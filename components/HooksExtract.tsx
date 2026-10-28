@@ -6,21 +6,27 @@ import type { TextPool } from "@/lib/types";
 import { Modal } from "./ui";
 
 type Status = "New" | "Check spelling" | "Duplicate" | "Already in pool" | "No text found";
-interface Item { id: number; url: string; text: string; conf: number; status: Status; checked: boolean }
+interface Item { id: number; url: string; text: string; conf: number; status: Status; checked: boolean; views?: number }
+interface Post { id: string; title: string; cover: string; views: number; likes: number; created: number; url: string }
+interface TTStatus { configured: boolean; connected: boolean; name: string | null }
+export interface NewHook { text: string; views?: number }
 
 const badge = (s: Status) => (s === "New" ? "ok" : s === "Check spelling" ? "warn" : s === "No text found" ? "bad" : "dim");
+const fmt = (n: number) => n.toLocaleString("en-US");
 
-export default function HooksExtract({ pools, initialPoolId, onAdd, onClose }: {
-  pools: TextPool[]; initialPoolId: string | null; onAdd: (poolId: string, lines: string[]) => void; onClose: () => void;
+export default function HooksExtract({ pools, initialPoolId, initialSource, onAdd, onClose }: {
+  pools: TextPool[]; initialPoolId: string | null; initialSource?: "screens" | "tiktok"; onAdd: (poolId: string, hooks: NewHook[]) => void; onClose: () => void;
 }) {
   const hookPools = pools.filter((p) => p.kind === "hooks");
+  const [source, setSource] = useState<"screens" | "tiktok">(initialSource ?? "screens");
   const [poolId, setPoolId] = useState(initialPoolId && hookPools.some((p) => p.id === initialPoolId) ? initialPoolId : hookPools[0]?.id ?? "");
   const [files, setFiles] = useState<File[]>([]);
-  const [crop, setCrop] = useState<Crop>({ top: 8, bottom: 20, right: 16 });
+  const [crop, setCrop] = useState<Crop>({ top: 8, bottom: 20, right: 12 });
   const [workers, setWorkers] = useState(2);
   const [items, setItems] = useState<Item[]>([]);
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(0);
+  const [total, setTotal] = useState(0);
   const [big, setBig] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const started = useRef(0);
@@ -29,15 +35,45 @@ export default function HooksExtract({ pools, initialPoolId, onAdd, onClose }: {
   const seen = useRef(new Set<string>());
   const [eta, setEta] = useState("");
 
+  // TikTok
+  const [tt, setTt] = useState<TTStatus | null>(null);
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [mode, setMode] = useState<"top" | "min">("top");
+  const [topN, setTopN] = useState(25);
+  const [minViews, setMinViews] = useState(1000);
+
   const previewUrl = useMemo(() => (files[0] ? URL.createObjectURL(files[0]) : null), [files]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
   useEffect(() => () => items.forEach((i) => URL.revokeObjectURL(i.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pool = hookPools.find((p) => p.id === poolId);
+  useEffect(() => {
+    if (source !== "tiktok" || tt) return;
+    fetch("/api/tiktok/status").then((r) => r.json()).then(setTt).catch(() => setErr("Could not check the TikTok connection"));
+  }, [source, tt]);
 
-  async function start() {
-    if (!files.length || !pool) return;
-    cancel.current = false; setRunning(true); setErr(null); setItems([]); setDone(0); seen.current = new Set(); started.current = Date.now();
+  const pool = hookPools.find((p) => p.id === poolId);
+  const selected = useMemo(() => {
+    if (!posts) return [];
+    const byViews = [...posts].sort((a, b) => b.views - a.views);
+    return mode === "top" ? byViews.slice(0, Math.max(1, topN)) : byViews.filter((p) => p.views >= minViews);
+  }, [posts, mode, topN, minViews]);
+
+  async function loadPosts() {
+    setLoadingPosts(true); setErr(null);
+    try {
+      const r = await fetch("/api/tiktok/posts");
+      const j = await r.json();
+      if (r.status === 409) { setTt((t) => (t ? { ...t, connected: false } : t)); throw new Error("TikTok connection expired. Connect again."); }
+      if (!r.ok) throw new Error(j.error ?? "Could not load your posts");
+      setPosts(j.posts);
+    } catch (e: any) { setErr(e.message); }
+    setLoadingPosts(false);
+  }
+
+  async function run(jobs: { get: () => Promise<Blob>; views?: number }[], cropUsed: Crop) {
+    if (!jobs.length || !pool) return;
+    cancel.current = false; setRunning(true); setErr(null); setItems([]); setDone(0); setTotal(jobs.length); seen.current = new Set(); started.current = Date.now();
     const existing = new Set(textItems(pool).map((t) => norm(t.replace(/\|/g, " "))));
     let ocr: Awaited<ReturnType<typeof createOcr>> | null = null;
     try {
@@ -46,9 +82,9 @@ export default function HooksExtract({ pools, initialPoolId, onAdd, onClose }: {
       await Promise.all(Array.from({ length: workers }, async () => {
         while (!cancel.current) {
           const i = next++;
-          if (i >= files.length) return;
-          let text = "", conf = 0;
-          try { ({ text, conf } = await ocr!.run(files[i], crop)); } catch { /* counted as no text */ }
+          if (i >= jobs.length) return;
+          let text = "", conf = 0, blob: Blob | null = null;
+          try { blob = await jobs[i].get(); ({ text, conf } = await ocr!.run(blob, cropUsed)); } catch { /* counted as no text */ }
           const key = norm(text);
           let status: Status = "New";
           if (!key) status = "No text found";
@@ -56,13 +92,13 @@ export default function HooksExtract({ pools, initialPoolId, onAdd, onClose }: {
           else if (seen.current.has(key)) status = "Duplicate";
           else if (conf < 75) status = "Check spelling";
           if (key) seen.current.add(key);
-          const item: Item = { id: i, url: URL.createObjectURL(files[i]), text, conf, status, checked: status === "New" };
+          const item: Item = { id: i, url: blob ? URL.createObjectURL(blob) : "", text, conf, status, checked: status === "New", views: jobs[i].views };
           finished++;
           setItems((cur) => [...cur, item]);
           setDone(finished);
           const per = (Date.now() - started.current) / finished;
-          const mins = Math.max(1, Math.round((per * (files.length - finished)) / 60000));
-          setEta(finished < files.length ? `about ${mins} min left` : "");
+          const mins = Math.max(1, Math.round((per * (jobs.length - finished)) / 60000));
+          setEta(finished < jobs.length ? `about ${mins} min left` : "");
         }
       }));
     } catch (e: any) {
@@ -73,55 +109,124 @@ export default function HooksExtract({ pools, initialPoolId, onAdd, onClose }: {
     }
   }
 
+  const startScreens = () => run(files.map((f) => ({ get: async () => f as Blob })), crop);
+  const startTikTok = () =>
+    run(selected.map((p) => ({
+      views: p.views,
+      get: async () => {
+        const r = await fetch("/api/tiktok/cover?u=" + encodeURIComponent(p.cover));
+        if (!r.ok) throw new Error("cover unavailable");
+        return r.blob();
+      },
+    })), { top: 0, bottom: 0, right: 0 });
+
   const checked = items.filter((i) => i.checked && i.text.trim());
   const setItem = (id: number, patch: Partial<Item>) => setItems((c) => c.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+  const reset = () => { setItems([]); setDone(0); setTotal(0); };
 
   return (
-    <Modal title="Extract hooks from screenshots" onClose={() => { cancel.current = true; onClose(); }} wide>
-      <div className="row">
-        <input ref={drop} type="file" accept="image/*" multiple hidden onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); setItems([]); setDone(0); }} />
-        <div className="grow" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); setFiles(Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"))); setItems([]); setDone(0); }}
-          style={{ border: "1px dashed var(--line)", borderRadius: 10, padding: 14, textAlign: "center", cursor: "pointer" }} onClick={() => drop.current?.click()}>
-          {files.length ? `${files.length} screenshot${files.length > 1 ? "s" : ""} selected` : "Drop your TikTok screenshots here, or click to browse"}
-        </div>
+    <Modal title="Extract hooks" onClose={() => { cancel.current = true; onClose(); }} wide>
+      <div className="tabs" style={{ marginBottom: 0 }}>
+        <button className={"tab" + (source === "screens" ? " on" : "")} disabled={running} onClick={() => { setSource("screens"); reset(); }}>From screenshots</button>
+        <button className={"tab" + (source === "tiktok" ? " on" : "")} disabled={running} onClick={() => { setSource("tiktok"); reset(); }}>From my TikTok account</button>
       </div>
-      <div className="two">
-        <div>
-          {previewUrl && (
-            <div className="crop-prev">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl} alt="Screenshot preview" />
-              <div className="z" style={{ left: 0, right: 0, top: 0, height: crop.top + "%" }} />
-              <div className="z" style={{ left: 0, right: 0, bottom: 0, height: crop.bottom + "%" }} />
-              <div className="z" style={{ right: 0, width: crop.right + "%", top: "40%", bottom: crop.bottom + "%" }} />
+
+      {source === "screens" && (
+        <>
+          <div className="row">
+            <input ref={drop} type="file" accept="image/*" multiple hidden onChange={(e) => { setFiles(Array.from(e.target.files ?? [])); reset(); }} />
+            <div className="grow" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); setFiles(Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"))); reset(); }}
+              style={{ border: "1px dashed var(--line)", borderRadius: 10, padding: 14, textAlign: "center", cursor: "pointer" }} onClick={() => drop.current?.click()}>
+              {files.length ? `${files.length} screenshot${files.length > 1 ? "s" : ""} selected` : "Drop your TikTok screenshots here, or click to browse"}
+            </div>
+          </div>
+          <div className="two">
+            <div>
+              {previewUrl && (
+                <div className="crop-prev">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={previewUrl} alt="Screenshot preview" />
+                  <div className="z" style={{ left: 0, right: 0, top: 0, height: crop.top + "%" }} />
+                  <div className="z" style={{ left: 0, right: 0, bottom: 0, height: crop.bottom + "%" }} />
+                  <div className="z" style={{ right: 0, width: crop.right + "%", top: "40%", bottom: crop.bottom + "%" }} />
+                </div>
+              )}
+            </div>
+            <div style={{ display: "grid", gap: 8, alignContent: "start" }}>
+              <p className="muted" style={{ margin: 0 }}>Red areas are ignored: they hide TikTok’s own interface.</p>
+              <label className="f">Top ({crop.top}%)<input type="range" min={0} max={40} value={crop.top} onChange={(e) => setCrop({ ...crop, top: +e.target.value })} /></label>
+              <label className="f">Bottom ({crop.bottom}%)<input type="range" min={0} max={50} value={crop.bottom} onChange={(e) => setCrop({ ...crop, bottom: +e.target.value })} /></label>
+              <label className="f">Right buttons ({crop.right}%)<input type="range" min={0} max={40} value={crop.right} onChange={(e) => setCrop({ ...crop, right: +e.target.value })} /></label>
+            </div>
+          </div>
+        </>
+      )}
+
+      {source === "tiktok" && (
+        <div style={{ display: "grid", gap: 10 }}>
+          {!tt && <p className="muted" style={{ margin: 0 }}>Checking your TikTok connection…</p>}
+          {tt && !tt.configured && (
+            <p className="badge warn" style={{ whiteSpace: "normal", margin: 0 }}>
+              TikTok is not set up on this site yet: add TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET (see the README).
+            </p>
+          )}
+          {tt?.configured && !tt.connected && (
+            <div className="row">
+              <button className="btn red" onClick={() => { window.location.href = "/api/tiktok/login"; }}>Connect TikTok</button>
+              <span className="muted">You will be sent to TikTok to allow read-only access to your posts.</span>
             </div>
           )}
+          {tt?.connected && (
+            <>
+              <div className="row">
+                <span className="badge ok">Connected{tt.name ? ` as ${tt.name}` : ""}</span>
+                <button className="btn sm" onClick={async () => { await fetch("/api/tiktok/disconnect", { method: "POST" }); setTt({ ...tt, connected: false, name: null }); setPosts(null); }}>Disconnect</button>
+                <span className="grow" />
+                <button className="btn" onClick={loadPosts} disabled={loadingPosts || running}>{loadingPosts ? "Loading…" : posts ? "Reload my posts" : "Load my posts"}</button>
+              </div>
+              {posts && (
+                <>
+                  <p className="muted" style={{ margin: 0 }}>{posts.length} posts found.</p>
+                  <div className="row">
+                    <select className="input" style={{ width: 230 }} value={mode} onChange={(e) => setMode(e.target.value as "top" | "min")}>
+                      <option value="top">My best posts (by views)</option>
+                      <option value="min">Posts with at least … views</option>
+                    </select>
+                    {mode === "top"
+                      ? <input className="input" style={{ width: 100 }} type="number" min={1} value={topN} onChange={(e) => setTopN(+e.target.value || 1)} aria-label="Number of posts" />
+                      : <input className="input" style={{ width: 130 }} type="number" min={0} value={minViews} onChange={(e) => setMinViews(+e.target.value || 0)} aria-label="Minimum views" />}
+                    <span className="muted">
+                      {selected.length} post{selected.length === 1 ? "" : "s"} selected
+                      {selected.length ? ` · ${fmt(selected[selected.length - 1].views)} to ${fmt(selected[0].views)} views` : ""}
+                    </span>
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </div>
-        <div style={{ display: "grid", gap: 8, alignContent: "start" }}>
-          <p className="muted" style={{ margin: 0 }}>Red areas are ignored: they hide TikTok’s own interface.</p>
-          <label className="f">Top ({crop.top}%)<input type="range" min={0} max={40} value={crop.top} onChange={(e) => setCrop({ ...crop, top: +e.target.value })} /></label>
-          <label className="f">Bottom ({crop.bottom}%)<input type="range" min={0} max={50} value={crop.bottom} onChange={(e) => setCrop({ ...crop, bottom: +e.target.value })} /></label>
-          <label className="f">Right buttons ({crop.right}%)<input type="range" min={0} max={40} value={crop.right} onChange={(e) => setCrop({ ...crop, right: +e.target.value })} /></label>
-          <div className="two">
-            <label className="f">Target pool
-              <select className="input" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
-                {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-            <label className="f">Parallel workers
-              <select className="input" value={workers} onChange={(e) => setWorkers(+e.target.value)}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</select>
-            </label>
-          </div>
-          <div className="row">
-            {!running ? <button className="btn red" disabled={!files.length || !pool} onClick={start}>Start</button>
-              : <button className="btn" onClick={() => { cancel.current = true; }}>Cancel</button>}
-          </div>
-        </div>
+      )}
+
+      <div className="two">
+        <label className="f">Target pool
+          <select className="input" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
+            {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        <label className="f">Parallel workers
+          <select className="input" value={workers} onChange={(e) => setWorkers(+e.target.value)}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</select>
+        </label>
       </div>
+      <div className="row">
+        {!running
+          ? <button className="btn red" disabled={!pool || (source === "screens" ? !files.length : !selected.length)} onClick={source === "screens" ? startScreens : startTikTok}>Start</button>
+          : <button className="btn" onClick={() => { cancel.current = true; }}>Cancel</button>}
+      </div>
+
       {(running || done > 0) && (
         <div style={{ display: "grid", gap: 4 }}>
-          <div className="bar"><div style={{ width: `${(done / Math.max(1, files.length)) * 100}%` }} /></div>
-          <span className="muted">{done} / {files.length} screenshots {eta && `· ${eta}`}</span>
+          <div className="bar"><div style={{ width: `${(done / Math.max(1, total)) * 100}%` }} /></div>
+          <span className="muted">{done} / {total} {source === "tiktok" ? "posts" : "screenshots"} {eta && `· ${eta}`}</span>
         </div>
       )}
       {err && <span className="badge bad" style={{ whiteSpace: "normal" }}>{err}</span>}
@@ -130,18 +235,19 @@ export default function HooksExtract({ pools, initialPoolId, onAdd, onClose }: {
           <div className="row">
             <button className="btn sm" onClick={() => setItems((c) => c.map((i) => ({ ...i, checked: !!i.text.trim() })))}>Select all</button>
             <button className="btn sm" onClick={() => setItems((c) => c.map((i) => ({ ...i, checked: false })))}>Select none</button>
-            <button className="btn sm" onClick={() => setItems([])}>Clear list</button>
+            <button className="btn sm" onClick={reset}>Clear list</button>
           </div>
           <div style={{ display: "grid", gap: 6, maxHeight: "38dvh", overflow: "auto" }}>
             {[...items].sort((a, b) => a.id - b.id).map((i) => (
               <div className="res" key={i.id}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={i.url} alt="" onClick={() => setBig(i.url)} />
+                {i.url ? <img src={i.url} alt="" onClick={() => setBig(i.url)} /> : <div />}
                 <div style={{ display: "grid", gap: 4 }}>
                   <div className="row">
                     <input type="checkbox" checked={i.checked} disabled={!i.text.trim()} onChange={(e) => setItem(i.id, { checked: e.target.checked })} aria-label="Include" />
                     <span className={"badge " + badge(i.status)}>{i.status}</span>
                     {i.conf > 0 && <span className="muted">{i.conf}%</span>}
+                    {i.views !== undefined && <span className="muted">{fmt(i.views)} views</span>}
                   </div>
                   <input className="input" value={i.text} onChange={(e) => setItem(i.id, { text: e.target.value })} />
                 </div>
@@ -152,7 +258,7 @@ export default function HooksExtract({ pools, initialPoolId, onAdd, onClose }: {
       )}
       <div className="row" style={{ justifyContent: "flex-end" }}>
         <button className="btn" onClick={() => { cancel.current = true; onClose(); }}>Close</button>
-        <button className="btn red" disabled={!checked.length || !pool} onClick={() => { onAdd(poolId, checked.map((i) => i.text.trim())); onClose(); }}>
+        <button className="btn red" disabled={!checked.length || !pool} onClick={() => { onAdd(poolId, checked.map((i) => ({ text: i.text.trim(), views: i.views }))); onClose(); }}>
           Add {checked.length} to pool
         </button>
       </div>

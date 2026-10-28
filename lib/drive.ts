@@ -1,4 +1,5 @@
 import { getSession } from "next-auth/react";
+import { decodeImage, looksLikeImage } from "./imageFormat";
 import type { Img } from "./render";
 
 let cached: { token: string; exp: number } | null = null;
@@ -13,7 +14,7 @@ export async function getToken(): Promise<string> {
 
 export interface DriveItem { id: string; name: string; mimeType: string }
 export const isFolder = (i: DriveItem) => i.mimeType === "application/vnd.google-apps.folder";
-export const isImage = (i: DriveItem) => /^image\/(jpeg|png|webp|gif|avif)$/.test(i.mimeType);
+export const isImage = (i: DriveItem) => !isFolder(i) && looksLikeImage(i.name, i.mimeType);
 
 async function api(url: string) {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${await getToken()}` } });
@@ -47,7 +48,6 @@ export async function listFolder(folder: string): Promise<DriveItem[]> {
 }
 
 // ---- Image cache (decoded, downscaled to max 2400px) with limited concurrency ----
-const MAX = 2400;
 const cache = new Map<string, Promise<Img>>();
 let active = 0;
 const queue: (() => void)[] = [];
@@ -61,17 +61,7 @@ export function loadDriveImage(id: string): Promise<Img> {
       await slot();
       try {
         const res = await api(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`);
-        const blob = await res.blob();
-        const full = await createImageBitmap(blob);
-        const k = Math.min(1, MAX / Math.max(full.width, full.height));
-        if (k >= 1) return full;
-        const small = await createImageBitmap(full, {
-          resizeWidth: Math.round(full.width * k),
-          resizeHeight: Math.round(full.height * k),
-          resizeQuality: "high",
-        });
-        full.close();
-        return small;
+        return await decodeImage(await res.blob());
       } finally {
         release();
       }

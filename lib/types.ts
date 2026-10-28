@@ -102,4 +102,6 @@ export interface Workspace {
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag
   exportFormat: "jpg" | "png";
   zones: boolean;
+  /** Draw hooks in proportion to their TikTok views (hooks that have views stored). */
+  favorTop?: boolean;
 }

@@ -52,6 +52,18 @@ export function pick(
   return chosen;
 }
 
+export const hookKey = (t: string) => norm(t.replace(/\|/g, " "));
+
+/** Random hook, more likely the more views it got. Hooks without stored views count as the median. */
+export function weightedPick(items: string[], views: Record<string, number>): string {
+  const known = Object.values(views).filter((v) => v > 0).sort((a, b) => a - b);
+  const median = known.length ? known[Math.floor(known.length / 2)] : 1;
+  const w = items.map((t) => Math.max(1, views[hookKey(t)] ?? median));
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < items.length; i++) { r -= w[i]; if (r <= 0) return items[i]; }
+  return items[items.length - 1];
+}
+
 export function lyricsText(project: Project): string {
   const s: LyricSection | undefined =
     project.lyrics.find((l) => l.id === project.lyricsSectionId) ?? project.lyrics[0];
@@ -63,7 +75,12 @@ export function pickText(project: Project, ws: Workspace, slideIdx: number, bags
   if (src.kind === "lyrics") return lyricsText(project);
   if (src.kind === "pool") {
     const pool = ws.textPools.find((p) => p.id === src.poolId);
-    return pool ? pick(pool.id, textItems(pool), bags, ws.noRepeat) ?? "" : "";
+    if (!pool) return "";
+    const items = textItems(pool);
+    if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length && items.length) {
+      return weightedPick(items, pool.views);
+    }
+    return pick(pool.id, items, bags, ws.noRepeat) ?? "";
   }
   return "";
 }

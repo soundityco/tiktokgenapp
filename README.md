@@ -33,6 +33,8 @@ AUTH_GOOGLE_ID=
 AUTH_GOOGLE_SECRET=
 ALLOWED_EMAILS=toi@gmail.com,ami@gmail.com
 DATABASE_URL=       # vide en local = fichier .data/workspaces.json
+TIKTOK_CLIENT_KEY=      # optionnel, voir « Import TikTok »
+TIKTOK_CLIENT_SECRET=
 ```
 Les mêmes variables sont à créer dans Netlify (*Site configuration → Environment variables*).
 
@@ -50,6 +52,16 @@ git remote add origin <ton-repo> && git push -u origin main
 ```
 Netlify → *Add new site → Import from Git*. Le fichier `netlify.toml` gère le reste. N'oublie pas d'ajouter l'URL Netlify aux redirect URIs Google (étape 1.4).
 
+## Import TikTok (optionnel)
+1. developers.tiktok.com → *Manage apps* → crée une app. Ajoute les produits **Login Kit** et **Display API** avec les scopes `user.info.basic` et `video.list` (l'interface de TikTok change souvent : cherche ces noms).
+2. Redirect URI à déclarer (HTTPS obligatoire, donc à tester sur le site Netlify) :
+   `https://TON-SITE.netlify.app/api/tiktok/callback`
+3. Tant que l'app est en **sandbox**, ajoute vos comptes TikTok comme utilisateurs de test (*Target users*) : pas de validation TikTok nécessaire.
+4. Copie *Client key* et *Client secret* dans les variables Netlify `TIKTOK_CLIENT_KEY` et `TIKTOK_CLIENT_SECRET`, puis relance un déploiement.
+5. Dans l'appli : *Extract hooks from screenshots* → onglet **From my TikTok account** → *Connect TikTok* → *Load my posts* → choisis « My best posts » (N meilleurs) ou « at least X views » → *Start*. Les vues de chaque hook sont enregistrées ; la case **Favor top hooks** tire les hooks proportionnellement à leurs vues.
+
+Limites : l'API renvoie la **couverture** de chaque post (la slide 1, donc le hook), pas les slides suivantes. Si vos carrousels photo n'apparaissent pas dans `video.list`, garde l'import par screenshots. Les jetons TikTok sont stockés côté serveur (table `tiktok_tokens`), jamais envoyés au navigateur.
+
 ## Utilisation rapide
 1. **Picture pools** → clique sur « Slide 1 pictures » → *Add from Google Drive* → choisis un dossier → *Add all*.
 2. **Text pools** → écris ou colle tes hooks (un par ligne, `|` = saut de ligne), ou *Extract hooks from screenshots*.
@@ -57,7 +69,7 @@ Netlify → *Add new site → Import from Git*. Le fichier `netlify.toml` gère 
 4. **Generate** (ou touche G) → ajuste dans l'inspecteur → **Download all** (ZIP) ou **Share** sur mobile.
 
 ## Limites connues / à faire
-- Formats de photos lus : JPG, PNG, WebP, GIF, AVIF (pas HEIC).
-- L'OCR télécharge son moteur et sa langue anglaise au premier usage (puis mis en cache par le navigateur).
+- Formats de photos : le vrai format est détecté dans le fichier (pas son extension) puis converti dans le navigateur : JPG, PNG, WebP, GIF, BMP, AVIF, **HEIC/HEIF**, TIFF. Le HEIC est plus lent à décoder (un à la fois).
+- L'OCR est hébergé par l'appli elle-même (`public/ocr`, copié automatiquement par `npm install`) : aucun CDN externe.
 - Sauvegarde : dernier enregistrement gagnant (prévu pour 1 personne par compte).
-- Phase 2 : import des posts via l'API TikTok (filtre par vues). Phase 3 : sous-titres vidéo synchronisés. Le modèle de données réserve déjà `views` (hooks) et `start` (lyrics).
+- Phase 3 : sous-titres vidéo synchronisés (le modèle de données réserve déjà `start` pour les lyrics).

@@ -4,10 +4,11 @@ import { DriveItem, isFolder, isImage, listFolder } from "@/lib/drive";
 import type { PicRef } from "@/lib/types";
 import { Modal } from "./ui";
 
-export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[]) => void; onClose: () => void }) {
+export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[], toAll: boolean) => void; onClose: () => void }) {
   const [path, setPath] = useState<{ id: string; name: string }[]>([{ id: "root", name: "My Drive" }]);
   const [items, setItems] = useState<DriveItem[]>([]);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [toAll, setToAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const cur = path[path.length - 1];
@@ -52,12 +53,13 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
           </label>
         ))}
       </div>
+      <label className="row"><input type="checkbox" checked={toAll} onChange={(e) => setToAll(e.target.checked)} /> Also add them to the picture pools of all slides in this project</label>
       <div className="row" style={{ justifyContent: "flex-end" }}>
         <button className="btn" onClick={onClose}>Close</button>
-        <button className="btn" disabled={!sel.size} onClick={() => { onAdd(images.filter((i) => sel.has(i.id)).map(toRef)); onClose(); }}>
+        <button className="btn" disabled={!sel.size} onClick={() => { onAdd(images.filter((i) => sel.has(i.id)).map(toRef), toAll); onClose(); }}>
           Add selected ({sel.size})
         </button>
-        <button className="btn red" disabled={!images.length} onClick={() => { onAdd(images.map(toRef)); onClose(); }}>
+        <button className="btn red" disabled={!images.length} onClick={() => { onAdd(images.map(toRef), toAll); onClose(); }}>
           Add all {images.length} pictures here
         </button>
       </div>

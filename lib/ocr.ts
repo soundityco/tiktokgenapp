@@ -41,16 +41,20 @@ function cropToCanvas(img: ImageBitmap, crop: Crop, mode: "threshold" | "gray"):
 export interface OcrLine { text: string; conf: number }
 
 export function cleanLines(lines: { text: string; confidence: number }[]): OcrLine[] {
-  return lines
+  const kept = lines
     .map((l) => ({ text: l.text.replace(/\s+/g, " ").trim(), conf: l.confidence }))
-    .filter((l) => l.text.length >= 3 && l.conf >= 55)
+    .filter((l) => l.text.length >= 2 && l.conf >= 55) // short lines are kept: a hook can end on "me" or "it"
     .filter((l) => !UI_WORDS.some((w) => norm(l.text) === w))
     .filter((l) => /[a-zA-Z]{2,}/.test(l.text));
+  // A lone tiny fragment is noise, not a hook.
+  return kept.reduce((n, l) => n + l.text.length, 0) >= 6 ? kept : [];
 }
 
 export async function createOcr(parallel: number) {
   const scheduler = createScheduler();
-  for (let i = 0; i < parallel; i++) scheduler.addWorker(await createWorker("eng"));
+  for (let i = 0; i < parallel; i++) scheduler.addWorker(
+      await createWorker("eng", 1, { workerPath: "/ocr/worker.min.js", corePath: "/ocr/core", langPath: "/ocr/lang" })
+    );
   const run = async (file: File | Blob, crop: Crop) => {
     const bmp = await createImageBitmap(file);
     try {

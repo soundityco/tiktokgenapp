@@ -4,11 +4,11 @@ import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultWorkspace, newProject, newSlide, slidePools, uid } from "@/lib/defaults";
 import { loadDriveImage } from "@/lib/drive";
-import { generateAll, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
+import { generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { loadFonts, slideToBlob } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
-import HooksExtract from "./HooksExtract";
+import HooksExtract, { NewHook } from "./HooksExtract";
 import Inspector from "./Inspector";
 import Logo from "./Logo";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
@@ -21,7 +21,7 @@ type Editor = { k: "text" | "pics"; id: string } | null;
 type Overlay =
   | null
   | { k: "drive"; poolId: string }
-  | { k: "extract"; poolId: string | null }
+  | { k: "extract"; poolId: string | null; source?: "tiktok" }
   | { k: "lyrics" }
   | { k: "newPool" }
   | { k: "newProject" }
@@ -59,6 +59,13 @@ export default function Studio({ userName }: { userName: string }) {
 
   // ---- load / autosave ----
   useEffect(() => {
+    const flag = new URLSearchParams(location.search).get("tiktok");
+    if (flag) {
+      history.replaceState(null, "", "/studio");
+      const msg: Record<string, string> = { connected: "TikTok connected", denied: "TikTok connection was cancelled", badstate: "TikTok connection failed (security check). Try again.", error: "TikTok connection failed. Try again.", notconfigured: "TikTok is not set up on this site yet" };
+      setTimeout(() => say(msg[flag] ?? "TikTok"), 300);
+      if (flag === "connected") setOverlay({ k: "extract", poolId: null, source: "tiktok" });
+    }
     loadFonts().then(() => setFontsReady(true));
     fetch("/api/workspace")
       .then(async (r) => {
@@ -364,6 +371,7 @@ export default function Studio({ userName }: { userName: string }) {
             </select>
             <button className="btn" onClick={() => setOverlay({ k: "lyrics" })}>Edit lyrics</button>
             <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} /> No repeats</label>
+            <label className="row" style={{ gap: 4 }} title="Hooks imported from TikTok are drawn more often the more views they got"><input type="checkbox" checked={!!ws.favorTop} onChange={(e) => upd((w) => ({ ...w, favorTop: e.target.checked }))} /> Favor top hooks</label>
             <span className="grow" />
             <select className="input" style={{ width: 80 }} aria-label="Export format" value={ws.exportFormat} onChange={(e) => upd((w) => ({ ...w, exportFormat: e.target.value as "jpg" | "png" }))}>
               <option value="jpg">JPG</option><option value="png">PNG</option>
@@ -399,18 +407,32 @@ export default function Studio({ userName }: { userName: string }) {
       )}
 
       {overlay?.k === "drive" && (
-        <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[]) => {
-          setPicPool(overlay.poolId, (t) => {
-            const have = new Set(t.pics.map((x) => x.id));
-            return { ...t, pics: [...t.pics, ...pics.filter((x) => !have.has(x.id))] };
-          });
-          say(`${pics.length} picture${pics.length > 1 ? "s" : ""} added`);
+        <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[], toAll: boolean) => {
+          const ids = new Set<string>([overlay.poolId]);
+          if (toAll) project.slides.forEach((s) => s.picPoolId && ids.add(s.picPoolId));
+          upd((w) => ({
+            ...w,
+            picPools: w.picPools.map((t) => {
+              if (!ids.has(t.id)) return t;
+              const have = new Set(t.pics.map((x) => x.id));
+              return { ...t, pics: [...t.pics, ...pics.filter((x) => !have.has(x.id))] };
+            }),
+          }));
+          say(`${pics.length} picture${pics.length > 1 ? "s" : ""} added${ids.size > 1 ? ` to ${ids.size} pools` : ""}`);
         }} />
       )}
       {overlay?.k === "extract" && (
-        <HooksExtract pools={vText} initialPoolId={overlay.poolId} onClose={() => setOverlay(null)} onAdd={(id, lines) => {
-          setTextPool(id, (t) => ({ ...t, text: (t.text.trim() ? t.text.replace(/\s+$/, "") + "\n" : "") + lines.join("\n") }));
-          say(`${lines.length} hook${lines.length > 1 ? "s" : ""} added`);
+        <HooksExtract pools={vText} initialPoolId={overlay.poolId} initialSource={overlay.source} onClose={() => setOverlay(null)} onAdd={(id, hooks: NewHook[]) => {
+          setTextPool(id, (t) => {
+            const views = { ...(t.views ?? {}) };
+            hooks.forEach((h) => { if (h.views !== undefined) views[hookKey(h.text)] = h.views; });
+            return {
+              ...t,
+              text: (t.text.trim() ? t.text.replace(/\s+$/, "") + "\n" : "") + hooks.map((h) => h.text).join("\n"),
+              ...(Object.keys(views).length ? { views } : {}),
+            };
+          });
+          say(`${hooks.length} hook${hooks.length > 1 ? "s" : ""} added`);
         }} />
       )}
       {overlay?.k === "newPool" && <NewPoolDialog tab={tab} onCreate={createPool} onClose={() => setOverlay(null)} />}
