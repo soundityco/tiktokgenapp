@@ -1,6 +1,8 @@
 "use client";
-import { FONT_LABELS, defaultStyle, defaultPic } from "@/lib/defaults";
+import { FONT_LABELS, defaultPic, defaultStyle } from "@/lib/defaults";
+import { useT } from "@/lib/i18n";
 import type { FontId, FormatId, PicSettings, SlideCfg, TextStyle } from "@/lib/types";
+import { Range, Section } from "./ui";
 
 interface Props {
   index: number;
@@ -12,96 +14,90 @@ interface Props {
 }
 
 export default function Inspector({ index, cfg, zones, onZones, onCfg, onApplyAll }: Props) {
+  const { t } = useT();
   const st = cfg.style, pic = cfg.pic;
   const setS = (patch: Partial<TextStyle>) => onCfg((c) => ({ ...c, style: { ...c.style, ...patch } }));
   const setP = (patch: Partial<PicSettings>) => onCfg((c) => ({ ...c, pic: { ...c.pic, ...patch } }));
   return (
-    <div>
-      <h3 style={{ margin: 0 }}>Slide {index + 1}</h3>
-      <div className="insp-sec">
-        <label className="f">Format
-          <select className="input" value={cfg.format} onChange={(e) => onCfg((c) => ({ ...c, format: e.target.value as FormatId }))}>
-            <option value="9:16">9:16 (1080×1920)</option>
-            <option value="3:4">3:4 (1080×1440)</option>
-            <option value="4:5">4:5 (1080×1350)</option>
-            <option value="1:1">1:1 (1080×1080)</option>
-            <option value="orig">Original (keeps the picture’s shape)</option>
-          </select>
-        </label>
+    <div className="stack">
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h2 className="title">{t("Slide {n}", { n: index + 1 })}</h2>
+        <button className="btn sm" onClick={onApplyAll} title={t("Copy format, photo and text settings to every slide")}>{t("Apply to all slides")}</button>
       </div>
 
-      <div className="insp-sec">
-        <h3>Picture</h3>
-        <div className="two">
-          <label className="f">Framing
-            <select className="input" value={pic.framing} onChange={(e) => setP({ framing: e.target.value as PicSettings["framing"] })}>
-              <option value="fill">Fill (crop)</option><option value="fit">Fit whole</option>
+      <div>
+        <Section title={t("Format & photo")}>
+          <label className="field">{t("Format")}
+            <select className="input" value={cfg.format} onChange={(e) => onCfg((c) => ({ ...c, format: e.target.value as FormatId }))}>
+              <option value="9:16">9:16 · 1080×1920</option>
+              <option value="3:4">3:4 · 1080×1440</option>
+              <option value="4:5">4:5 · 1080×1350</option>
+              <option value="1:1">1:1 · 1080×1080</option>
+              <option value="orig">{t("Original shape")}</option>
             </select>
           </label>
-          <label className="f">Bars
-            <select className="input" disabled={pic.framing === "fill"} value={pic.bars} onChange={(e) => setP({ bars: e.target.value as PicSettings["bars"] })}>
-              <option value="blur">Blurred</option><option value="black">Black</option>
+          <label className="field">{t("Framing")}
+            <select className="input" value={pic.framing === "fill" ? "fill" : pic.bars === "blur" ? "fit-blur" : "fit-black"}
+              onChange={(e) => {
+                const v = e.target.value;
+                setP(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
+              }}>
+              <option value="fill">{t("Fill (crop)")}</option>
+              <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
+              <option value="fit-black">{t("Fit whole, black bars")}</option>
             </select>
           </label>
-        </div>
-        <label className="f">Zoom ({pic.zoom.toFixed(2)}×)
-          <input type="range" min={0.5} max={4} step={0.05} value={pic.zoom} onChange={(e) => setP({ zoom: +e.target.value })} />
-        </label>
-        <label className="f">Darken ({pic.darken}%)
-          <input type="range" min={0} max={80} value={pic.darken} onChange={(e) => setP({ darken: +e.target.value })} />
-        </label>
-        <button className="btn sm" onClick={() => setP({ ox: 0, oy: 0, zoom: 1 })}>Reset framing</button>
-      </div>
+          <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => setP({ zoom: v })} />
+          <Range label={t("Darken")} value={pic.darken} display={`${pic.darken}%`} min={0} max={80} onChange={(v) => setP({ darken: v })} />
+          <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, pic: { ...defaultPic(), framing: c.pic.framing, bars: c.pic.bars, darken: c.pic.darken } }))}>{t("Reset framing")}</button></div>
+        </Section>
 
-      <div className="insp-sec">
-        <h3>Text</h3>
-        <label className="f">Font
-          <select className="input" value={st.font} onChange={(e) => setS({ font: e.target.value as FontId })}>
-            {Object.entries(FONT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <div className="two">
-          <label className="f">Look
+        <Section title={t("Text")}>
+          <label className="field">{t("Font")}
+            <select className="input" value={st.font} onChange={(e) => setS({ font: e.target.value as FontId })}>
+              {Object.entries(FONT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </label>
+          <label className="field">{t("Style")}
             <select className="input" value={st.look} onChange={(e) => setS({ look: e.target.value as TextStyle["look"] })}>
-              <option value="outline">Outline</option><option value="box">Box</option><option value="shadow">Shadow</option><option value="plain">Plain</option>
+              <option value="outline">{t("Outline")}</option><option value="box">{t("Box")}</option><option value="shadow">{t("Shadow")}</option><option value="plain">{t("Plain")}</option>
             </select>
           </label>
-          <label className="f">Case
-            <select className="input" value={st.case} onChange={(e) => setS({ case: e.target.value as TextStyle["case"] })}>
-              <option value="asis">As typed</option><option value="upper">UPPER</option><option value="lower">lower</option>
-            </select>
-          </label>
-        </div>
-        <label className="f">Size ({st.size})<input type="range" min={18} max={200} value={st.size} onChange={(e) => setS({ size: +e.target.value })} /></label>
-        <label className="f">Width ({st.width}%)<input type="range" min={20} max={100} value={st.width} onChange={(e) => setS({ width: +e.target.value })} /></label>
-        <label className="f">Line spacing ({st.lineHeight.toFixed(2)})<input type="range" min={0.9} max={1.8} step={0.01} value={st.lineHeight} onChange={(e) => setS({ lineHeight: +e.target.value })} /></label>
-        <label className="f">Align
-          <select className="input" value={st.align} onChange={(e) => setS({ align: e.target.value as TextStyle["align"] })}>
-            <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
-          </select>
-        </label>
-        <div className="two">
-          <label className="f">Text color<input type="color" value={st.color} onChange={(e) => setS({ color: e.target.value })} /></label>
-          <label className="f">Outline / box color<input type="color" value={st.accent} onChange={(e) => setS({ accent: e.target.value })} /></label>
-        </div>
-        <label className="f">Horizontal ({Math.round(st.x)}%)<input type="range" min={0} max={100} value={st.x} onChange={(e) => setS({ x: +e.target.value })} /></label>
-        <label className="f">Vertical ({Math.round(st.y)}%)<input type="range" min={0} max={100} value={st.y} onChange={(e) => setS({ y: +e.target.value })} /></label>
-        <div className="row">
-          <button className="btn sm" onClick={() => setS({ x: 50, y: 50 })}>Center</button>
-          <button className="btn sm" onClick={() => setS({ x: 50 })}>Center H</button>
-          <button className="btn sm" onClick={() => setS({ y: 50 })}>Center V</button>
-        </div>
+          <Range label={t("Size")} value={st.size} min={18} max={200} onChange={(v) => setS({ size: v })} />
+          <div className="cols2">
+            <label className="field">{t("Text color")}<input type="color" value={st.color} onChange={(e) => setS({ color: e.target.value })} /></label>
+            <label className="field">{st.look === "box" ? t("Box color") : t("Outline color")}<input type="color" value={st.accent} onChange={(e) => setS({ accent: e.target.value })} /></label>
+          </div>
+          <div className="cols2">
+            <label className="field">{t("Case")}
+              <select className="input" value={st.case} onChange={(e) => setS({ case: e.target.value as TextStyle["case"] })}>
+                <option value="asis">{t("As typed")}</option><option value="upper">{t("UPPERCASE")}</option><option value="lower">{t("lowercase")}</option>
+              </select>
+            </label>
+            <label className="field">{t("Align")}
+              <select className="input" value={st.align} onChange={(e) => setS({ align: e.target.value as TextStyle["align"] })}>
+                <option value="left">{t("Left")}</option><option value="center">{t("Center")}</option><option value="right">{t("Right")}</option>
+              </select>
+            </label>
+          </div>
+          <Range label={t("Width")} value={st.width} display={`${st.width}%`} min={20} max={100} onChange={(v) => setS({ width: v })} />
+          <Range label={t("Line spacing")} value={st.lineHeight} display={st.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => setS({ lineHeight: v })} />
+          <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
+        </Section>
+
+        <Section title={t("Position")} open={false}>
+          <Range label={t("Horizontal")} value={Math.round(st.x)} display={`${Math.round(st.x)}%`} min={0} max={100} onChange={(v) => setS({ x: v })} />
+          <Range label={t("Vertical")} value={Math.round(st.y)} display={`${Math.round(st.y)}%`} min={0} max={100} onChange={(v) => setS({ y: v })} />
+          <div className="row">
+            <button className="btn sm" onClick={() => setS({ x: 50, y: 50 })}>{t("Center")}</button>
+            <button className="btn sm" onClick={() => setS({ x: 50 })}>{t("Center horizontally")}</button>
+            <button className="btn sm" onClick={() => setS({ y: 50 })}>{t("Center vertically")}</button>
+          </div>
+          <label className="check"><input type="checkbox" checked={zones} onChange={(e) => onZones(e.target.checked)} />{t("Show TikTok interface zones")}</label>
+        </Section>
       </div>
 
-      <div className="insp-sec">
-        <button className="btn" onClick={onApplyAll}>Apply to all slides</button>
-        <button className="btn" onClick={() => onCfg((c) => ({ ...c, style: defaultStyle() }))}>Reset text style</button>
-        <button className="btn ghost" onClick={() => onCfg((c) => ({ ...c, pic: defaultPic() }))}>Reset picture settings</button>
-        <label className="row"><input type="checkbox" checked={zones} onChange={(e) => onZones(e.target.checked)} /> TikTok zones (preview only)</label>
-        <p className="muted" style={{ margin: 0, fontSize: 12 }}>
-          On the preview: drag the text to move it (snaps to the centre), scroll on text to resize, drag the picture to reframe, scroll on it to zoom, double-click it to reset.
-        </p>
-      </div>
+      <p className="muted xs">{t("On the preview: drag the text to move it (it snaps to the centre), scroll on it to resize, drag the photo to reframe it, scroll on it to zoom, double-click it to reset.")}</p>
     </div>
   );
 }

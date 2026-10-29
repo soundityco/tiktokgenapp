@@ -18,9 +18,10 @@ const ensure = () =>
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
 
-const file = path.join(process.cwd(), ".data", "workspaces.json");
+// Resolved lazily so tests (and tools) can change the working directory.
+const dataFile = () => path.join(process.cwd(), ".data", "workspaces.json");
 const readAll = async (): Promise<Record<string, unknown>> => {
-  try { return JSON.parse(await fs.readFile(file, "utf8")); } catch { return {}; }
+  try { return JSON.parse(await fs.readFile(dataFile(), "utf8")); } catch { return {}; }
 };
 
 export async function loadWorkspace(email: string): Promise<unknown | null> {
@@ -33,18 +34,34 @@ export async function loadWorkspace(email: string): Promise<unknown | null> {
   return (await readAll())[email] ?? null;
 }
 
-export async function saveWorkspace(email: string, data: unknown): Promise<void> {
+export type SaveResult = { ok: true; rev: number } | { ok: false; rev: number };
+
+/**
+ * Save only if nobody else saved since the client last loaded (compare-and-swap on a revision number).
+ * Protects against two tabs/devices silently overwriting each other.
+ */
+export async function saveWorkspaceCas(email: string, data: any, expectedRev: number): Promise<SaveResult> {
+  const next = { ...data, rev: expectedRev + 1 };
   if (sql) {
     await ensure();
-    await sql`INSERT INTO workspaces (email, data, updated_at) VALUES (${email}, ${JSON.stringify(data)}::jsonb, now())
-      ON CONFLICT (email) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`;
-    return;
+    const json = JSON.stringify(next);
+    const upd = await sql`UPDATE workspaces SET data = ${json}::jsonb, updated_at = now()
+      WHERE email = ${email} AND COALESCE((data->>'rev')::int, 0) = ${expectedRev} RETURNING email`;
+    if (upd.length) return { ok: true, rev: next.rev };
+    const ins = await sql`INSERT INTO workspaces (email, data) VALUES (${email}, ${json}::jsonb)
+      ON CONFLICT (email) DO NOTHING RETURNING email`;
+    if (ins.length) return { ok: true, rev: next.rev };
+    const cur = await sql`SELECT COALESCE((data->>'rev')::int, 0) AS rev FROM workspaces WHERE email = ${email}`;
+    return { ok: false, rev: Number(cur[0]?.rev ?? 0) };
   }
   if (process.env.NODE_ENV === "production") throw new Error("DATABASE_URL is not set (see README)");
-  const all = await readAll();
-  all[email] = data;
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(all));
+  const all: any = await readAll();
+  const cur = Number(all[email]?.rev ?? 0);
+  if (all[email] && cur !== expectedRev) return { ok: false, rev: cur };
+  all[email] = next;
+  await fs.mkdir(path.dirname(dataFile()), { recursive: true });
+  await fs.writeFile(dataFile(), JSON.stringify(all));
+  return { ok: true, rev: next.rev };
 }
 
 // ---- TikTok tokens (server side only: the client secret never reaches the browser) ----
@@ -64,9 +81,9 @@ const ensureTT = () =>
     data jsonb NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
-const ttFile = path.join(process.cwd(), ".data", "tiktok.json");
+const ttPath = () => path.join(process.cwd(), ".data", "tiktok.json");
 const readTT = async (): Promise<Record<string, TikTokTokens>> => {
-  try { return JSON.parse(await fs.readFile(ttFile, "utf8")); } catch { return {}; }
+  try { return JSON.parse(await fs.readFile(ttPath(), "utf8")); } catch { return {}; }
 };
 
 export async function loadTikTok(email: string): Promise<TikTokTokens | null> {
@@ -90,6 +107,6 @@ export async function saveTikTok(email: string, t: TikTokTokens | null): Promise
   if (process.env.NODE_ENV === "production") throw new Error("DATABASE_URL is not set (see README)");
   const all = await readTT();
   if (!t) delete all[email]; else all[email] = t;
-  await fs.mkdir(path.dirname(ttFile), { recursive: true });
-  await fs.writeFile(ttFile, JSON.stringify(all));
+  await fs.mkdir(path.dirname(ttPath()), { recursive: true });
+  await fs.writeFile(ttPath(), JSON.stringify(all));
 }

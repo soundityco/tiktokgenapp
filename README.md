@@ -68,8 +68,21 @@ Limites : l'API renvoie la **couverture** de chaque post (la slide 1, donc le ho
 3. **Edit lyrics** → ajoute des sections (Verse 1, Chorus…), choisis celle à afficher avec le menu « Lyrics ».
 4. **Generate** (ou touche G) → ajuste dans l'inspecteur → **Download all** (ZIP) ou **Share** sur mobile.
 
+## Langue
+L'interface existe en **français et en anglais** : la langue du navigateur est détectée, et tu peux la changer dans ⚙ (en haut à droite). Les textes sont dans `lib/fr.ts` (clé = texte anglais utilisé dans le code).
+
+## Développement
+```
+npm test          # tests automatiques (génération, formats d'image, OCR, traductions, sauvegarde…)
+npm run typecheck
+```
+Un test vérifie aussi que chaque texte de l'interface a sa traduction française.
+
 ## Limites connues / à faire
 - Formats de photos : le vrai format est détecté dans le fichier (pas son extension) puis converti dans le navigateur : JPG, PNG, WebP, GIF, BMP, AVIF, **HEIC/HEIF**, TIFF. Le HEIC est plus lent à décoder (un à la fois).
 - L'OCR est hébergé par l'appli elle-même (`public/ocr`, copié automatiquement par `npm install`) : aucun CDN externe.
-- Sauvegarde : dernier enregistrement gagnant (prévu pour 1 personne par compte).
+- Si tu ouvres l'appli sur deux appareils ou onglets, une bannière te prévient quand l'autre a enregistré avant toi (« Charger la dernière version » ou « Garder ma version ») : plus d'écrasement silencieux.
 - Phase 3 : sous-titres vidéo synchronisés (le modèle de données réserve déjà `start` pour les lyrics).
+
+## Alertes `npm audit`
+Deux alertes concernent PostCSS, embarqué dans Next.js : elles portent sur du CSS fourni par un attaquant, que l'appli ne traite jamais. Les corriger demande Next 16 (changement majeur), à faire plus tard.

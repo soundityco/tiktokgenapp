@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node scripts/copy-ocr.mjs"
+    "postinstall": "node scripts/copy-ocr.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fontsource-variable/tiktok-sans": "^5.3.0",
@@ -27,6 +28,7 @@
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   }
 }

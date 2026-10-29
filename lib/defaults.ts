@@ -30,6 +30,9 @@ export const FONT_LABELS: Record<FontId, string> = {
   typewriter: "Typewriter",
 };
 
+/** Default shared photo list of a slide. Older workspaces call it "pictures". */
+export const isSlidePhotoList = (name: string, n: number) => name === `Slide ${n} photos` || name === `Slide ${n} pictures`;
+
 export function newSlide(n: number, textPoolId: string | null, picPoolId: string | null, lyrics = false): SlideCfg {
   return {
     id: uid(),
@@ -44,7 +47,7 @@ export function newSlide(n: number, textPoolId: string | null, picPoolId: string
 export function slidePools(n: number): { text: TextPool; pics: PicPool } {
   return {
     text: { id: uid(), name: `Slide ${n} text`, scope: "shared", kind: "hooks", text: "" },
-    pics: { id: uid(), name: `Slide ${n} pictures`, scope: "shared", pics: [] },
+    pics: { id: uid(), name: `Slide ${n} photos`, scope: "shared", pics: [] },
   };
 }
 

@@ -1,5 +1,6 @@
 "use client";
 import { ReactNode, useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n";
 
 const stack: symbol[] = [];
 
@@ -17,7 +18,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
   return (
     <div className="ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={"modal" + (wide ? " wide" : "")} role="dialog" aria-modal="true" aria-label={title}>
-        <h2>{title}</h2>
+        <h2 className="title">{title}</h2>
         {children}
       </div>
     </div>
@@ -25,67 +26,115 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
 }
 
 export function ConfirmDialog(p: { title: string; message: string; confirmLabel: string; onConfirm: () => void; onClose: () => void }) {
+  const { t } = useT();
   return (
     <Modal title={p.title} onClose={p.onClose}>
-      <p style={{ margin: 0 }}>{p.message}</p>
-      <div className="row" style={{ justifyContent: "flex-end" }}>
-        <button className="btn" onClick={p.onClose}>Cancel</button>
-        <button className="btn red" onClick={() => { p.onConfirm(); p.onClose(); }}>{p.confirmLabel}</button>
+      <p>{p.message}</p>
+      <div className="modal-foot">
+        <button className="btn" onClick={p.onClose}>{t("Cancel")}</button>
+        <button className="btn primary" onClick={() => { p.onConfirm(); p.onClose(); }}>{p.confirmLabel}</button>
       </div>
     </Modal>
   );
 }
 
 export function PromptDialog(p: { title: string; label: string; initial?: string; confirmLabel: string; onSubmit: (v: string) => void; onClose: () => void }) {
+  const { t } = useT();
   const [v, setV] = useState(p.initial ?? "");
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
   const go = () => { if (v.trim()) { p.onSubmit(v.trim()); p.onClose(); } };
   return (
     <Modal title={p.title} onClose={p.onClose}>
-      <label className="f">{p.label}
+      <label className="field">{p.label}
         <input ref={ref} className="input" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
       </label>
-      <div className="row" style={{ justifyContent: "flex-end" }}>
-        <button className="btn" onClick={p.onClose}>Cancel</button>
-        <button className="btn red" onClick={go} disabled={!v.trim()}>{p.confirmLabel}</button>
+      <div className="modal-foot">
+        <button className="btn" onClick={p.onClose}>{t("Cancel")}</button>
+        <button className="btn primary" onClick={go} disabled={!v.trim()}>{p.confirmLabel}</button>
       </div>
     </Modal>
   );
 }
 
-export function NewPoolDialog(p: { tab: "text" | "pics"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "block") => void; onClose: () => void }) {
+export function NewPoolDialog(p: { kind: "text" | "photos"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "block") => void; onClose: () => void }) {
+  const { t } = useT();
   const [name, setName] = useState("");
   const [scope, setScope] = useState<"shared" | "project">("shared");
   const [kind, setKind] = useState<"hooks" | "block">("hooks");
   const go = () => { if (name.trim()) { p.onCreate(name.trim(), scope, kind); p.onClose(); } };
   return (
-    <Modal title={p.tab === "text" ? "New text pool" : "New picture pool"} onClose={p.onClose}>
-      <label className="f">Name
+    <Modal title={p.kind === "text" ? t("New text list") : t("New photo list")} onClose={p.onClose}>
+      <label className="field">{t("Name")}
         <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
       </label>
-      {p.tab === "text" && (
-        <label className="f">Kind
+      {p.kind === "text" && (
+        <label className="field">{t("Type")}
           <select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "block")}>
-            <option value="hooks">One text per line</option>
-            <option value="block">Lyrics block</option>
+            <option value="hooks">{t("One text per line")}</option>
+            <option value="block">{t("Lyrics block")}</option>
           </select>
         </label>
       )}
-      <label className="f">Scope
-        <select className="input" value={scope} onChange={(e) => setScope(e.target.value as "shared" | "project")}>
-          <option value="shared">Shared by all projects</option>
-          <option value="project">Only this project</option>
-        </select>
-      </label>
-      <div className="row" style={{ justifyContent: "flex-end" }}>
-        <button className="btn" onClick={p.onClose}>Cancel</button>
-        <button className="btn red" onClick={go} disabled={!name.trim()}>Create</button>
+      <ScopeSelect value={scope} onChange={setScope} />
+      <div className="modal-foot">
+        <button className="btn" onClick={p.onClose}>{t("Cancel")}</button>
+        <button className="btn primary" onClick={go} disabled={!name.trim()}>{t("Create")}</button>
       </div>
     </Modal>
   );
 }
 
+export function ScopeSelect({ value, onChange }: { value: "shared" | "project"; onChange: (v: "shared" | "project") => void }) {
+  const { t } = useT();
+  return (
+    <label className="field">{t("Available in")}
+      <select className="input" value={value} onChange={(e) => onChange(e.target.value as "shared" | "project")}>
+        <option value="shared">{t("All projects")}</option>
+        <option value="project">{t("This project only")}</option>
+      </select>
+    </label>
+  );
+}
+
 export function Toast({ msg }: { msg: string | null }) {
   return msg ? <div className="toast" role="status">{msg}</div> : null;
+}
+
+/** Small popover menu that closes on outside click / Escape. */
+export function Menu({ trigger, children, left }: { trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; left?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", down);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key); };
+  }, [open]);
+  return (
+    <div className="menu-wrap" ref={ref}>
+      {trigger(open, () => setOpen((o) => !o))}
+      {open && <div className={"menu" + (left ? " left" : "")} role="menu">{children(() => setOpen(false))}</div>}
+    </div>
+  );
+}
+
+export function Section({ title, children, open = true }: { title: string; children: ReactNode; open?: boolean }) {
+  return (
+    <details className="sec" open={open}>
+      <summary>{title}</summary>
+      <div className="body">{children}</div>
+    </details>
+  );
+}
+
+export function Range(p: { label: string; value: number; display?: string; min: number; max: number; step?: number; onChange: (v: number) => void }) {
+  return (
+    <label className="field">
+      <span>{p.label}<span className="val">{p.display ?? p.value}</span></span>
+      <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} />
+    </label>
+  );
 }

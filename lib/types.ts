@@ -94,6 +94,8 @@ export interface Project {
 
 export interface Workspace {
   v: 1;
+  /** Revision stamped by the server on each save (see saveWorkspaceCas). */
+  rev?: number;
   projects: Project[];
   currentProjectId: string;
   textPools: TextPool[];

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n";
 import { renderSlide, TextBox } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import type { GenSlide, PicPool, SlideCfg, TextPool } from "@/lib/types";
@@ -24,6 +25,7 @@ interface Props {
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export default function SlideCard(p: Props) {
+  const { t } = useT();
   const { cfg, gen } = p;
   const { img, err } = useDriveImage(gen?.picId ?? null);
   const cv = useRef<HTMLCanvasElement>(null);
@@ -101,35 +103,40 @@ export default function SlideCard(p: Props) {
 
   return (
     <div className={"card" + (p.selected ? " sel" : "")} onClick={p.onSelect}>
-      <div className="row" style={{ flexWrap: "nowrap" }}>
+      <div className="row nowrap">
         <span className="num">{p.index + 1}</span>
-        <select className="input" aria-label="Text pool" value={textVal} onChange={(e) => {
-          const v = e.target.value;
-          p.onCfg((c) => ({ ...c, textSource: v === "" ? { kind: "none" } : v === "__lyrics" ? { kind: "lyrics" } : { kind: "pool", poolId: v } }));
-        }}>
-          <option value="">No text</option>
-          <option value="__lyrics">Lyrics (this release)</option>
-          {p.textPools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select className="input" aria-label="Picture pool" value={cfg.picPoolId ?? ""} onChange={(e) => {
-          const v = e.target.value || null;
-          p.onCfg((c) => ({ ...c, picPoolId: v }));
-        }}>
-          <option value="">No picture</option>
-          {p.picPools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        <span className="grow" style={{ fontWeight: 600 }}>{t("Slide {n}", { n: p.index + 1 })}</span>
+        <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId} title={t("Pick another photo")}>↻ {t("Photo")}</button>
+        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind === "none"} title={t("Pick another text")}>↻ {t("Text")}</button>
       </div>
       <div className="cv-wrap">
         <canvas ref={cv} className="cv" width={1080} height={1920}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
       </div>
-      {err && <span className="badge bad" style={{ whiteSpace: "normal" }}>{err}</span>}
-      <textarea className="input" rows={3} aria-label="Caption" placeholder="Slide text" value={text} onChange={(e) => p.onText(e.target.value)} />
-      <div className="row">
-        <button className="btn sm" onClick={p.onRerollPic} disabled={!cfg.picPoolId}>↻ Pic</button>
-        <button className="btn sm" onClick={p.onRerollText} disabled={cfg.textSource.kind === "none"}>↻ Text</button>
-        <button className="btn sm" onClick={p.onSave}>Save</button>
+      {err && <span className="notice bad">{err}</span>}
+      <textarea className="input" rows={3} aria-label={t("Caption")} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
+      <div className="cols2">
+        <label className="field">{t("Text from")}
+          <select className="input" value={textVal} onChange={(e) => {
+            const v = e.target.value;
+            p.onCfg((c) => ({ ...c, textSource: v === "" ? { kind: "none" } : v === "__lyrics" ? { kind: "lyrics" } : { kind: "pool", poolId: v } }));
+          }}>
+            <option value="">{t("No text")}</option>
+            <option value="__lyrics">{t("Lyrics")}</option>
+            {p.textPools.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </label>
+        <label className="field">{t("Photo from")}
+          <select className="input" value={cfg.picPoolId ?? ""} onChange={(e) => {
+            const v = e.target.value || null;
+            p.onCfg((c) => ({ ...c, picPoolId: v }));
+          }}>
+            <option value="">{t("No photo")}</option>
+            {p.picPools.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </label>
       </div>
+      <button className="btn sm" onClick={p.onSave}>{t("Save this slide")}</button>
     </div>
   );
 }
