@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 import Logo from "@/components/Logo";
@@ -12,9 +13,10 @@ export default async function Login() {
   const dev = process.env.NODE_ENV !== "production" && process.env.DEV_FAKE_LOGIN === "1";
   return (
     <main className="login">
-      <div className="login-card">
-        <div className="row"><Logo size={40} /><h1 style={{ fontSize: "var(--fs-xl)" }}>TkTgen</h1></div>
-        <p className="muted">
+      <div className="login-main">
+        <div className="row"><Logo size={36} /><span className="label">TkTgen</span></div>
+        <h1 className="display" style={{ fontSize: 56 }}>{t("Make your next")} <em>{t("post")}</em>.</h1>
+        <p className="muted" style={{ fontSize: 15 }}>
           {t("Turn your photos, hooks and lyrics into TikTok carousels in one click. Sign in with Google to reach your releases and the photo folders in your Drive.")}
         </p>
         <form action={async () => { "use server"; await signIn("google", { redirectTo: "/studio" }); }}>
@@ -26,6 +28,10 @@ export default async function Login() {
           </form>
         )}
       </div>
+      <nav className="login-foot">
+        <Link href="/privacy">{t("Privacy")}</Link>
+        <Link href="/terms">{t("Terms")}</Link>
+      </nav>
     </main>
   );
 }

@@ -10,13 +10,14 @@ import { loadFonts, slideToBlob } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
 import HooksExtract, { NewHook } from "./HooksExtract";
+import Icon from "./Icon";
 import Inspector from "./Inspector";
 import Logo from "./Logo";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
 import SlideCard from "./SlideCard";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "./ui";
 
-const VERSION = "v0.2";
+const VERSION = "v0.3";
 
 type Editor = { k: "text" | "photos"; id: string } | null;
 type Overlay =
@@ -327,18 +328,19 @@ export default function Studio({ userName }: { userName: string }) {
   const nSlides = project.slides.length;
 
   const listRows = (kind: "text" | "photos") =>
-    (kind === "text" ? vText : vPics).map((p) => (
+    (kind === "text" ? vText : vPics).map((p, n) => (
       <div key={p.id} className="item" role="button" tabIndex={0} onClick={() => setEditor({ k: kind, id: p.id })}
         onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) setEditor({ k: kind, id: p.id }); }}>
+        <span className="idx">{String(n + 1).padStart(2, "0")}</span>
         <div className="grow" style={{ minWidth: 0 }}>
-          <div className="truncate">{p.name}</div>
+          <div className="truncate item-name">{p.name}</div>
           <div className="muted xs">
             {"pics" in p ? t("{n} photos", { n: p.pics.length }) : p.kind === "block" ? t("Lyrics block") : t("{n} texts", { n: textItems(p).length })}
             {" · "}{p.scope === "shared" ? t("all projects") : t("this project")}
           </div>
         </div>
         <button className="btn quiet icon sm del" aria-label={t("Delete {name}", { name: p.name })} title={t("Delete")}
-          onClick={(e) => { e.stopPropagation(); askDeletePool(kind, p.id); }}>🗑</button>
+          onClick={(e) => { e.stopPropagation(); askDeletePool(kind, p.id); }}><Icon name="trash" size={14} /></button>
       </div>
     ));
 
@@ -349,8 +351,8 @@ export default function Studio({ userName }: { userName: string }) {
         <select className="input" style={{ width: 210 }} aria-label={t("Project")} value={project.id} onChange={(e) => upd((w) => ({ ...w, currentProjectId: e.target.value }))}>
           {ws.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <button className="btn icon" aria-label={t("New project")} title={t("New project")} onClick={() => setOverlay({ k: "newProject" })}>+</button>
-        <Menu left trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Project menu")} onClick={toggle}>⋯</button>}>
+        <button className="btn icon" aria-label={t("New project")} title={t("New project")} onClick={() => setOverlay({ k: "newProject" })}><Icon name="plus" /></button>
+        <Menu left trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Project menu")} onClick={toggle}><Icon name="more" /></button>}>
           {(close) => (<>
             <button onClick={() => { close(); setOverlay({ k: "rename" }); }}>{t("Rename")}</button>
             <button onClick={() => { close(); duplicateProject(); }}>{t("Duplicate")}</button>
@@ -359,20 +361,20 @@ export default function Studio({ userName }: { userName: string }) {
           </>)}
         </Menu>
         <span className="grow" />
-        <span className={"badge " + (saveState === "error" || saveState === "conflict" ? "bad" : "")}>
+        <span className={"badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
           {saveState === "saved" ? t("Saved") : saveState === "saving" ? t("Saving…") : saveState === "conflict" ? t("Not saved") : t("Not saved")}
         </span>
-        <button className="btn" onClick={() => setOverlay({ k: "import", poolId: null })}>{t("Import hooks")}</button>
-        <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}>⚙</button>}>
+        <button className="btn" onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" />{t("Import hooks")}</button>
+        <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}><Icon name="sliders" /></button>}>
           {(close) => (<>
-            <div className="label">{t("Language")}</div>
-            <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? "✓ " : ""}English</button>
-            <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? "✓ " : ""}Français</button>
+            <div className="label cap">{t("Language")}</div>
+            <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
+            <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
             <div className="sep" />
             <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
             <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
             <div className="sep" />
-            <div className="label truncate">{userName}</div>
+            <div className="label cap truncate">{userName}</div>
             <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>
           </>)}
         </Menu>
@@ -392,22 +394,22 @@ export default function Studio({ userName }: { userName: string }) {
       <div className="main">
         <aside className="col side l">
           <section className="group">
-            <div className="group-head"><h3>{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}>+</button></div>
+            <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
             {listRows("text")}
           </section>
           <section className="group">
-            <div className="group-head"><h3>{t("Photos")}</h3><button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}>+</button></div>
+            <div className="group-head"><h3 className="label">{t("Photos")}</h3><button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button></div>
             {listRows("photos")}
           </section>
         </aside>
 
         <main className="col center">
           <div className="toolbar">
-            <button className="btn primary" onClick={generate} title={t("Shortcut: G")}>{t("Generate")}</button>
+            <button className="btn primary" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
             <div className="stepper">
-              <button className="btn quiet icon sm" aria-label={t("Fewer slides")} onClick={removeSlide} disabled={nSlides <= 1}>−</button>
+              <button className="btn quiet icon sm" aria-label={t("Fewer slides")} onClick={removeSlide} disabled={nSlides <= 1}><Icon name="minus" size={14} /></button>
               <span>{nSlides === 1 ? t("1 slide") : t("{n} slides", { n: nSlides })}</span>
-              <button className="btn quiet icon sm" aria-label={t("More slides")} onClick={addSlide} disabled={nSlides >= 10}>+</button>
+              <button className="btn quiet icon sm" aria-label={t("More slides")} onClick={addSlide} disabled={nSlides >= 10}><Icon name="plus" size={14} /></button>
             </div>
             <div className="row" style={{ gap: "var(--s1)" }}>
               <select className="input" style={{ width: 170 }} aria-label={t("Lyrics section")} value={project.lyricsSectionId ?? ""} onChange={(e) => updProject((p) => ({ ...p, lyricsSectionId: e.target.value || null }))}>
@@ -417,7 +419,7 @@ export default function Studio({ userName }: { userName: string }) {
               <button className="btn" onClick={() => setOverlay({ k: "lyrics" })}>{t("Edit lyrics")}</button>
             </div>
             <span className="grow" />
-            <Menu trigger={(_, toggle) => <button className="btn" onClick={toggle}>{t("Options")} ▾</button>}>
+            <Menu trigger={(_, toggle) => <button className="btn" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
               {() => (
                 <div className="stack" style={{ padding: "var(--s2) var(--s3)", minWidth: 270 }}>
                   <label className="check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
@@ -430,13 +432,18 @@ export default function Studio({ userName }: { userName: string }) {
                 </div>
               )}
             </Menu>
-            <button className="btn" onClick={downloadAll} disabled={busy || !project.generated}>{busy ? t("Exporting…") : t("Download all")}</button>
-            {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn" onClick={shareAll} disabled={busy || !project.generated}>{t("Share")}</button>}
+            <button className="btn" onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
+            {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn" onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" />{t("Share")}</button>}
           </div>
           {!project.generated && (
-            <p className="muted" style={{ marginBottom: "var(--s4)" }}>
-              {t("1. Add photos from your Drive  ·  2. Write or import your texts and lyrics  ·  3. Press Generate")}
-            </p>
+            <div className="empty">
+              <h2 className="display">{t("Make your next")} <em>{t("post")}</em>.</h2>
+              <ol>
+                <li>{t("Add photos from your Drive")}</li>
+                <li>{t("Write or import your texts and lyrics")}</li>
+                <li>{t("Press Generate")}</li>
+              </ol>
+            </div>
           )}
           <div className="slides">
             {project.slides.map((cfg, i) => (
@@ -505,7 +512,7 @@ export default function Studio({ userName }: { userName: string }) {
               <div key={l.id} className="stack" style={{ gap: "var(--s2)" }}>
                 <div className="row nowrap">
                   <input className="input grow" value={l.name} aria-label={t("Section name")} onChange={(e) => updProject((p) => ({ ...p, lyrics: p.lyrics.map((x) => (x.id === l.id ? { ...x, name: e.target.value } : x)) }))} />
-                  <button className="btn quiet icon danger" aria-label={t("Delete section")} onClick={() => updProject((p) => ({ ...p, lyrics: p.lyrics.filter((x) => x.id !== l.id), lyricsSectionId: p.lyricsSectionId === l.id ? null : p.lyricsSectionId }))}>🗑</button>
+                  <button className="btn quiet icon danger" aria-label={t("Delete section")} onClick={() => updProject((p) => ({ ...p, lyrics: p.lyrics.filter((x) => x.id !== l.id), lyricsSectionId: p.lyricsSectionId === l.id ? null : p.lyricsSectionId }))}><Icon name="trash" /></button>
                 </div>
                 <textarea className="input" rows={5} aria-label={t("Lyrics")} value={l.text} onChange={(e) => updProject((p) => ({ ...p, lyrics: p.lyrics.map((x) => (x.id === l.id ? { ...x, text: e.target.value } : x)) }))} />
               </div>

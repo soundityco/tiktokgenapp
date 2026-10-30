@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
+import Icon from "./Icon";
 import { renderSlide, TextBox } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import type { GenSlide, PicPool, SlideCfg, TextPool } from "@/lib/types";
@@ -103,11 +104,12 @@ export default function SlideCard(p: Props) {
 
   return (
     <div className={"card" + (p.selected ? " sel" : "")} onClick={p.onSelect}>
-      <div className="row nowrap">
-        <span className="num">{p.index + 1}</span>
-        <span className="grow" style={{ fontWeight: 600 }}>{t("Slide {n}", { n: p.index + 1 })}</span>
-        <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId} title={t("Pick another photo")}>↻ {t("Photo")}</button>
-        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind === "none"} title={t("Pick another text")}>↻ {t("Text")}</button>
+      <div className="card-head">
+        <span className="idx-chip" aria-label={t("Slide {n}", { n: p.index + 1 })}>{String(p.index + 1).padStart(2, "0")}</span>
+        <span className="grow" />
+        <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
+        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind === "none"} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
+        <button className="btn sm quiet icon" onClick={p.onSave} aria-label={t("Save this slide")} title={t("Save this slide")}><Icon name="download" size={14} /></button>
       </div>
       <div className="cv-wrap">
         <canvas ref={cv} className="cv" width={1080} height={1920}
@@ -115,7 +117,7 @@ export default function SlideCard(p: Props) {
       </div>
       {err && <span className="notice bad">{err}</span>}
       <textarea className="input" rows={3} aria-label={t("Caption")} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
-      <div className="cols2">
+      <div className="cols2 fields">
         <label className="field">{t("Text from")}
           <select className="input" value={textVal} onChange={(e) => {
             const v = e.target.value;
@@ -136,7 +138,6 @@ export default function SlideCard(p: Props) {
           </select>
         </label>
       </div>
-      <button className="btn sm" onClick={p.onSave}>{t("Save this slide")}</button>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { loadDriveImage } from "@/lib/drive";
 import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
+import Icon from "./Icon";
 import { Modal, ScopeSelect } from "./ui";
 
 function Thumb({ id, name }: { id: string; name: string }) {
@@ -100,7 +101,7 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
         <ScopeSelect value={pool.scope} onChange={(v) => p.onChange((x) => ({ ...x, scope: v }))} />
       </div>
       <div className="row">
-        <button className="btn primary" onClick={p.onBrowse}>{t("Add from Google Drive")}</button>
+        <button className="btn primary" onClick={p.onBrowse}><Icon name="folder" />{t("Add from Google Drive")}</button>
         <span className="muted grow">{t("{n} photos (they stay in your Drive)", { n: pool.pics.length })}</span>
         <button className="btn sm" disabled={!pool.pics.length} onClick={() => p.onChange((x) => ({ ...x, pics: [] }))}>{t("Remove all")}</button>
       </div>
@@ -110,7 +111,7 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
           <div key={pic.id} className="thumb-wrap">
             <Thumb id={pic.id} name={pic.name} />
             <button className="x" aria-label={t("Remove {name}", { name: pic.name })}
-              onClick={() => p.onChange((x) => ({ ...x, pics: x.pics.filter((y: PicRef) => y.id !== pic.id) }))}>×</button>
+              onClick={() => p.onChange((x) => ({ ...x, pics: x.pics.filter((y: PicRef) => y.id !== pic.id) }))}><Icon name="x" size={12} /></button>
           </div>
         ))}
       </div>

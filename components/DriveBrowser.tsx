@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { DriveItem, isFolder, isImage, listFolder } from "@/lib/drive";
 import { useT } from "@/lib/i18n";
 import type { PicRef } from "@/lib/types";
+import Icon from "./Icon";
 import { Modal } from "./ui";
 
 export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[], toAll: boolean) => void; onClose: () => void }) {
@@ -35,7 +36,7 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
         <button className="btn sm" onClick={() => setPath([{ id: "root", name: t("My Drive") }])}>{t("My Drive")}</button>
         <button className="btn sm" onClick={() => setPath([{ id: "shared", name: t("Shared with me") }])}>{t("Shared with me")}</button>
         <span className="muted xs grow truncate">{path.map((p) => p.name).join(" / ")}</span>
-        {path.length > 1 && <button className="btn sm quiet" onClick={() => setPath(path.slice(0, -1))}>← {t("Back")}</button>}
+        {path.length > 1 && <button className="btn sm quiet" onClick={() => setPath(path.slice(0, -1))}><Icon name="back" size={14} />{t("Back")}</button>}
       </div>
       {err && <p className="notice bad">{err}</p>}
       <div className="stack" style={{ maxHeight: "48dvh", overflow: "auto", gap: 4 }}>
@@ -43,7 +44,7 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
         {!loading && !items.length && <p className="muted">{t("No folders or photos here.")}</p>}
         {items.filter(isFolder).map((f) => (
           <button key={f.id} className="item" onClick={() => setPath([...path, { id: f.id, name: f.name }])}>
-            <span>📁</span><span className="grow truncate">{f.name}</span>
+            <Icon name="folder" size={15} /><span className="grow truncate">{f.name}</span>
           </button>
         ))}
         {images.map((i) => (

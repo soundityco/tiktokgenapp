@@ -5,6 +5,13 @@ export const FR: Record<string, string> = {
   "1 slide": "1 slide",
   "1. Add photos from your Drive  ·  2. Write or import your texts and lyrics  ·  3. Press Generate":
     "1. Ajoute des photos depuis ton Drive  ·  2. Écris ou importe tes textes et paroles  ·  3. Clique sur Générer",
+  "Add photos from your Drive": "Ajoute des photos depuis ton Drive",
+  "Write or import your texts and lyrics": "Écris ou importe tes textes et tes paroles",
+  "Press Generate": "Clique sur Générer",
+  "Make your next": "Crée ton prochain",
+  "post": "post",
+  "Privacy": "Confidentialité",
+  "Terms": "Conditions",
   "Add a section": "Ajouter une section",
   "Add all {n} photos here": "Ajouter les {n} photos de ce dossier",
   "Add from Google Drive": "Ajouter depuis Google Drive",
