@@ -15,6 +15,14 @@ const P: Record<string, string> = {
   sliders: "M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M9 14.5v5",
   type: "M5 6.5V4.5h14v2M12 4.5v15M9 19.5h6",
   image: "M4 5.5h16v13H4zM4 15l4.5-4.5 4 4 3-3L20 15.5M9 9.5h.01",
+  lock: "M7 10V7a5 5 0 0110 0v3M5 10h14v10H5zM12 14v3",
+  unlock: "M7 10V7a5 5 0 019.4-2.4M5 10h14v10H5zM12 14v3",
+  undo: "M8 7L3 12l5 5M3 12h9a6 6 0 016 6",
+  redo: "M16 7l5 5-5 5M21 12h-9a6 6 0 00-6 6",
+  search: "M11 4a7 7 0 105.2 11.9L21 21M11 4a7 7 0 00-7 7",
+  copy: "M8 8h11v11H8zM5 16H4V4h12v1",
+  arrowLeft: "M20 12H4M10 6l-6 6 6 6",
+  arrowRight: "M4 12h16M14 6l6 6-6 6",
 };
 
 export default function Icon({ name, size = 16 }: { name: keyof typeof P | "more"; size?: number }) {

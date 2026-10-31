@@ -1,10 +1,10 @@
 "use client";
 import JSZip from "jszip";
-import { signOut } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { defaultWorkspace, isSlidePhotoList, newProject, newSlide, slidePools, uid } from "@/lib/defaults";
-import { loadDriveImage } from "@/lib/drive";
-import { generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
+import { defaultWorkspace, isSlidePhotoList, newProject, uid } from "@/lib/defaults";
+import { DRIVE_AUTH_EVENT, loadDriveImage } from "@/lib/drive";
+import { generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
 import { loadFonts, slideToBlob } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, TextPool, Workspace } from "@/lib/types";
@@ -17,9 +17,12 @@ import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
 import SlideCard from "./SlideCard";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "./ui";
 
-const VERSION = "v0.3";
+const VERSION = "v0.4";
+const MAX_SLIDES = 35;
 
 type Editor = { k: "text" | "photos"; id: string } | null;
+type MobileTab = "slides" | "lists" | "style";
+type PreflightItem = { key: string; params?: Record<string, string | number> };
 type Overlay =
   | null
   | { k: "drive"; poolId: string }
@@ -53,19 +56,79 @@ export default function Studio({ userName }: { userName: string }) {
   const [toast, setToast] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [driveAuth, setDriveAuth] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [history, setHistory] = useState({ past: 0, future: 0 });
   const loaded = useRef(false);
   const rev = useRef(0);
   const conflict = useRef(false);
+  const wsRef = useRef<Workspace | null>(null);
+  const past = useRef<Workspace[]>([]);
+  const future = useRef<Workspace[]>([]);
+  const lastHistory = useRef(0);
+  const cancelExport = useRef(false);
   const [resume, setResume] = useState(0);
   const restoreInput = useRef<HTMLInputElement>(null);
 
   const say = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); }, []);
 
+  const syncHistory = () => setHistory({ past: past.current.length, future: future.current.length });
+  const remember = useCallback((snapshot: Workspace) => {
+    const now = Date.now();
+    // Coalesce quick successive edits (typing, dragging) into one undo step.
+    if (now - lastHistory.current < 700 && past.current.length) { future.current = []; syncHistory(); return; }
+    past.current.push(snapshot);
+    if (past.current.length > 80) past.current.shift();
+    future.current = [];
+    lastHistory.current = now;
+    syncHistory();
+  }, []);
+  const apply = useCallback((next: Workspace, record = true) => {
+    const cur = wsRef.current;
+    if (record && cur) remember(cur);
+    wsRef.current = next;
+    setWs(next);
+    if (!record) syncHistory();
+  }, [remember]);
+  const upd = useCallback((fn: (w: Workspace) => Workspace) => {
+    const cur = wsRef.current;
+    if (!cur) return;
+    const next = fn(cur);
+    if (next === cur) return;
+    remember(cur);
+    wsRef.current = next;
+    setWs(next);
+  }, [remember]);
+  const undo = useCallback(() => {
+    const prev = past.current.pop();
+    const cur = wsRef.current;
+    if (!prev || !cur) return;
+    future.current.push(cur);
+    wsRef.current = prev;
+    lastHistory.current = 0;
+    setWs(prev);
+    syncHistory();
+  }, []);
+  const redo = useCallback(() => {
+    const next = future.current.pop();
+    const cur = wsRef.current;
+    if (!next || !cur) return;
+    past.current.push(cur);
+    wsRef.current = next;
+    lastHistory.current = 0;
+    setWs(next);
+    syncHistory();
+  }, []);
+
+  useEffect(() => { wsRef.current = ws; }, [ws]);
+
   // ---- load / autosave ----
   useEffect(() => {
     const flag = new URLSearchParams(location.search).get("tiktok");
     if (flag) {
-      history.replaceState(null, "", "/studio");
+      window.history.replaceState(null, "", "/studio");
       if (flag === "connected") setOverlay({ k: "import", poolId: null, source: "tiktok" });
       const msg: Record<string, string> = { connected: "TikTok connected", denied: "TikTok connection was cancelled", badstate: "TikTok connection failed (security check). Try again.", error: "TikTok connection failed. Try again.", notconfigured: "TikTok is not set up on this site yet" };
       setTimeout(() => say(t(msg[flag] ?? "TikTok")), 300);
@@ -76,27 +139,50 @@ export default function Studio({ userName }: { userName: string }) {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? "Could not load your data");
         rev.current = j.data?.rev ?? 0;
-        setWs(j.data && j.data.v === 1 ? (j.data as Workspace) : defaultWorkspace());
+        const next = j.data && j.data.v === 1 ? (j.data as Workspace) : defaultWorkspace();
+        wsRef.current = next;
+        setWs(next);
+        past.current = []; future.current = []; lastHistory.current = 0;
+        syncHistory();
       })
       .catch((e) => setLoadErr(String(e.message ?? e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveWorkspace = useCallback(async (data: Workspace) => {
+    setSaveState("saving");
+    try {
+      const r = await fetch("/api/workspace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, baseRev: rev.current }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) { rev.current = j.rev; setSaveState("saved"); }
+      else if (r.status === 409) { rev.current = j.rev; conflict.current = true; setSaveState("conflict"); }
+      else setSaveState("error");
+    } catch { setSaveState("error"); }
   }, []);
 
   useEffect(() => {
     if (!ws || conflict.current) return;
     if (!loaded.current) { loaded.current = true; return; }
     setSaveState("saving");
-    const timer = setTimeout(async () => {
-      try {
-        const r = await fetch("/api/workspace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: ws, baseRev: rev.current }) });
-        const j = await r.json().catch(() => ({}));
-        if (r.ok) { rev.current = j.rev; setSaveState("saved"); }
-        else if (r.status === 409) { rev.current = j.rev; conflict.current = true; setSaveState("conflict"); }
-        else setSaveState("error");
-      } catch { setSaveState("error"); }
-    }, 1000);
+    const timer = setTimeout(() => { void saveWorkspace(ws); }, 1000);
     return () => clearTimeout(timer);
-  }, [ws, resume]);
+  }, [ws, resume, saveWorkspace]);
+
+  const wasOffline = useRef(false);
+  useEffect(() => {
+    const on = () => { setOnline(true); if (wasOffline.current && wsRef.current) void saveWorkspace(wsRef.current); wasOffline.current = false; };
+    const off = () => { wasOffline.current = true; setOnline(false); };
+    setOnline(navigator.onLine);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, [saveWorkspace]);
+
+  useEffect(() => {
+    const h = () => setDriveAuth(true);
+    window.addEventListener(DRIVE_AUTH_EVENT, h);
+    return () => window.removeEventListener(DRIVE_AUTH_EVENT, h);
+  }, []);
 
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => { if (saveState === "saving" || saveState === "error") e.preventDefault(); };
@@ -109,8 +195,42 @@ export default function Studio({ userName }: { userName: string }) {
   const vText = useMemo(() => (ws && project ? poolsVisible(ws.textPools, project.id) : []), [ws, project]);
   const vPics = useMemo(() => (ws && project ? poolsVisible(ws.picPools, project.id) : []), [ws, project]);
 
+  // ---- preflight ----
+  const warnings = useMemo<PreflightItem[]>(() => {
+    if (!ws || !project) return [];
+    const out: PreflightItem[] = [];
+    const photoIds = new Set<string>();
+    const poolUses = new Map<string, number>();
+    let photoSlides = 0;
+    project.slides.forEach((s, i) => {
+      const n = i + 1;
+      const source = s.textSource;
+      if (source.kind === "none") out.push({ key: "Slide {n} has no text", params: { n } });
+      else if (source.kind === "pool") {
+        const pool = ws.textPools.find((p) => p.id === source.poolId);
+        if (!pool || !textItems(pool).length) out.push({ key: "The text list of slide {n} is empty", params: { n } });
+        else poolUses.set(pool.id, (poolUses.get(pool.id) ?? 0) + 1);
+      } else if (!lyricsText(project).trim()) {
+        out.push({ key: "Slide {n} has no lyrics", params: { n } });
+      }
+      if (!s.picPoolId) out.push({ key: "Slide {n} has no photo", params: { n } });
+      else {
+        const pool = ws.picPools.find((p) => p.id === s.picPoolId);
+        if (!pool || !pool.pics.length) out.push({ key: "The photo list of slide {n} is empty", params: { n } });
+        else { photoSlides++; pool.pics.forEach((p) => photoIds.add(p.id)); }
+      }
+    });
+    if (photoSlides > photoIds.size) out.push({ key: "Only {n} unique photos for {m} slides: some photos will repeat.", params: { n: photoIds.size, m: photoSlides } });
+    poolUses.forEach((count, id) => {
+      const pool = ws.textPools.find((p) => p.id === id);
+      if (pool?.kind !== "hooks") return;
+      const available = textItems(pool).length;
+      if (available < count) out.push({ key: "The list “{name}” has {n} texts for {m} slides: some texts will repeat.", params: { name: pool.name, n: available, m: count } });
+    });
+    return out;
+  }, [ws, project]);
+
   // ---- updaters ----
-  const upd = (fn: (w: Workspace) => Workspace) => setWs((w) => (w ? fn(w) : w));
   const updProject = (fn: (p: Project) => Project) =>
     upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === w.currentProjectId ? fn(p) : p)) }));
   const updSlide = (i: number, fn: (s: SlideCfg) => SlideCfg) =>
@@ -124,12 +244,18 @@ export default function Studio({ userName }: { userName: string }) {
 
   // ---- generate ----
   const generate = useCallback(() => {
+    const current = wsRef.current;
+    const active = current?.projects.find((x) => x.id === current.currentProjectId);
+    if (active?.slides.length && active.slides.every((s, i) => s.locked && active.generated?.[i])) {
+      say(t("All slides are locked"));
+      return;
+    }
     upd((w) => {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
-      const { slides, bags } = generateAll(w, p);
+      const { slides, bags } = generateAll(w, p, (i) => (p.slides[i].locked ? p.generated?.[i] : undefined));
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: slides } : x)) };
     });
-  }, []);
+  }, [say, t, upd]);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -141,7 +267,21 @@ export default function Studio({ userName }: { userName: string }) {
     return () => window.removeEventListener("keydown", k);
   }, [generate]);
 
-  const rerollPic = (i: number) =>
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+      else if (key === "y") { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [undo, redo]);
+
+  const rerollPic = (i: number) => {
+    if (project?.slides[i]?.locked) return;
     upd((w) => {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
       const bags = { ...w.bags };
@@ -151,7 +291,9 @@ export default function Studio({ userName }: { userName: string }) {
       g[i] = { ...g[i], picId: pic?.id ?? null, picName: pic?.name };
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g } : x)) };
     });
-  const rerollText = (i: number) =>
+  };
+  const rerollText = (i: number) => {
+    if (project?.slides[i]?.locked) return;
     upd((w) => {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
       const bags = { ...w.bags };
@@ -160,25 +302,55 @@ export default function Studio({ userName }: { userName: string }) {
       g[i] = { ...g[i], text };
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g } : x)) };
     });
+  };
 
-  // ---- slides count ----
-  const addSlide = () =>
+  // ---- slides ----
+  const insertSlide = (at: number, copyGenerated: boolean) =>
     upd((w) => {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
-      if (p.slides.length >= 10) return w;
-      const n = p.slides.length + 1;
-      let textPools = w.textPools, picPools = w.picPools;
-      let tp = textPools.find((x) => x.scope === "shared" && x.name === `Slide ${n} text`);
-      let pp = picPools.find((x) => x.scope === "shared" && isSlidePhotoList(x.name, n));
-      const fresh = slidePools(n);
-      if (!tp) { tp = fresh.text; textPools = [...textPools, tp]; }
-      if (!pp) { pp = fresh.pics; picPools = [...picPools, pp]; }
-      const last = p.slides[p.slides.length - 1];
-      const s: SlideCfg = { ...newSlide(n, tp.id, pp.id), format: last.format, pic: { ...last.pic, ox: 0, oy: 0 }, style: { ...last.style } };
-      return { ...w, textPools, picPools, projects: w.projects.map((x) => (x.id === p.id ? { ...x, slides: [...x.slides, s], selectedSlide: n - 1 } : x)) };
+      if (p.slides.length >= MAX_SLIDES) return w;
+      const from = Math.max(0, Math.min(p.slides.length - 1, at));
+      const src = p.slides[from];
+      const gsrc = p.generated?.[from];
+      const s: SlideCfg = {
+        ...src,
+        id: uid(),
+        locked: false,
+        textSource: { ...src.textSource },
+        pic: { ...src.pic },
+        style: { ...src.style },
+      };
+      const slides = [...p.slides];
+      slides.splice(from + 1, 0, s);
+      const generated = p.generated
+        ? Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null })
+        : null;
+      if (generated) generated.splice(from + 1, 0, copyGenerated && gsrc ? { ...gsrc } : { text: "", picId: null });
+      return { ...w, projects: w.projects.map((x) => (x.id === p.id ? { ...x, slides, generated, selectedSlide: from + 1 } : x)) };
     });
-  const removeSlide = () =>
-    updProject((p) => p.slides.length <= 1 ? p : { ...p, slides: p.slides.slice(0, -1), generated: p.generated?.slice(0, p.slides.length - 1) ?? null, selectedSlide: Math.min(p.selectedSlide, p.slides.length - 2) });
+  const addSlide = () => insertSlide(project?.selectedSlide ?? 0, false);
+  const duplicateSlide = (i: number) => insertSlide(i, true);
+  const deleteSlide = (i: number) =>
+    updProject((p) => {
+      if (p.slides.length <= 1) return p;
+      const slides = p.slides.filter((_, k) => k !== i);
+      const generated = p.generated
+        ? Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null }).filter((_, k) => k !== i)
+        : null;
+      return { ...p, slides, generated, selectedSlide: Math.min(i, slides.length - 1) };
+    });
+  const moveSlide = (from: number, to: number) =>
+    updProject((p) => {
+      if (from === to || to < 0 || to >= p.slides.length) return p;
+      const slides = [...p.slides];
+      const [s] = slides.splice(from, 1);
+      slides.splice(to, 0, s);
+      const generated = p.generated
+        ? Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null })
+        : null;
+      if (generated) { const [g] = generated.splice(from, 1); generated.splice(to, 0, g); }
+      return { ...p, slides, generated, selectedSlide: to };
+    });
 
   const applyAll = () => {
     updProject((p) => {
@@ -249,7 +421,9 @@ export default function Studio({ userName }: { userName: string }) {
         textSource: s.textSource.kind === "pool" ? { kind: "pool" as const, poolId: map.get(s.textSource.poolId) ?? s.textSource.poolId } : s.textSource,
         picPoolId: s.picPoolId ? map.get(s.picPoolId) ?? s.picPoolId : null,
       }));
-      const copy: Project = { id, name: src.name + " " + t("(copy)"), slides, lyrics: [], lyricsSectionId: null, generated: null, selectedSlide: 0 };
+      const lyrics = src.lyrics.map((l) => ({ ...l, id: uid() }));
+      const section = src.lyrics.findIndex((l) => l.id === src.lyricsSectionId);
+      const copy: Project = { id, name: src.name + " " + t("(copy)"), slides, lyrics, lyricsSectionId: section >= 0 ? lyrics[section].id : null, generated: null, selectedSlide: 0 };
       return { ...w, textPools: [...w.textPools, ...tCopies], picPools: [...w.picPools, ...pCopies], projects: [...w.projects, copy], currentProjectId: id };
     });
   const deleteProject = () =>
@@ -258,44 +432,70 @@ export default function Studio({ userName }: { userName: string }) {
       const textPools = w.textPools.filter((p) => !(p.scope === "project" && p.projectId === id));
       const picPools = w.picPools.filter((p) => !(p.scope === "project" && p.projectId === id));
       let projects = w.projects.filter((p) => p.id !== id);
-      if (!projects.length) projects = [newProject(t("New release"), textPools.slice(0, 2), picPools.slice(0, 3))];
+      if (!projects.length) projects = [newProject(
+        t("New release"),
+        textPools.filter((p) => p.scope === "shared").slice(0, 2),
+        picPools.filter((p) => p.scope === "shared").slice(0, 3)
+      )];
       return { ...w, textPools, picPools, projects, currentProjectId: projects[0].id };
     });
 
   // ---- export ----
-  async function buildFiles() {
-    const p = project!;
+  async function buildFiles(p: Project, onStep?: (done: number, total: number) => void, failures?: string[]) {
     const ext = ws!.exportFormat;
     const out: { name: string; blob: Blob }[] = [];
     for (let i = 0; i < p.slides.length; i++) {
+      if (cancelExport.current) break;
       const g = p.generated?.[i];
-      const img = g?.picId ? await loadDriveImage(g.picId) : null;
-      out.push({ name: `slide${i + 1}.${ext}`, blob: await slideToBlob(p.slides[i], img, g?.text ?? "", ext) });
+      try {
+        const img = g?.picId ? await loadDriveImage(g.picId) : null;
+        out.push({ name: `slide${i + 1}.${ext}`, blob: await slideToBlob(p.slides[i], img, g?.text ?? "", ext) });
+      } catch (e: any) {
+        failures?.push(`Slide ${i + 1}: ${e?.message ?? t("Export failed")}`);
+      }
+      onStep?.(i + 1, p.slides.length);
     }
     return out;
   }
   async function downloadAll() {
     if (!project?.generated) return say(t("Generate a carousel first"));
+    const p = project;
+    cancelExport.current = false;
     setBusy(true);
+    setExportProgress({ done: 0, total: p.slides.length });
+    const failures: string[] = [];
     try {
-      const files = await buildFiles();
-      const folder = `${safe(project.name)} ${stamp()}`;
+      const files = await buildFiles(p, (done, total) => setExportProgress({ done, total }), failures);
+      if (cancelExport.current) { say(t("Export cancelled")); return; }
+      if (!files.length) throw new Error(t("Export failed"));
+      const folder = `${safe(p.name)} ${stamp()}`;
       const zip = new JSZip();
       const dir = zip.folder(folder)!;
       files.forEach((f) => dir.file(f.name, f.blob));
+      const captions = p.slides.map((_, i) => `Slide ${i + 1}\n${p.generated?.[i]?.text ?? ""}`).join("\n\n");
+      dir.file("captions.txt", captions);
       download(await zip.generateAsync({ type: "blob" }), `${folder}.zip`);
+      if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: files.length, m: p.slides.length, f: failures.length }));
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
-    setBusy(false);
+    finally { setBusy(false); setExportProgress(null); }
   }
   async function shareAll() {
     if (!project?.generated) return say(t("Generate a carousel first"));
+    const p = project;
+    cancelExport.current = false;
     setBusy(true);
+    setExportProgress({ done: 0, total: p.slides.length });
+    const failures: string[] = [];
     try {
-      const files = (await buildFiles()).map((f) => new File([f.blob], f.name, { type: f.blob.type }));
-      if (navigator.canShare?.({ files })) await navigator.share({ files });
+      const files = await buildFiles(p, (done, total) => setExportProgress({ done, total }), failures);
+      if (cancelExport.current) { say(t("Export cancelled")); return; }
+      if (!files.length) throw new Error(t("Export failed"));
+      const shareFiles = files.map((f) => new File([f.blob], f.name, { type: f.blob.type }));
+      if (navigator.canShare?.({ files: shareFiles })) await navigator.share({ files: shareFiles });
       else say(t("Sharing files is not supported on this device"));
+      if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: files.length, m: p.slides.length, f: failures.length }));
     } catch (e: any) { if (e?.name !== "AbortError") say(e?.message ?? t("Share failed")); }
-    setBusy(false);
+    finally { setBusy(false); setExportProgress(null); }
   }
   async function saveOne(i: number) {
     try {
@@ -312,7 +512,7 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       const data = JSON.parse(await file.text());
       if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a TkTgen backup"));
-      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { setWs(data as Workspace); say(t("Backup restored")); } });
+      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(data as Workspace); say(t("Backup restored")); } });
     } catch (e: any) { say(e?.message ?? t("Could not read this file")); }
   };
 
@@ -330,7 +530,7 @@ export default function Studio({ userName }: { userName: string }) {
   const listRows = (kind: "text" | "photos") =>
     (kind === "text" ? vText : vPics).map((p, n) => (
       <div key={p.id} className="item" role="button" tabIndex={0} onClick={() => setEditor({ k: kind, id: p.id })}
-        onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) setEditor({ k: kind, id: p.id }); }}>
+        onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setEditor({ k: kind, id: p.id }); } }}>
         <span className="idx">{String(n + 1).padStart(2, "0")}</span>
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="truncate item-name">{p.name}</div>
@@ -361,9 +561,11 @@ export default function Studio({ userName }: { userName: string }) {
           </>)}
         </Menu>
         <span className="grow" />
-        <span className={"badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
+        <span role="status" aria-live="polite" className={"badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
           {saveState === "saved" ? t("Saved") : saveState === "saving" ? t("Saving…") : saveState === "conflict" ? t("Not saved") : t("Not saved")}
         </span>
+        {saveState === "error" && <button className="btn sm" onClick={() => wsRef.current && void saveWorkspace(wsRef.current)}>{t("Try again")}</button>}
+        {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
         <button className="btn" onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" />{t("Import hooks")}</button>
         <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}><Icon name="sliders" /></button>}>
           {(close) => (<>
@@ -390,8 +592,14 @@ export default function Studio({ userName }: { userName: string }) {
           </span>
         </div>
       )}
+      {driveAuth && (
+        <div className="notice bad row" style={{ margin: "var(--s3) var(--s4) 0", justifyContent: "space-between" }}>
+          <span>{t("Google Drive access expired. Reconnect to load your photos.")}</span>
+          <button className="btn sm" onClick={() => { setDriveAuth(false); void signIn("google", { redirectTo: "/studio" }); }}>{t("Reconnect Google")}</button>
+        </div>
+      )}
 
-      <div className="main">
+      <div className="main" data-mobile-tab={mobileTab}>
         <aside className="col side l">
           <section className="group">
             <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
@@ -406,10 +614,12 @@ export default function Studio({ userName }: { userName: string }) {
         <main className="col center">
           <div className="toolbar">
             <button className="btn primary" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+            <button className="btn icon quiet" aria-label={t("Undo")} title={t("Undo")} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
+            <button className="btn icon quiet" aria-label={t("Redo")} title={t("Redo")} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
             <div className="stepper">
-              <button className="btn quiet icon sm" aria-label={t("Fewer slides")} onClick={removeSlide} disabled={nSlides <= 1}><Icon name="minus" size={14} /></button>
+              <button className="btn quiet icon sm" aria-label={t("Delete slide")} title={t("Delete slide")} onClick={() => deleteSlide(sel)} disabled={nSlides <= 1}><Icon name="minus" size={14} /></button>
               <span>{nSlides === 1 ? t("1 slide") : t("{n} slides", { n: nSlides })}</span>
-              <button className="btn quiet icon sm" aria-label={t("More slides")} onClick={addSlide} disabled={nSlides >= 10}><Icon name="plus" size={14} /></button>
+              <button className="btn quiet icon sm" aria-label={t("Add a slide after this one")} title={t("Add a slide after this one")} onClick={addSlide} disabled={nSlides >= MAX_SLIDES}><Icon name="plus" size={14} /></button>
             </div>
             <div className="row" style={{ gap: "var(--s1)" }}>
               <select className="input" style={{ width: 170 }} aria-label={t("Lyrics section")} value={project.lyricsSectionId ?? ""} onChange={(e) => updProject((p) => ({ ...p, lyricsSectionId: e.target.value || null }))}>
@@ -434,7 +644,17 @@ export default function Studio({ userName }: { userName: string }) {
             </Menu>
             <button className="btn" onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
             {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn" onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" />{t("Share")}</button>}
+            {exportProgress && <span className="badge" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
+            {busy && <button className="btn" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
           </div>
+          {warnings.length > 0 && (
+            <details className="notice warn preflight">
+              <summary>{t("{n} points to check before generating", { n: warnings.length })}</summary>
+              <ul className="xs">
+                {warnings.map((w, i) => <li key={i}>{t(w.key, w.params)}</li>)}
+              </ul>
+            </details>
+          )}
           {!project.generated && (
             <div className="empty">
               <h2 className="display">{t("Make your next")} <em>{t("post")}</em>.</h2>
@@ -449,9 +669,13 @@ export default function Studio({ userName }: { userName: string }) {
             {project.slides.map((cfg, i) => (
               <SlideCard key={cfg.id} index={i} cfg={cfg} gen={project.generated?.[i]} selected={i === sel}
                 textPools={vText} picPools={vPics} zones={ws.zones} fontsReady={fontsReady}
+                locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
                 onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt })}
-                onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)} />
+                onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
+                onDuplicate={() => duplicateSlide(i)} onDelete={() => deleteSlide(i)}
+                onMoveLeft={() => moveSlide(i, i - 1)} onMoveRight={() => moveSlide(i, i + 1)}
+                onToggleLock={() => updSlide(i, (s) => ({ ...s, locked: !s.locked }))} />
             ))}
           </div>
         </main>
@@ -461,6 +685,12 @@ export default function Studio({ userName }: { userName: string }) {
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll} />
         </aside>
       </div>
+
+      <nav className="mobile-tabs" aria-label={t("Sections")}>
+        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => setMobileTab("slides")}><Icon name="sparkle" size={18} />{t("Slides")}</button>
+        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => setMobileTab("lists")}><Icon name="list" size={18} />{t("Lists")}</button>
+        <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => setMobileTab("style")}><Icon name="sliders" size={18} />{t("Style")}</button>
+      </nav>
 
       {edText && (
         <TextPoolEditor pool={edText} onClose={() => setEditor(null)} onDelete={() => askDeletePool("text", edText.id)}

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { DriveItem, isFolder, isImage, listFolder } from "@/lib/drive";
+import { DriveItem, isFolder, isImage, listFolder, searchDrive } from "@/lib/drive";
 import { useT } from "@/lib/i18n";
 import type { PicRef } from "@/lib/types";
 import Icon from "./Icon";
@@ -14,17 +14,22 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
   const [toAll, setToAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [q, setQ] = useState("");
   const cur = path[path.length - 1];
+  const query = q.trim();
 
   useEffect(() => {
     let off = false;
     setLoading(true); setErr(null); setSel(new Set());
-    listFolder(cur.id)
-      .then((r) => !off && setItems(r))
-      .catch((e) => !off && setErr(e.message))
-      .finally(() => !off && setLoading(false));
-    return () => { off = true; };
-  }, [cur.id]);
+    const timer = setTimeout(() => {
+      const run = query ? searchDrive(query) : listFolder(cur.id);
+      run
+        .then((r) => !off && setItems(r))
+        .catch((e) => !off && setErr(e.message))
+        .finally(() => !off && setLoading(false));
+    }, query ? 250 : 0);
+    return () => { off = true; clearTimeout(timer); };
+  }, [cur.id, query]);
 
   const images = items.filter(isImage);
   const toRef = (i: DriveItem): PicRef => ({ id: i.id, name: i.name });
@@ -33,17 +38,30 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
   return (
     <Modal title={t("Add photos from Google Drive")} onClose={onClose} wide>
       <div className="row">
-        <button className="btn sm" onClick={() => setPath([{ id: "root", name: t("My Drive") }])}>{t("My Drive")}</button>
-        <button className="btn sm" onClick={() => setPath([{ id: "shared", name: t("Shared with me") }])}>{t("Shared with me")}</button>
-        <span className="muted xs grow truncate">{path.map((p) => p.name).join(" / ")}</span>
-        {path.length > 1 && <button className="btn sm quiet" onClick={() => setPath(path.slice(0, -1))}><Icon name="back" size={14} />{t("Back")}</button>}
+        <button className="btn sm" onClick={() => { setQ(""); setPath([{ id: "root", name: t("My Drive") }]); }}>{t("My Drive")}</button>
+        <button className="btn sm" onClick={() => { setQ(""); setPath([{ id: "shared", name: t("Shared with me") }]); }}>{t("Shared with me")}</button>
+        <input className="input" style={{ width: 200 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search your Drive")} aria-label={t("Search your Drive")} />
+        <nav className="crumbs grow" aria-label={t("Folder path")}>
+          {path.map((p, i) => (
+            <span key={p.id} className="row" style={{ gap: 4, flex: "none" }}>
+              {i > 0 && <span>/</span>}
+              <button onClick={() => { setQ(""); setPath(path.slice(0, i + 1)); }}>{p.name}</button>
+            </span>
+          ))}
+        </nav>
+        {path.length > 1 && <button className="btn sm quiet" onClick={() => { setQ(""); setPath(path.slice(0, -1)); }}><Icon name="back" size={14} />{t("Back")}</button>}
       </div>
       {err && <p className="notice bad">{err}</p>}
       <div className="stack" style={{ maxHeight: "48dvh", overflow: "auto", gap: 4 }}>
         {loading && <p className="muted">{t("Loading…")}</p>}
-        {!loading && !items.length && <p className="muted">{t("No folders or photos here.")}</p>}
+        {!loading && !items.length && <p className="muted">{query ? t("No results.") : t("No folders or photos here.")}</p>}
         {items.filter(isFolder).map((f) => (
-          <button key={f.id} className="item" onClick={() => setPath([...path, { id: f.id, name: f.name }])}>
+          <button key={f.id} className="item" onClick={() => {
+            if (query) {
+              setQ("");
+              setPath([{ id: "root", name: t("My Drive") }, { id: f.id, name: f.name }]);
+            } else setPath([...path, { id: f.id, name: f.name }]);
+          }}>
             <Icon name="folder" size={15} /><span className="grow truncate">{f.name}</span>
           </button>
         ))}
@@ -61,7 +79,7 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
           {t("Add selected ({n})", { n: sel.size })}
         </button>
         <button className="btn primary" disabled={!images.length} onClick={() => { onAdd(images.map(toRef), toAll); onClose(); }}>
-          {t("Add all {n} photos here", { n: images.length })}
+          {query ? t("Add all {n} photos", { n: images.length }) : t("Add all {n} photos here", { n: images.length })}
         </button>
       </div>
     </Modal>

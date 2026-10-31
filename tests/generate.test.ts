@@ -73,6 +73,18 @@ describe("generateAll", () => {
       expect(slides[0].text).toMatch(/hook/);
     }
   });
+  it("keeps locked slides and excludes their photos from new picks", () => {
+    const ws = defaultWorkspace();
+    const photos = Array.from({ length: 4 }, (_, i) => ({ id: `ph${i}`, name: `p${i}.jpg` }));
+    ws.picPools.forEach((p) => (p.pics = photos));
+    ws.textPools[0].text = "hook one\nhook two";
+    ws.textPools[1].text = "second a\nsecond b";
+    const project = ws.projects[0];
+    const locked = { text: "kept", picId: "ph0" };
+    const { slides } = generateAll(ws, project, (i) => (i === 0 ? locked : undefined));
+    expect(slides[0]).toBe(locked);
+    expect(slides.slice(1).map((s) => s.picId)).not.toContain("ph0");
+  });
   it("lyricsText falls back to the first section", () => {
     const ws = defaultWorkspace();
     const p = ws.projects[0];

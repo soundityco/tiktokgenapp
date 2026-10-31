@@ -7,17 +7,44 @@ const stack: symbol[] = [];
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // Escape only closes the topmost dialog.
+    // Escape only closes the topmost dialog, and Tab stays inside it.
     const token = Symbol();
     stack.push(token);
-    const k = (e: KeyboardEvent) => e.key === "Escape" && stack[stack.length - 1] === token && closeRef.current();
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    const focusables = () =>
+      Array.from(dialog?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []).filter((el) => el.offsetParent !== null);
+    const first = focusables()[0];
+    (first ?? dialog)?.focus();
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && stack[stack.length - 1] === token) {
+        closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || stack[stack.length - 1] !== token) return;
+      const items = focusables();
+      if (!items.length) { e.preventDefault(); dialog?.focus(); return; }
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      const next = e.shiftKey
+        ? items[at <= 0 ? items.length - 1 : at - 1]
+        : items[at === -1 || at === items.length - 1 ? 0 : at + 1];
+      e.preventDefault();
+      next.focus();
+    };
     window.addEventListener("keydown", k);
-    return () => { window.removeEventListener("keydown", k); stack.splice(stack.indexOf(token), 1); };
+    return () => {
+      window.removeEventListener("keydown", k);
+      stack.splice(stack.indexOf(token), 1);
+      previous?.focus?.();
+    };
   }, []);
   return (
     <div className="ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={"modal" + (wide ? " wide" : "")} role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={dialogRef} tabIndex={-1} className={"modal" + (wide ? " wide" : "")} role="dialog" aria-modal="true" aria-label={title}>
         <h2 className="title">{title}</h2>
         {children}
       </div>

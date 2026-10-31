@@ -98,11 +98,23 @@ export function pickPic(
   return ref ? { id: ref.id, name: ref.name } : null;
 }
 
-/** Generate every slide of the project. Never the same picture twice in one carousel. */
-export function generateAll(ws: Workspace, project: Project): { slides: GenSlide[]; bags: Record<string, string[]> } {
+/**
+ * Generate every slide of the project. Never the same picture twice in one carousel.
+ * `preserve` lets locked slides keep their existing generated text and photo.
+ */
+export function generateAll(
+  ws: Workspace,
+  project: Project,
+  preserve?: (index: number) => GenSlide | undefined
+): { slides: GenSlide[]; bags: Record<string, string[]> } {
   const bags = { ...ws.bags };
-  const used = new Set<string>();
+  const kept = project.slides.map((_, i) => preserve?.(i));
+  const used = new Set<string>(
+    kept.map((g) => g?.picId).filter((id): id is string => !!id)
+  );
   const slides = project.slides.map((_, i): GenSlide => {
+    const old = kept[i];
+    if (old) return old;
     const pic = pickPic(project.slides[i].picPoolId, ws, bags, used);
     if (pic) used.add(pic.id);
     return { text: pickText(project, ws, i, bags), picId: pic?.id ?? null, picName: pic?.name };

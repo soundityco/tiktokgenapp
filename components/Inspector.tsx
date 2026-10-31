@@ -20,6 +20,7 @@ export default function Inspector({ index, cfg, zones, onZones, onCfg, onApplyAl
   const setP = (patch: Partial<PicSettings>) => onCfg((c) => ({ ...c, pic: { ...c.pic, ...patch } }));
   return (
     <div className="stack">
+      {cfg.locked && <p className="notice warn xs">{t("This slide is locked: Generate and re-rolls won't change it.")}</p>}
       <div className="insp-title">
         <h2>{t("Slide {n}", { n: index + 1 })}</h2>
         <button className="btn sm" onClick={onApplyAll} title={t("Copy format, photo and text settings to every slide")}>{t("Apply to all slides")}</button>

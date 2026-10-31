@@ -37,6 +37,8 @@ export type TextSource = { kind: "none" } | { kind: "pool"; poolId: string } | {
 
 export interface SlideCfg {
   id: string;
+  /** Locked slides keep their generated text and photo when the carousel is regenerated. */
+  locked?: boolean;
   format: FormatId;
   textSource: TextSource;
   picPoolId: string | null;

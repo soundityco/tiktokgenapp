@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { textItems } from "@/lib/generate";
+import { hookKey, textItems } from "@/lib/generate";
 import { loadDriveImage } from "@/lib/drive";
 import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
@@ -59,6 +59,13 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   const { pool } = p;
   const file = useRef<HTMLInputElement>(null);
   const n = textItems(pool).length;
+  const perf = pool.kind === "hooks" && pool.views
+    ? textItems(pool)
+        .map((text) => ({ text, views: pool.views?.[hookKey(text)] ?? 0 }))
+        .filter((x) => x.views > 0)
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 8)
+    : [];
   return (
     <Modal title={t("Text list")} onClose={p.onClose} wide>
       <div className="cols2">
@@ -73,6 +80,19 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
       </label>
       <textarea className="input" rows={12} aria-label={t("Texts")} value={pool.text} onChange={(e) => p.onChange((x) => ({ ...x, text: e.target.value }))}
         placeholder={pool.kind === "hooks" ? t("One text per line. Use | to force a line break on the slide.") : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
+      {perf.length > 0 && (
+        <details className="sec">
+          <summary>{t("Best hooks by views")}</summary>
+          <div className="body">
+            {perf.map((row) => (
+              <div className="row" key={row.text}>
+                <span className="grow truncate">{row.text}</span>
+                <span className="muted xs">{t("{n} views", { n: row.views.toLocaleString("en-US") })}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
       <div className="row">
         <span className="muted grow">{pool.kind === "hooks" ? t("{n} texts", { n }) : n ? t("1 block") : t("Empty")}</span>
         <input ref={file} type="file" accept=".txt,text/plain" hidden onChange={async (e) => {

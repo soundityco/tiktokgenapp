@@ -62,11 +62,22 @@ Netlify → *Add new site → Import from Git*. Le fichier `netlify.toml` gère 
 
 Limites : l'API renvoie la **couverture** de chaque post (la slide 1, donc le hook), pas les slides suivantes. Si vos carrousels photo n'apparaissent pas dans `video.list`, garde l'import par screenshots. Les jetons TikTok sont stockés côté serveur (table `tiktok_tokens`), jamais envoyés au navigateur.
 
+## Nouveautés v0.4
+- **Gestion complète des slides** : insérer après la slide sélectionnée, dupliquer, déplacer, supprimer, jusqu'à 35 slides.
+- **Verrou** par slide : une slide verrouillée conserve son texte et sa photo lors d'une régénération.
+- **Annuler / rétablir** (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z) et boutons dans la barre d'outils.
+- **Pré-vol** avant génération : listes vides, slides sans source, risque de photos ou de textes répétés.
+- **Export avec progression**, annulation et fichier `captions.txt` dans le ZIP.
+- **Mobile** : onglets Slides / Listes / Style, défilement tactile corrigé et champs adaptés à iOS.
+- **Drive** : recherche dans tout le Drive et fil d'Ariane cliquable.
+- **Hooks** : les vues TikTok enregistrées sont visibles dans l'éditeur de liste.
+
 ## Utilisation rapide
 1. **Picture pools** → clique sur « Slide 1 pictures » → *Add from Google Drive* → choisis un dossier → *Add all*.
 2. **Text pools** → écris ou colle tes hooks (un par ligne, `|` = saut de ligne), ou *Extract hooks from screenshots*.
 3. **Edit lyrics** → ajoute des sections (Verse 1, Chorus…), choisis celle à afficher avec le menu « Lyrics ».
 4. **Generate** (ou touche G) → ajuste dans l'inspecteur → **Download all** (ZIP) ou **Share** sur mobile.
+5. Pour garder une slide telle quelle, ouvre son menu (⋯) et choisis **Lock slide** avant de régénérer.
 
 ## Langue
 L'interface existe en **français et en anglais** : la langue du navigateur est détectée, et tu peux la changer dans ⚙ (en haut à droite). Les textes sont dans `lib/fr.ts` (clé = texte anglais utilisé dans le code).

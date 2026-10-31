@@ -4,6 +4,7 @@ import { loadWorkspace, saveWorkspaceCas } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 const email = async () => (await auth())?.user?.email?.toLowerCase() ?? null;
+const MAX_BODY = 2_000_000;
 
 export async function GET() {
   const e = await email();
@@ -11,7 +12,8 @@ export async function GET() {
   try {
     return Response.json({ data: await loadWorkspace(e) });
   } catch (err) {
-    return Response.json({ error: String(err) }, { status: 500 });
+    console.error("workspace load failed", err);
+    return Response.json({ error: "server_error" }, { status: 500 });
   }
 }
 
@@ -20,7 +22,10 @@ export async function PUT(req: Request) {
   const e = await email();
   if (!e) return Response.json({ error: "unauthorized" }, { status: 401 });
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    if (raw.length > MAX_BODY) return Response.json({ error: "too_large" }, { status: 413 });
+    let body: any;
+    try { body = JSON.parse(raw); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
     const data = body?.data;
     if (!data || data.v !== 1 || !Array.isArray(data.projects)) {
       return Response.json({ error: "invalid workspace" }, { status: 400 });
@@ -29,6 +34,7 @@ export async function PUT(req: Request) {
     const r = await saveWorkspaceCas(e, data, baseRev);
     return r.ok ? Response.json({ ok: true, rev: r.rev }) : Response.json({ error: "conflict", rev: r.rev }, { status: 409 });
   } catch (err) {
-    return Response.json({ error: String(err) }, { status: 500 });
+    console.error("workspace save failed", err);
+    return Response.json({ error: "server_error" }, { status: 500 });
   }
 }

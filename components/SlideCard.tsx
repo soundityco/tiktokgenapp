@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
+import { Menu } from "./ui";
 import { renderSlide, TextBox } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import type { GenSlide, PicPool, SlideCfg, TextPool } from "@/lib/types";
@@ -21,6 +22,14 @@ interface Props {
   onRerollPic: () => void;
   onRerollText: () => void;
   onSave: () => void;
+  locked: boolean;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+  onToggleLock: () => void;
 }
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -81,6 +90,7 @@ export default function SlideCard(p: Props) {
   // Wheel needs a non-passive listener to stop the page from scrolling.
   const wheelRef = useRef<(e: WheelEvent) => void>(() => {});
   wheelRef.current = (e) => {
+    if (!p.selected) return; // let the page scroll until the slide is selected
     e.preventDefault();
     const c = toCanvas(e);
     const dir = e.deltaY < 0 ? 1 : -1;
@@ -103,13 +113,26 @@ export default function SlideCard(p: Props) {
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
   return (
-    <div className={"card" + (p.selected ? " sel" : "")} onClick={p.onSelect}>
+    <div className={"card" + (p.selected ? " sel" : "") + (p.locked ? " locked" : "")} onClick={p.onSelect}>
       <div className="card-head">
-        <span className="idx-chip" aria-label={t("Slide {n}", { n: p.index + 1 })}>{String(p.index + 1).padStart(2, "0")}</span>
+        <button className="idx-chip" onClick={(e) => { e.stopPropagation(); p.onSelect(); }} aria-label={p.locked ? `${t("Slide {n}", { n: p.index + 1 })} · ${t("Locked")}` : t("Slide {n}", { n: p.index + 1 })} aria-pressed={p.selected}>
+          {p.locked && <Icon name="lock" size={10} />}{String(p.index + 1).padStart(2, "0")}
+        </button>
         <span className="grow" />
-        <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
-        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind === "none"} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
+        <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId || p.locked} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
+        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind === "none" || p.locked} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
         <button className="btn sm quiet icon" onClick={p.onSave} aria-label={t("Save this slide")} title={t("Save this slide")}><Icon name="download" size={14} /></button>
+        <Menu trigger={(_, toggle) => <button className="btn sm quiet icon" aria-label={t("Slide actions")} title={t("Slide actions")} onClick={(e) => { e.stopPropagation(); toggle(); }}><Icon name="more" size={14} /></button>}>
+          {(close) => (<>
+            <button disabled={!p.canMoveLeft} onClick={(e) => { e.stopPropagation(); close(); p.onMoveLeft(); }}><Icon name="arrowLeft" size={14} />{t("Move left")}</button>
+            <button disabled={!p.canMoveRight} onClick={(e) => { e.stopPropagation(); close(); p.onMoveRight(); }}><Icon name="arrowRight" size={14} />{t("Move right")}</button>
+            <div className="sep" />
+            <button onClick={(e) => { e.stopPropagation(); close(); p.onDuplicate(); }}><Icon name="copy" size={14} />{t("Duplicate slide")}</button>
+            <button onClick={(e) => { e.stopPropagation(); close(); p.onToggleLock(); }}><Icon name={p.locked ? "unlock" : "lock"} size={14} />{p.locked ? t("Unlock slide") : t("Lock slide")}</button>
+            <div className="sep" />
+            <button className="danger" style={{ color: "var(--danger)" }} onClick={(e) => { e.stopPropagation(); close(); p.onDelete(); }}><Icon name="trash" size={14} />{t("Delete slide")}</button>
+          </>)}
+        </Menu>
       </div>
       <div className="cv-wrap">
         <canvas ref={cv} className="cv" width={1080} height={1920}
