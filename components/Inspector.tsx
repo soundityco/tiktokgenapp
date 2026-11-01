@@ -1,7 +1,8 @@
 "use client";
 import { FONT_LABELS, defaultPic, defaultStyle } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
-import type { FontId, FormatId, PicSettings, SlideCfg, TextStyle } from "@/lib/types";
+import type { FontId, FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
+import Icon from "./Icon";
 import { Range, Section } from "./ui";
 
 interface Props {
@@ -11,9 +12,17 @@ interface Props {
   onZones: (v: boolean) => void;
   onCfg: (fn: (c: SlideCfg) => SlideCfg) => void;
   onApplyAll: () => void;
+  lyrics: LyricSection[];
+  presets: StylePreset[];
+  onSavePreset: () => void;
+  onApplyPreset: (id: string) => void;
+  onDeletePreset: (id: string) => void;
 }
 
-export default function Inspector({ index, cfg, zones, onZones, onCfg, onApplyAll }: Props) {
+export default function Inspector({
+  index, cfg, zones, onZones, onCfg, onApplyAll,
+  lyrics, presets, onSavePreset, onApplyPreset, onDeletePreset,
+}: Props) {
   const { t } = useT();
   const st = cfg.style, pic = cfg.pic;
   const setS = (patch: Partial<TextStyle>) => onCfg((c) => ({ ...c, style: { ...c.style, ...patch } }));
@@ -83,7 +92,36 @@ export default function Inspector({ index, cfg, zones, onZones, onCfg, onApplyAl
           </div>
           <Range label={t("Width")} value={st.width} display={`${st.width}%`} min={20} max={100} onChange={(v) => setS({ width: v })} />
           <Range label={t("Line spacing")} value={st.lineHeight} display={st.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => setS({ lineHeight: v })} />
+          {cfg.textSource.kind === "lyrics" && (
+            <label className="field">{t("Lyrics section for this slide")}
+              <select className="input" value={cfg.textSource.sectionId ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  onCfg((c) => ({ ...c, textSource: v ? { kind: "lyrics", sectionId: v } : { kind: "lyrics" } }));
+                }}>
+                <option value="">{t("Project default")}</option>
+                {lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </label>
+          )}
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
+        </Section>
+
+        <Section title={t("Style presets")} open={false}>
+          <div className="row">
+            <button className="btn sm" onClick={onSavePreset}>{t("Save current style")}</button>
+            {!presets.length && <span className="muted xs">{t("No presets yet.")}</span>}
+          </div>
+          {presets.map((p) => (
+            <div className="row nowrap" key={p.id}>
+              <button className="btn sm grow" onClick={() => onApplyPreset(p.id)} title={t("Apply")}>
+                <span className="truncate">{p.name}</span>
+              </button>
+              <button className="btn sm quiet icon" aria-label={t("Delete preset")} title={t("Delete preset")} onClick={() => onDeletePreset(p.id)}>
+                <Icon name="trash" size={13} />
+              </button>
+            </div>
+          ))}
         </Section>
 
         <Section title={t("Position")} open={false}>

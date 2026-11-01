@@ -226,3 +226,35 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   .btn.sm { height: 34px; } .btn.icon.sm { width: 34px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---------- Slide reordering ---------- */
+.grip { cursor: grab; color: var(--faint); font-size: 14px; line-height: 1; padding: 0 2px; user-select: none; -webkit-user-drag: element; }
+.grip:hover { color: var(--text); }
+.card.dragging { opacity: .45; }
+.card.drop-target .cv-wrap { outline: 2px dashed var(--accent-hi); }
+
+/* ---------- Studio switch ---------- */
+.studio-switch { display: inline-flex; align-items: center; padding: 3px; gap: 2px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 999px; }
+.studio-switch button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.studio-switch button:hover:not(.on) { color: var(--text); background: var(--raised); }
+.studio-switch button.on { background: var(--accent); color: #fff; }
+
+/* ---------- Video studio ---------- */
+.main[data-studio="video"] { display: block; overflow: auto; padding-bottom: 0; }
+.video-page { min-height: 100%; padding: var(--s5); }
+.video-wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: var(--s4); }
+.video-head { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.video-head .display { font-size: 28px; line-height: 1; }
+.video-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--s5); align-items: start; }
+.video-grid .cv-wrap { max-width: 280px; }
+.video-grid .cv { cursor: default; touch-action: auto; }
+.video-side { display: grid; gap: var(--s2); min-width: 0; }
+.video-src { position: fixed; left: -9999px; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
+.wave { width: 100%; height: 90px; display: block; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); touch-action: none; cursor: ew-resize; }
+.lyric-timing { display: grid; gap: var(--s1); max-height: 210px; overflow: auto; padding-right: 2px; }
+@media (max-width: 760px) {
+  .video-grid { grid-template-columns: 1fr; }
+  .video-grid .cv-wrap { max-width: 200px; margin: 0 auto; }
+  .video-page { padding: var(--s4); }
+  .video-head .display { font-size: 24px; }
+}

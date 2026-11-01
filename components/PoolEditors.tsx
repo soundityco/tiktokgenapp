@@ -54,7 +54,7 @@ function Thumb({ id, name }: { id: string; name: string }) {
 
 interface Common { onClose: () => void; onDelete: () => void }
 
-export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; onImport: () => void }) {
+export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; onImport: () => void; onRefreshViews?: () => void; viewsBusy?: boolean }) {
   const { t } = useT();
   const { pool } = p;
   const file = useRef<HTMLInputElement>(null);
@@ -102,6 +102,11 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         }} />
         <button className="btn sm" onClick={() => file.current?.click()}>{t("Import .txt")}</button>
         {pool.kind === "hooks" && <button className="btn sm" onClick={p.onImport}>{t("Import hooks…")}</button>}
+        {pool.kind === "hooks" && p.onRefreshViews && Object.keys(pool.views ?? {}).length > 0 && (
+          <button className="btn sm" onClick={p.onRefreshViews} disabled={p.viewsBusy}>
+            {p.viewsBusy ? t("Updating…") : t("Update views")}
+          </button>
+        )}
       </div>
       <div className="modal-foot">
         <button className="btn quiet danger left" onClick={p.onDelete}>{t("Delete list")}</button>

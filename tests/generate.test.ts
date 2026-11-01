@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultWorkspace } from "../lib/defaults";
-import { generateAll, hookKey, lyricsText, pick, textItems, weightedPick } from "../lib/generate";
+import { generateAll, hookKey, lyricsText, pick, pickText, textItems, weightedPick, weightedPickBag } from "../lib/generate";
 import type { TextPool } from "../lib/types";
 
 const pool = (kind: TextPool["kind"], text: string): TextPool => ({ id: "p", name: "p", scope: "shared", kind, text });
@@ -91,5 +91,88 @@ describe("generateAll", () => {
     p.lyrics = [{ id: "v", name: "Verse", text: "verse text" }];
     p.lyricsSectionId = null;
     expect(lyricsText(p)).toBe("verse text");
+  });
+});
+
+describe("lyrics per slide", () => {
+  it("uses the slide's own section, else the project default", () => {
+    const ws = defaultWorkspace();
+    const p = ws.projects[0];
+    p.lyrics = [
+      { id: "v", name: "Verse", text: "verse text" },
+      { id: "c", name: "Chorus", text: "chorus text" },
+    ];
+    p.lyricsSectionId = "v";
+    p.slides = [0, 1].map(() => ({ ...p.slides[0], textSource: { kind: "lyrics" as const } }));
+    expect(pickText(p, ws, 0, {})).toBe("verse text");
+    p.slides[1].textSource = { kind: "lyrics", sectionId: "c" };
+    expect(pickText(p, ws, 1, {})).toBe("chorus text");
+  });
+
+  it("falls back when the chosen section was deleted", () => {
+    const ws = defaultWorkspace();
+    const p = ws.projects[0];
+    p.lyrics = [{ id: "v", name: "Verse", text: "verse text" }];
+    p.lyricsSectionId = "v";
+    p.slides[0].textSource = { kind: "lyrics", sectionId: "gone" };
+    expect(pickText(p, ws, 0, {})).toBe("verse text");
+  });
+});
+
+describe("favor top hooks + no repeat", () => {
+  const setup = () => {
+    const ws = defaultWorkspace();
+    const pool = ws.textPools[0];
+    pool.text = "h0\nh1\nh2\nh3\nh4\nh5";
+    pool.views = { h0: 5000, h1: 4000, h2: 3000, h3: 2000, h4: 1000, h5: 500 };
+    ws.favorTop = true;
+    ws.noRepeat = true;
+    return { ws, project: ws.projects[0] };
+  };
+
+  it("still never repeats before the whole pool was used", () => {
+    const { ws, project } = setup();
+    const bags: Record<string, string[]> = {};
+    for (let round = 0; round < 5; round++) {
+      const got = Array.from({ length: 6 }, () => pickText(project, ws, 0, bags));
+      expect(new Set(got).size).toBe(6);
+    }
+  });
+
+  it("without no repeat, the best hooks come back more often", () => {
+    const { ws, project } = setup();
+    ws.noRepeat = false;
+    const bags: Record<string, string[]> = {};
+    const counts: Record<string, number> = {};
+    for (let i = 0; i < 800; i++) {
+      const h = pickText(project, ws, 0, bags);
+      counts[h] = (counts[h] ?? 0) + 1;
+    }
+    expect(counts.h0).toBeGreaterThan(counts.h5);
+  });
+
+  it("with no repeat, the best hooks land earlier in the carousel", () => {
+    const { ws, project } = setup();
+    const bags: Record<string, string[]> = {};
+    let pos0 = 0, pos5 = 0;
+    for (let cycle = 0; cycle < 200; cycle++) {
+      const got = Array.from({ length: 6 }, () => pickText(project, ws, 0, bags));
+      pos0 += got.indexOf("h0");
+      pos5 += got.indexOf("h5");
+    }
+    expect(pos0).toBeLessThan(pos5);
+  });
+
+  it("weightedPickBag empties the bag one item at a time", () => {
+    const bags: Record<string, string[]> = {};
+    const items = ["a", "b", "c"];
+    const views = { a: 100, b: 10, c: 10 };
+    const got = new Set([
+      weightedPickBag("p", items, views, bags, true),
+      weightedPickBag("p", items, views, bags, true),
+      weightedPickBag("p", items, views, bags, true),
+    ]);
+    expect(got.size).toBe(3);
+    expect(bags.p).toEqual([]);
   });
 });

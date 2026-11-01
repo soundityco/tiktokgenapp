@@ -23,6 +23,9 @@ const P: Record<string, string> = {
   copy: "M8 8h11v11H8zM5 16H4V4h12v1",
   arrowLeft: "M20 12H4M10 6l-6 6 6 6",
   arrowRight: "M4 12h16M14 6l6 6-6 6",
+  film: "M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4",
+  play: "M8 5.5l11 6.5-11 6.5z",
+  pause: "M8.5 5v14M15.5 5v14",
 };
 
 export default function Icon({ name, size = 16 }: { name: keyof typeof P | "more"; size?: number }) {

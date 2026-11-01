@@ -2,11 +2,12 @@
 import JSZip from "jszip";
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { defaultWorkspace, isSlidePhotoList, newProject, uid } from "@/lib/defaults";
+import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
+import { delMedia } from "@/lib/idb";
 import { DRIVE_AUTH_EVENT, loadDriveImage } from "@/lib/drive";
 import { generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
-import { loadFonts, slideToBlob } from "@/lib/render";
+import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
 import HooksExtract, { NewHook } from "./HooksExtract";
@@ -15,9 +16,11 @@ import Inspector from "./Inspector";
 import Logo from "./Logo";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
 import SlideCard from "./SlideCard";
+import VideoStudio from "./VideoStudio";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "./ui";
 
-const VERSION = "v0.4";
+const VERSION = "v0.5";
+const HISTORY_KEY = "tktgen-undo";
 const MAX_SLIDES = 35;
 
 type Editor = { k: "text" | "photos"; id: string } | null;
@@ -31,6 +34,7 @@ type Overlay =
   | { k: "newPool"; kind: "text" | "photos" }
   | { k: "newProject" }
   | { k: "rename" }
+  | { k: "preset" }
   | { k: "confirm"; title: string; message: string; label: string; run: () => void };
 
 const stamp = () => {
@@ -53,6 +57,7 @@ export default function Studio({ userName }: { userName: string }) {
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error" | "conflict">("saved");
   const [editor, setEditor] = useState<Editor>(null);
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [studio, setStudio] = useState<"carousel" | "video">("carousel");
   const [toast, setToast] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,17 +69,33 @@ export default function Studio({ userName }: { userName: string }) {
   const loaded = useRef(false);
   const rev = useRef(0);
   const conflict = useRef(false);
+  const saveBusy = useRef(false);
+  const saveAgain = useRef(false);
   const wsRef = useRef<Workspace | null>(null);
   const past = useRef<Workspace[]>([]);
   const future = useRef<Workspace[]>([]);
   const lastHistory = useRef(0);
   const cancelExport = useRef(false);
   const [resume, setResume] = useState(0);
+  const [viewsBusy, setViewsBusy] = useState(false);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
   const restoreInput = useRef<HTMLInputElement>(null);
 
   const say = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); }, []);
 
-  const syncHistory = () => setHistory({ past: past.current.length, future: future.current.length });
+  const historyTimer = useRef<number | null>(null);
+  const persistHistory = useCallback(() => {
+    if (historyTimer.current) window.clearTimeout(historyTimer.current);
+    historyTimer.current = window.setTimeout(() => {
+      try {
+        const payload = JSON.stringify({ past: past.current.slice(-10), future: future.current.slice(-10) });
+        if (payload.length > 1_500_000) sessionStorage.removeItem(HISTORY_KEY);
+        else sessionStorage.setItem(HISTORY_KEY, payload);
+      } catch { /* storage full or private mode */ }
+    }, 500);
+  }, []);
+  const syncHistory = () => { setHistory({ past: past.current.length, future: future.current.length }); persistHistory(); };
   const remember = useCallback((snapshot: Workspace) => {
     const now = Date.now();
     // Coalesce quick successive edits (typing, dragging) into one undo step.
@@ -139,10 +160,18 @@ export default function Studio({ userName }: { userName: string }) {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? "Could not load your data");
         rev.current = j.data?.rev ?? 0;
-        const next = j.data && j.data.v === 1 ? (j.data as Workspace) : defaultWorkspace();
+        const next = normalizeWorkspace(j.data && j.data.v === 1 ? (j.data as Workspace) : defaultWorkspace());
         wsRef.current = next;
         setWs(next);
         past.current = []; future.current = []; lastHistory.current = 0;
+        try {
+          const raw = sessionStorage.getItem(HISTORY_KEY);
+          if (raw) {
+            const h = JSON.parse(raw);
+            if (Array.isArray(h?.past)) past.current = h.past.slice(-10);
+            if (Array.isArray(h?.future)) future.current = h.future.slice(-10);
+          }
+        } catch { /* ignore */ }
         syncHistory();
       })
       .catch((e) => setLoadErr(String(e.message ?? e)));
@@ -160,23 +189,40 @@ export default function Studio({ userName }: { userName: string }) {
     } catch { setSaveState("error"); }
   }, []);
 
+  // Serialise saves: an immediate save (video studio) and the debounce can overlap, and two
+  // PUTs with the same base revision would raise a false "changed on another device" conflict.
+  const flushSave = useCallback(async () => {
+    if (saveBusy.current) { saveAgain.current = true; return; }
+    saveBusy.current = true;
+    try {
+      do {
+        saveAgain.current = false;
+        const data = wsRef.current;
+        if (!data || conflict.current) break;
+        await saveWorkspace(data);
+      } while (saveAgain.current && !conflict.current);
+    } finally {
+      saveBusy.current = false;
+    }
+  }, [saveWorkspace]);
+
   useEffect(() => {
     if (!ws || conflict.current) return;
     if (!loaded.current) { loaded.current = true; return; }
     setSaveState("saving");
-    const timer = setTimeout(() => { void saveWorkspace(ws); }, 1000);
+    const timer = setTimeout(() => { void flushSave(); }, 1000);
     return () => clearTimeout(timer);
-  }, [ws, resume, saveWorkspace]);
+  }, [ws, resume, flushSave]);
 
   const wasOffline = useRef(false);
   useEffect(() => {
-    const on = () => { setOnline(true); if (wasOffline.current && wsRef.current) void saveWorkspace(wsRef.current); wasOffline.current = false; };
+    const on = () => { setOnline(true); if (wasOffline.current && wsRef.current) void flushSave(); wasOffline.current = false; };
     const off = () => { wasOffline.current = true; setOnline(false); };
     setOnline(navigator.onLine);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
-  }, [saveWorkspace]);
+  }, [flushSave]);
 
   useEffect(() => {
     const h = () => setDriveAuth(true);
@@ -210,7 +256,7 @@ export default function Studio({ userName }: { userName: string }) {
         const pool = ws.textPools.find((p) => p.id === source.poolId);
         if (!pool || !textItems(pool).length) out.push({ key: "The text list of slide {n} is empty", params: { n } });
         else poolUses.set(pool.id, (poolUses.get(pool.id) ?? 0) + 1);
-      } else if (!lyricsText(project).trim()) {
+      } else if (!lyricsText(project, source.sectionId).trim()) {
         out.push({ key: "Slide {n} has no lyrics", params: { n } });
       }
       if (!s.picPoolId) out.push({ key: "Slide {n} has no photo", params: { n } });
@@ -227,8 +273,14 @@ export default function Studio({ userName }: { userName: string }) {
       const available = textItems(pool).length;
       if (available < count) out.push({ key: "The list “{name}” has {n} texts for {m} slides: some texts will repeat.", params: { name: pool.name, n: available, m: count } });
     });
+    if (fontsReady) {
+      project.slides.forEach((s, i) => {
+        const txt = project.generated?.[i]?.text;
+        if (txt && textOverflow(s, txt)) out.push({ key: "The text of slide {n} is too long: it will be cut.", params: { n: i + 1 } });
+      });
+    }
     return out;
-  }, [ws, project]);
+  }, [ws, project, fontsReady]);
 
   // ---- updaters ----
   const updProject = (fn: (p: Project) => Project) =>
@@ -261,11 +313,11 @@ export default function Studio({ userName }: { userName: string }) {
     const k = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key.toLowerCase() === "g" && !document.querySelector(".ov")) generate();
+      if (studio === "carousel" && e.key.toLowerCase() === "g" && !document.querySelector(".ov")) generate();
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [generate]);
+  }, [generate, studio]);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -398,6 +450,28 @@ export default function Studio({ userName }: { userName: string }) {
   };
   const setTextPool = (id: string, fn: (x: TextPool) => TextPool) => upd((w) => ({ ...w, textPools: w.textPools.map((x) => (x.id === id ? fn(x) : x)) }));
   const setPicPool = (id: string, fn: (x: PicPool) => PicPool) => upd((w) => ({ ...w, picPools: w.picPools.map((x) => (x.id === id ? fn(x) : x)) }));
+  const refreshViews = async (pool: TextPool) => {
+    setViewsBusy(true);
+    try {
+      const r = await fetch("/api/tiktok/posts");
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 409) throw new Error(t("TikTok connection expired. Connect again."));
+      if (!r.ok) throw new Error(j.error ?? t("Could not load your posts"));
+      const known = new Map<string, number>();
+      for (const post of j.posts ?? []) known.set(hookKey(String(post.title ?? "")), Number(post.views ?? 0));
+      const views = { ...(pool.views ?? {}) };
+      let n = 0;
+      for (const hook of textItems(pool)) {
+        const v = known.get(hookKey(hook));
+        if (v !== undefined) { views[hookKey(hook)] = v; n++; }
+      }
+      if (!n) { say(t("No matching posts found for this list")); return; }
+      setTextPool(pool.id, (x) => ({ ...x, views }));
+      say(t("Views updated for {n} hooks", { n }));
+    } catch (e: any) {
+      say(e?.message ?? t("Could not update views"));
+    } finally { setViewsBusy(false); }
+  };
   const scopeFix = <T extends { scope: string; projectId?: string }>(x: T): T => (x.scope === "project" ? { ...x, projectId: project!.id } : { ...x, projectId: undefined });
 
   // ---- projects ----
@@ -423,10 +497,17 @@ export default function Studio({ userName }: { userName: string }) {
       }));
       const lyrics = src.lyrics.map((l) => ({ ...l, id: uid() }));
       const section = src.lyrics.findIndex((l) => l.id === src.lyricsSectionId);
-      const copy: Project = { id, name: src.name + " " + t("(copy)"), slides, lyrics, lyricsSectionId: section >= 0 ? lyrics[section].id : null, generated: null, selectedSlide: 0 };
+      const videoId = uid();
+      const copy: Project = { id, name: src.name + " " + t("(copy)"), slides, lyrics, lyricsSectionId: section >= 0 ? lyrics[section].id : null, generated: null, selectedSlide: 0, videos: [{ ...defaultVideo(), id: videoId, name: "Video 1" }], videoId };
       return { ...w, textPools: [...w.textPools, ...tCopies], picPools: [...w.picPools, ...pCopies], projects: [...w.projects, copy], currentProjectId: id };
     });
-  const deleteProject = () =>
+  const deleteProject = () => {
+    const gone = wsRef.current?.projects.find((x) => x.id === wsRef.current!.currentProjectId);
+    if (gone) {
+      const keys = new Set<string>([`audio:${gone.id}`, `video:${gone.id}`]);
+      gone.videos?.forEach((v) => { keys.add(`audio:${v.id}`); keys.add(`video:${v.id}`); });
+      keys.forEach((k) => void delMedia(k));
+    }
     upd((w) => {
       const id = w.currentProjectId;
       const textPools = w.textPools.filter((p) => !(p.scope === "project" && p.projectId === id));
@@ -439,6 +520,7 @@ export default function Studio({ userName }: { userName: string }) {
       )];
       return { ...w, textPools, picPools, projects, currentProjectId: projects[0].id };
     });
+  };
 
   // ---- export ----
   async function buildFiles(p: Project, onStep?: (done: number, total: number) => void, failures?: string[]) {
@@ -512,12 +594,21 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       const data = JSON.parse(await file.text());
       if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a TkTgen backup"));
-      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(data as Workspace); say(t("Backup restored")); } });
+      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(normalizeWorkspace(data as Workspace)); say(t("Backup restored")); } });
     } catch (e: any) { say(e?.message ?? t("Could not read this file")); }
   };
 
   // rev.current already holds the server revision returned with the 409: resuming the autosave overwrites it.
   const keepMine = () => { conflict.current = false; setSaveState("saving"); setResume((n) => n + 1); };
+
+  // Switching studios keeps the same workspace in memory: save first, close any dialog, swap the view.
+  const switchStudio = (next: "carousel" | "video") => {
+    if (next === studio) return;
+    void flushSave();
+    setEditor(null);
+    setOverlay(null);
+    setStudio(next);
+  };
 
   if (loadErr) return <div className="login"><div className="login-card"><h2 className="title">{t("Could not load your data")}</h2><p className="muted">{loadErr}</p><button className="btn primary" onClick={() => location.reload()}>{t("Try again")}</button></div></div>;
   if (!ws || !project) return <div className="login"><p className="muted">{t("Loading…")}</p></div>;
@@ -526,6 +617,19 @@ export default function Studio({ userName }: { userName: string }) {
   const edText = editor?.k === "text" ? ws.textPools.find((x) => x.id === editor.id) : undefined;
   const edPics = editor?.k === "photos" ? ws.picPools.find((x) => x.id === editor.id) : undefined;
   const nSlides = project.slides.length;
+  const presets = ws.presets ?? [];
+  const savePreset = (name: string) => {
+    const style = { ...project.slides[sel].style };
+    upd((w) => ({ ...w, presets: [...(w.presets ?? []), { id: uid(), name, style }] }));
+    say(t("Preset saved"));
+  };
+  const applyPreset = (id: string) => {
+    const preset = presets.find((x) => x.id === id);
+    if (!preset) return;
+    updSlide(sel, (s) => ({ ...s, style: { ...preset.style } }));
+    say(t("Preset applied"));
+  };
+  const deletePreset = (id: string) => upd((w) => ({ ...w, presets: (w.presets ?? []).filter((x) => x.id !== id) }));
 
   const listRows = (kind: "text" | "photos") =>
     (kind === "text" ? vText : vPics).map((p, n) => (
@@ -560,11 +664,19 @@ export default function Studio({ userName }: { userName: string }) {
             <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setOverlay({ k: "confirm", title: t("Delete project"), label: t("Delete"), message: t("Are you sure you want to delete “{name}”? Its slide setup and project-only lists will be deleted too. This can't be undone.", { name: project.name }), run: deleteProject }); }}>{t("Delete")}</button>
           </>)}
         </Menu>
+        <div className="studio-switch" role="group" aria-label={t("Studio")}>
+          <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
+            <Icon name="sparkle" size={14} />{t("Carousel")}
+          </button>
+          <button className={studio === "video" ? "on" : ""} aria-pressed={studio === "video"} onClick={() => switchStudio("video")}>
+            <Icon name="film" size={14} />{t("Video")}
+          </button>
+        </div>
         <span className="grow" />
         <span role="status" aria-live="polite" className={"badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
           {saveState === "saved" ? t("Saved") : saveState === "saving" ? t("Saving…") : saveState === "conflict" ? t("Not saved") : t("Not saved")}
         </span>
-        {saveState === "error" && <button className="btn sm" onClick={() => wsRef.current && void saveWorkspace(wsRef.current)}>{t("Try again")}</button>}
+        {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
         <button className="btn" onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" />{t("Import hooks")}</button>
         <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}><Icon name="sliders" /></button>}>
@@ -599,7 +711,16 @@ export default function Studio({ userName }: { userName: string }) {
         </div>
       )}
 
-      <div className="main" data-mobile-tab={mobileTab}>
+      <div className="main" data-mobile-tab={mobileTab} data-studio={studio}>
+        {studio === "video" ? (
+          <VideoStudio
+            project={project}
+            onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
+            onSaveNow={() => void flushSave()}
+            onBack={() => switchStudio("carousel")}
+          />
+        ) : (
+        <>
         <aside className="col side l">
           <section className="group">
             <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
@@ -675,26 +796,37 @@ export default function Studio({ userName }: { userName: string }) {
                 onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
                 onDuplicate={() => duplicateSlide(i)} onDelete={() => deleteSlide(i)}
                 onMoveLeft={() => moveSlide(i, i - 1)} onMoveRight={() => moveSlide(i, i + 1)}
-                onToggleLock={() => updSlide(i, (s) => ({ ...s, locked: !s.locked }))} />
+                onToggleLock={() => updSlide(i, (s) => ({ ...s, locked: !s.locked }))}
+                dragging={dragFrom === i} dragOver={dragOver === i && dragFrom !== i}
+                onDragStart={() => setDragFrom(i)} onDragEnd={() => { setDragFrom(null); setDragOver(null); }}
+                onDragOver={() => setDragOver(i)}
+                onDrop={() => { if (dragFrom !== null && dragFrom !== i) moveSlide(dragFrom, i); setDragFrom(null); setDragOver(null); }} />
             ))}
           </div>
         </main>
 
         <aside className="col side r">
           <Inspector index={sel} cfg={project.slides[sel]} zones={ws.zones} onZones={(v) => upd((w) => ({ ...w, zones: v }))}
-            onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll} />
+            onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
+            lyrics={project.lyrics} presets={ws.presets ?? []}
+            onSavePreset={() => setOverlay({ k: "preset" })} onApplyPreset={applyPreset} onDeletePreset={deletePreset} />
         </aside>
+        </>
+        )}
       </div>
 
+      {studio === "carousel" && (
       <nav className="mobile-tabs" aria-label={t("Sections")}>
         <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => setMobileTab("slides")}><Icon name="sparkle" size={18} />{t("Slides")}</button>
         <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => setMobileTab("lists")}><Icon name="list" size={18} />{t("Lists")}</button>
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => setMobileTab("style")}><Icon name="sliders" size={18} />{t("Style")}</button>
       </nav>
+      )}
 
       {edText && (
         <TextPoolEditor pool={edText} onClose={() => setEditor(null)} onDelete={() => askDeletePool("text", edText.id)}
-          onChange={(fn) => setTextPool(edText.id, (x) => scopeFix(fn(x)))} onImport={() => setOverlay({ k: "import", poolId: edText.id })} />
+          onChange={(fn) => setTextPool(edText.id, (x) => scopeFix(fn(x)))} onImport={() => setOverlay({ k: "import", poolId: edText.id })}
+          onRefreshViews={() => void refreshViews(edText)} viewsBusy={viewsBusy} />
       )}
       {edPics && (
         <PicPoolEditor pool={edPics} onClose={() => setEditor(null)} onDelete={() => askDeletePool("photos", edPics.id)}
@@ -729,6 +861,9 @@ export default function Studio({ userName }: { userName: string }) {
           });
           say(t("{n} hooks added", { n: hooks.length }));
         }} />
+      )}
+      {overlay?.k === "preset" && (
+        <PromptDialog title={t("Style presets")} label={t("Preset name")} confirmLabel={t("Save current style")} onSubmit={savePreset} onClose={() => setOverlay(null)} />
       )}
       {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} onCreate={createPool} onClose={() => setOverlay(null)} />}
       {overlay?.k === "newProject" && <PromptDialog title={t("New project")} label={t("Release name")} confirmLabel={t("Create")} onSubmit={createProject} onClose={() => setOverlay(null)} />}

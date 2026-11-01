@@ -1,4 +1,4 @@
-import { FontId, PicSettings, Project, SlideCfg, TextPool, PicPool, TextStyle, Workspace } from "./types";
+import { FontId, PicSettings, Project, SlideCfg, TextPool, PicPool, TextStyle, VideoSettings, VideoSetup, Workspace } from "./types";
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -17,6 +17,13 @@ export const defaultStyle = (): TextStyle => ({
 });
 
 export const defaultPic = (): PicSettings => ({ framing: "fill", bars: "blur", zoom: 1, darken: 0, ox: 0, oy: 0 });
+
+export const defaultVideo = (): VideoSettings => ({
+  crop: { start: 0, duration: 15 },
+  offset: 0,
+  captions: true,
+  frame: { zoom: 1, ox: 0, oy: 0 },
+});
 
 export const FONT_LABELS: Record<FontId, string> = {
   classic: "TikTok (Classic)",
@@ -56,7 +63,28 @@ export function newProject(name: string, textPools: TextPool[], picPools: PicPoo
   const slides: SlideCfg[] = [0, 1, 2].map((i) =>
     newSlide(i + 1, i < 2 ? textPools[i]?.id ?? null : null, picPools[i]?.id ?? null, i === 2)
   );
-  return { id: uid(), name, slides, lyrics: [], lyricsSectionId: null, generated: null, selectedSlide: 0 };
+  const videoId = uid();
+  return {
+    id: uid(), name, slides, lyrics: [], lyricsSectionId: null, generated: null, selectedSlide: 0,
+    videos: [{ ...defaultVideo(), id: videoId, name: "Video 1" }],
+    videoId,
+  };
+}
+
+/** Old workspaces had one `project.video`; turn it into the first clip of the release. */
+export function normalizeWorkspace(w: Workspace): Workspace {
+  return {
+    ...w,
+    projects: w.projects.map((p) => {
+      const videos: VideoSetup[] = p.videos?.length
+        ? p.videos
+        : [{ ...defaultVideo(), ...(p.video ?? {}), id: p.id, name: "Video 1" }];
+      const videoId = p.videoId && videos.some((v) => v.id === p.videoId) ? p.videoId : videos[0].id;
+      const next: Project = { ...p, videos, videoId };
+      if (next.video) delete next.video;
+      return next;
+    }),
+  };
 }
 
 export function defaultWorkspace(): Workspace {

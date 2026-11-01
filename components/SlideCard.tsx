@@ -30,6 +30,12 @@ interface Props {
   onMoveLeft: () => void;
   onMoveRight: () => void;
   onToggleLock: () => void;
+  onDragStart?: () => void;
+  onDragOver?: () => void;
+  onDragEnd?: () => void;
+  onDrop?: () => void;
+  dragging?: boolean;
+  dragOver?: boolean;
 }
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -113,8 +119,13 @@ export default function SlideCard(p: Props) {
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
   return (
-    <div className={"card" + (p.selected ? " sel" : "") + (p.locked ? " locked" : "")} onClick={p.onSelect}>
+    <div className={"card" + (p.selected ? " sel" : "") + (p.locked ? " locked" : "") + (p.dragging ? " dragging" : "") + (p.dragOver ? " drop-target" : "")} onClick={p.onSelect}
+      onDragOver={(e) => { if (p.onDragOver) { e.preventDefault(); p.onDragOver(); } }}
+      onDrop={(e) => { if (p.onDrop) { e.preventDefault(); p.onDrop(); } }}
+      onDragEnd={p.onDragEnd}>
       <div className="card-head">
+        <span className="grip" draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(p.index)); p.onDragStart?.(); }}
+          title={t("Drag to reorder")} aria-hidden="true">⠿</span>
         <button className="idx-chip" onClick={(e) => { e.stopPropagation(); p.onSelect(); }} aria-label={p.locked ? `${t("Slide {n}", { n: p.index + 1 })} · ${t("Locked")}` : t("Slide {n}", { n: p.index + 1 })} aria-pressed={p.selected}>
           {p.locked && <Icon name="lock" size={10} />}{String(p.index + 1).padStart(2, "0")}
         </button>

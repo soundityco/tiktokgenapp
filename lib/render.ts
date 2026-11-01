@@ -29,7 +29,6 @@ export interface Overlay {
 }
 
 export interface TextBox { x: number; y: number; w: number; h: number }
-
 export interface RenderResult { box: TextBox | null; w: number; h: number }
 
 const tmp = (w: number, h: number) => {
@@ -112,9 +111,71 @@ function layout(ctx: CanvasRenderingContext2D, raw: string, st: TextStyle, W: nu
     const lh = size * st.lineHeight;
     const gap = lh * 0.55;
     const height = lines.reduce((h, l) => h + (l ? lh : gap), 0);
-    if ((height <= maxH && !tooWide) || size <= 18) return { lines, size, lh, gap, height, maxW };
+    const overflow = height > maxH || tooWide;
+    if ((!overflow) || size <= 18) return { lines, size, lh, gap, height, maxW, overflow };
     size -= 2;
   }
+}
+
+/** True when even the smallest font does not fit: the slide will show a cut or overflowing text. */
+export function textOverflow(cfg: SlideCfg, text: string): boolean {
+  if (!text.trim() || typeof document === "undefined") return false;
+  const [W, H] = canvasSize(cfg, null);
+  const ctx = tmp(W, H).getContext("2d");
+  if (!ctx) return false;
+  return layout(ctx, text, cfg.style, W, H).overflow;
+}
+
+/** Draw text with a text style on any canvas (slides, but also video captions). */
+export function drawStyledText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  st: TextStyle,
+  W: number,
+  H: number
+): TextBox | null {
+  if (!text.trim()) return null;
+  const L = layout(ctx, text, st, W, H);
+  setFont(ctx, st, L.size);
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  const widths = L.lines.map((l) => (l ? ctx.measureText(l).width : 0));
+  const bw = Math.max(...widths, 1);
+  const cx = (st.x / 100) * W, cy = (st.y / 100) * H;
+  const left = cx - bw / 2, top = cy - L.height / 2;
+  const box = { x: left, y: top, w: bw, h: L.height };
+  let y = top;
+  L.lines.forEach((line, i) => {
+    if (!line) { y += L.gap; return; }
+    const lw = widths[i];
+    const lx = st.align === "left" ? left : st.align === "right" ? left + bw - lw : cx - lw / 2;
+    const ly = y + L.lh / 2;
+    if (st.look === "box") {
+      const padX = L.size * 0.3, padY = L.size * 0.08;
+      ctx.fillStyle = st.accent;
+      ctx.beginPath();
+      ctx.roundRect(lx - padX, ly - L.lh / 2 + padY, lw + padX * 2, L.lh - padY * 2, L.size * 0.2);
+      ctx.fill();
+    }
+    ctx.textAlign = "left";
+    if (st.look === "outline") {
+      ctx.strokeStyle = st.accent;
+      ctx.lineWidth = Math.max(3, L.size * 0.2);
+      ctx.strokeText(line, lx, ly);
+    }
+    if (st.look === "shadow") {
+      ctx.shadowColor = st.accent;
+      ctx.shadowBlur = L.size * 0.35;
+      ctx.shadowOffsetY = L.size * 0.05;
+    }
+    ctx.fillStyle = st.color;
+    ctx.fillText(line, lx, ly);
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    y += L.lh;
+  });
+  return box;
 }
 
 export function renderSlide(
@@ -133,50 +194,8 @@ export function renderSlide(
   ctx.fillRect(0, 0, W, H);
   if (img) drawPicture(ctx, img, cfg, W, H);
 
-  let box: TextBox | null = null;
   const st = cfg.style;
-  if (text.trim()) {
-    const L = layout(ctx, text, st, W, H);
-    setFont(ctx, st, L.size);
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    const widths = L.lines.map((l) => (l ? ctx.measureText(l).width : 0));
-    const bw = Math.max(...widths, 1);
-    const cx = (st.x / 100) * W, cy = (st.y / 100) * H;
-    const left = cx - bw / 2, top = cy - L.height / 2;
-    box = { x: left, y: top, w: bw, h: L.height };
-    let y = top;
-    L.lines.forEach((line, i) => {
-      if (!line) { y += L.gap; return; }
-      const lw = widths[i];
-      const lx = st.align === "left" ? left : st.align === "right" ? left + bw - lw : cx - lw / 2;
-      const ly = y + L.lh / 2;
-      if (st.look === "box") {
-        const padX = L.size * 0.3, padY = L.size * 0.08;
-        ctx.fillStyle = st.accent;
-        ctx.beginPath();
-        ctx.roundRect(lx - padX, ly - L.lh / 2 + padY, lw + padX * 2, L.lh - padY * 2, L.size * 0.2);
-        ctx.fill();
-      }
-      ctx.textAlign = "left";
-      if (st.look === "outline") {
-        ctx.strokeStyle = st.accent;
-        ctx.lineWidth = Math.max(3, L.size * 0.2);
-        ctx.strokeText(line, lx, ly);
-      }
-      if (st.look === "shadow") {
-        ctx.shadowColor = st.accent;
-        ctx.shadowBlur = L.size * 0.35;
-        ctx.shadowOffsetY = L.size * 0.05;
-      }
-      ctx.fillStyle = st.color;
-      ctx.fillText(line, lx, ly);
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-      y += L.lh;
-    });
-  }
+  const box = drawStyledText(ctx, text, st, W, H);
 
   if (overlay.zones) {
     ctx.fillStyle = "rgba(207,31,57,.28)";

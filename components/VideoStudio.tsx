@@ -1,0 +1,881 @@
+"use client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { defaultStyle, defaultVideo, uid } from "@/lib/defaults";
+import { useT } from "@/lib/i18n";
+import { delMedia, getMedia, putMedia } from "@/lib/idb";
+import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, peaksOf, syncClip } from "@/lib/media";
+import { drawStyledText } from "@/lib/render";
+import type { Project, TextStyle, VideoSettings, VideoSetup } from "@/lib/types";
+import Icon from "./Icon";
+import { Section } from "./ui";
+
+const RATE = 25;
+const PRESETS = [10, 15, 20, 30];
+
+const DEFAULT_VIDEO: VideoSettings = defaultVideo();
+
+/** Clips of a release; old workspaces still carry a single `project.video`. */
+function clipsOf(p: Project): VideoSetup[] {
+  return p.videos?.length
+    ? p.videos
+    : [{ ...DEFAULT_VIDEO, id: p.id, name: "Video 1", ...(p.video ?? {}) }];
+}
+
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function saveBlob(blob: Blob, name: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/**
+ * Last resort when `decodeAudioData` refuses the container (typical of phone MOV/MP4):
+ * play the video through the Web Audio graph, unmuted but wired only to a silent gain,
+ * and rebuild the envelope from what comes out. Real time, so we stop after ~40 s.
+ */
+async function captureEnvelope(
+  url: string,
+  rate: number,
+  maxSeconds: number,
+  onProgress?: (p: number) => void,
+  signal?: AbortSignal
+): Promise<Float32Array> {
+  const ctx = new AudioContext();
+  const v = document.createElement("video");
+  v.src = url;
+  v.preload = "auto";
+  v.playsInline = true;
+  v.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0";
+  document.body.appendChild(v);
+
+  const cap = Math.ceil(maxSeconds * rate) + 2;
+  const acc = new Float32Array(cap);
+  const cnt = new Uint16Array(cap);
+  let total = maxSeconds;
+  let samples = 0;
+  let base = -1;
+  let baseTime = 0;
+  let lastPct = -1;
+  let active = true;
+  let guard = 0;
+  let stall = 0;
+
+  const src = ctx.createMediaElementSource(v);
+  const proc = ctx.createScriptProcessor(1024, 1, 1);
+  const silent = ctx.createGain();
+  silent.gain.value = 0;
+  src.connect(proc);
+  proc.connect(silent);
+  silent.connect(ctx.destination);
+
+  let settle!: () => void;
+  const finished = new Promise<void>((resolve) => { settle = resolve; });
+  const done = () => {
+    if (!active) return;
+    active = false;
+    window.clearTimeout(guard);
+    window.clearTimeout(stall);
+    settle();
+  };
+
+  proc.onaudioprocess = (e) => {
+    if (!active) return;
+    const buffer = e.inputBuffer;
+    if (!buffer.numberOfChannels) return;
+    const data = buffer.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+    samples += data.length;
+    // The graph runs before the video really starts: ignore that priming silence.
+    if (base < 0) {
+      if (v.currentTime <= 0) return;
+      base = samples;
+      baseTime = v.currentTime;
+      window.clearTimeout(stall);
+    }
+    const t = baseTime + (samples - base) / ctx.sampleRate;
+    const idx = Math.min(cap - 1, Math.max(0, Math.round(t * rate)));
+    acc[idx] += Math.sqrt(sum / Math.max(1, data.length));
+    cnt[idx] += 1;
+    const pct = Math.round(Math.min(1, t / total) * 100);
+    if (pct !== lastPct) { lastPct = pct; onProgress?.(pct / 100); }
+    if (t >= total) done();
+  };
+  v.onended = () => done();
+
+  // Everything here runs before the first await, inside the click: unmuted playback is
+  // gated by the autoplay policy, and muting the element would zero the samples before
+  // they reach the graph. Starting both now is what makes the sync repeatable after a reload.
+  v.addEventListener("loadedmetadata", () => {
+    if (Number.isFinite(v.duration) && v.duration > 0) total = Math.min(v.duration, maxSeconds);
+  }, { once: true });
+  void ctx.resume().catch(() => {});
+  // Never await play(): some browsers keep that promise pending while the element is
+  // already playing and the samples are flowing, which froze the analysis at 100 %.
+  void v.play().catch(() => {});
+  guard = window.setTimeout(done, (maxSeconds + 10) * 1000);
+  // If playback never starts (autoplay blocked, broken file), do not wait forever.
+  stall = window.setTimeout(() => {
+    if (base < 0) done();
+  }, 12000);
+  signal?.addEventListener("abort", done, { once: true });
+
+  try {
+    await finished;
+    v.pause();
+    const frames = Math.ceil(total * rate) + 2;
+    const env = new Float32Array(frames);
+    let peak = 0;
+    for (let i = 0; i < frames; i++) {
+      env[i] = cnt[i] ? acc[i] / cnt[i] : 0;
+      if (env[i] > peak) peak = env[i];
+    }
+    if (peak < 1e-4) throw new Error("silent");
+    onProgress?.(1);
+    return env;
+  } finally {
+    active = false;
+    v.pause();
+    v.removeAttribute("src");
+    v.load();
+    v.remove();
+    ctx.close().catch(() => {});
+  }
+}
+
+/** Resolves once the video knows its metadata, so a seek is not silently dropped. */
+function whenReady(el: HTMLVideoElement): Promise<void> {
+  if (el.readyState >= 1) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => { el.removeEventListener("loadedmetadata", done); resolve(); };
+    el.addEventListener("loadedmetadata", done);
+    window.setTimeout(done, 3000);
+  });
+}
+
+/**
+ * Video studio: import the official audio of the release, import the playback video,
+ * find where the camera recording sits in the official track, trim the segment, place the
+ * lyrics once, then export a vertical clip with the official audio and the lyrics burned in.
+ */
+export default function VideoStudio({
+  project,
+  onProject,
+  onSaveNow,
+  onBack,
+}: {
+  project: Project;
+  onProject: (fn: (p: Project) => Project) => void;
+  onSaveNow: () => void;
+  onBack: () => void;
+}) {
+  const { t } = useT();
+  const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
+  const clip = clips.find((c) => c.id === project.videoId) ?? clips[0];
+  const settings = useMemo<VideoSettings>(() => ({ ...DEFAULT_VIDEO, ...clip }), [clip]);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [audioBuf, setAudioBuf] = useState<AudioBuffer | null>(null);
+  const [peaks, setPeaks] = useState<number[]>([]);
+  const [videoDur, setVideoDur] = useState(0);
+  const [head, setHead] = useState(settings.crop.start);
+  const [playing, setPlaying] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncPct, setSyncPct] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [sectionId, setSectionId] = useState(project.lyricsSectionId ?? project.lyrics[0]?.id ?? "");
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const waveRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const rafRef = useRef(0);
+  const originRef = useRef(0);
+  const ioRef = useRef(0);
+  const syncRef = useRef<AbortController | null>(null);
+
+  const getCtx = useCallback(() => {
+    if (!ctxRef.current) ctxRef.current = new AudioContext();
+    return ctxRef.current;
+  }, []);
+
+  const setV = useCallback((patch: Partial<VideoSettings>) => {
+    onProject((p) => {
+      const list = clipsOf(p);
+      const target = list.find((c) => c.id === clip.id) ?? list[0];
+      return { ...p, videos: list.map((c) => (c.id === target.id ? { ...c, ...patch } : c)), videoId: target.id };
+    });
+  }, [onProject, clip.id]);
+
+  const section = project.lyrics.find((s) => s.id === sectionId) ?? project.lyrics[0];
+  const lines = useMemo(
+    () => (section ? section.text.split(/\r?\n/).map((text, i) => ({ text, i })).filter((l) => l.text.trim()) : []),
+    [section]
+  );
+  const timed = useMemo(() => {
+    if (!section) return [] as { text: string; at: number }[];
+    return lines
+      .map((l) => ({ text: l.text.trim(), at: section.times?.[l.i] }))
+      .filter((l): l is { text: string; at: number } => typeof l.at === "number")
+      .sort((a, b) => a.at - b.at);
+  }, [section, lines]);
+
+  const captionStyle: TextStyle = useMemo(() => {
+    const base = project.slides[project.selectedSlide]?.style ?? project.slides[0]?.style ?? defaultStyle();
+    return { ...base, y: 78, size: Math.min(base.size, 72), width: 84 };
+  }, [project.slides, project.selectedSlide]);
+
+  const styleRef = useRef(captionStyle);
+  styleRef.current = captionStyle;
+  const activeRef = useRef<(time: number) => string | null>(() => null);
+  activeRef.current = (time: number) => {
+    let found: string | null = null;
+    for (const l of timed) {
+      if (l.at <= time + 0.02) found = l.text;
+      else break;
+    }
+    return found;
+  };
+
+  const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
+
+  const drawAt = useCallback((time: number) => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const g = c.getContext("2d");
+    if (!g) return;
+    const W = c.width, H = c.height;
+    const cfg = settingsRef.current;
+    const frame = cfg.frame ?? DEFAULT_VIDEO.frame;
+    g.fillStyle = "#000";
+    g.fillRect(0, 0, W, H);
+    const el = videoRef.current;
+    if (el && el.videoWidth) {
+      const s = Math.max(W / el.videoWidth, H / el.videoHeight) * frame.zoom;
+      const dw = el.videoWidth * s, dh = el.videoHeight * s;
+      g.drawImage(el, (W - dw) / 2 + frame.ox * W, (H - dh) / 2 + frame.oy * H, dw, dh);
+    }
+    if (cfg.captions) {
+      const text = activeRef.current(time);
+      if (text) drawStyledText(g, text, styleRef.current, W, H);
+    }
+  }, []);
+
+  const stop = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    if (sourceRef.current) {
+      try { sourceRef.current.stop(); } catch { /* already stopped */ }
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    videoRef.current?.pause();
+    setPlaying(false);
+  }, []);
+
+  // ---- files ----
+  useEffect(() => {
+    let off = false;
+    const token = ++ioRef.current;
+    syncRef.current?.abort();
+    stop();
+    setAudioBlob(null);
+    setAudioBuf(null);
+    setPeaks([]);
+    setVideoBlob(null);
+    setVideoDur(0);
+    setErr(null);
+    setNote(null);
+    setHead(settingsRef.current.crop.start);
+    void (async () => {
+      try {
+        const [a, b] = await Promise.all([getMedia(`audio:${clip.id}`), getMedia(`video:${clip.id}`)]);
+        if (off || token !== ioRef.current) return;
+        if (a) {
+          setAudioBlob(a);
+          decodeAudio(getCtx(), a)
+            .then((buf) => {
+              if (off || token !== ioRef.current) return;
+              setAudioBuf(buf);
+              setPeaks(peaksOf(buf.getChannelData(0)));
+            })
+            .catch(() => { if (!off && token === ioRef.current) setErr(t("Could not read this audio file.")); });
+        }
+        if (b) setVideoBlob(b);
+      } catch { /* IndexedDB unavailable */ }
+    })();
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clip.id]);
+
+  useEffect(() => {
+    setSectionId(project.lyricsSectionId ?? project.lyrics[0]?.id ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id]);
+
+  useEffect(() => {
+    if (!videoBlob) {
+      setVideoUrl(null);
+      const el = videoRef.current;
+      if (el) { el.pause(); el.removeAttribute("src"); el.load(); }
+      return;
+    }
+    const url = URL.createObjectURL(videoBlob);
+    setVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [videoBlob]);
+
+  useEffect(() => () => { stop(); syncRef.current?.abort(); ctxRef.current?.close().catch(() => {}); }, [stop]);
+
+  useEffect(() => {
+    if (!note) return;
+    const id = setTimeout(() => setNote(null), 3500);
+    return () => clearTimeout(id);
+  }, [note]);
+
+  const pickAudio = async (f: File) => {
+    const token = ++ioRef.current;
+    syncRef.current?.abort();
+    stop();
+    setErr(null); setNote(null);
+    setAudioBlob(f);
+    setAudioBuf(null);
+    setPeaks([]);
+    setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    try { await putMedia(`audio:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
+    onSaveNow();
+    try {
+      const buf = await decodeAudio(getCtx(), f);
+      if (token !== ioRef.current) return;
+      setAudioBuf(buf);
+      setPeaks(peaksOf(buf.getChannelData(0)));
+      const cur = settingsRef.current;
+      const d = Math.min(cur.crop.duration, buf.duration);
+      const start = Math.max(0, Math.min(cur.crop.start, buf.duration - d));
+      setV({ crop: { start, duration: d } });
+      setHead(start);
+      onSaveNow();
+    } catch {
+      if (token === ioRef.current) setErr(t("Could not read this audio file."));
+    }
+  };
+
+  const pickVideo = async (f: File) => {
+    syncRef.current?.abort();
+    stop();
+    setErr(null);
+    setVideoBlob(f);
+    setVideoDur(0);
+    setV({ videoName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    setHead(settingsRef.current.crop.start);
+    try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
+    onSaveNow();
+  };
+
+  const removeAudio = async () => {
+    ioRef.current++;
+    syncRef.current?.abort();
+    stop();
+    setAudioBlob(null);
+    setAudioBuf(null);
+    setPeaks([]);
+    setV({ audioName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    setHead(settingsRef.current.crop.start);
+    await delMedia(`audio:${clip.id}`);
+    onSaveNow();
+  };
+
+  const removeVideo = async () => {
+    syncRef.current?.abort();
+    stop();
+    setVideoBlob(null);
+    setVideoDur(0);
+    setV({ videoName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    setHead(settingsRef.current.crop.start);
+    await delMedia(`video:${clip.id}`);
+    onSaveNow();
+  };
+
+  /** New clip on the same release: same song and segment, fresh camera take. */
+  const addVideo = async () => {
+    syncRef.current?.abort();
+    stop();
+    const id = uid();
+    const name = `Video ${clips.length + 1}`;
+    let copied = false;
+    if (audioBlob) {
+      try { await putMedia(`audio:${id}`, audioBlob); copied = true; } catch { /* private mode: keep it in memory */ }
+    }
+    const cur = settingsRef.current;
+    onProject((p) => ({
+      ...p,
+      videos: [
+        ...clipsOf(p),
+        {
+          ...cur,
+          id,
+          name,
+          audioName: copied ? cur.audioName : undefined,
+          videoName: undefined,
+          offset: 0,
+          score: undefined,
+          musicStart: undefined,
+          musicEnd: undefined,
+          anchors: undefined,
+        },
+      ],
+      videoId: id,
+    }));
+    onSaveNow();
+  };
+
+  const close = () => { syncRef.current?.abort(); stop(); onSaveNow(); onBack(); };
+
+  const onDropFile = (f: File | undefined) => {
+    if (!f) return;
+    if (f.type.startsWith("video/") || /\.(mp4|mov|webm|m4v|avi)$/i.test(f.name)) void pickVideo(f);
+    else if (f.type.startsWith("audio/") || /\.(mp3|wav|m4a|aac|ogg|flac|aiff)$/i.test(f.name)) void pickAudio(f);
+  };
+
+  // ---- playback ----
+  const play = async () => {
+    if (!audioBuf) return;
+    const ctx = getCtx();
+    await ctx.resume();
+    stop();
+    const cfg = settingsRef.current;
+    const until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
+    const from = head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
+    const el = videoRef.current;
+    if (el) {
+      el.muted = true;
+      await whenReady(el);
+      el.currentTime = Math.max(0, from - cfg.offset);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = audioBuf;
+    src.connect(ctx.destination);
+    originRef.current = ctx.currentTime;
+    src.start(0, from, until - from);
+    sourceRef.current = src;
+    if (el) void el.play().catch(() => {});
+    setPlaying(true);
+    const tick = () => {
+      const now = from + (ctx.currentTime - originRef.current);
+      if (now >= until) { setHead(until); stop(); return; }
+      setHead(now);
+      if (el) {
+        const target = Math.max(0, now - settingsRef.current.offset);
+        if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+      }
+      drawAt(now);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  useEffect(() => {
+    if (!playing) drawAt(head);
+  }, [drawAt, head, playing, settings, timed, captionStyle, videoUrl]);
+
+  // ---- audio sync ----
+  const autoSync = async () => {
+    const official = audioBuf;
+    const recording = videoBlob;
+    if (!official || !recording) return;
+    syncRef.current?.abort();
+    stop();
+    setSyncBusy(true); setSyncPct(0); setErr(null); setNote(null);
+    // Start the real-time capture right away, inside the click: the video cannot be muted
+    // (mute zeroes the samples before the Web Audio graph), so it needs the user gesture.
+    const ac = new AbortController();
+    syncRef.current = ac;
+    const capture = videoUrl
+      ? captureEnvelope(videoUrl, RATE, 45, (p) => setSyncPct(p), ac.signal)
+      : null;
+    if (capture) void capture.catch(() => {});
+    try {
+      const ref = envelopeOf(official.getChannelData(0), official.sampleRate, RATE);
+      let clip: Float32Array;
+      try {
+        const vbuf = await Promise.race([
+          decodeAudio(getCtx(), recording),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
+        ]);
+        clip = envelopeOf(vbuf.getChannelData(0), vbuf.sampleRate, RATE);
+        ac.abort();
+      } catch {
+        // Phone MOV/MP4 often decode fine in the <video> but not through decodeAudioData.
+        if (!capture) throw new Error("no-url");
+        clip = await capture;
+      }
+      const cfg = settingsRef.current;
+      const r = syncClip(clip, ref, RATE, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
+      // The clip, the project or the files may have changed while we were analysing.
+      if (ac.signal.aborted) {
+        /* result ignored */
+      } else if (!r.anchors) {
+        setErr(t("Low confidence: check the offset by ear."));
+      } else {
+        setV({
+          offset: round2(r.offset),
+          score: round2(r.score),
+          musicStart: r.musicStart === null ? undefined : round2(r.musicStart),
+          musicEnd: r.musicEnd === null ? undefined : round2(r.musicEnd),
+          anchors: r.anchors,
+        });
+        setNote(t("Sync quality {n}%", { n: Math.round(r.score * 100) }));
+        if (r.score < 0.45 || r.anchors < 2) setErr(t("Low confidence: check the offset by ear."));
+        onSaveNow();
+      }
+    } catch {
+      if (!ac.signal.aborted) setErr(t("The video has no readable audio track. Sync it manually."));
+    }
+    if (syncRef.current === ac) syncRef.current = null;
+    setSyncBusy(false);
+    setSyncPct(0);
+  };
+
+  // ---- crop ----
+  const setCropStart = (v: number) => {
+    const cfg = settingsRef.current;
+    const start = clamp(v, 0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - cfg.crop.duration));
+    setV({ crop: { ...cfg.crop, start: round2(start) } });
+  };
+  const setCropDuration = (v: number) => {
+    const cfg = settingsRef.current;
+    const duration = clamp(v, 1, Math.max(1, audioBuf?.duration ?? v));
+    const start = clamp(cfg.crop.start, 0, Math.max(0, (audioBuf?.duration ?? duration) - duration));
+    setV({ crop: { start: round2(start), duration: round2(duration) } });
+  };
+
+  const dragWave = useRef<null | { mode: "start" | "end" | "move"; x: number; start: number; duration: number }>(null);
+  const wavePos = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return clamp((e.clientX - r.left) / r.width, 0, 1);
+  };
+  const waveDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!audioBuf) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const f = wavePos(e);
+    const cfg = settingsRef.current;
+    const x0 = cfg.crop.start / audioBuf.duration;
+    const x1 = (cfg.crop.start + cfg.crop.duration) / audioBuf.duration;
+    if (Math.abs(f - x0) < 0.02) dragWave.current = { mode: "start", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
+    else if (Math.abs(f - x1) < 0.02) dragWave.current = { mode: "end", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
+    else if (f > x0 && f < x1) dragWave.current = { mode: "move", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
+    else {
+      const start = clamp(f * audioBuf.duration, 0, Math.max(0, audioBuf.duration - cfg.crop.duration));
+      setV({ crop: { start: round2(start), duration: cfg.crop.duration } });
+      dragWave.current = { mode: "move", x: f, start, duration: cfg.crop.duration };
+    }
+  };
+  const waveMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = dragWave.current;
+    if (!d || !audioBuf) return;
+    const f = wavePos(e);
+    const delta = (f - d.x) * audioBuf.duration;
+    if (d.mode === "start") {
+      const start = clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - d.duration));
+      setV({ crop: { start: round2(start), duration: d.duration } });
+    } else if (d.mode === "end") {
+      const duration = clamp(d.duration + delta, 1, Math.max(1, audioBuf.duration - d.start));
+      setV({ crop: { start: d.start, duration: round2(duration) } });
+    } else {
+      const start = clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - d.duration));
+      setV({ crop: { start: round2(start), duration: d.duration } });
+    }
+  };
+  const waveUp = () => { dragWave.current = null; };
+
+  useEffect(() => {
+    const c = waveRef.current;
+    if (!c || !peaks.length || !audioBuf) return;
+    const W = c.width, H = c.height, dur = audioBuf.duration;
+    const g = c.getContext("2d");
+    if (!g) return;
+    g.fillStyle = "#16161c";
+    g.fillRect(0, 0, W, H);
+    const x0 = (settings.crop.start / dur) * W;
+    const x1 = (Math.min(dur, settings.crop.start + settings.crop.duration) / dur) * W;
+    g.fillStyle = "rgba(216,33,60,.16)";
+    g.fillRect(x0, 0, Math.max(0, x1 - x0), H);
+    const bw = W / peaks.length;
+    g.fillStyle = "#6f6e78";
+    peaks.forEach((v, i) => {
+      const h = Math.max(1, v * (H - 14));
+      g.fillRect(i * bw, (H - h) / 2, Math.max(1, bw - 0.6), h);
+    });
+    g.fillStyle = "#f03a56";
+    g.fillRect(x0 - 1, 0, 3, H);
+    g.fillRect(x1 - 2, 0, 3, H);
+    g.fillStyle = "#f0eee8";
+    g.fillRect((head / dur) * W - 1, 0, 2, H);
+  }, [peaks, settings.crop, head, audioBuf]);
+
+  // ---- lyrics timing ----
+  const saveTimes = (id: string, times: (number | null)[]) =>
+    onProject((p) => ({ ...p, lyrics: p.lyrics.map((s) => (s.id === id ? { ...s, times } : s)) }));
+
+  const setLine = (i: number, value: number | null) => {
+    if (!section) return;
+    const count = section.text.split(/\r?\n/).length;
+    const times = Array.from({ length: count }, (_, k) => section.times?.[k] ?? null);
+    times[i] = value;
+    saveTimes(section.id, times);
+  };
+
+  const autoPlace = () => {
+    if (!section) return;
+    const raw = section.text.split(/\r?\n/);
+    const filled = raw.map((l, i) => ({ l: l.trim(), i })).filter((x) => x.l);
+    if (!filled.length) return;
+    const cfg = settingsRef.current;
+    const from = cfg.crop.start;
+    const to = cfg.crop.start + cfg.crop.duration;
+    // Lines follow the attacks of the official audio instead of an arbitrary split.
+    const placed = audioBuf
+      ? autoLineTimes(filled.map((x) => x.l), envelopeOf(audioBuf.getChannelData(0), audioBuf.sampleRate, RATE), RATE, from, to)
+      : filled.map((_, k) => from + 0.4 + ((to - from - 0.8) * k) / filled.length);
+    const times: (number | null)[] = new Array(raw.length).fill(null);
+    filled.forEach((x, k) => { times[x.i] = round2(placed[k]); });
+    saveTimes(section.id, times);
+    setNote(t("Lyrics placed on the segment"));
+  };
+
+  // ---- export ----
+  const exportVideo = async () => {
+    const canvas = canvasRef.current;
+    if (!audioBuf || !canvas || !videoBlob) return;
+    if (typeof MediaRecorder === "undefined" || !canvas.captureStream) {
+      setErr(t("Video export failed"));
+      return;
+    }
+    stop();
+    setErr(null); setNote(null); setExporting(true);
+    try {
+      const ctx = getCtx();
+      await ctx.resume();
+      const cfg = settingsRef.current;
+      const from = cfg.crop.start;
+      const until = Math.min(audioBuf.duration, from + cfg.crop.duration);
+      if (until - from < 0.5) throw new Error("short");
+      const stream = canvas.captureStream(30);
+      const dest = ctx.createMediaStreamDestination();
+      const src = ctx.createBufferSource();
+      src.buffer = audioBuf;
+      src.connect(dest);
+      const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
+      const rec = new MediaRecorder(new MediaStream([...stream.getVideoTracks(), ...dest.stream.getAudioTracks()]),
+        mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const finished = new Promise<Blob>((resolve) => { rec.onstop = () => resolve(new Blob(chunks, { type: "video/webm" })); });
+      const el = videoRef.current;
+      if (el) {
+        el.muted = true;
+        await whenReady(el);
+        el.currentTime = Math.max(0, from - cfg.offset);
+      }
+      rec.start(250);
+      originRef.current = ctx.currentTime;
+      src.start(0, from, until - from);
+      if (el) void el.play().catch(() => {});
+      await new Promise<void>((resolve) => {
+        const tick = () => {
+          const now = from + (ctx.currentTime - originRef.current);
+          if (now >= until) { drawAt(until); resolve(); return; }
+          if (el) {
+            const target = Math.max(0, now - settingsRef.current.offset);
+            if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+          }
+          drawAt(now);
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      });
+      rec.stop();
+      try { src.stop(); } catch { /* already ended */ }
+      el?.pause();
+      setPlaying(false);
+      const blob = await finished;
+      const name = `${project.name || "TkTgen"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
+      saveBlob(blob, `${name} clip.webm`);
+      setNote(t("Video exported"));
+    } catch {
+      setErr(t("Video export failed"));
+    }
+    setExporting(false);
+  };
+
+  return (
+    <div className="video-page">
+      <div className="video-wrap">
+      <div className="video-head">
+        <div className="stack" style={{ gap: 2 }}>
+          <span className="label">{t("Video studio")}</span>
+          <h2 className="display">{project.name}</h2>
+        </div>
+        <span className="grow" />
+        <div className="row nowrap">
+          <label className="field" style={{ margin: 0 }}>{t("Video")}
+            <select className="input" style={{ width: 150 }} value={clip.id}
+              onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
+              {clips.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+          <button className="btn icon" aria-label={t("New video")} title={t("New video")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+        </div>
+      </div>
+      <div className="video-grid">
+        <div className="stack">
+          <div className="cv-wrap"><canvas ref={canvasRef} className="cv" width={1080} height={1920} /></div>
+          <div className="row">
+            <button className="btn icon" aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause") : t("Play")}
+              onClick={() => (playing ? stop() : void play())} disabled={!audioBuf}>
+              <Icon name={playing ? "pause" : "play"} />
+            </button>
+            <span className="mono xs">{fmtTime(head)} / {fmtTime(end)}</span>
+            <span className="grow" />
+            <span className="muted xs">{t("Files stay on this device.")}</span>
+          </div>
+          <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline
+            onLoadedMetadata={(e) => setVideoDur(e.currentTarget.duration)} />
+          {!videoBlob && <p className="muted xs">{t("Nothing to preview yet.")}</p>}
+        </div>
+
+        <div className="video-side">
+          <Section title={t("Official audio")}>
+            <div className="row">
+              <label className="btn sm">
+                <Icon name="folder" size={14} />{t("Import audio")}
+                <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
+              </label>
+              {audioBlob ? <span className="badge ok truncate">{settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
+              {audioBlob && <button className="btn sm quiet danger" onClick={() => void removeAudio()}>{t("Remove audio")}</button>}
+            </div>
+            {audioBuf && (
+              <>
+                <canvas ref={waveRef} className="wave" width={900} height={90}
+                  onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={waveUp} />
+                <p className="muted xs">{t("Drag the edges to trim, the middle to move the segment.")}</p>
+                <div className="row">
+                  {PRESETS.map((d) => (
+                    <button key={d} className={"btn sm" + (Math.abs(settings.crop.duration - d) < 0.01 ? " primary" : "")}
+                      onClick={() => setCropDuration(d)}>{d}s</button>
+                  ))}
+                </div>
+                <div className="cols2">
+                  <label className="field">{t("Start (s)")}
+                    <input className="input" type="number" min={0} step={0.1} value={round2(settings.crop.start)}
+                      onChange={(e) => setCropStart(Number(e.target.value) || 0)} />
+                  </label>
+                  <label className="field">{t("Length (s)")}
+                    <input className="input" type="number" min={1} step={0.1} value={round2(settings.crop.duration)}
+                      onChange={(e) => setCropDuration(Number(e.target.value) || 1)} />
+                  </label>
+                </div>
+                <p className="mono xs">{t("Segment")} {fmtTime(settings.crop.start)} → {fmtTime(end)}</p>
+              </>
+            )}
+          </Section>
+
+          <Section title={t("Playback video")}>
+            <div className="drop" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}
+              onClick={() => document.getElementById("video-file")?.click()}>
+              {settings.videoName ?? t("Import the video recorded with the camera")}
+            </div>
+            <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
+            <div className="row">
+              {videoBlob && <span className="badge ok truncate">{settings.videoName ?? "video"}</span>}
+              {!videoBlob && <span className="muted xs">{t("No video imported yet")}</span>}
+              {videoBlob && <button className="btn sm quiet danger" onClick={() => void removeVideo()}>{t("Remove video")}</button>}
+              {videoDur > 0 && <span className="muted xs">{fmtTime(videoDur)}</span>}
+            </div>
+            {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
+              <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
+            )}
+          </Section>
+
+          <Section title={t("Sync with the official audio")}>
+            <div className="row">
+              <button className="btn sm primary" onClick={() => void autoSync()} disabled={!audioBuf || !videoBlob || syncBusy}>
+                <Icon name="refresh" size={14} />{syncBusy ? t("Analysing… {n}%", { n: Math.round(syncPct * 100) }) : t("Auto sync")}
+              </button>
+              {settings.score !== undefined && <span className="badge">{t("Sync quality {n}%", { n: Math.round(settings.score * 100) })}</span>}
+              {!!settings.anchors && <span className="badge">{t("{n} anchors", { n: settings.anchors })}</span>}
+            </div>
+            <label className="field">{t("Offset (s)")}
+              <input className="input" type="number" step={0.05} value={round2(settings.offset)}
+                onChange={(e) => setV({ offset: round2(Number(e.target.value) || 0) })} />
+            </label>
+            <div className="row">
+              <button className="btn sm" onClick={() => setV({ offset: round2(settings.offset - 0.1) })}>−0,1</button>
+              <button className="btn sm" onClick={() => setV({ offset: round2(settings.offset + 0.1) })}>+0,1</button>
+              <button className="btn sm" onClick={() => setV({ offset: Math.max(0, settings.crop.start) })}>{t("Set here")}</button>
+            </div>
+            {settings.musicStart != null && settings.musicEnd != null && (
+              <p className="mono xs">
+                {t("Music detected from {a} to {b} in the video.", { a: fmtTime(settings.musicStart), b: fmtTime(settings.musicEnd) })}
+              </p>
+            )}
+          </Section>
+
+          <Section title={t("Lyrics on the video")} open={false}>
+            <label className="check">
+              <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
+              {t("Lyrics on the video")}
+            </label>
+            {project.lyrics.length === 0 && <p className="muted xs">{t("No lyrics in this section.")}</p>}
+            {project.lyrics.length > 0 && (
+              <>
+                <label className="field">{t("Section")}
+                  <select className="input" value={section?.id ?? ""} onChange={(e) => setSectionId(e.target.value)}>
+                    {project.lyrics.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </label>
+                <div className="row">
+                  <button className="btn sm" onClick={autoPlace} disabled={!lines.length}>{t("Auto place")}</button>
+                  <span className="muted xs">{t("Pick a section to place its lines.")}</span>
+                </div>
+                <div className="lyric-timing">
+                  {lines.map((l) => (
+                    <div className="row nowrap" key={l.i}>
+                      <span className="grow truncate xs">{l.text}</span>
+                      <input className="input" style={{ width: 82 }} type="number" step={0.1} placeholder="–"
+                        aria-label={t("Line {n}", { n: l.i + 1 })}
+                        value={section?.times?.[l.i] ?? ""}
+                        onChange={(e) => setLine(l.i, e.target.value === "" ? null : round2(Number(e.target.value)))} />
+                      <button className="btn sm" onClick={() => setLine(l.i, round2(head))}>{t("Set here")}</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </Section>
+
+          {err && <p className="notice bad xs">{err}</p>}
+          {note && <p className="notice xs">{note}</p>}
+        </div>
+      </div>
+      <div className="modal-foot">
+        <span className="muted grow xs">{audioBuf && videoBlob ? t("Ready to export") : t("Import the release audio")}</span>
+        <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}>
+          <Icon name="download" />{exporting ? t("Exporting…") : t("Export video")}
+        </button>
+        <button className="btn" onClick={close}>{t("Done")}</button>
+      </div>
+      </div>
+    </div>
+  );
+}

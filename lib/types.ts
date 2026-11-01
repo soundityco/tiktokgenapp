@@ -33,7 +33,11 @@ export interface PicSettings {
   oy: number; // offset, fraction of canvas height
 }
 
-export type TextSource = { kind: "none" } | { kind: "pool"; poolId: string } | { kind: "lyrics" };
+/** A lyrics slide uses the project's section by default, or its own section when `sectionId` is set. */
+export type TextSource =
+  | { kind: "none" }
+  | { kind: "pool"; poolId: string }
+  | { kind: "lyrics"; sectionId?: string };
 
 export interface SlideCfg {
   id: string;
@@ -76,12 +80,55 @@ export interface LyricSection {
   text: string;
   /** Reserved for phase 3 (video subtitles): start time in seconds. */
   start?: number;
+  /**
+   * Start of every line of `text` in the official audio (seconds), indexed like `text.split("\n")`.
+   * `null` = not placed yet. Kept per section so it is reused by every video of the release.
+   */
+  times?: (number | null)[];
 }
 
 export interface GenSlide {
   text: string;
   picId: string | null;
   picName?: string;
+}
+
+/** Reusable text style, saved in the workspace and available in every project. */
+export interface StylePreset {
+  id: string;
+  name: string;
+  style: TextStyle;
+}
+
+export interface VideoFrame {
+  zoom: number;
+  ox: number; // fraction of the canvas
+  oy: number;
+}
+
+export interface VideoSettings {
+  audioName?: string;
+  videoName?: string;
+  /** Part of the official audio used by the post (seconds). The imported file itself is never trimmed. */
+  crop: { start: number; duration: number };
+  /** Official-audio time of the first video frame (video t=0). */
+  offset: number;
+  /** Confidence of the automatic sync, 0 to 1. */
+  score?: number;
+  /** Clip seconds where the music really plays, found by the automatic sync. */
+  musicStart?: number;
+  musicEnd?: number;
+  /** How many spread-out excerpts of the official track agreed on the offset. */
+  anchors?: number;
+  /** Burn the timed lyrics on the video. */
+  captions: boolean;
+  frame: VideoFrame;
+}
+
+/** One clip made for a release: its own official-audio segment, camera take and sync. */
+export interface VideoSetup extends VideoSettings {
+  id: string;
+  name: string;
 }
 
 export interface Project {
@@ -92,6 +139,12 @@ export interface Project {
   lyricsSectionId: string | null;
   generated: GenSlide[] | null;
   selectedSlide: number;
+  /** @deprecated Single video setup of older workspaces; migrated to `videos` on load. */
+  video?: VideoSettings;
+  /** One entry per clip made for this release (a release can have several camera takes). */
+  videos: VideoSetup[];
+  /** Clip currently open in the video studio. */
+  videoId?: string;
 }
 
 export interface Workspace {
@@ -108,4 +161,6 @@ export interface Workspace {
   zones: boolean;
   /** Draw hooks in proportion to their TikTok views (hooks that have views stored). */
   favorTop?: boolean;
+  /** Named text styles, reusable across projects. */
+  presets?: StylePreset[];
 }

@@ -64,21 +64,49 @@ export function weightedPick(items: string[], views: Record<string, number>): st
   return items[items.length - 1];
 }
 
-export function lyricsText(project: Project): string {
-  const s: LyricSection | undefined =
-    project.lyrics.find((l) => l.id === project.lyricsSectionId) ?? project.lyrics[0];
+/**
+ * Views-weighted pick that still honours the shuffle bag.
+ * Without this, turning on "Favor my best hooks" silently disabled "No repeats".
+ */
+export function weightedPickBag(
+  poolId: string,
+  items: string[],
+  views: Record<string, number>,
+  bags: Record<string, string[]>,
+  noRepeat: boolean
+): string | null {
+  if (!items.length) return null;
+  if (!noRepeat) return weightedPick(items, views);
+  let bag = (bags[poolId] ?? []).filter((i) => items.includes(i));
+  if (!bag.length) bag = shuffle(items);
+  const chosen = weightedPick(bag, views);
+  bags[poolId] = bag.filter((i) => i !== chosen);
+  return chosen;
+}
+
+/** The section a lyrics slide reads: its own, else the project's, else the first one. */
+export function lyricsSection(project: Project, sectionId?: string | null): LyricSection | undefined {
+  return (
+    (sectionId ? project.lyrics.find((l) => l.id === sectionId) : undefined) ??
+    project.lyrics.find((l) => l.id === project.lyricsSectionId) ??
+    project.lyrics[0]
+  );
+}
+
+export function lyricsText(project: Project, sectionId?: string | null): string {
+  const s = lyricsSection(project, sectionId);
   return s?.text.replace(/\r\n/g, "\n").replace(/\s+$/g, "") ?? "";
 }
 
 export function pickText(project: Project, ws: Workspace, slideIdx: number, bags: Record<string, string[]>): string {
   const src = project.slides[slideIdx].textSource;
-  if (src.kind === "lyrics") return lyricsText(project);
+  if (src.kind === "lyrics") return lyricsText(project, src.sectionId);
   if (src.kind === "pool") {
     const pool = ws.textPools.find((p) => p.id === src.poolId);
     if (!pool) return "";
     const items = textItems(pool);
     if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length && items.length) {
-      return weightedPick(items, pool.views);
+      return weightedPickBag(pool.id, items, pool.views, bags, ws.noRepeat) ?? "";
     }
     return pick(pool.id, items, bags, ws.noRepeat) ?? "";
   }

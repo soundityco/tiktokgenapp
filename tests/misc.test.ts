@@ -2,6 +2,8 @@ import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { defaultWorkspace, normalizeWorkspace } from "../lib/defaults";
+import type { Workspace } from "../lib/types";
 import { FR } from "../lib/fr";
 import { looksLikeImage, sniff } from "../lib/imageFormat";
 import { translate } from "../lib/translate";
@@ -96,6 +98,53 @@ describe("i18n", () => {
       }
     }
     expect([...missing]).toEqual([]);
+  });
+});
+
+describe("video clips per release", () => {
+  it("migrates the old single video setup into the first clip", () => {
+    const ws = defaultWorkspace();
+    const base = ws.projects[0];
+    const legacy = {
+      ...ws,
+      projects: [{
+        id: base.id,
+        name: base.name,
+        slides: base.slides,
+        lyrics: [],
+        lyricsSectionId: null,
+        generated: null,
+        selectedSlide: 0,
+        video: {
+          crop: { start: 3, duration: 12 },
+          offset: 4.2,
+          score: 0.9,
+          captions: false,
+          frame: { zoom: 1.2, ox: 0.1, oy: -0.2 },
+          audioName: "song.mp3",
+          videoName: "take.mov",
+        },
+      }],
+    } as unknown as Workspace;
+    const p = normalizeWorkspace(legacy).projects[0];
+    expect(p.videos).toHaveLength(1);
+    expect(p.videos[0].id).toBe(base.id); // keeps the legacy IndexedDB media keys
+    expect(p.videos[0].name).toBe("Video 1");
+    expect(p.videos[0].crop).toEqual({ start: 3, duration: 12 });
+    expect(p.videos[0].offset).toBe(4.2);
+    expect(p.videos[0].audioName).toBe("song.mp3");
+    expect(p.videos[0].videoName).toBe("take.mov");
+    expect(p.videoId).toBe(base.id);
+    expect(p.video).toBeUndefined();
+  });
+
+  it("keeps several clips and repairs an unknown selection", () => {
+    const ws = defaultWorkspace();
+    const p = ws.projects[0];
+    const second = { ...p.videos[0], id: "clip-2", name: "Video 2", offset: 7 };
+    const out = normalizeWorkspace({ ...ws, projects: [{ ...p, videos: [p.videos[0], second], videoId: "missing" }] });
+    expect(out.projects[0].videos.map((v) => v.id)).toEqual([p.videos[0].id, "clip-2"]);
+    expect(out.projects[0].videoId).toBe(p.videos[0].id);
   });
 });
 

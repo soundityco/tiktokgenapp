@@ -72,6 +72,24 @@ Limites : l'API renvoie la **couverture** de chaque post (la slide 1, donc le ho
 - **Drive** : recherche dans tout le Drive et fil d'Ariane cliquable.
 - **Hooks** : les vues TikTok enregistrées sont visibles dans l'éditeur de liste.
 
+## Nouveautés v0.5
+**Récap.** Le studio vidéo n'est plus une fenêtre posée sur le carrousel : un switch `Carrousel / Vidéo` dans l'en-tête permet de passer d'un studio à l'autre, à côté du sélecteur de release, avec sauvegarde forcée avant chaque bascule. Chaque release peut maintenant garder plusieurs clips (`Video 1`, `Video 2`…) avec leur propre audio officiel, prise caméra, segment, cadrage et synchro ; les paroles chronométrées et le style restent communs à la release. Les anciens projets sont migrés automatiquement : l'ancien réglage vidéo unique devient le premier clip et retrouve ses fichiers déjà importés.
+
+Le nettoyage a été revu : retirer l'audio ou la vidéo efface les buffers, la forme d'onde, l'offset et la synchro, supprime la copie locale et décharge le lecteur ; changer de clip ou de release remet le studio à zéro et annule les analyses en cours, et supprimer une release supprime les médias de tous ses clips. Les imports, suppressions et synchros sont enregistrés immédiatement, et l'export porte le nom du clip. Les fichiers restent sur l'appareil ; la synchro automatique reste le point à stabiliser.
+
+- **Studio vidéo** : importe l'audio officiel de la sortie, recadre-le (10/15/20/30 s ou à la main sur la forme d'onde), importe la vidéo tournée à la caméra : l'appli retrouve automatiquement où la prise de son se situe dans l'audio officiel (recherche par repères répartis sur le morceau, puis recalage fin sur la zone où la musique joue vraiment — quelqu'un qui parle au début ne fausse plus le résultat), puis exporte un clip vertical `.webm` avec l'audio officiel et les paroles incrustées.
+- **Paroles synchronisées** : les instants de chaque ligne sont placés une fois (automatiquement ou à la main) et restent enregistrés avec la section, donc réutilisables pour toutes les vidéos de la release.
+- **Deux studios, un seul en-tête** : le sélecteur de release reste en haut et un switch `Carrousel / Vidéo` permet de passer d'un studio à l'autre sans rechargement. La sauvegarde est forcée avant chaque bascule, et les deux studios travaillent sur le même workspace : aucune donnée n'est perdue.
+- **Plusieurs vidéos par release** : chaque release garde ses clips (`Video 1`, `Video 2`…) avec leur propre audio officiel, prise caméra, recadrage et synchro ; les paroles chronométrées et le style restent communs à la release.
+- **Enregistrement immédiat** : les imports, suppressions et synchros sont sauvegardés tout de suite, et chaque bascule de studio force l'enregistrement au lieu d'attendre le délai habituel.
+- **Paroles par slide** : chaque slide « Lyrics » peut lire sa propre section (couplet, refrain…) au lieu d'une section unique pour tout le projet.
+- **Préréglages de style** nommés, réutilisables sur tous les projets.
+- **Réordonner les slides en glisser-déposer** (poignée ⠿).
+- **Vues TikTok mises à jour** en un clic depuis l'éditeur d'une liste de hooks.
+- **Annuler / rétablir** conservé après un rechargement de l'onglet.
+- Pré-vol : signale aussi les textes trop longs pour leur style.
+- Correction : « Favor my best hooks » ne désactive plus « No repeats until everything was used ».
+
 ## Utilisation rapide
 1. **Picture pools** → clique sur « Slide 1 pictures » → *Add from Google Drive* → choisis un dossier → *Add all*.
 2. **Text pools** → écris ou colle tes hooks (un par ligne, `|` = saut de ligne), ou *Extract hooks from screenshots*.
@@ -93,7 +111,7 @@ Un test vérifie aussi que chaque texte de l'interface a sa traduction français
 - Formats de photos : le vrai format est détecté dans le fichier (pas son extension) puis converti dans le navigateur : JPG, PNG, WebP, GIF, BMP, AVIF, **HEIC/HEIF**, TIFF. Le HEIC est plus lent à décoder (un à la fois).
 - L'OCR est hébergé par l'appli elle-même (`public/ocr`, copié automatiquement par `npm install`) : aucun CDN externe.
 - Si tu ouvres l'appli sur deux appareils ou onglets, une bannière te prévient quand l'autre a enregistré avant toi (« Charger la dernière version » ou « Garder ma version ») : plus d'écrasement silencieux.
-- Phase 3 : sous-titres vidéo synchronisés (le modèle de données réserve déjà `start` pour les lyrics).
+- Studio vidéo : les fichiers importés restent sur l'appareil (IndexedDB), un audio et une vidéo par clip, rien n'est envoyé au serveur. Retirer l'audio ou la vidéo supprime aussi la copie locale ; supprimer un projet supprime les médias de tous ses clips. L'export produit un `.webm` (pas de MP4), limité à 30 s par la durée du segment. Si le navigateur ne sait pas décoder la piste audio du fichier (fréquent avec les MOV/MP4 de téléphone), la synchro relit la bande-son via le lecteur vidéo en temps réel : compte alors jusqu'à ~45 s d'attente. Précision de la synchro : environ 0,1 s (boutons ±0,1 pour affiner à l'oreille).
 
 ## Alertes `npm audit`
 Deux alertes concernent PostCSS, embarqué dans Next.js : elles portent sur du CSS fourni par un attaquant, que l'appli ne traite jamais. Les corriger demande Next 16 (changement majeur), à faire plus tard.
