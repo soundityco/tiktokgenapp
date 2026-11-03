@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { delMedia, getMedia, putMedia } from "@/lib/idb";
-import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, peaksOf, syncClip } from "@/lib/media";
+import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { drawStyledText } from "@/lib/render";
 import type { Project, TextStyle, VideoSettings, VideoSetup } from "@/lib/types";
 import Icon from "./Icon";
@@ -35,15 +35,15 @@ function saveBlob(blob: Blob, name: string) {
 /**
  * Last resort when `decodeAudioData` refuses the container (typical of phone MOV/MP4):
  * play the video through the Web Audio graph, unmuted but wired only to a silent gain,
- * and rebuild the envelope from what comes out. Real time, so we stop after ~40 s.
+ * and keep the raw mono sound that comes out (the sync needs the real audio, not just its
+ * loudness). Real time, so we stop after `maxSeconds`.
  */
-async function captureEnvelope(
+async function capturePcm(
   url: string,
-  rate: number,
   maxSeconds: number,
   onProgress?: (p: number) => void,
   signal?: AbortSignal
-): Promise<Float32Array> {
+): Promise<{ samples: Float32Array; rate: number }> {
   const ctx = new AudioContext();
   const v = document.createElement("video");
   v.src = url;
@@ -52,9 +52,7 @@ async function captureEnvelope(
   v.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0";
   document.body.appendChild(v);
 
-  const cap = Math.ceil(maxSeconds * rate) + 2;
-  const acc = new Float32Array(cap);
-  const cnt = new Uint16Array(cap);
+  const blocks: Float32Array[] = [];
   let total = maxSeconds;
   let samples = 0;
   let base = -1;
@@ -87,8 +85,6 @@ async function captureEnvelope(
     const buffer = e.inputBuffer;
     if (!buffer.numberOfChannels) return;
     const data = buffer.getChannelData(0);
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
     samples += data.length;
     // The graph runs before the video really starts: ignore that priming silence.
     if (base < 0) {
@@ -98,9 +94,7 @@ async function captureEnvelope(
       window.clearTimeout(stall);
     }
     const t = baseTime + (samples - base) / ctx.sampleRate;
-    const idx = Math.min(cap - 1, Math.max(0, Math.round(t * rate)));
-    acc[idx] += Math.sqrt(sum / Math.max(1, data.length));
-    cnt[idx] += 1;
+    blocks.push(new Float32Array(data)); // the buffer is reused by the browser: copy it
     const pct = Math.round(Math.min(1, t / total) * 100);
     if (pct !== lastPct) { lastPct = pct; onProgress?.(pct / 100); }
     if (t >= total) done();
@@ -127,16 +121,22 @@ async function captureEnvelope(
   try {
     await finished;
     v.pause();
-    const frames = Math.ceil(total * rate) + 2;
-    const env = new Float32Array(frames);
+    const rate = ctx.sampleRate;
+    const lead = Math.round(baseTime * rate); // playback rarely starts at exactly 0 s: keep the timeline true
+    const len = Math.min(lead + blocks.reduce((n, b) => n + b.length, 0), Math.ceil(total * rate));
+    const pcm = new Float32Array(len);
+    let at = lead;
     let peak = 0;
-    for (let i = 0; i < frames; i++) {
-      env[i] = cnt[i] ? acc[i] / cnt[i] : 0;
-      if (env[i] > peak) peak = env[i];
+    for (const b of blocks) {
+      if (at >= len) break;
+      const take = Math.min(b.length, len - at);
+      pcm.set(take === b.length ? b : b.subarray(0, take), at);
+      for (let i = 0; i < take; i++) peak = Math.max(peak, Math.abs(b[i]));
+      at += take;
     }
     if (peak < 1e-4) throw new Error("silent");
     onProgress?.(1);
-    return env;
+    return { samples: pcm, rate };
   } finally {
     active = false;
     v.pause();
@@ -498,34 +498,41 @@ export default function VideoStudio({
     setSyncBusy(true); setSyncPct(0); setErr(null); setNote(null);
     // Start the real-time capture right away, inside the click: the video cannot be muted
     // (mute zeroes the samples before the Web Audio graph), so it needs the user gesture.
+    // `ac` = "this analysis is still the current one" (aborted when the clip/files change).
+    // `capAc` = "stop the real-time capture" (aborted as soon as the fast decode worked).
+    // They MUST be separate: aborting `ac` after a successful decode made the result look stale and it was thrown away.
     const ac = new AbortController();
     syncRef.current = ac;
+    const capAc = new AbortController();
+    ac.signal.addEventListener("abort", () => capAc.abort());
     const capture = videoUrl
-      ? captureEnvelope(videoUrl, RATE, 45, (p) => setSyncPct(p), ac.signal)
+      ? capturePcm(videoUrl, 60, (p) => setSyncPct(p), capAc.signal)
       : null;
     if (capture) void capture.catch(() => {});
     try {
-      const ref = envelopeOf(official.getChannelData(0), official.sampleRate, RATE);
-      let clip: Float32Array;
+      let clip: { samples: Float32Array; rate: number };
       try {
         const vbuf = await Promise.race([
           decodeAudio(getCtx(), recording),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
         ]);
-        clip = envelopeOf(vbuf.getChannelData(0), vbuf.sampleRate, RATE);
-        ac.abort();
+        clip = { samples: monoOf(vbuf), rate: vbuf.sampleRate };
+        capAc.abort(); // the fast path worked: no need for the real-time capture
       } catch {
         // Phone MOV/MP4 often decode fine in the <video> but not through decodeAudioData.
         if (!capture) throw new Error("no-url");
         clip = await capture;
       }
+      // Let the spinner paint before the (CPU-heavy) analysis blocks the main thread for a moment.
+      await new Promise((resolve) => setTimeout(resolve, 30));
       const cfg = settingsRef.current;
-      const r = syncClip(clip, ref, RATE, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
+      const r = syncAudio(clip.samples, clip.rate, monoOf(official), official.sampleRate, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
       // The clip, the project or the files may have changed while we were analysing.
       if (ac.signal.aborted) {
         /* result ignored */
-      } else if (!r.anchors) {
-        setErr(t("Low confidence: check the offset by ear."));
+      } else if (!r.anchors || r.score < 0.4) {
+        // Nothing in the official track resembles this recording: keep the current offset untouched.
+        setErr(t("No match found in the official audio. Check it is the right track, or sync by ear."));
       } else {
         setV({
           offset: round2(r.offset),
@@ -535,11 +542,15 @@ export default function VideoStudio({
           anchors: r.anchors,
         });
         setNote(t("Sync quality {n}%", { n: Math.round(r.score * 100) }));
-        if (r.score < 0.45 || r.anchors < 2) setErr(t("Low confidence: check the offset by ear."));
+        if (r.score < 0.7) setErr(t("Low confidence: check the offset by ear."));
         onSaveNow();
       }
-    } catch {
-      if (!ac.signal.aborted) setErr(t("The video has no readable audio track. Sync it manually."));
+    } catch (e) {
+      if (!ac.signal.aborted) {
+        console.error("auto sync failed", e);
+        const reading = e instanceof Error && ["no-url", "silent", "decode"].includes(e.message);
+        setErr(reading ? t("The video has no readable audio track. Sync it manually.") : t("The analysis failed. Sync it by ear."));
+      }
     }
     if (syncRef.current === ac) syncRef.current = null;
     setSyncBusy(false);

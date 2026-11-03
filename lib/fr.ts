@@ -1,5 +1,7 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "No match found in the official audio. Check it is the right track, or sync by ear.": "Aucune correspondance trouvée dans l'audio officiel. Vérifie que c'est le bon morceau, ou synchronise à l'oreille.",
+  "The analysis failed. Sync it by ear.": "L'analyse a échoué. Synchronise à l'oreille.",
   "(copy)": "(copie)",
   "1 block": "1 bloc",
   "1 slide": "1 slide",
