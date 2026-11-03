@@ -895,14 +895,16 @@ export default function Studio({ userName }: { userName: string }) {
         <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[], toAll: boolean, folder) => {
           const ids = new Set<string>([overlay.poolId]);
           if (toAll) project.slides.forEach((s) => s.picPoolId && ids.add(s.picPoolId));
-          const tagged = folder ? pics.map((y) => ({ ...y, folder: folder.id })) : pics;
           upd((w) => ({
             ...w,
             picPools: w.picPools.map((x) => {
               if (!ids.has(x.id)) return x;
+              // The folder is linked to the list being edited only: the other lists just get a copy.
+              const link = folder && x.id === overlay.poolId ? folder : null;
               const have = new Set(x.pics.map((y) => y.id));
-              const next = { ...x, pics: [...x.pics, ...tagged.filter((y) => !have.has(y.id))] };
-              if (folder && !x.folders?.some((f) => f.id === folder.id)) next.folders = [...(x.folders ?? []), folder];
+              const add = pics.filter((y) => !have.has(y.id)).map((y) => (link ? { ...y, folder: link.id } : y));
+              const next = { ...x, pics: [...x.pics, ...add] };
+              if (link && !x.folders?.some((f) => f.id === link.id)) next.folders = [...(x.folders ?? []), link];
               return next;
             }),
           }));

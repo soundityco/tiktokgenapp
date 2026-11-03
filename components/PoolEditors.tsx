@@ -122,10 +122,11 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   const folders = pool.folders ?? [];
   const onSync = useRef(p.onSync);
   useEffect(() => { onSync.current(false); }, [pool.id]); // fresh photos each time the list is opened
+  // Removing a folder also removes the photos it brought, so a list filled from the wrong folder can be cleaned.
   const unlink = (id: string) => p.onChange((x) => ({
     ...x,
     folders: (x.folders ?? []).filter((f) => f.id !== id),
-    pics: x.pics.map((y) => (y.folder === id ? { id: y.id, name: y.name } : y)),
+    pics: x.pics.filter((y) => y.folder !== id),
   }));
   const remove = (pic: PicRef) => p.onChange((x) => ({
     ...x,
@@ -149,7 +150,7 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
           {folders.map((f) => (
             <span key={f.id} className="row nowrap" style={{ gap: 2 }}>
               <Icon name="folder" size={13} /><span className="xs">{f.name}</span>
-              <button className="btn sm quiet icon" aria-label={t("Unlink {name}", { name: f.name })} title={t("Unlink {name}", { name: f.name })} onClick={() => unlink(f.id)}><Icon name="x" size={11} /></button>
+              <button className="btn sm quiet icon" aria-label={t("Remove the folder {name} and its photos", { name: f.name })} title={t("Remove the folder {name} and its photos", { name: f.name })} onClick={() => unlink(f.id)}><Icon name="x" size={11} /></button>
             </span>
           ))}
           <button className="btn sm" onClick={() => p.onSync(true)}>{t("Sync with Drive")}</button>

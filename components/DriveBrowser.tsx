@@ -19,6 +19,7 @@ export default function DriveBrowser({ onAdd, onClose }: {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
   const cur = path[path.length - 1];
   const query = q.trim();
 
@@ -38,6 +39,13 @@ export default function DriveBrowser({ onAdd, onClose }: {
   const images = items.filter(isImage);
   const toRef = (i: DriveItem): PicRef => ({ id: i.id, name: i.name });
   const linkable = !query && cur.id !== "shared";
+  const allSel = images.length > 0 && images.every((i) => sel.has(i.id));
+  // Tick every photo first so you see what is being added, then add them.
+  const addAll = () => {
+    setSel(new Set(images.map((i) => i.id)));
+    setAdding(true);
+    setTimeout(() => { onAdd(images.map(toRef), toAll, linkable ? { id: cur.id, name: cur.name } : undefined); onClose(); }, 450);
+  };
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
@@ -70,22 +78,29 @@ export default function DriveBrowser({ onAdd, onClose }: {
             <Icon name="folder" size={15} /><span className="grow truncate">{f.name}</span>
           </button>
         ))}
+        {images.length > 1 && (
+          <label className="item">
+            <input type="checkbox" checked={allSel} disabled={adding}
+              onChange={() => setSel(allSel ? new Set() : new Set(images.map((i) => i.id)))} />
+            <span className="grow muted">{t("Select all ({n})", { n: images.length })}</span>
+          </label>
+        )}
         {images.map((i) => (
           <label key={i.id} className="item">
-            <input type="checkbox" checked={sel.has(i.id)} onChange={() => toggle(i.id)} />
+            <input type="checkbox" checked={sel.has(i.id)} disabled={adding} onChange={() => toggle(i.id)} />
             <span className="grow truncate">{i.name}</span>
           </label>
         ))}
       </div>
       {linkable && images.length > 0 && <p className="muted xs">{t("Adding all the photos of a folder links it: photos you put in it later are added automatically.")}</p>}
-      <label className="check"><input type="checkbox" checked={toAll} onChange={(e) => setToAll(e.target.checked)} />{t("Also add them to the photo lists of all slides in this project")}</label>
+      <label className="check"><input type="checkbox" checked={toAll} onChange={(e) => setToAll(e.target.checked)} />{t("Also copy them into the photo lists of the other slides")}</label>
       <div className="modal-foot">
         <button className="btn quiet" onClick={onClose}>{t("Close")}</button>
-        <button className="btn" disabled={!sel.size} onClick={() => { onAdd(images.filter((i) => sel.has(i.id)).map(toRef), toAll); onClose(); }}>
+        <button className="btn" disabled={!sel.size || adding} onClick={() => { onAdd(images.filter((i) => sel.has(i.id)).map(toRef), toAll); onClose(); }}>
           {t("Add selected ({n})", { n: sel.size })}
         </button>
-        <button className="btn primary" disabled={!images.length} onClick={() => { onAdd(images.map(toRef), toAll, linkable ? { id: cur.id, name: cur.name } : undefined); onClose(); }}>
-          {query ? t("Add all {n} photos", { n: images.length }) : t("Add all {n} photos here", { n: images.length })}
+        <button className="btn primary" disabled={!images.length || adding} onClick={addAll}>
+          {adding ? t("Adding…") : query ? t("Add all {n} photos", { n: images.length }) : t("Add all {n} photos here", { n: images.length })}
         </button>
       </div>
     </Modal>

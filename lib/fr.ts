@@ -24,7 +24,7 @@ export const FR: Record<string, string> = {
   "Align": "Alignement",
   "All projects": "Tous les projets",
   "Already in pool": "Déjà dans la liste",
-  "Also add them to the photo lists of all slides in this project": "Les ajouter aussi aux listes de photos de toutes les slides de ce projet",
+  "Also copy them into the photo lists of the other slides": "Les copier aussi dans les listes de photos des autres slides",
   "Apply to all slides": "Appliquer à toutes les slides",
   "Are you sure you want to delete “{name}”? Its slide setup and project-only lists will be deleted too. This can't be undone.":
     "Veux-tu vraiment supprimer « {name} » ? Ses réglages de slides et ses listes propres au projet seront supprimés aussi. Cette action est définitive.",
@@ -383,6 +383,8 @@ export const FR: Record<string, string> = {
   "Photo list is up to date": "La liste de photos est à jour",
   "Adding all the photos of a folder links it: photos you put in it later are added automatically.": "Ajouter toutes les photos d'un dossier le relie : les photos que tu y mettras ensuite seront ajoutées automatiquement.",
   "Linked folders:": "Dossiers reliés :",
-  "Unlink {name}": "Délier {name}",
+  "Remove the folder {name} and its photos": "Retirer le dossier {name} et ses photos",
+  "Select all ({n})": "Tout cocher ({n})",
+  "Adding…": "Ajout…",
   "Sync with Drive": "Synchroniser avec Drive",
 };
