@@ -4,17 +4,19 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_AUTH_EVENT, loadDriveImage } from "@/lib/drive";
+import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder } from "@/lib/drive";
+import { loadSavedFonts } from "@/lib/fonts";
 import { generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
-import type { GenSlide, PicPool, PicRef, Project, SlideCfg, TextPool, Workspace } from "@/lib/types";
+import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
 import HooksExtract, { NewHook } from "./HooksExtract";
 import Icon from "./Icon";
 import Inspector from "./Inspector";
 import Logo from "./Logo";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
+import { withPreset } from "./TextControls";
 import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "./ui";
@@ -34,7 +36,6 @@ type Overlay =
   | { k: "newPool"; kind: "text" | "photos" }
   | { k: "newProject" }
   | { k: "rename" }
-  | { k: "preset" }
   | { k: "confirm"; title: string; message: string; label: string; run: () => void };
 
 const stamp = () => {
@@ -60,6 +61,7 @@ export default function Studio({ userName }: { userName: string }) {
   const [studio, setStudio] = useState<"carousel" | "video">("carousel");
   const [toast, setToast] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
+  const [fonts, setFonts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
   const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
@@ -154,7 +156,7 @@ export default function Studio({ userName }: { userName: string }) {
       const msg: Record<string, string> = { connected: "TikTok connected", denied: "TikTok connection was cancelled", badstate: "TikTok connection failed (security check). Try again.", error: "TikTok connection failed. Try again.", notconfigured: "TikTok is not set up on this site yet" };
       setTimeout(() => say(t(msg[flag] ?? "TikTok")), 300);
     }
-    loadFonts().then(() => setFontsReady(true));
+    Promise.all([loadFonts(), loadSavedFonts().then(setFonts, () => {})]).then(() => setFontsReady(true));
     fetch("/api/workspace")
       .then(async (r) => {
         const j = await r.json();
@@ -229,6 +231,59 @@ export default function Studio({ userName }: { userName: string }) {
     window.addEventListener(DRIVE_AUTH_EVENT, h);
     return () => window.removeEventListener(DRIVE_AUTH_EVENT, h);
   }, []);
+
+  // ---- linked Drive folders: photos added to (or deleted from) the folder follow in the list ----
+  const syncing = useRef(false);
+  const lastSync = useRef(0);
+  const tRef = useRef(t);
+  tRef.current = t;
+  const syncDrive = useCallback(async (onlyPool?: string, manual = false) => {
+    const w = wsRef.current;
+    if (!w || syncing.current) return;
+    const linked = (p: PicPool) => !!p.folders?.length && (!onlyPool || p.id === onlyPool);
+    const ids = [...new Set(w.picPools.filter(linked).flatMap((p) => p.folders!.map((f) => f.id)))];
+    if (!ids.length) return;
+    syncing.current = true;
+    lastSync.current = Date.now();
+    try {
+      const listed = new Map<string, DriveItem[]>();
+      let failed = 0;
+      for (const id of ids) {
+        try { listed.set(id, (await listFolder(id)).filter(isImage)); } catch { failed++; }
+      }
+      const cur = wsRef.current;
+      if (!cur) return;
+      let added = 0, removed = 0;
+      const picPools = cur.picPools.map((p) => {
+        if (!linked(p)) return p;
+        let pics = p.pics;
+        for (const f of p.folders!) {
+          const l = listed.get(f.id);
+          if (l) pics = mergeFolder(pics, f.id, l, p.excluded);
+        }
+        if (pics === p.pics) return p;
+        const before = new Set(p.pics.map((x) => x.id)), after = new Set(pics.map((x) => x.id));
+        added += pics.filter((x) => !before.has(x.id)).length;
+        removed += p.pics.filter((x) => !after.has(x.id)).length;
+        return { ...p, pics };
+      });
+      // Not an undo step: it mirrors Drive, it is not an edit.
+      if (added || removed) apply({ ...cur, picPools }, false);
+      if (added) say(tRef.current("{n} new photos from Drive", { n: added }));
+      else if (manual) say(tRef.current(failed ? "Some folders could not be read" : "Photo list is up to date"));
+    } finally {
+      syncing.current = false;
+    }
+  }, [apply, say]);
+
+  const wsLoaded = !!ws;
+  useEffect(() => {
+    if (!wsLoaded) return;
+    void syncDrive();
+    const h = () => { if (document.visibilityState === "visible" && Date.now() - lastSync.current > 60_000) void syncDrive(); };
+    document.addEventListener("visibilitychange", h);
+    return () => document.removeEventListener("visibilitychange", h);
+  }, [wsLoaded, syncDrive]);
 
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => { if (saveState === "saving" || saveState === "error") e.preventDefault(); };
@@ -618,15 +673,12 @@ export default function Studio({ userName }: { userName: string }) {
   const edPics = editor?.k === "photos" ? ws.picPools.find((x) => x.id === editor.id) : undefined;
   const nSlides = project.slides.length;
   const presets = ws.presets ?? [];
-  const savePreset = (name: string) => {
-    const style = { ...project.slides[sel].style };
-    upd((w) => ({ ...w, presets: [...(w.presets ?? []), { id: uid(), name, style }] }));
+  const savePreset = (name: string, style: SlideCfg["style"]) => {
+    upd((w) => ({ ...w, presets: [...(w.presets ?? []), { id: uid(), name, style: { ...style } }] }));
     say(t("Preset saved"));
   };
-  const applyPreset = (id: string) => {
-    const preset = presets.find((x) => x.id === id);
-    if (!preset) return;
-    updSlide(sel, (s) => ({ ...s, style: { ...preset.style } }));
+  const applyPreset = (preset: StylePreset) => {
+    updSlide(sel, (s) => ({ ...s, style: withPreset(s.style, preset) }));
     say(t("Preset applied"));
   };
   const deletePreset = (id: string) => upd((w) => ({ ...w, presets: (w.presets ?? []).filter((x) => x.id !== id) }));
@@ -718,6 +770,11 @@ export default function Studio({ userName }: { userName: string }) {
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
             onSaveNow={() => void flushSave()}
             onBack={() => switchStudio("carousel")}
+            fonts={fonts}
+            onFonts={setFonts}
+            presets={presets}
+            onSavePreset={savePreset}
+            onDeletePreset={deletePreset}
           />
         ) : (
         <>
@@ -808,8 +865,8 @@ export default function Studio({ userName }: { userName: string }) {
         <aside className="col side r">
           <Inspector index={sel} cfg={project.slides[sel]} zones={ws.zones} onZones={(v) => upd((w) => ({ ...w, zones: v }))}
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
-            lyrics={project.lyrics} presets={ws.presets ?? []}
-            onSavePreset={() => setOverlay({ k: "preset" })} onApplyPreset={applyPreset} onDeletePreset={deletePreset} />
+            lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts}
+            onSavePreset={(name) => savePreset(name, project.slides[sel].style)} onApplyPreset={applyPreset} onDeletePreset={deletePreset} />
         </aside>
         </>
         )}
@@ -830,19 +887,23 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {edPics && (
         <PicPoolEditor pool={edPics} onClose={() => setEditor(null)} onDelete={() => askDeletePool("photos", edPics.id)}
-          onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))} onBrowse={() => setOverlay({ k: "drive", poolId: edPics.id })} />
+          onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))} onBrowse={() => setOverlay({ k: "drive", poolId: edPics.id })}
+          onSync={(manual) => void syncDrive(edPics.id, manual)} />
       )}
 
       {overlay?.k === "drive" && (
-        <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[], toAll: boolean) => {
+        <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[], toAll: boolean, folder) => {
           const ids = new Set<string>([overlay.poolId]);
           if (toAll) project.slides.forEach((s) => s.picPoolId && ids.add(s.picPoolId));
+          const tagged = folder ? pics.map((y) => ({ ...y, folder: folder.id })) : pics;
           upd((w) => ({
             ...w,
             picPools: w.picPools.map((x) => {
               if (!ids.has(x.id)) return x;
               const have = new Set(x.pics.map((y) => y.id));
-              return { ...x, pics: [...x.pics, ...pics.filter((y) => !have.has(y.id))] };
+              const next = { ...x, pics: [...x.pics, ...tagged.filter((y) => !have.has(y.id))] };
+              if (folder && !x.folders?.some((f) => f.id === folder.id)) next.folders = [...(x.folders ?? []), folder];
+              return next;
             }),
           }));
           say(ids.size > 1 ? t("{n} photos added to {m} lists", { n: pics.length, m: ids.size }) : t("{n} photos added", { n: pics.length }));
@@ -861,9 +922,6 @@ export default function Studio({ userName }: { userName: string }) {
           });
           say(t("{n} hooks added", { n: hooks.length }));
         }} />
-      )}
-      {overlay?.k === "preset" && (
-        <PromptDialog title={t("Style presets")} label={t("Preset name")} confirmLabel={t("Save current style")} onSubmit={savePreset} onClose={() => setOverlay(null)} />
       )}
       {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} onCreate={createPool} onClose={() => setOverlay(null)} />}
       {overlay?.k === "newProject" && <PromptDialog title={t("New project")} label={t("Release name")} confirmLabel={t("Create")} onSubmit={createProject} onClose={() => setOverlay(null)} />}

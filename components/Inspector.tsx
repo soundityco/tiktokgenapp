@@ -1,8 +1,9 @@
 "use client";
-import { FONT_LABELS, defaultPic, defaultStyle } from "@/lib/defaults";
+import { defaultPic, defaultStyle } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
-import type { FontId, FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
-import Icon from "./Icon";
+import { zoomPic } from "@/lib/render";
+import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
+import { FontPicker, StylePresets } from "./TextControls";
 import { Range, Section } from "./ui";
 
 interface Props {
@@ -14,14 +15,16 @@ interface Props {
   onApplyAll: () => void;
   lyrics: LyricSection[];
   presets: StylePreset[];
-  onSavePreset: () => void;
-  onApplyPreset: (id: string) => void;
+  onSavePreset: (name: string) => void;
+  onApplyPreset: (p: StylePreset) => void;
   onDeletePreset: (id: string) => void;
+  fonts: string[];
+  onFonts: (names: string[]) => void;
 }
 
 export default function Inspector({
   index, cfg, zones, onZones, onCfg, onApplyAll,
-  lyrics, presets, onSavePreset, onApplyPreset, onDeletePreset,
+  lyrics, presets, onSavePreset, onApplyPreset, onDeletePreset, fonts, onFonts,
 }: Props) {
   const { t } = useT();
   const st = cfg.style, pic = cfg.pic;
@@ -57,17 +60,13 @@ export default function Inspector({
               <option value="fit-black">{t("Fit whole, black bars")}</option>
             </select>
           </label>
-          <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => setP({ zoom: v })} />
+          <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => onCfg((c) => ({ ...c, pic: zoomPic(c.pic, v) }))} />
           <Range label={t("Darken")} value={pic.darken} display={`${pic.darken}%`} min={0} max={80} onChange={(v) => setP({ darken: v })} />
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, pic: { ...defaultPic(), framing: c.pic.framing, bars: c.pic.bars, darken: c.pic.darken } }))}>{t("Reset framing")}</button></div>
         </Section>
 
         <Section title={t("Text")}>
-          <label className="field">{t("Font")}
-            <select className="input" value={st.font} onChange={(e) => setS({ font: e.target.value as FontId })}>
-              {Object.entries(FONT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </label>
+          <FontPicker style={st} fonts={fonts} onChange={setS} onFonts={onFonts} />
           <label className="field">{t("Style")}
             <select className="input" value={st.look} onChange={(e) => setS({ look: e.target.value as TextStyle["look"] })}>
               <option value="outline">{t("Outline")}</option><option value="box">{t("Box")}</option><option value="shadow">{t("Shadow")}</option><option value="plain">{t("Plain")}</option>
@@ -108,20 +107,7 @@ export default function Inspector({
         </Section>
 
         <Section title={t("Style presets")} open={false}>
-          <div className="row">
-            <button className="btn sm" onClick={onSavePreset}>{t("Save current style")}</button>
-            {!presets.length && <span className="muted xs">{t("No presets yet.")}</span>}
-          </div>
-          {presets.map((p) => (
-            <div className="row nowrap" key={p.id}>
-              <button className="btn sm grow" onClick={() => onApplyPreset(p.id)} title={t("Apply")}>
-                <span className="truncate">{p.name}</span>
-              </button>
-              <button className="btn sm quiet icon" aria-label={t("Delete preset")} title={t("Delete preset")} onClick={() => onDeletePreset(p.id)}>
-                <Icon name="trash" size={13} />
-              </button>
-            </div>
-          ))}
+          <StylePresets presets={presets} onSave={onSavePreset} onApply={onApplyPreset} onDelete={onDeletePreset} />
         </Section>
 
         <Section title={t("Position")} open={false}>

@@ -2,15 +2,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
-import { loadSavedFonts } from "@/lib/fonts";
 import { delMedia, getMedia, putMedia } from "@/lib/idb";
 import { activeCue, alignLyrics, buildCues, cleanHeard } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify } from "@/lib/notify";
 import { drawStyledText } from "@/lib/render";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import type { Project, TextStyle, VideoSettings, VideoSetup } from "@/lib/types";
+import type { Project, StylePreset, TextStyle, VideoSettings, VideoSetup } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
+import { StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import { Range, Section } from "./ui";
 
@@ -172,11 +172,22 @@ export default function VideoStudio({
   onProject,
   onSaveNow,
   onBack,
+  fonts,
+  onFonts,
+  presets,
+  onSavePreset,
+  onDeletePreset,
 }: {
   project: Project;
   onProject: (fn: (p: Project) => Project) => void;
   onSaveNow: () => void;
   onBack: () => void;
+  /** Fonts loaded by the user, shared with the carousel. */
+  fonts: string[];
+  onFonts: (names: string[]) => void;
+  presets: StylePreset[];
+  onSavePreset: (name: string, style: TextStyle) => void;
+  onDeletePreset: (id: string) => void;
 }) {
   const { t, lang } = useT();
   const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
@@ -199,7 +210,6 @@ export default function VideoStudio({
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState(project.lyricsSectionId ?? project.lyrics[0]?.id ?? "");
-  const [fonts, setFonts] = useState<string[]>([]);
   const [genBusy, setGenBusy] = useState(false);
   const [genStep, setGenStep] = useState<AsrStep | null>(null);
   const [genPct, setGenPct] = useState(0);
@@ -363,7 +373,6 @@ export default function VideoStudio({
 
   useEffect(() => () => { stop(); syncRef.current?.abort(); genRef.current?.abort(); stopTranscribe(); ctxRef.current?.close().catch(() => {}); }, [stop]);
 
-  useEffect(() => { void loadSavedFonts().then(setFonts); }, []);
 
   useEffect(() => {
     if (!note) return;
@@ -1087,9 +1096,14 @@ export default function VideoStudio({
               style={captionStyle}
               fonts={fonts}
               onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
-              onFonts={setFonts}
+              onFonts={onFonts}
               onReset={() => setV({ captionStyle: undefined })}
             />
+          </Section>
+
+          <Section title={t("Style presets")} open={false}>
+            <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
+              onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
           </Section>
 
           <Section title={t("Place lines by hand")} open={false}>

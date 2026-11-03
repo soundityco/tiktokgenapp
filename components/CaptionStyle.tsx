@@ -1,10 +1,7 @@
 "use client";
-import { useRef, useState } from "react";
-import { FONT_LABELS } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
-import { addFont, removeFont } from "@/lib/fonts";
-import type { FontId, TextStyle } from "@/lib/types";
-import Icon from "./Icon";
+import type { TextStyle } from "@/lib/types";
+import { FontPicker } from "./TextControls";
 import { Range } from "./ui";
 
 /** Text studio of the video captions: same controls as the carousel inspector, plus loaded fonts. */
@@ -22,55 +19,9 @@ export default function CaptionStyle({
   onReset: () => void;
 }) {
   const { t } = useT();
-  const [fontErr, setFontErr] = useState<string | null>(null);
-  const input = useRef<HTMLInputElement>(null);
-  const value = style.customFont ? `custom:${style.customFont}` : style.font;
-
-  const pick = (v: string) => {
-    if (v.startsWith("custom:")) onChange({ customFont: v.slice(7) });
-    else onChange({ font: v as FontId, customFont: undefined });
-  };
-
-  const load = async (files: FileList | null) => {
-    setFontErr(null);
-    let last: string | null = null;
-    const names = new Set(fonts);
-    for (const f of Array.from(files ?? [])) {
-      try { last = await addFont(f); names.add(last); }
-      catch { setFontErr(t("This file is not a usable font.")); }
-    }
-    onFonts([...names].sort((a, b) => a.localeCompare(b)));
-    if (last) onChange({ customFont: last });
-  };
-
-  const drop = async () => {
-    if (!style.customFont) return;
-    const gone = style.customFont;
-    await removeFont(gone);
-    onFonts(fonts.filter((n) => n !== gone));
-    onChange({ customFont: undefined });
-  };
-
   return (
     <div className="stack">
-      <label className="field">{t("Font")}
-        <select className="input" value={value} onChange={(e) => pick(e.target.value)}>
-          {Object.entries(FONT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          {fonts.length > 0 && (
-            <optgroup label={t("Your fonts")}>
-              {fonts.map((n) => <option key={n} value={`custom:${n}`}>{n}</option>)}
-            </optgroup>
-          )}
-        </select>
-      </label>
-      <div className="row">
-        <button className="btn sm" onClick={() => input.current?.click()}><Icon name="folder" size={14} />{t("Load a font")}</button>
-        {style.customFont && <button className="btn sm quiet danger" onClick={() => void drop()}>{t("Remove this font")}</button>}
-        <input ref={input} type="file" hidden multiple accept=".ttf,.otf,.woff,.woff2,font/*"
-          onChange={(e) => { void load(e.target.files); e.target.value = ""; }} />
-      </div>
-      <p className="muted xs">{t("Fonts stay on this device (.ttf, .otf, .woff, .woff2).")}</p>
-      {fontErr && <p className="notice bad xs">{fontErr}</p>}
+      <FontPicker style={style} fonts={fonts} onChange={onChange} onFonts={onFonts} />
 
       <label className="field">{t("Style")}
         <select className="input" value={style.look} onChange={(e) => onChange({ look: e.target.value as TextStyle["look"] })}>

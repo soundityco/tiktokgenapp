@@ -116,9 +116,22 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   );
 }
 
-export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void; onBrowse: () => void }) {
+export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void; onBrowse: () => void; onSync: (manual: boolean) => void }) {
   const { t } = useT();
   const { pool } = p;
+  const folders = pool.folders ?? [];
+  const onSync = useRef(p.onSync);
+  useEffect(() => { onSync.current(false); }, [pool.id]); // fresh photos each time the list is opened
+  const unlink = (id: string) => p.onChange((x) => ({
+    ...x,
+    folders: (x.folders ?? []).filter((f) => f.id !== id),
+    pics: x.pics.map((y) => (y.folder === id ? { id: y.id, name: y.name } : y)),
+  }));
+  const remove = (pic: PicRef) => p.onChange((x) => ({
+    ...x,
+    pics: x.pics.filter((y) => y.id !== pic.id),
+    ...(pic.folder ? { excluded: [...(x.excluded ?? []), pic.id] } : {}),
+  }));
   return (
     <Modal title={t("Photo list")} onClose={p.onClose} wide>
       <div className="cols2">
@@ -128,15 +141,27 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
       <div className="row">
         <button className="btn primary" onClick={p.onBrowse}><Icon name="folder" />{t("Add from Google Drive")}</button>
         <span className="muted grow">{t("{n} photos (they stay in your Drive)", { n: pool.pics.length })}</span>
-        <button className="btn sm" disabled={!pool.pics.length} onClick={() => p.onChange((x) => ({ ...x, pics: [] }))}>{t("Remove all")}</button>
+        <button className="btn sm" disabled={!pool.pics.length} onClick={() => p.onChange((x) => ({ ...x, pics: [], folders: [], excluded: [] }))}>{t("Remove all")}</button>
       </div>
+      {folders.length > 0 && (
+        <div className="row">
+          <span className="muted xs">{t("Linked folders:")}</span>
+          {folders.map((f) => (
+            <span key={f.id} className="row nowrap" style={{ gap: 2 }}>
+              <Icon name="folder" size={13} /><span className="xs">{f.name}</span>
+              <button className="btn sm quiet icon" aria-label={t("Unlink {name}", { name: f.name })} title={t("Unlink {name}", { name: f.name })} onClick={() => unlink(f.id)}><Icon name="x" size={11} /></button>
+            </span>
+          ))}
+          <button className="btn sm" onClick={() => p.onSync(true)}>{t("Sync with Drive")}</button>
+        </div>
+      )}
       {!pool.pics.length && <p className="muted">{t("Pick a folder in your Drive and add all its photos in one click.")}</p>}
       <div className="thumbs" style={{ maxHeight: "46dvh", overflow: "auto" }}>
         {pool.pics.map((pic) => (
           <div key={pic.id} className="thumb-wrap">
             <Thumb id={pic.id} name={pic.name} />
             <button className="x" aria-label={t("Remove {name}", { name: pic.name })}
-              onClick={() => p.onChange((x) => ({ ...x, pics: x.pics.filter((y: PicRef) => y.id !== pic.id) }))}><Icon name="x" size={12} /></button>
+              onClick={() => remove(pic)}><Icon name="x" size={12} /></button>
           </div>
         ))}
       </div>

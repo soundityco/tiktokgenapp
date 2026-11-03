@@ -376,4 +376,13 @@ export const FR: Record<string, string> = {
   "Follows the style of the selected carousel slide until you change something.": "Suit le style de la slide sélectionnée du carrousel tant que tu ne changes rien.",
   "Place lines by hand": "Placer les lignes à la main",
   "Used only when no lyrics were generated from the audio.": "Utilisé seulement si aucune parole n'a été générée depuis l'audio.",
+  "This font is not loaded on this device: load the file again to see it.": "Cette police n'est pas chargée sur cet appareil : recharge le fichier pour la voir.",
+  "A preset keeps the look and the font, not the position of the text.": "Un préréglage garde le style et la police, pas la position du texte.",
+  "{n} new photos from Drive": "{n} nouvelles photos depuis Drive",
+  "Some folders could not be read": "Certains dossiers n'ont pas pu être lus",
+  "Photo list is up to date": "La liste de photos est à jour",
+  "Adding all the photos of a folder links it: photos you put in it later are added automatically.": "Ajouter toutes les photos d'un dossier le relie : les photos que tu y mettras ensuite seront ajoutées automatiquement.",
+  "Linked folders:": "Dossiers reliés :",
+  "Unlink {name}": "Délier {name}",
+  "Sync with Drive": "Synchroniser avec Drive",
 };

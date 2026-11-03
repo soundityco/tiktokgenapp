@@ -6,7 +6,11 @@ import type { PicRef } from "@/lib/types";
 import Icon from "./Icon";
 import { Modal } from "./ui";
 
-export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[], toAll: boolean) => void; onClose: () => void }) {
+export default function DriveBrowser({ onAdd, onClose }: {
+  /** `folder` is set when a whole folder was added: the list then stays in sync with it. */
+  onAdd: (pics: PicRef[], toAll: boolean, folder?: { id: string; name: string }) => void;
+  onClose: () => void;
+}) {
   const { t } = useT();
   const [path, setPath] = useState<{ id: string; name: string }[]>([{ id: "root", name: t("My Drive") }]);
   const [items, setItems] = useState<DriveItem[]>([]);
@@ -33,6 +37,7 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
 
   const images = items.filter(isImage);
   const toRef = (i: DriveItem): PicRef => ({ id: i.id, name: i.name });
+  const linkable = !query && cur.id !== "shared";
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
@@ -72,13 +77,14 @@ export default function DriveBrowser({ onAdd, onClose }: { onAdd: (pics: PicRef[
           </label>
         ))}
       </div>
+      {linkable && images.length > 0 && <p className="muted xs">{t("Adding all the photos of a folder links it: photos you put in it later are added automatically.")}</p>}
       <label className="check"><input type="checkbox" checked={toAll} onChange={(e) => setToAll(e.target.checked)} />{t("Also add them to the photo lists of all slides in this project")}</label>
       <div className="modal-foot">
         <button className="btn quiet" onClick={onClose}>{t("Close")}</button>
         <button className="btn" disabled={!sel.size} onClick={() => { onAdd(images.filter((i) => sel.has(i.id)).map(toRef), toAll); onClose(); }}>
           {t("Add selected ({n})", { n: sel.size })}
         </button>
-        <button className="btn primary" disabled={!images.length} onClick={() => { onAdd(images.map(toRef), toAll); onClose(); }}>
+        <button className="btn primary" disabled={!images.length} onClick={() => { onAdd(images.map(toRef), toAll, linkable ? { id: cur.id, name: cur.name } : undefined); onClose(); }}>
           {query ? t("Add all {n} photos", { n: images.length }) : t("Add all {n} photos here", { n: images.length })}
         </button>
       </div>

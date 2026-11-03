@@ -66,6 +66,8 @@ export interface TextPool {
 export interface PicRef {
   id: string; // Google Drive file id
   name: string;
+  /** Linked Drive folder this photo came from (kept in sync with it). */
+  folder?: string;
 }
 
 export interface PicPool {
@@ -74,6 +76,10 @@ export interface PicPool {
   scope: "shared" | "project";
   projectId?: string;
   pics: PicRef[];
+  /** Drive folders imported whole: new photos put in them are added to the list, deleted ones removed. */
+  folders?: { id: string; name: string }[];
+  /** Photos of a linked folder removed by hand, so the sync does not bring them back. */
+  excluded?: string[];
 }
 
 export interface LyricSection {

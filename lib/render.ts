@@ -1,4 +1,4 @@
-import { FORMATS, FontId, SlideCfg, TextStyle } from "./types";
+import { FORMATS, FontId, PicSettings, SlideCfg, TextStyle } from "./types";
 
 export type Img = ImageBitmap | HTMLImageElement;
 
@@ -38,16 +38,30 @@ const tmp = (w: number, h: number) => {
   return c;
 };
 
+/**
+ * Keep the photo offset in bounds: a photo larger than the canvas always covers it,
+ * a smaller one stays inside it. Stored offsets are kept clamped so a drag reacts at once.
+ */
+export function clampPic(pic: PicSettings, iw: number, ih: number, W: number, H: number): PicSettings {
+  const s = (pic.framing === "fill" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih)) * pic.zoom;
+  const mx = Math.abs(iw * s - W) / 2 / W, my = Math.abs(ih * s - H) / 2 / H;
+  const ox = Math.max(-mx, Math.min(mx, pic.ox)), oy = Math.max(-my, Math.min(my, pic.oy));
+  return ox === pic.ox && oy === pic.oy ? pic : { ...pic, ox, oy };
+}
+
+/** Change the zoom around the centre of the canvas: the point in the middle stays in the middle. */
+export function zoomPic(pic: PicSettings, zoom: number): PicSettings {
+  const k = zoom / (pic.zoom || 1);
+  return { ...pic, zoom, ox: pic.ox * k, oy: pic.oy * k };
+}
+
 function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: number, H: number) {
-  const { framing, bars, zoom, ox, oy, darken } = cfg.pic;
   const iw = img.width, ih = img.height;
+  const { framing, bars, zoom, ox, oy, darken } = clampPic(cfg.pic, iw, ih, W, H);
   if (framing === "fill") {
     const s = Math.max(W / iw, H / ih) * zoom;
     const dw = iw * s, dh = ih * s;
-    const maxX = Math.max(0, (dw - W) / 2), maxY = Math.max(0, (dh - H) / 2);
-    const dx = (W - dw) / 2 + Math.max(-maxX, Math.min(maxX, ox * W));
-    const dy = (H - dh) / 2 + Math.max(-maxY, Math.min(maxY, oy * H));
-    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.drawImage(img, (W - dw) / 2 + ox * W, (H - dh) / 2 + oy * H, dw, dh);
   } else {
     if (bars === "blur") {
       // Cheap blur that works in every browser (no ctx.filter): shrink, then stretch with smoothing.

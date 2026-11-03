@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
 import { Menu } from "./ui";
-import { renderSlide, TextBox } from "@/lib/render";
+import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import type { GenSlide, PicPool, SlideCfg, TextPool } from "@/lib/types";
 
@@ -67,13 +67,16 @@ export default function SlideCard(p: Props) {
     const pad = 30;
     return !!b && x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad;
   };
+  const fit = (pic: SlideCfg["pic"]) =>
+    img && cv.current ? clampPic(pic, img.width, img.height, cv.current.width, cv.current.height) : pic;
 
   const down = (e: React.PointerEvent) => {
     p.onSelect();
     const c = toCanvas(e);
     (e.target as Element).setPointerCapture(e.pointerId);
     const isText = inText(c.x, c.y);
-    drag.current = { kind: isText ? "text" : "pic", sx: e.clientX, sy: e.clientY, ox: isText ? cfg.style.x : cfg.pic.ox, oy: isText ? cfg.style.y : cfg.pic.oy, k: c.k };
+    const pic = fit(cfg.pic);
+    drag.current = { kind: isText ? "text" : "pic", sx: e.clientX, sy: e.clientY, ox: isText ? cfg.style.x : pic.ox, oy: isText ? cfg.style.y : pic.oy, k: c.k };
   };
   const move = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -88,7 +91,7 @@ export default function SlideCard(p: Props) {
       setGuides({ v: sv, h: sh });
       p.onCfg((c) => ({ ...c, style: { ...c.style, x, y } }));
     } else {
-      p.onCfg((c) => ({ ...c, pic: { ...c.pic, ox: d.ox + dx / W, oy: d.oy + dy / H } }));
+      p.onCfg((c) => ({ ...c, pic: fit({ ...c.pic, ox: d.ox + dx / W, oy: d.oy + dy / H }) }));
     }
   };
   const up = () => { drag.current = null; setGuides({ v: false, h: false }); };
@@ -101,7 +104,7 @@ export default function SlideCard(p: Props) {
     const c = toCanvas(e);
     const dir = e.deltaY < 0 ? 1 : -1;
     if (inText(c.x, c.y)) p.onCfg((s) => ({ ...s, style: { ...s.style, size: clamp(Math.round(s.style.size + dir * 3), 18, 200) } }));
-    else p.onCfg((s) => ({ ...s, pic: { ...s.pic, zoom: clamp(+(s.pic.zoom + dir * 0.05).toFixed(2), 0.5, 4) } }));
+    else p.onCfg((s) => ({ ...s, pic: fit(zoomPic(fit(s.pic), clamp(+(s.pic.zoom + dir * 0.05).toFixed(2), 0.5, 4))) }));
   };
   useEffect(() => {
     const el = cv.current;

@@ -1,6 +1,7 @@
 import { getSession } from "next-auth/react";
 import { decodeImage, looksLikeImage } from "./imageFormat";
 import type { Img } from "./render";
+import type { PicRef } from "./types";
 
 /** Emitted when Google Drive rejects the session, so the studio can offer a reconnect. */
 export const DRIVE_AUTH_EVENT = "tktgen:drive-auth";
@@ -77,6 +78,22 @@ export async function searchDrive(query: string): Promise<DriveItem[]> {
     pageToken = data.nextPageToken ?? "";
   } while (pageToken);
   return items.filter((i) => isFolder(i) || isImage(i));
+}
+
+/**
+ * Bring a list up to date with one of its linked folders: photos new in the folder are appended,
+ * photos that came from it and are gone (deleted, moved) are dropped. Photos added by hand are kept.
+ * Returns the same array when nothing changed.
+ */
+export function mergeFolder(pics: PicRef[], folderId: string, listed: DriveItem[], excluded: string[] = []): PicRef[] {
+  const inFolder = new Set(listed.map((i) => i.id));
+  const kept = pics.filter((p) => p.folder !== folderId || inFolder.has(p.id));
+  const have = new Set(kept.map((p) => p.id));
+  const skip = new Set(excluded);
+  const added = listed
+    .filter((i) => isImage(i) && !have.has(i.id) && !skip.has(i.id))
+    .map((i): PicRef => ({ id: i.id, name: i.name, folder: folderId }));
+  return kept.length === pics.length && !added.length ? pics : [...kept, ...added];
 }
 
 // ---- Image cache (decoded, downscaled to max 2400px) with limited concurrency ----
