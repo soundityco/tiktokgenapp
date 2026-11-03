@@ -350,6 +350,9 @@ export default function Studio({ userName }: { userName: string }) {
     });
 
   // ---- generate ----
+  // A new photo starts centred, without the zoom or offset chosen for the previous one.
+  const reframe = (s: SlideCfg): SlideCfg => ({ ...s, pic: { ...s.pic, zoom: 1, ox: 0, oy: 0 } });
+
   const generate = useCallback(() => {
     const current = wsRef.current;
     const active = current?.projects.find((x) => x.id === current.currentProjectId);
@@ -360,7 +363,8 @@ export default function Studio({ userName }: { userName: string }) {
     upd((w) => {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
       const { slides, bags } = generateAll(w, p, (i) => (p.slides[i].locked ? p.generated?.[i] : undefined));
-      return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: slides } : x)) };
+      const cfgs = p.slides.map((s) => (s.locked ? s : reframe(s)));
+      return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: slides, slides: cfgs } : x)) };
     });
   }, [say, t, upd]);
 
@@ -396,7 +400,8 @@ export default function Studio({ userName }: { userName: string }) {
       const pic = pickPic(p.slides[i].picPoolId, w, bags, others);
       const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
       g[i] = { ...g[i], picId: pic?.id ?? null, picName: pic?.name };
-      return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g } : x)) };
+      const cfgs = p.slides.map((s, k) => (k === i ? reframe(s) : s));
+      return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g, slides: cfgs } : x)) };
     });
   };
   const rerollText = (i: number) => {
