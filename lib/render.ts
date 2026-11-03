@@ -76,6 +76,10 @@ function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: 
 }
 
 function setFont(ctx: CanvasRenderingContext2D, st: TextStyle, size: number) {
+  if (st.customFont) {
+    ctx.font = `400 ${size}px "${st.customFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
+    return;
+  }
   const f = FONTS[st.font];
   ctx.font = `${f.italic ? "italic " : ""}${f.weight} ${size}px ${f.family}`;
 }

@@ -2,12 +2,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
+import { loadSavedFonts } from "@/lib/fonts";
 import { delMedia, getMedia, putMedia } from "@/lib/idb";
+import { activeCue, alignLyrics, buildCues, cleanHeard } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
+import { askNotifyPermission, notify } from "@/lib/notify";
 import { drawStyledText } from "@/lib/render";
+import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { Project, TextStyle, VideoSettings, VideoSetup } from "@/lib/types";
+import CaptionStyle from "./CaptionStyle";
 import Icon from "./Icon";
-import { Section } from "./ui";
+import { Range, Section } from "./ui";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -173,7 +178,7 @@ export default function VideoStudio({
   onSaveNow: () => void;
   onBack: () => void;
 }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
   const clip = clips.find((c) => c.id === project.videoId) ?? clips[0];
   const settings = useMemo<VideoSettings>(() => ({ ...DEFAULT_VIDEO, ...clip }), [clip]);
@@ -194,6 +199,15 @@ export default function VideoStudio({
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState(project.lyricsSectionId ?? project.lyrics[0]?.id ?? "");
+  const [fonts, setFonts] = useState<string[]>([]);
+  const [genBusy, setGenBusy] = useState(false);
+  const [genStep, setGenStep] = useState<AsrStep | null>(null);
+  const [genPct, setGenPct] = useState(0);
+  const [genInfo, setGenInfo] = useState<string | null>(null);
+  const [model, setModel] = useState<AsrModel>("base");
+  const [language, setLanguage] = useState(lang === "fr" ? "french" : "auto");
+  const [useWritten, setUseWritten] = useState(true);
+  const genRef = useRef<AbortController | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const waveRef = useRef<HTMLCanvasElement>(null);
@@ -231,15 +245,25 @@ export default function VideoStudio({
       .sort((a, b) => a.at - b.at);
   }, [section, lines]);
 
-  const captionStyle: TextStyle = useMemo(() => {
+  // By default the captions follow the selected carousel slide; the text studio overrides it per clip.
+  const slideStyle: TextStyle = useMemo(() => {
     const base = project.slides[project.selectedSlide]?.style ?? project.slides[0]?.style ?? defaultStyle();
     return { ...base, y: 78, size: Math.min(base.size, 72), width: 84 };
   }, [project.slides, project.selectedSlide]);
+  const captionStyle: TextStyle = settings.captionStyle ?? slideStyle;
+  const mode = settings.captionMode ?? "phrase";
+  const lineChars = settings.lineChars ?? 22;
+  const cues = useMemo(
+    () => buildCues(project.lyricWords ?? [], mode, { lineChars, from: settings.crop.start, to: settings.crop.start + settings.crop.duration }),
+    [project.lyricWords, mode, lineChars, settings.crop.start, settings.crop.duration]
+  );
 
   const styleRef = useRef(captionStyle);
   styleRef.current = captionStyle;
   const activeRef = useRef<(time: number) => string | null>(() => null);
   activeRef.current = (time: number) => {
+    // Lyrics generated from the audio win; hand-placed lines are the fallback.
+    if (cues.length) return activeCue(cues, time)?.text ?? null;
     let found: string | null = null;
     for (const l of timed) {
       if (l.at <= time + 0.02) found = l.text;
@@ -261,7 +285,9 @@ export default function VideoStudio({
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
     const el = videoRef.current;
-    if (el && el.videoWidth) {
+    // Outside the part of the track the camera recorded, there is no picture: black.
+    const inVideo = time >= cfg.offset - 0.001 && (!Number.isFinite(el?.duration) || time <= cfg.offset + (el?.duration ?? 0) + 0.001);
+    if (el && el.videoWidth && inVideo) {
       const s = Math.max(W / el.videoWidth, H / el.videoHeight) * frame.zoom;
       const dw = el.videoWidth * s, dh = el.videoHeight * s;
       g.drawImage(el, (W - dw) / 2 + frame.ox * W, (H - dh) / 2 + frame.oy * H, dw, dh);
@@ -335,7 +361,9 @@ export default function VideoStudio({
     return () => URL.revokeObjectURL(url);
   }, [videoBlob]);
 
-  useEffect(() => () => { stop(); syncRef.current?.abort(); ctxRef.current?.close().catch(() => {}); }, [stop]);
+  useEffect(() => () => { stop(); syncRef.current?.abort(); genRef.current?.abort(); stopTranscribe(); ctxRef.current?.close().catch(() => {}); }, [stop]);
+
+  useEffect(() => { void loadSavedFonts().then(setFonts); }, []);
 
   useEffect(() => {
     if (!note) return;
@@ -486,7 +514,18 @@ export default function VideoStudio({
 
   useEffect(() => {
     if (!playing) drawAt(head);
-  }, [drawAt, head, playing, settings, timed, captionStyle, videoUrl]);
+  }, [drawAt, head, playing, settings, timed, cues, captionStyle, videoUrl, fonts]);
+
+  // Paused: keep the picture on the frame that matches the playhead, so trimming and re-syncing are seen live.
+  useEffect(() => {
+    if (playing) return;
+    const el = videoRef.current;
+    if (!el || !videoUrl) return;
+    const target = head - settings.offset;
+    if (target < 0 || (Number.isFinite(el.duration) && target > el.duration)) { drawAt(head); return; }
+    if (Math.abs(el.currentTime - target) > 0.01) el.currentTime = target;
+    else drawAt(head);
+  }, [head, settings.offset, playing, videoUrl, videoDur, drawAt]);
 
   // ---- audio sync ----
   const autoSync = async () => {
@@ -495,6 +534,8 @@ export default function VideoStudio({
     if (!official || !recording) return;
     syncRef.current?.abort();
     stop();
+    void askNotifyPermission(); // inside the click: lets the browser tell the user when the analysis is over
+    let outcome: { title: string; body: string } | null = null;
     setSyncBusy(true); setSyncPct(0); setErr(null); setNote(null);
     // Start the real-time capture right away, inside the click: the video cannot be muted
     // (mute zeroes the samples before the Web Audio graph), so it needs the user gesture.
@@ -533,6 +574,7 @@ export default function VideoStudio({
       } else if (!r.anchors || r.score < 0.4) {
         // Nothing in the official track resembles this recording: keep the current offset untouched.
         setErr(t("No match found in the official audio. Check it is the right track, or sync by ear."));
+        outcome = { title: t("Sync failed"), body: t("No match found in the official audio. Check it is the right track, or sync by ear.") };
       } else {
         setV({
           offset: round2(r.offset),
@@ -543,15 +585,22 @@ export default function VideoStudio({
         });
         setNote(t("Sync quality {n}%", { n: Math.round(r.score * 100) }));
         if (r.score < 0.7) setErr(t("Low confidence: check the offset by ear."));
+        outcome = {
+          title: r.score < 0.7 ? t("Sync finished, low confidence") : t("Sync finished"),
+          body: t("Sync quality {n}%", { n: Math.round(r.score * 100) }) + " · " + t("Offset (s)") + " " + round2(r.offset),
+        };
         onSaveNow();
       }
     } catch (e) {
       if (!ac.signal.aborted) {
         console.error("auto sync failed", e);
         const reading = e instanceof Error && ["no-url", "silent", "decode"].includes(e.message);
-        setErr(reading ? t("The video has no readable audio track. Sync it manually.") : t("The analysis failed. Sync it by ear."));
+        const msg = reading ? t("The video has no readable audio track. Sync it manually.") : t("The analysis failed. Sync it by ear.");
+        setErr(msg);
+        outcome = { title: t("Sync failed"), body: msg };
       }
     }
+    if (outcome && !ac.signal.aborted) notify(outcome.title, outcome.body);
     if (syncRef.current === ac) syncRef.current = null;
     setSyncBusy(false);
     setSyncPct(0);
@@ -562,6 +611,7 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     const start = clamp(v, 0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - cfg.crop.duration));
     setV({ crop: { ...cfg.crop, start: round2(start) } });
+    setHead(round2(start));
   };
   const setCropDuration = (v: number) => {
     const cfg = settingsRef.current;
@@ -570,16 +620,26 @@ export default function VideoStudio({
     setV({ crop: { start: round2(start), duration: round2(duration) } });
   };
 
-  const dragWave = useRef<null | { mode: "start" | "end" | "move"; x: number; start: number; duration: number }>(null);
+  const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset"; x: number; start: number; duration: number }>(null);
   const wavePos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return clamp((e.clientX - r.left) / r.width, 0, 1);
   };
   const waveDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!audioBuf) return;
+    stop();
     e.currentTarget.setPointerCapture(e.pointerId);
     const f = wavePos(e);
     const cfg = settingsRef.current;
+    // Top strip of the blue "video available" band: slide it to move the sync by hand.
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2) {
+      const o0 = cfg.offset / audioBuf.duration, o1 = (cfg.offset + videoDur) / audioBuf.duration;
+      if (f >= o0 && f <= o1) {
+        dragWave.current = { mode: "offset", x: f, start: cfg.offset, duration: 0 };
+        return;
+      }
+    }
     const x0 = cfg.crop.start / audioBuf.duration;
     const x1 = (cfg.crop.start + cfg.crop.duration) / audioBuf.duration;
     if (Math.abs(f - x0) < 0.02) dragWave.current = { mode: "start", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
@@ -588,6 +648,7 @@ export default function VideoStudio({
     else {
       const start = clamp(f * audioBuf.duration, 0, Math.max(0, audioBuf.duration - cfg.crop.duration));
       setV({ crop: { start: round2(start), duration: cfg.crop.duration } });
+      setHead(round2(start));
       dragWave.current = { mode: "move", x: f, start, duration: cfg.crop.duration };
     }
   };
@@ -596,15 +657,21 @@ export default function VideoStudio({
     if (!d || !audioBuf) return;
     const f = wavePos(e);
     const delta = (f - d.x) * audioBuf.duration;
-    if (d.mode === "start") {
+    // The preview follows the edge being dragged: the picture shown is the one under that edge.
+    if (d.mode === "offset") {
+      setV({ offset: round2(clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - 1))) });
+    } else if (d.mode === "start") {
       const start = clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - d.duration));
       setV({ crop: { start: round2(start), duration: d.duration } });
+      setHead(round2(start));
     } else if (d.mode === "end") {
       const duration = clamp(d.duration + delta, 1, Math.max(1, audioBuf.duration - d.start));
       setV({ crop: { start: d.start, duration: round2(duration) } });
+      setHead(round2(Math.max(d.start, d.start + duration - 0.1)));
     } else {
       const start = clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - d.duration));
       setV({ crop: { start: round2(start), duration: d.duration } });
+      setHead(round2(start));
     }
   };
   const waveUp = () => { dragWave.current = null; };
@@ -619,6 +686,21 @@ export default function VideoStudio({
     g.fillRect(0, 0, W, H);
     const x0 = (settings.crop.start / dur) * W;
     const x1 = (Math.min(dur, settings.crop.start + settings.crop.duration) / dur) * W;
+    // Where the camera video exists on the official track.
+    if (videoBlob && videoDur > 0) {
+      const v0 = clamp(settings.offset / dur, 0, 1) * W;
+      const v1 = clamp((settings.offset + videoDur) / dur, 0, 1) * W;
+      g.fillStyle = "rgba(86,156,255,.16)";
+      g.fillRect(v0, 0, Math.max(0, v1 - v0), H);
+      g.fillStyle = "rgba(86,156,255,.95)";
+      g.fillRect(v0, 0, Math.max(0, v1 - v0), 15);
+      if (settings.musicStart != null && settings.musicEnd != null) {
+        const m0 = clamp((settings.offset + settings.musicStart) / dur, 0, 1) * W;
+        const m1 = clamp((settings.offset + settings.musicEnd) / dur, 0, 1) * W;
+        g.fillStyle = "rgba(79,255,176,.9)";
+        g.fillRect(m0, H - 4, Math.max(0, m1 - m0), 4);
+      }
+    }
     g.fillStyle = "rgba(216,33,60,.16)";
     g.fillRect(x0, 0, Math.max(0, x1 - x0), H);
     const bw = W / peaks.length;
@@ -632,7 +714,15 @@ export default function VideoStudio({
     g.fillRect(x1 - 2, 0, 3, H);
     g.fillStyle = "#f0eee8";
     g.fillRect((head / dur) * W - 1, 0, 2, H);
-  }, [peaks, settings.crop, head, audioBuf]);
+    if (videoBlob && videoDur > 0) {
+      const v0 = clamp(settings.offset / dur, 0, 1) * W;
+      if ((clamp((settings.offset + videoDur) / dur, 0, 1) * W) - v0 > 56) {
+        g.fillStyle = "#0c0c0e";
+        g.font = "700 11px sans-serif";
+        g.fillText("VIDEO", v0 + 6, 12);
+      }
+    }
+  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, head, audioBuf, videoBlob, videoDur]);
 
   // ---- lyrics timing ----
   const saveTimes = (id: string, times: (number | null)[]) =>
@@ -662,6 +752,75 @@ export default function VideoStudio({
     filled.forEach((x, k) => { times[x.i] = round2(placed[k]); });
     saveTimes(section.id, times);
     setNote(t("Lyrics placed on the segment"));
+  };
+
+  // ---- lyrics from the official audio ----
+  const generateLyrics = async () => {
+    if (!audioBuf) return;
+    genRef.current?.abort();
+    const ac = new AbortController();
+    genRef.current = ac;
+    void askNotifyPermission();
+    setGenBusy(true); setGenStep("library"); setGenPct(0); setGenInfo(null); setErr(null); setNote(null);
+    const cfg = settingsRef.current;
+    // A little margin so a word that straddles the edge of the segment is heard whole.
+    const from = Math.max(0, cfg.crop.start - 0.5);
+    const to = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration + 0.5);
+    let outcome: { title: string; body: string } | null = null;
+    try {
+      const samples = await prepareAudio(audioBuf, from, to);
+      const heard = cleanHeard(await transcribe(samples, { model, language, base: from, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }));
+      if (ac.signal.aborted) return;
+      if (!heard.length) {
+        const msg = t("No words were heard in this segment. Try a more accurate model or set the language.");
+        setErr(msg);
+        outcome = { title: t("Lyrics not found"), body: msg };
+      } else {
+        let words = heard;
+        let info = t("{n} words heard", { n: heard.length });
+        const written = useWritten ? section?.text ?? "" : "";
+        if (written.trim()) {
+          const aligned = alignLyrics(written, heard);
+          if (aligned) {
+            words = aligned.words;
+            info = t("{n} words placed on your written lyrics", { n: aligned.words.length });
+          } else {
+            info = t("Your written lyrics do not match what was heard: the words are shown as heard.");
+          }
+        }
+        onProject((p) => ({
+          ...p,
+          lyricWords: [...(p.lyricWords ?? []).filter((x) => x.e <= from || x.s >= to), ...words].sort((a, b) => a.s - b.s),
+        }));
+        setV({ captions: true });
+        setGenInfo(info);
+        outcome = { title: t("Lyrics ready"), body: info };
+        onSaveNow();
+      }
+    } catch (e) {
+      if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
+      console.error("lyrics generation failed", e);
+      const msg = t("Lyrics generation failed. Check your connection (the speech model is downloaded once) and try again.");
+      setErr(msg);
+      outcome = { title: t("Lyrics failed"), body: msg };
+    } finally {
+      if (genRef.current === ac) {
+        genRef.current = null;
+        setGenBusy(false);
+        setGenStep(null);
+        if (outcome) notify(outcome.title, outcome.body);
+      }
+    }
+  };
+
+  const cancelLyrics = () => { genRef.current?.abort(); genRef.current = null; setGenBusy(false); setGenStep(null); };
+
+  const clearLyrics = () => {
+    const cfg = settingsRef.current;
+    const a = cfg.crop.start, b = cfg.crop.start + cfg.crop.duration;
+    onProject((p) => ({ ...p, lyricWords: (p.lyricWords ?? []).filter((x) => x.e <= a || x.s >= b) }));
+    setGenInfo(null);
+    onSaveNow();
   };
 
   // ---- export ----
@@ -760,8 +919,10 @@ export default function VideoStudio({
             <span className="grow" />
             <span className="muted xs">{t("Files stay on this device.")}</span>
           </div>
-          <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline
-            onLoadedMetadata={(e) => setVideoDur(e.currentTarget.duration)} />
+          <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
+            onLoadedMetadata={(e) => setVideoDur(e.currentTarget.duration)}
+            onSeeked={() => { if (!playing) drawAt(head); }}
+            onLoadedData={() => { if (!playing) drawAt(head); }} />
           {!videoBlob && <p className="muted xs">{t("Nothing to preview yet.")}</p>}
         </div>
 
@@ -779,7 +940,7 @@ export default function VideoStudio({
               <>
                 <canvas ref={waveRef} className="wave" width={900} height={90}
                   onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={waveUp} />
-                <p className="muted xs">{t("Drag the edges to trim, the middle to move the segment.")}</p>
+                <p className="muted xs">{t("Drag the edges to trim, the middle to move the segment. Drag the top of the blue band to move the sync.")}</p>
                 <div className="row">
                   {PRESETS.map((d) => (
                     <button key={d} className={"btn sm" + (Math.abs(settings.crop.duration - d) < 0.01 ? " primary" : "")}
@@ -842,12 +1003,30 @@ export default function VideoStudio({
             )}
           </Section>
 
-          <Section title={t("Lyrics on the video")} open={false}>
+          <Section title={t("Lyrics from the audio")}>
             <label className="check">
               <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
               {t("Lyrics on the video")}
             </label>
-            {project.lyrics.length === 0 && <p className="muted xs">{t("No lyrics in this section.")}</p>}
+            <p className="muted xs">{t("The words are heard in the official audio (not in the video), for the chosen segment only.")}</p>
+            <div className="cols2">
+              <label className="field">{t("Accuracy")}
+                <select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
+                  <option value="tiny">{t("Fast")}</option>
+                  <option value="base">{t("Balanced")}</option>
+                  <option value="small">{t("Precise (slower)")}</option>
+                </select>
+              </label>
+              <label className="field">{t("Language")}
+                <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)} disabled={genBusy}>
+                  <option value="auto">{t("Detect")}</option>
+                  <option value="french">Français</option><option value="english">English</option>
+                  <option value="spanish">Español</option><option value="portuguese">Português</option>
+                  <option value="italian">Italiano</option><option value="german">Deutsch</option>
+                  <option value="dutch">Nederlands</option><option value="arabic">العربية</option>
+                </select>
+              </label>
+            </div>
             {project.lyrics.length > 0 && (
               <>
                 <label className="field">{t("Section")}
@@ -855,9 +1034,71 @@ export default function VideoStudio({
                     {project.lyrics.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </label>
+                <label className="check">
+                  <input type="checkbox" checked={useWritten} onChange={(e) => setUseWritten(e.target.checked)} />
+                  {t("Correct the words with the written lyrics of this section")}
+                </label>
+              </>
+            )}
+            <div className="row">
+              {!genBusy ? (
+                <button className="btn sm primary" onClick={() => void generateLyrics()} disabled={!audioBuf}>
+                  <Icon name="refresh" size={14} />{t("Generate lyrics from the audio")}
+                </button>
+              ) : (
+                <>
+                  <span className="badge">
+                    {genStep === "model" && genPct > 0 && genPct < 1
+                      ? t("Downloading the speech model… {n}%", { n: Math.round(genPct * 100) })
+                      : genStep === "listen" ? t("Listening to the audio…") : t("Loading the speech engine…")}
+                  </span>
+                  <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>
+                </>
+              )}
+              {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button>}
+            </div>
+            <p className="muted xs">{t("The speech model ({name}) is downloaded once, then kept by the browser. Your audio never leaves this device.", { name: ASR_MODELS[model].split("/")[1].replace("_timestamped", "") })}</p>
+            {genInfo && <p className="notice xs">{genInfo}</p>}
+
+            <div className="row">
+              <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
+              <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
+            </div>
+            {mode === "phrase" && (
+              <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
+                onChange={(v) => setV({ lineChars: v })} />
+            )}
+            {cues.length > 0 && (
+              <div className="lyric-timing">
+                {cues.map((c, i) => (
+                  <button key={i} className="btn sm quiet row nowrap" style={{ justifyContent: "flex-start" }}
+                    onClick={() => { stop(); setHead(round2(c.start)); }}>
+                    <span className="mono xs">{fmtTime(c.start)}</span>
+                    <span className="grow truncate xs">{c.text.replace(/\n/g, " ⏎ ")}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <Section title={t("Text style")}>
+            <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Follows the style of the selected carousel slide until you change something.")}</p>
+            <CaptionStyle
+              style={captionStyle}
+              fonts={fonts}
+              onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
+              onFonts={setFonts}
+              onReset={() => setV({ captionStyle: undefined })}
+            />
+          </Section>
+
+          <Section title={t("Place lines by hand")} open={false}>
+            {project.lyrics.length === 0 && <p className="muted xs">{t("No lyrics in this section.")}</p>}
+            {project.lyrics.length > 0 && (
+              <>
                 <div className="row">
                   <button className="btn sm" onClick={autoPlace} disabled={!lines.length}>{t("Auto place")}</button>
-                  <span className="muted xs">{t("Pick a section to place its lines.")}</span>
+                  <span className="muted xs">{cues.length ? t("Used only when no lyrics were generated from the audio.") : t("Pick a section to place its lines.")}</span>
                 </div>
                 <div className="lyric-timing">
                   {lines.map((l) => (

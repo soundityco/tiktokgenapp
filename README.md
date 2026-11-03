@@ -122,3 +122,16 @@ Un test vérifie aussi que chaque texte de l'interface a sa traduction français
 
 ## Alertes `npm audit`
 Deux alertes concernent PostCSS, embarqué dans Next.js : elles portent sur du CSS fourni par un attaquant, que l'appli ne traite jamais. Les corriger demande Next 16 (changement majeur), à faire plus tard.
+
+## Studio vidéo : zone vidéo, trim live, paroles depuis l'audio, style du texte
+
+**Notification de fin de synchro** : au clic sur « Synchroniser » (ou « Générer les paroles »), le navigateur demande l'autorisation d'afficher des notifications. Quand le travail se termine et que tu n'es plus sur l'onglet, une notification s'affiche (succès, confiance faible ou échec).
+
+**Waveform** : une bande bleue montre de quand à quand la vidéo existe sur l'audio officiel (`offset` → `offset + durée de la vidéo`), un trait vert en bas indique où la musique a été détectée. Le segment rouge se redimensionne (bords) ou se déplace (milieu) ; l'aperçu affiche en direct l'image sous le bord que tu tires. Tirer le haut de la bande bleue déplace la synchro à la main. Hors de la vidéo, l'aperçu est noir.
+
+**Paroles depuis l'audio** : un modèle Whisper (transformers.js, dans un worker du navigateur) écoute le segment choisi de l'audio officiel et renvoie chaque mot avec son temps. Si la section de paroles contient du texte écrit, un alignement (`lib/lyricsAlign.ts`) remplace les mots entendus par ton orthographe et comble les mots manqués ; le segment retrouve tout seul son couplet ou son refrain dans le texte complet. Les mots ne sont jamais coupés. Deux modes : mot à mot, ou phrase par phrase (coupes aux pauses, aux fins de ligne, aux points, retours à la ligne équilibrés sans finir sur « de », « la », « the »…). La longueur des lignes se règle.
+- Le modèle (tiny ≈ 40 Mo, base ≈ 80 Mo, small ≈ 250 Mo) se télécharge une fois depuis Hugging Face, puis le navigateur le garde. La bibliothèque est chargée depuis jsDelivr. L'audio ne quitte jamais l'appareil.
+- Fichiers : `public/asr/worker.js` (modèle), `lib/transcribe.ts` (pont + rééchantillonnage 16 kHz), `lib/lyricsAlign.ts` (alignement et légendes, testé).
+- Les mots sont stockés par sortie (`project.lyricWords`, temps absolus dans l'audio) : tous les clips de la sortie les réutilisent.
+
+**Style du texte** : même réglages que le carrousel (police, effet, taille, couleurs, casse, alignement, largeur max du bloc, interligne, position) + « Charger une police » (.ttf, .otf, .woff, .woff2, gardée dans IndexedDB sur l'appareil). Par défaut, le style suit la slide sélectionnée ; dès que tu changes un réglage, la vidéo a son propre style (bouton « Réinitialiser » pour revenir).

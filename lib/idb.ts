@@ -54,3 +54,18 @@ export async function delMedia(key: string): Promise<void> {
     /* nothing stored */
   }
 }
+
+/** Keys starting with `prefix` (used to list the fonts the user loaded). */
+export async function listMedia(prefix: string): Promise<string[]> {
+  try {
+    const d = await db();
+    return await new Promise<string[]>((resolve, reject) => {
+      const tx = d.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).getAllKeys();
+      req.onsuccess = () => resolve((req.result as IDBValidKey[]).map(String).filter((k) => k.startsWith(prefix)));
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return [];
+  }
+}

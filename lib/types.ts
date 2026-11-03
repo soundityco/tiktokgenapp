@@ -12,6 +12,8 @@ export type FontId =
 
 export interface TextStyle {
   font: FontId;
+  /** Font file loaded by the user (see lib/fonts.ts). Overrides `font` when set. */
+  customFont?: string;
   look: "outline" | "box" | "shadow" | "plain";
   case: "asis" | "upper" | "lower";
   size: number; // px at 1080 wide
@@ -87,6 +89,15 @@ export interface LyricSection {
   times?: (number | null)[];
 }
 
+/** One sung word placed on the official audio (absolute seconds in the track). */
+export interface LyricWord {
+  w: string;
+  s: number;
+  e: number;
+  /** Line of the lyrics text this word belongs to, when the words were aligned on written lyrics. */
+  line?: number;
+}
+
 export interface GenSlide {
   text: string;
   picId: string | null;
@@ -122,6 +133,12 @@ export interface VideoSettings {
   anchors?: number;
   /** Burn the timed lyrics on the video. */
   captions: boolean;
+  /** How the generated lyrics are cut into captions: one word at a time or one phrase at a time. */
+  captionMode?: "phrase" | "word";
+  /** Longest line of a caption, in characters (smart line breaks happen before it is exceeded). */
+  lineChars?: number;
+  /** Own text style for the captions; falls back to the selected carousel slide's style. */
+  captionStyle?: TextStyle;
   frame: VideoFrame;
 }
 
@@ -137,6 +154,8 @@ export interface Project {
   slides: SlideCfg[];
   lyrics: LyricSection[];
   lyricsSectionId: string | null;
+  /** Words heard in the official audio, timed (from the lyrics generator of the video studio). */
+  lyricWords?: LyricWord[];
   generated: GenSlide[] | null;
   selectedSlide: number;
   /** @deprecated Single video setup of older workspaces; migrated to `videos` on load. */
