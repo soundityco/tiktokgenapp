@@ -1,4 +1,4 @@
-import { getToken } from "./drive";
+import { getToken, thumbLinks } from "./drive";
 
 // Google generates small thumbnails for every Drive picture (HEIC included): much lighter than downloading the file.
 const cache = new Map<string, Promise<string | null>>();
@@ -10,7 +10,9 @@ const release = () => { active--; waiting.shift()?.(); };
 export function thumbnailLink(id: string): Promise<string | null> {
   let p = cache.get(id);
   if (!p) {
+    const known = thumbLinks.get(id);
     p = (async () => {
+      if (known) return known.replace(/=s\d+(-c)?$/, "=s240"); // already given by a folder listing
       await slot();
       try {
         const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=thumbnailLink&supportsAllDrives=true`, {

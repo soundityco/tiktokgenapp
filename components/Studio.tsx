@@ -4,7 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder } from "@/lib/drive";
+import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts } from "@/lib/fonts";
 import { generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
@@ -24,6 +24,13 @@ import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "
 const VERSION = "v0.5";
 const HISTORY_KEY = "tktgen-undo";
 const MAX_SLIDES = 35;
+/**
+ * Photos of each list downloaded ahead of time, so Generate shows them at once. A small window that
+ * moves forward with the shuffle bag: enough for several Generates, without downloading whole folders.
+ */
+const PREFETCH_PER_LIST = 8;
+/** Linked folders are listed again at most this often when coming back to the tab. */
+const FOLDER_SYNC_EVERY = 5 * 60_000;
 
 type Editor = { k: "text" | "photos"; id: string } | null;
 type MobileTab = "slides" | "lists" | "style";
@@ -280,7 +287,7 @@ export default function Studio({ userName }: { userName: string }) {
   useEffect(() => {
     if (!wsLoaded) return;
     void syncDrive();
-    const h = () => { if (document.visibilityState === "visible" && Date.now() - lastSync.current > 60_000) void syncDrive(); };
+    const h = () => { if (document.visibilityState === "visible" && Date.now() - lastSync.current > FOLDER_SYNC_EVERY) void syncDrive(); };
     document.addEventListener("visibilitychange", h);
     return () => document.removeEventListener("visibilitychange", h);
   }, [wsLoaded, syncDrive]);
@@ -295,6 +302,28 @@ export default function Studio({ userName }: { userName: string }) {
   const project: Project | null = ws ? ws.projects.find((p) => p.id === ws.currentProjectId) ?? ws.projects[0] : null;
   const vText = useMemo(() => (ws && project ? poolsVisible(ws.textPools, project.id) : []), [ws, project]);
   const vPics = useMemo(() => (ws && project ? poolsVisible(ws.picPools, project.id) : []), [ws, project]);
+
+  // Photos the next Generate can draw (still in the shuffle bag first) are downloaded ahead of time.
+  const prefetchIds = useMemo(() => {
+    if (!ws || !project) return "";
+    const ids: string[] = [];
+    for (const poolId of new Set(project.slides.map((s) => s.picPoolId))) {
+      const pool = ws.picPools.find((p) => p.id === poolId);
+      if (!pool) continue;
+      // The bag is already shuffled and drawn from the front: its order is the order of the next photos.
+      const inPool = new Set(pool.pics.map((x) => x.id));
+      const bag = (ws.bags[pool.id] ?? []).filter((x) => inPool.has(x));
+      const inBag = new Set(bag);
+      const next = [...bag, ...pool.pics.map((x) => x.id).filter((x) => !inBag.has(x))];
+      ids.push(...next.slice(0, PREFETCH_PER_LIST));
+    }
+    return ids.join(",");
+  }, [ws?.picPools, ws?.bags, project?.slides]);
+  useEffect(() => {
+    if (!prefetchIds) return;
+    const id = setTimeout(() => prefetchDriveImages(prefetchIds.split(",")), 1500);
+    return () => clearTimeout(id);
+  }, [prefetchIds]);
 
   // ---- preflight ----
   const warnings = useMemo<PreflightItem[]>(() => {

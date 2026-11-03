@@ -60,8 +60,9 @@ export default function Inspector({
               <option value="fit-black">{t("Fit whole, black bars")}</option>
             </select>
           </label>
-          <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => onCfg((c) => ({ ...c, pic: zoomPic(c.pic, v) }))} />
-          <Range label={t("Darken")} value={pic.darken} display={`${pic.darken}%`} min={0} max={80} onChange={(v) => setP({ darken: v })} />
+          <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => onCfg((c) => ({ ...c, pic: zoomPic(c.pic, v) }))}
+            onReset={() => setP({ zoom: 1, ox: 0, oy: 0 })} />
+          <Range label={t("Darken")} value={pic.darken} display={`${pic.darken}%`} min={0} max={80} onChange={(v) => setP({ darken: v })} onReset={() => setP({ darken: defaultPic().darken })} />
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, pic: { ...defaultPic(), framing: c.pic.framing, bars: c.pic.bars, darken: c.pic.darken } }))}>{t("Reset framing")}</button></div>
         </Section>
 
@@ -72,7 +73,7 @@ export default function Inspector({
               <option value="outline">{t("Outline")}</option><option value="box">{t("Box")}</option><option value="shadow">{t("Shadow")}</option><option value="plain">{t("Plain")}</option>
             </select>
           </label>
-          <Range label={t("Size")} value={st.size} min={18} max={200} onChange={(v) => setS({ size: v })} />
+          <Range label={t("Size")} value={st.size} min={18} max={200} onChange={(v) => setS({ size: v })} onReset={() => setS({ size: defaultStyle().size })} />
           <div className="cols2">
             <label className="field">{t("Text color")}<input type="color" value={st.color} onChange={(e) => setS({ color: e.target.value })} /></label>
             <label className="field">{st.look === "box" ? t("Box color") : t("Outline color")}<input type="color" value={st.accent} onChange={(e) => setS({ accent: e.target.value })} /></label>
@@ -89,8 +90,8 @@ export default function Inspector({
               </select>
             </label>
           </div>
-          <Range label={t("Width")} value={st.width} display={`${st.width}%`} min={20} max={100} onChange={(v) => setS({ width: v })} />
-          <Range label={t("Line spacing")} value={st.lineHeight} display={st.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => setS({ lineHeight: v })} />
+          <Range label={t("Width")} value={st.width} display={`${st.width}%`} min={20} max={100} onChange={(v) => setS({ width: v })} onReset={() => setS({ width: defaultStyle().width })} />
+          <Range label={t("Line spacing")} value={st.lineHeight} display={st.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => setS({ lineHeight: v })} onReset={() => setS({ lineHeight: defaultStyle().lineHeight })} />
           {cfg.textSource.kind === "lyrics" && (
             <label className="field">{t("Lyrics section for this slide")}
               <select className="input" value={cfg.textSource.sectionId ?? ""}

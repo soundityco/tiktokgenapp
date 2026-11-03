@@ -157,11 +157,15 @@ export function Section({ title, children, open = true }: { title: string; child
   );
 }
 
-export function Range(p: { label: string; value: number; display?: string; min: number; max: number; step?: number; onChange: (v: number) => void }) {
+/** Slider. With `onReset`, a double-click on the value (or the slider) puts the default value back. */
+export function Range(p: { label: string; value: number; display?: string; min: number; max: number; step?: number; onReset?: () => void; onChange: (v: number) => void }) {
+  const { t } = useT();
+  const back = p.onReset;
+  const hint = back ? t("Double-click to reset") : undefined;
   return (
     <label className="field">
-      <span>{p.label}<span className="val">{p.display ?? p.value}</span></span>
-      <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} />
+      <span>{p.label}<span className={"val" + (back ? " resettable" : "")} title={hint} onDoubleClick={back}>{p.display ?? p.value}</span></span>
+      <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={hint} />
     </label>
   );
 }

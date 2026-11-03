@@ -386,5 +386,6 @@ export const FR: Record<string, string> = {
   "Remove the folder {name} and its photos": "Retirer le dossier {name} et ses photos",
   "Select all ({n})": "Tout cocher ({n})",
   "Adding…": "Ajout…",
+  "Double-click to reset": "Double-clic pour réinitialiser",
   "Sync with Drive": "Synchroniser avec Drive",
 };
