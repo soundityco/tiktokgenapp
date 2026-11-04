@@ -568,7 +568,7 @@ export const FR: Record<string, string> = {
   "Grain size": "Taille du grain",
   "Use this grade on every video of the release": "Appliquer cet étalonnage à toutes les vidéos de la sortie",
   "Remove the grade": "Retirer l'étalonnage",
-  "This LUT is not on this device: import it again.": "Cette LUT n'est pas sur cet appareil : importe-la à nouveau.",
+  "This LUT is not on this device: import it again.": "Cette LUT n'est pas dans ce navigateur : importe à nouveau le même fichier .cube, l'étalonnage la retrouvera.",
   "colour grade applied on the camera file": "étalonnage appliqué sur le fichier caméra",
   "colour grade": "étalonnage",
   "Colour": "Couleur",
@@ -604,4 +604,8 @@ export const FR: Record<string, string> = {
   "Put the camera file on your Drive to open this video on another device.": "Mets le fichier caméra sur ton Drive pour ouvrir cette vidéo sur un autre appareil.",
   "Get it on this device": "Le récupérer sur cet appareil",
   "Put it on my Drive ({size})": "Le mettre sur mon Drive ({size})",
+  "Camera file found again: the sync and the settings are kept.": "Fichier caméra retrouvé : la synchro et les réglages sont gardés.",
+  "Pick {name} again: this browser does not have it. The sync and the settings are kept.": "Resélectionne {name} : ce navigateur ne l'a pas. La synchro et les réglages sont gardés.",
+  "The LUT “{name}” is not in this browser: the picture is shown without it.": "La LUT « {name} » n'est pas dans ce navigateur : l'image est affichée sans elle.",
+  "Import it again": "La réimporter",
 };

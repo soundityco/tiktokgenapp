@@ -21,7 +21,7 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips, onApplyAll }: {
+export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips, onApplyAll, onLutStored }: {
   grade: VideoGrade | undefined;
   onChange: (g: VideoGrade | undefined) => void;
   raw: boolean;
@@ -29,6 +29,8 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
   lookErr: string | null;
   clips: number;
   onApplyAll: () => void;
+  /** A LUT file was stored (also a missing one put back under its id): read it again. */
+  onLutStored: (id: string) => void;
 }) {
   const { t, lang } = useT();
   const [luts, setLuts] = useState(knownLuts);
@@ -41,13 +43,16 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
     setErr(null);
     try {
       parseCube(await f.text()); // refuse a file that is not a 3D .cube before keeping it
-      const id = uid();
+      // The LUT of this grade, missing in this browser: same name, same id, so every clip using it finds it.
+      const name0 = f.name.replace(/\.cube$/i, "");
+      const id = lookErr && g.lut && g.lut.name === name0 ? g.lut.id : uid();
       await putMedia(`lut:${id}`, f);
       const name = f.name.replace(/\.cube$/i, "");
-      const next = [...luts, { id, name }];
+      const next = [...luts.filter((l) => l.id !== id), { id, name }];
       setLuts(next);
       try { localStorage.setItem(LUTS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
       set({ lut: { id, name } });
+      onLutStored(id);
     } catch (e) {
       setErr(t("This file is not a 3D LUT (.cube): {why}", { why: e instanceof Error ? e.message : String(e) }));
     }

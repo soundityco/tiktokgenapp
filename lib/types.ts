@@ -200,6 +200,8 @@ export interface VideoSourceInfo {
 export interface VideoSettings {
   audioName?: string;
   videoName?: string;
+  /** Size in bytes of the camera file: picking the same file again (another browser) keeps the sync. */
+  videoSize?: number;
   /** What the camera file is (read at import). */
   source?: VideoSourceInfo;
   /** The camera file kept in the user's Google Drive, to open the clip on another device. */

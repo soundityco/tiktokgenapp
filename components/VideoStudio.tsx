@@ -436,6 +436,7 @@ export default function VideoStudio({
   rawRef.current = rawView;
   const graderRef = useRef<Grader | null>(null);
   const [lutRev, setLutRev] = useState(0);
+  const [lutReload, setLutReload] = useState(0);
   const lutId = grade?.lut?.id;
   useEffect(() => {
     let off = false;
@@ -450,7 +451,7 @@ export default function VideoStudio({
       catch (e) { if (!off) setLookErr(e instanceof Error ? e.message : String(e)); }
     });
     return () => { off = true; };
-  }, [lutId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lutId, lutReload]); // eslint-disable-line react-hooks/exhaustive-deps
   const colourKey = gradeKey(grade);
   /** The grade of this video is still loading (its LUT): the preview waits rather than showing the log. */
   const gradePendingRef = useRef(false);
@@ -772,13 +773,28 @@ export default function VideoStudio({
     syncRef.current?.abort();
     stop();
     setErr(null);
+    // The same camera file again (another browser, data cleared): plug it back, keep the sync and every setting.
+    const cur = settingsRef.current;
+    if (!videoBlob && cur.videoName === f.name) {
+      const info = await probeVideo(f);
+      const same = cur.videoSize ? cur.videoSize === f.size
+        : !!info.duration && !!cur.source?.duration && Math.abs(info.duration - cur.source.duration) < 0.05;
+      if (same) {
+        setVideoBlob(f);
+        if (!cur.videoSize) setV({ videoSize: f.size });
+        void askPersistentStorage();
+        try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
+        setNote(t("Camera file found again: the sync and the settings are kept."));
+        return;
+      }
+    }
     // The light copy and the picture of the previous file go first, so they are never shown for this one.
     posterRef.current = null;
     stillRef.current = null;
     await delMedia(posterKey).catch(() => {});
     setVideoBlob(f);
     setVideoDur(0);
-    setV({ videoName: f.name, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+    setV({ videoName: f.name, videoSize: f.size, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
     void askPersistentStorage();
     void describeVideo(f, true);
@@ -1916,6 +1932,12 @@ export default function VideoStudio({
                 onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
             ))}
           </div>
+          {lookErr && grade?.lut && (
+            <p className="notice warn xs">
+              {t("The LUT “{name}” is not in this browser: the picture is shown without it.", { name: grade.lut.name })}{" "}
+              <button className="btn sm quiet" onClick={() => setTab("color")}>{t("Import it again")}</button>
+            </p>
+          )}
           {(() => {
             // One line for the work done in the background on the video, one step after the other.
             const job = driveJob
@@ -2122,12 +2144,13 @@ export default function VideoStudio({
             <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
             <button role="tab" aria-selected={tab === "hook"} className={"tab" + (tab === "hook" ? " on" : "")} onClick={() => setTab("hook")}>{t("Hook")}</button>
             <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Lyrics style")}</button>
-            <button role="tab" aria-selected={tab === "color"} className={"tab" + (tab === "color" ? " on" : "")} onClick={() => setTab("color")}>{t("Colour")}</button>
+            <button role="tab" aria-selected={tab === "color"} className={"tab" + (tab === "color" ? " on" : "")} onClick={() => setTab("color")}>{t("Colour")}{lookErr && <span className="tab-dot" />}</button>
           </div>
 
           {tab === "color" && (
             <div className="tab-body">
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
+                onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 clips={clips.length}
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
             </div>
@@ -2157,7 +2180,9 @@ export default function VideoStudio({
               <div className="stack">
                 <span className="label">{t("Playback video")}</span>
                 <div className="drop" onClick={() => document.getElementById("video-file")?.click()}>
-                  {settings.videoName ?? t("Import the video recorded with the camera")}
+                  {settings.videoName && !videoBlob
+                    ? t("Pick {name} again: this browser does not have it. The sync and the settings are kept.", { name: settings.videoName })
+                    : settings.videoName ?? t("Import the video recorded with the camera")}
                 </div>
                 <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
                 <div className="row">
