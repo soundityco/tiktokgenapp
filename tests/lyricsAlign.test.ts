@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import type { LyricWord } from "@/lib/types";
 
 const w = (text: string, s: number, e: number, line?: number): LyricWord => ({ w: text, s, e, ...(line === undefined ? {} : { line }) });
@@ -101,6 +101,22 @@ describe("buildCues", () => {
     expect(activeCue(cues, 2.1)?.text).toContain("Je marche"); // short hold after the last word
     expect(activeCue(cues, 2.9)).toBeNull();
     expect(activeCue(cues, 3.5)?.text).toContain("Les");
+  });
+
+  it("moves one line earlier or later, the others stay", () => {
+    const cues = buildCues(words, "phrase", { lineChars: 40 });
+    const moved = buildCues(shiftCue(words, cues[1], -0.3), "phrase", { lineChars: 40 });
+    expect(moved[1].start).toBeCloseTo(2.7);
+    expect(moved[1].text).toBe(cues[1].text);
+    expect(moved[0].start).toBe(cues[0].start);
+  });
+
+  it("ends a line when set by hand, and keeps it when the line moves", () => {
+    const cues = buildCues(words, "phrase", { lineChars: 40 });
+    const cut = setCueEnd(words, cues[0], 1.6);
+    expect(buildCues(cut, "phrase", { lineChars: 40 })[0].end).toBeCloseTo(1.6);
+    const later = buildCues(shiftCue(cut, buildCues(cut, "phrase", { lineChars: 40 })[0], 0.2), "phrase", { lineChars: 40 });
+    expect(later[0].end).toBeCloseTo(1.8);
   });
 });
 

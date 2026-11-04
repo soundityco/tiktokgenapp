@@ -102,6 +102,8 @@ export interface LyricWord {
   e: number;
   /** Line of the lyrics text this word belongs to, when the words were aligned on written lyrics. */
   line?: number;
+  /** Set by hand on the last word of a caption: when that caption leaves the screen (seconds in the audio). */
+  until?: number;
 }
 
 export interface GenSlide {

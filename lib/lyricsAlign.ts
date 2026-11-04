@@ -282,7 +282,13 @@ export function cleanHeard(words: LyricWord[]): LyricWord[] {
 
 // ---------- captions ----------
 
-export interface Cue { text: string; start: number; end: number }
+export interface Cue {
+  text: string;
+  start: number;
+  end: number;
+  /** The words shown (the same objects as in the list given to buildCues), to retime the caption. */
+  words: LyricWord[];
+}
 export interface CueOptions {
   /** Longest line, in characters. A caption holds up to two lines. */
   lineChars?: number;
@@ -356,9 +362,26 @@ export function buildCues(words: LyricWord[], mode: "phrase" | "word", opts: Cue
     const spoken = g[g.length - 1].e;
     const nextStart = groups[i + 1]?.[0].s;
     // Keep the caption on screen until the next one when the pause is short: no flicker between them.
-    const end = nextStart !== undefined && nextStart - spoken <= hold ? nextStart : spoken + hold * 0.6;
-    return { text: mode === "word" ? g[0].w : breakLines(g, lineChars), start, end };
+    const set = g[g.length - 1].until;
+    const end = set ?? (nextStart !== undefined && nextStart - spoken <= hold ? nextStart : spoken + hold * 0.6);
+    return { text: mode === "word" ? g[0].w : breakLines(g, lineChars), start, end, words: g };
   });
+}
+
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
+
+/** Move a caption earlier or later: its words (and the end set by hand, if any) move by `delta` seconds. */
+export function shiftCue(all: LyricWord[], cue: Cue, delta: number): LyricWord[] {
+  const mine = new Set(cue.words);
+  return all.map((x) => (mine.has(x)
+    ? { ...x, s: r3(x.s + delta), e: r3(x.e + delta), ...(x.until === undefined ? {} : { until: r3(x.until + delta) }) }
+    : x));
+}
+
+/** When a caption leaves the screen, set by hand on its last word. */
+export function setCueEnd(all: LyricWord[], cue: Cue, end: number): LyricWord[] {
+  const last = cue.words[cue.words.length - 1];
+  return all.map((x) => (x === last ? { ...x, until: r3(end) } : x));
 }
 
 export function activeCue(cues: Cue[], time: number): Cue | null {

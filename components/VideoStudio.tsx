@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { downloadDriveFile, type DriveItem } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, parseLyrics } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, parseLyrics, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawStyledText, TextBox, zoomPic } from "@/lib/render";
@@ -772,12 +772,21 @@ export default function VideoStudio({
   };
 
   // ---- audio ↔ video link ----
-  /** Where the segment may sit while linked: the synced take when the video holds several, else the whole video. */
+  /**
+   * Where the segment may sit while linked: the whole video, or, when it holds several takes, the
+   * part between the neighbouring takes (what was filmed before and after the music of this take stays reachable).
+   */
   const linkRangeOf = (v: Pick<VideoSettings, "offset" | "musicStart" | "musicEnd" | "takes">): [number, number] | null => {
     if (!audioBuf || !videoBlob || videoDur <= 0) return null;
-    const multi = (v.takes?.length ?? 0) > 1 && v.musicStart != null && v.musicEnd != null;
-    const lo = Math.max(0, v.offset + (multi ? v.musicStart! : 0));
-    const hi = Math.min(audioBuf.duration, v.offset + (multi ? v.musicEnd! : videoDur));
+    let a = 0, b = videoDur;
+    if ((v.takes?.length ?? 0) > 1 && v.musicStart != null && v.musicEnd != null) {
+      for (const k of v.takes!) {
+        if (k.musicEnd <= v.musicStart + 0.01) a = Math.max(a, k.musicEnd);
+        if (k.musicStart >= v.musicEnd - 0.01) b = Math.min(b, k.musicStart);
+      }
+    }
+    const lo = Math.max(0, v.offset + a);
+    const hi = Math.min(audioBuf.duration, v.offset + b);
     return hi - lo >= 1 ? [lo, hi] : null;
   };
   /** Limits of the segment: the linked range, else the whole official track. */
@@ -1381,6 +1390,28 @@ export default function VideoStudio({
   const segLen = Math.max(0.1, end - settings.crop.start);
   const current = activeCue(cues, head);
 
+  /** Retime one caption by 0.1 s: "start" moves the whole line, "end" only when it leaves the screen. Never over its neighbours. */
+  const retime = (i: number, what: "start" | "end", dir: 1 | -1) => {
+    const c = cues[i], prev = cues[i - 1], next = cues[i + 1];
+    const words = project.lyricWords ?? [];
+    let out: LyricWord[];
+    if (what === "start") {
+      const lo = prev ? prev.words[prev.words.length - 1].e + 0.02 : 0;
+      const hi = next ? next.start - 0.02 : Infinity;
+      const d = clamp(dir * 0.1, lo - c.start, hi - c.words[c.words.length - 1].e);
+      if (Math.abs(d) < 0.005) return;
+      out = shiftCue(words, c, d);
+      setHead(round2(Math.max(settings.crop.start, c.start + d)));
+    } else {
+      const to = clamp(c.end + dir * 0.1, c.start + 0.2, next ? next.start : c.end + 60);
+      if (Math.abs(to - c.end) < 0.005) return;
+      out = setCueEnd(words, c, to);
+      setHead(round2(Math.max(c.start, to - 0.3)));
+    }
+    stop();
+    onProject((p) => ({ ...p, lyricWords: out }));
+  };
+
   // ---- keyboard: Space play, ←/→ previous/next line, Alt+←/→ offset, I/O segment start/end ----
   const stepTo = (dir: 1 | -1) => {
     const lo = settingsRef.current.crop.start;
@@ -1710,14 +1741,30 @@ export default function VideoStudio({
               )}
               <p className="muted xs">{t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")}</p>
               {cues.length > 0 && (
-                <div className="lyric-timing">
-                  {cues.map((c, i) => (
-                    <button key={i} className={"btn sm quiet row nowrap" + (c === current ? " on" : "")} style={{ justifyContent: "flex-start" }}
-                      onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
-                      <span className="mono xs">{fmtTime(c.start)}</span>
-                      <span className="grow truncate xs">{c.text.replace(/\n/g, " ⏎ ")}</span>
-                    </button>
-                  ))}
+                <div className="stack" style={{ gap: 4 }}>
+                  <div className="cue-row cue-legend muted xs">
+                    <span>{t("Starts")}</span><span className="grow">{t("Line")}</span><span>{t("Ends")}</span>
+                  </div>
+                  <div className="lyric-timing">
+                    {cues.map((c, i) => (
+                      <div key={i} className={"cue-row" + (c === current ? " on" : "")}>
+                        <span className="nudge">
+                          <button className="btn sm quiet" aria-label={t("Earlier")} title={t("Show this line earlier (−0.1 s)")} onClick={() => retime(i, "start", -1)}>−</button>
+                          <span className="mono xs">{fmtTime(c.start)}</span>
+                          <button className="btn sm quiet" aria-label={t("Later")} title={t("Show this line later (+0.1 s)")} onClick={() => retime(i, "start", 1)}>+</button>
+                        </span>
+                        <button className="cue-text grow truncate xs" onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
+                          {c.text.replace(/\n/g, " ⏎ ")}
+                        </button>
+                        <span className="nudge">
+                          <button className="btn sm quiet" aria-label={t("Shorter")} title={t("Hide this line earlier (−0.1 s)")} onClick={() => retime(i, "end", -1)}>−</button>
+                          <span className="mono xs">{fmtTime(c.end)}</span>
+                          <button className="btn sm quiet" aria-label={t("Longer")} title={t("Keep this line longer (+0.1 s)")} onClick={() => retime(i, "end", 1)}>+</button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="muted xs">{t("Fine-tune each line by 0.1 s. Editing the pasted lyrics or syncing again places them anew: retouch last.")}</p>
                 </div>
               )}
               {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}

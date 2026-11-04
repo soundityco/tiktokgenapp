@@ -263,7 +263,15 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-src { position: fixed; left: -9999px; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 .wave { width: 100%; height: 90px; display: block; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); touch-action: none; cursor: ew-resize; }
 .lyric-timing { display: grid; gap: var(--s1); max-height: 210px; overflow: auto; padding-right: 2px; }
-.lyric-timing .btn.on { color: var(--text); background: var(--raised); }
+.cue-row { display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 1px 2px; border-radius: var(--r); }
+.cue-row.on { background: var(--raised); }
+.cue-row.on .cue-text { color: var(--text); }
+.cue-row .nudge { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.cue-row .nudge .btn { width: 24px; padding: 0; justify-content: center; }
+.cue-row .nudge .mono { width: 42px; text-align: center; }
+.cue-text { min-width: 0; height: var(--h-sm); padding: 0 6px; border: 0; background: none; color: var(--muted); text-align: left; cursor: pointer; }
+.cue-text:hover { color: var(--text); }
+.cue-legend span:first-child, .cue-legend span:last-child { width: 94px; text-align: center; flex: none; }
 /* The preview stays in view while the panels on the right scroll. */
 .video-stage { position: sticky; top: var(--s4); }
 .video-stage .input.sm { height: var(--h-sm); font-size: var(--fs-sm); min-width: 0; }
