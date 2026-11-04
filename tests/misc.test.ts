@@ -215,3 +215,15 @@ describe("TikTok tokens and login", () => {
     expect(url.searchParams.get("redirect_uri")).toBe("https://app.test/api/tiktok/callback");
   });
 });
+
+describe("TikTok callback address", () => {
+  it("uses the address the user opened, not the deploy's own one", async () => {
+    const { redirectUri } = await import("../lib/tiktok");
+    const onNetlify = new Request("https://6aeb0fcce3a2f884897ac0c6--tiktokgenapp.netlify.app/api/tiktok/login", {
+      headers: { host: "6aeb0fcce3a2f884897ac0c6--tiktokgenapp.netlify.app", "x-forwarded-host": "tiktokgenapp.netlify.app", "x-forwarded-proto": "https" },
+    });
+    expect(redirectUri(onNetlify)).toBe("https://tiktokgenapp.netlify.app/api/tiktok/callback");
+    const local = new Request("http://localhost:3000/api/tiktok/login", { headers: { host: "localhost:3000" } });
+    expect(redirectUri(local)).toBe("http://localhost:3000/api/tiktok/callback");
+  });
+});

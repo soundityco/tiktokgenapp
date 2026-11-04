@@ -9,8 +9,25 @@ export const SCOPES = process.env.TIKTOK_SCOPES ?? "user.info.basic,video.list";
 
 export const tiktokConfigured = () => !!process.env.TIKTOK_CLIENT_KEY && !!process.env.TIKTOK_CLIENT_SECRET;
 
+/**
+ * The address the user really opened (e.g. https://tiktokgenapp.netlify.app). On Netlify `req.url`
+ * carries the address of the deploy itself (https://<id>--site.netlify.app): TikTok then refused
+ * the callback address, and redirects landed on a domain where the user is not signed in.
+ */
+export function publicOrigin(req: Request): string {
+  const host = req.headers.get("x-forwarded-host")?.split(",")[0].trim() || req.headers.get("host");
+  if (!host) return new URL(req.url).origin;
+  // Still the deploy's own address ("<id>--site.netlify.app"): use the site's main one, given by Netlify.
+  if (/^[0-9a-f]{24}--/.test(host) && process.env.URL) return process.env.URL.replace(/\/$/, "");
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0].trim()
+    || (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+/** Same address for a path of the app. */
+export const appUrl = (req: Request, path: string) => new URL(path, publicOrigin(req));
+
 export const redirectUri = (req: Request) =>
-  process.env.TIKTOK_REDIRECT_URI ?? `${new URL(req.url).origin}/api/tiktok/callback`;
+  process.env.TIKTOK_REDIRECT_URI ?? `${publicOrigin(req)}/api/tiktok/callback`;
 
 /**
  * PKCE, required by TikTok's login ("code_challenge" error without it): a random secret kept in a

@@ -1,11 +1,11 @@
 import { auth } from "@/auth";
 import { saveTikTok } from "@/lib/db";
-import { exchangeCode, fetchDisplayName } from "@/lib/tiktok";
+import { appUrl, exchangeCode, fetchDisplayName } from "@/lib/tiktok";
 
 export const dynamic = "force-dynamic";
 
 const back = (req: Request, flag: string) => {
-  const headers = new Headers({ Location: new URL(`/studio?tiktok=${flag}`, req.url).toString() });
+  const headers = new Headers({ Location: appUrl(req, `/studio?tiktok=${flag}`).toString() });
   headers.append("Set-Cookie", "tt_state=; Path=/; Max-Age=0");
   headers.append("Set-Cookie", "tt_verifier=; Path=/; Max-Age=0");
   return new Response(null, { status: 302, headers });
@@ -15,7 +15,7 @@ const cookieOf = (req: Request, name: string) =>
 
 export async function GET(req: Request) {
   const email = (await auth())?.user?.email?.toLowerCase();
-  if (!email) return Response.redirect(new URL("/", req.url));
+  if (!email) return Response.redirect(appUrl(req, "/"));
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
