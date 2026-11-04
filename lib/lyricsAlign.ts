@@ -374,15 +374,48 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
 export function shiftCue(all: LyricWord[], cue: Cue, delta: number): LyricWord[] {
   const mine = new Set(cue.words);
   return all.map((x) => (mine.has(x)
-    ? { ...x, s: r3(x.s + delta), e: r3(x.e + delta), ...(x.until === undefined ? {} : { until: r3(x.until + delta) }) }
+    ? { ...x, s: r3(x.s + delta), e: r3(x.e + delta), ...(x.until === undefined ? {} : { until: r3(x.until + delta) }), manual: true }
     : x));
 }
 
 /** When a caption leaves the screen, set by hand on its last word. */
 export function setCueEnd(all: LyricWord[], cue: Cue, end: number): LyricWord[] {
+  const mine = new Set(cue.words);
   const last = cue.words[cue.words.length - 1];
-  return all.map((x) => (x === last ? { ...x, until: r3(end) } : x));
+  return all.map((x) => (x === last ? { ...x, until: r3(end), manual: true } : mine.has(x) ? { ...x, manual: true } : x));
 }
+
+/**
+ * The lyrics were placed again (text edited, synced again): the words retimed by hand keep their timing.
+ * Old and new words are matched in order (longest common sequence of the words), so an edit elsewhere
+ * in the text, or a line added or removed, leaves the other retouches where they were.
+ */
+export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
+  if (!prev.some((x) => x.manual) || !next.length) return next;
+  const a = [...prev].sort((x, y) => x.s - y.s), b = [...next].sort((x, y) => x.s - y.s);
+  const ka = a.map((x) => norm(x.w)), kb = b.map((x) => norm(x.w));
+  const n = a.length, m = b.length;
+  // Lengths of the common sequences of a[i..] and b[j..], one row per word of `a`.
+  const L = new Int32Array((n + 1) * (m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      L[i * (m + 1) + j] = ka[i] === kb[j] ? L[(i + 1) * (m + 1) + j + 1] + 1 : Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
+    }
+  }
+  const out = [...b];
+  for (let i = 0, j = 0; i < n && j < m;) {
+    if (ka[i] === kb[j]) {
+      const o = a[i];
+      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true };
+      i++; j++;
+    } else if (L[(i + 1) * (m + 1) + j] >= L[i * (m + 1) + j + 1]) i++;
+    else j++;
+  }
+  return out.sort((x, y) => x.s - y.s);
+}
+
+/** Some words were retimed by hand. */
+export const hasManual = (words: LyricWord[] | undefined): boolean => !!words?.some((x) => x.manual);
 
 export function activeCue(cues: Cue[], time: number): Cue | null {
   let found: Cue | null = null;

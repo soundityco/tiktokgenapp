@@ -104,6 +104,8 @@ export interface LyricWord {
   line?: number;
   /** Set by hand on the last word of a caption: when that caption leaves the screen (seconds in the audio). */
   until?: number;
+  /** Retimed by hand: this timing wins over the automatic one, also when the lyrics are placed again. */
+  manual?: boolean;
 }
 
 export interface GenSlide {

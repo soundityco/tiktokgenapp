@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { downloadDriveFile, type DriveItem } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, parseLyrics, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawStyledText, TextBox, zoomPic } from "@/lib/render";
@@ -998,13 +998,16 @@ export default function VideoStudio({
     };
   };
 
-  /** Place the written lyrics again on the words already heard: instant, no new analysis. */
-  const resyncLyrics = (src = writtenSrc, p = project) => {
+  /**
+   * Place the written lyrics again on the words already heard: instant, no new analysis.
+   * The lines retimed by hand keep their timing, unless `fresh` (back to the automatic timing).
+   */
+  const resyncLyrics = (src = writtenSrc, p = project, fresh = false) => {
     const heard = p.heardWords;
     if (!heard?.length) { void generateLyrics(); return; }
     const cfg = settingsRef.current;
     const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
-    onProject((x) => ({ ...x, lyricWords: r.words }));
+    onProject((x) => ({ ...x, lyricWords: fresh ? r.words : keepManual(x.lyricWords ?? [], r.words) }));
     setGenInfo(r.info);
     if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
@@ -1091,7 +1094,7 @@ export default function VideoStudio({
       } else {
         const { words, info } = placeWords(heard, src, proj, segFrom, segTo);
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
-        onProject((p) => ({ ...p, heardWords: heard, lyricWords: words }));
+        onProject((p) => ({ ...p, heardWords: heard, lyricWords: keepManual(p.lyricWords ?? [], words) }));
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
         setGenInfo(info);
         outcome = { title: t("Lyrics ready"), body: info };
@@ -1764,7 +1767,12 @@ export default function VideoStudio({
                       </div>
                     ))}
                   </div>
-                  <p className="muted xs">{t("Fine-tune each line by 0.1 s. Editing the pasted lyrics or syncing again places them anew: retouch last.")}</p>
+                  <div className="row">
+                    <span className="muted xs grow">{t("Fine-tune each line by 0.1 s. Your retouches are kept when you edit the lyrics or sync again.")}</span>
+                    {hasManual(project.lyricWords) && !genBusy && (
+                      <button className="btn sm quiet" onClick={() => resyncLyrics(writtenSrc, project, true)}>{t("Back to the automatic timing")}</button>
+                    )}
+                  </div>
                 </div>
               )}
               {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}

@@ -509,5 +509,6 @@ export const FR: Record<string, string> = {
   "Hide this line earlier (−0.1 s)": "Faire disparaître cette ligne plus tôt (−0,1 s)",
   "Longer": "Plus long",
   "Keep this line longer (+0.1 s)": "Garder cette ligne plus longtemps (+0,1 s)",
-  "Fine-tune each line by 0.1 s. Editing the pasted lyrics or syncing again places them anew: retouch last.": "Ajuste chaque ligne de 0,1 s. Modifier les paroles collées ou relancer la synchro les replace : fais les retouches en dernier.",
+  "Fine-tune each line by 0.1 s. Your retouches are kept when you edit the lyrics or sync again.": "Ajuste chaque ligne de 0,1 s. Tes retouches sont gardées si tu modifies les paroles ou relances la synchro.",
+  "Back to the automatic timing": "Revenir au timing automatique",
 };

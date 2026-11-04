@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, keepManual, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import type { LyricWord } from "@/lib/types";
 
 const w = (text: string, s: number, e: number, line?: number): LyricWord => ({ w: text, s, e, ...(line === undefined ? {} : { line }) });
@@ -117,6 +117,19 @@ describe("buildCues", () => {
     expect(buildCues(cut, "phrase", { lineChars: 40 })[0].end).toBeCloseTo(1.6);
     const later = buildCues(shiftCue(cut, buildCues(cut, "phrase", { lineChars: 40 })[0], 0.2), "phrase", { lineChars: 40 });
     expect(later[0].end).toBeCloseTo(1.8);
+  });
+
+  it("keeps the lines retimed by hand when the lyrics are placed again", () => {
+    const cues = buildCues(words, "phrase", { lineChars: 40 });
+    const shifted = shiftCue(words, cues[1], 0.4);
+    const mine = setCueEnd(shifted, buildCues(shifted, "phrase", { lineChars: 40 })[1], 5.5);
+    // Placed anew from the audio, with a word added at the start: the automatic timing is back everywhere but on the retouched line.
+    const fresh = [w("Oh", 0, 0.1, 0), ...words.map((x) => ({ ...x, s: x.s + 0.05, e: x.e + 0.05 }))];
+    const kept = buildCues(keepManual(mine, fresh), "phrase", { lineChars: 40 });
+    expect(kept[1].start).toBeCloseTo(3.4);
+    expect(kept[1].end).toBeCloseTo(5.5);
+    expect(kept[0].start).toBe(0);
+    expect(kept[0].text.startsWith("Oh")).toBe(true);
   });
 });
 
