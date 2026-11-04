@@ -1194,7 +1194,8 @@ export default function VideoStudio({
     setV({ crop: fitCrop(cfg.crop.start, v, boundsOf(cfg)) });
   };
 
-  const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset"; x: number; start: number; duration: number }>(null);
+  /** "press": down inside the segment, not moved yet: a click places the playhead, a drag moves the segment. */
+  const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset" | "head" | "press"; x: number; px: number; start: number; duration: number }>(null);
   const wavePos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return clamp((e.clientX - r.left) / r.width, 0, 1);
@@ -1207,29 +1208,79 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     // Top strip of the blue "video available" band: slide it to move the sync by hand.
     const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX;
+    const near = (t: number) => Math.abs(e.clientX - (rect.left + (t / audioBuf.duration) * rect.width)) <= 6;
     if (!cfg.linked && videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2) {
       const o0 = cfg.offset / audioBuf.duration, o1 = (cfg.offset + videoDur) / audioBuf.duration;
       if (f >= o0 && f <= o1) {
-        dragWave.current = { mode: "offset", x: f, start: cfg.offset, duration: 0 };
+        dragWave.current = { mode: "offset", x: f, px, start: cfg.offset, duration: 0 };
         return;
       }
     }
     const x0 = cfg.crop.start / audioBuf.duration;
     const x1 = (cfg.crop.start + cfg.crop.duration) / audioBuf.duration;
-    if (Math.abs(f - x0) < 0.02) dragWave.current = { mode: "start", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
-    else if (Math.abs(f - x1) < 0.02) dragWave.current = { mode: "end", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
-    else if (f > x0 && f < x1) dragWave.current = { mode: "move", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
+    const seg = { x: f, px, start: cfg.crop.start, duration: cfg.crop.duration };
+    // The playhead first (a thin line inside the segment), then the edges, then the segment itself.
+    if (near(head) && head > cfg.crop.start + 0.05 && head < cfg.crop.start + cfg.crop.duration - 0.05) dragWave.current = { mode: "head", ...seg };
+    else if (Math.abs(f - x0) < 0.02) dragWave.current = { mode: "start", ...seg };
+    else if (Math.abs(f - x1) < 0.02) dragWave.current = { mode: "end", ...seg };
+    else if (f > x0 && f < x1) dragWave.current = { mode: "press", ...seg };
     else {
       const crop = fitCrop(f * audioBuf.duration, cfg.crop.duration, boundsOf(cfg));
       setV({ crop });
       setHead(crop.start);
-      dragWave.current = { mode: "move", x: f, start: crop.start, duration: crop.duration };
+      dragWave.current = { mode: "move", x: f, px, start: crop.start, duration: crop.duration };
     }
+  };
+  /**
+   * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
+   * a click elsewhere puts the playhead there. `onCue`: also called for a click on a caption.
+   */
+  const scrubRef = useRef<{ px: number; at: number | null; moved: boolean } | null>(null);
+  const scrub = (onCue?: () => void) => {
+    const timeOf = (el: HTMLElement, x: number) => {
+      const r = el.getBoundingClientRect();
+      const cfg = settingsRef.current;
+      return round2(cfg.crop.start + clamp((x - r.left) / r.width, 0, 1) * Math.max(0.1, cfg.crop.duration - 0.05));
+    };
+    return {
+      onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+        stop();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const cue = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
+        scrubRef.current = { px: e.clientX, at: cue ? Number(cue.dataset.at) : null, moved: false };
+      },
+      onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
+        const d = scrubRef.current;
+        if (!d) return;
+        if (!d.moved && Math.abs(e.clientX - d.px) < 4) return;
+        d.moved = true;
+        setHead(timeOf(e.currentTarget, e.clientX));
+      },
+      onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
+        const d = scrubRef.current;
+        scrubRef.current = null;
+        if (!d || d.moved) return;
+        if (d.at !== null) { setHead(round2(d.at)); onCue?.(); }
+        else setHead(timeOf(e.currentTarget, e.clientX));
+      },
+      onPointerCancel: () => { scrubRef.current = null; },
+    };
+  };
+  /** Time under the pointer, kept inside the segment (where the playhead lives). */
+  const headAt = (f: number) => {
+    const cfg = settingsRef.current;
+    return round2(clamp(f * (audioBuf?.duration ?? 0), cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05));
   };
   const waveMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const d = dragWave.current;
     if (!d || !audioBuf) return;
     const f = wavePos(e);
+    if (d.mode === "head") { setHead(headAt(f)); return; }
+    if (d.mode === "press") {
+      if (Math.abs(e.clientX - d.px) < 4) return;
+      d.mode = "move"; // it is a drag: the segment moves
+    }
     const delta = (f - d.x) * audioBuf.duration;
     const bounds = boundsOf(settingsRef.current);
     // The preview follows the edge being dragged: the picture shown is the one under that edge.
@@ -1246,7 +1297,11 @@ export default function VideoStudio({
       setHead(crop.start);
     }
   };
-  const waveUp = () => { dragWave.current = null; };
+  const waveUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = dragWave.current;
+    dragWave.current = null;
+    if (d?.mode === "press") setHead(headAt(wavePos(e))); // a click inside the segment: the playhead goes there
+  };
 
   useEffect(() => {
     const c = waveRef.current;
@@ -2089,34 +2144,29 @@ export default function VideoStudio({
                   </div>
                 )}
                 <canvas ref={waveRef} className="wave" width={1200} height={90}
-                  onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={waveUp} />
+                  onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={() => { dragWave.current = null; }} />
                 {hooks.length > 0 && (
-                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")}>
+                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     {hooks.map((h, i) => (
                       <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
                         style={{ left: `${(clamp(h.from, 0, segLen) / segLen) * 100}%`, width: `${((clamp(h.to ?? segLen, 0, segLen) - clamp(h.from, 0, segLen)) / segLen) * 100}%` }}
-                        title={h.text || t("Hook {n}", { n: i + 1 })}
-                        onClick={() => { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); }}>
+                        title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
+                        onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
                         {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                       </button>
                     ))}
                     <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                   </div>
                 )}
-                <div className="lyric-track" role="group" aria-label={t("Lyrics of the segment")}
-                  onPointerDown={(e) => {
-                    if (e.target !== e.currentTarget) return;
-                    const r = e.currentTarget.getBoundingClientRect();
-                    stop();
-                    setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
-                  }}>
+                <div className="lyric-track" role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
                   {cues.map((c, i) => (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
                       style={{
                         left: `${(clamp(c.start - settings.crop.start, 0, segLen) / segLen) * 100}%`,
                         width: `${((clamp(c.end, settings.crop.start, end) - clamp(c.start, settings.crop.start, end)) / segLen) * 100}%`,
                       }}
-                      onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
+                      data-at={Math.max(settings.crop.start, c.start)}
+                      onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       {c.text.replace(/\n/g, " ")}
                     </button>
                   ))}
