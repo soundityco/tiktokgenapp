@@ -608,4 +608,7 @@ export const FR: Record<string, string> = {
   "Pick {name} again: this browser does not have it. The sync and the settings are kept.": "Resélectionne {name} : ce navigateur ne l'a pas. La synchro et les réglages sont gardés.",
   "The LUT “{name}” is not in this browser: the picture is shown without it.": "La LUT « {name} » n'est pas dans ce navigateur : l'image est affichée sans elle.",
   "Import it again": "La réimporter",
+  "Content": "Contenu",
+  "Its style": "Son style",
+  "No hook on this video yet.": "Pas encore de hook sur cette vidéo.",
 };

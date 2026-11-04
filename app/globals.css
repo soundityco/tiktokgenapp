@@ -172,6 +172,11 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .tabs { display: inline-flex; gap: var(--s4); border-bottom: 1px solid var(--line); width: 100%; }
 .tab { height: 34px; padding: 0; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); cursor: pointer; }
 .tab.on { color: var(--text); border-bottom-color: var(--accent-hi); }
+/* Two families of tabs side by side: content | style. */
+.tabs.grouped { flex-wrap: wrap; gap: 0 var(--s5); }
+.tab-group { display: inline-flex; align-items: center; gap: var(--s4); }
+.tab-group + .tab-group { padding-left: var(--s5); border-left: 1px solid var(--line); }
+.tab-group-label { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .toast { position: fixed; bottom: var(--s5); left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line-2); border-left: 2px solid var(--accent-hi); padding: 10px 16px; border-radius: var(--r); z-index: 80; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
 .preflight { margin-bottom: var(--s5); }
 .preflight summary { cursor: pointer; }

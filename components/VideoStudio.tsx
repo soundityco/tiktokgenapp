@@ -4,7 +4,7 @@ import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
-import { canWriteDrive, downloadDriveFile, downloadDriveFileProgress, type DriveItem, uploadToDrive } from "@/lib/drive";
+import { canWriteDrive, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, uploadToDrive } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
@@ -13,7 +13,7 @@ import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegi
 import { buildGradeLut, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
 import { copyRegion, Grader } from "@/lib/gradeGL";
-import ColorGrade, { lastLut } from "./ColorGrade";
+import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
 import { convertSegment, cropFor, grabFrame, type ConvertCrop, type ConvertStep } from "@/lib/convert";
@@ -444,12 +444,26 @@ export default function VideoStudio({
     if (!lutId) return;
     const known = LOOKS.get(lutId);
     if (known) { setLook(known); return; }
-    void getMedia(`lut:${lutId}`).then(async (b) => {
+    const want = settingsRef.current.grade?.lut;
+    void (async () => {
+      let b = await getMedia(`lut:${lutId}`);
+      // Not in this browser under this id: the same LUT under another id here, else its copy in the user's Drive.
+      if (!b && want) {
+        const twin = knownLuts().find((l) => l.name === want.name && l.id !== lutId);
+        if (twin) b = await getMedia(`lut:${twin.id}`);
+        if (!b) {
+          try {
+            const id = want.driveId ?? await findInAppFolder(`${want.name}.cube`);
+            if (id) b = await downloadDriveFile(id);
+          } catch (e) { console.warn("[grade] LUT download from Drive failed", e); }
+        }
+        if (b) { void putMedia(`lut:${lutId}`, b).catch(() => {}); rememberLut(lutId, want.name); }
+      }
       if (off) return;
       if (!b) { setLookErr(t("This LUT is not on this device: import it again.")); return; }
       try { const l = parseCube(await b.text()); LOOKS.set(lutId, l); if (!off) setLook(l); }
       catch (e) { if (!off) setLookErr(e instanceof Error ? e.message : String(e)); }
-    });
+    })();
     return () => { off = true; };
   }, [lutId, lutReload]); // eslint-disable-line react-hooks/exhaustive-deps
   const colourKey = gradeKey(grade);
@@ -704,6 +718,27 @@ export default function VideoStudio({
       setDriveJob(null);
     }
   };
+  // The look LUT is small: it goes to Drive by itself, so every browser and device finds it (see the LUT loading above).
+  const lutUp = useRef<string | null>(null);
+  useEffect(() => {
+    const lut = settings.grade?.lut;
+    if (!lut || lut.driveId || !look || !driveWrite || lutUp.current === lut.id) return;
+    lutUp.current = lut.id;
+    void (async () => {
+      const b = await getMedia(`lut:${lut.id}`);
+      if (!b) return;
+      try {
+        const driveId = await uploadToDrive(b, `${lut.name}.cube`, () => {}, new AbortController().signal, "application/octet-stream");
+        // Every clip of the release using this LUT gets the link.
+        onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.grade?.lut?.id === lut.id ? { ...c, grade: { ...c.grade, lut: { ...c.grade.lut, driveId } } } : c)) }));
+        onSaveNow();
+      } catch (e) {
+        console.warn("[grade] LUT upload to Drive failed", e);
+        lutUp.current = null;
+      }
+    })();
+  }, [settings.grade?.lut, look, driveWrite]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** The camera file from Drive, on a device that does not have it. */
   const fetchOriginal = async () => {
     const id = settings.drive?.originalId;
@@ -1730,7 +1765,7 @@ export default function VideoStudio({
   // ---- layout ----
   /** Files still opening: the panels wait (greyed) so nothing is edited half-loaded. */
   const studioLoading = !!audioBlob && (!audioBuf || (!!videoUrl && !playerReady));
-  const [tab, setTab] = useState<"media" | "lyrics" | "hook" | "style" | "color">(() =>
+  const [tab, setTab] = useState<"media" | "lyrics" | "hook" | "style" | "hookstyle" | "color">(() =>
     (project.audioName ?? settings.audioName) && settings.videoName ? "lyrics" : "media");
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
@@ -2137,14 +2172,22 @@ export default function VideoStudio({
             {!audioBuf && note && <p className="notice xs">{note}</p>}
           </div>
 
-          <div className="tabs" role="tablist">
-            <button role="tab" aria-selected={tab === "media"} className={"tab" + (tab === "media" ? " on" : "")} onClick={() => setTab("media")}>
-              {t("Media")}{(!audioBlob || !videoBlob) && <span className="tab-dot" />}
-            </button>
-            <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
-            <button role="tab" aria-selected={tab === "hook"} className={"tab" + (tab === "hook" ? " on" : "")} onClick={() => setTab("hook")}>{t("Hook")}</button>
-            <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Lyrics style")}</button>
-            <button role="tab" aria-selected={tab === "color"} className={"tab" + (tab === "color" ? " on" : "")} onClick={() => setTab("color")}>{t("Colour")}{lookErr && <span className="tab-dot" />}</button>
+          {/* What the video says (content), then how it looks (style). */}
+          <div className="tabs grouped" role="tablist">
+            <div className="tab-group">
+              <span className="tab-group-label">{t("Content")}</span>
+              <button role="tab" aria-selected={tab === "media"} className={"tab" + (tab === "media" ? " on" : "")} onClick={() => setTab("media")}>
+                {t("Media")}{(!audioBlob || !videoBlob) && <span className="tab-dot" />}
+              </button>
+              <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
+              <button role="tab" aria-selected={tab === "hook"} className={"tab" + (tab === "hook" ? " on" : "")} onClick={() => setTab("hook")}>{t("Hook")}</button>
+            </div>
+            <div className="tab-group">
+              <span className="tab-group-label">{t("Style")}</span>
+              <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Lyrics")}</button>
+              <button role="tab" aria-selected={tab === "hookstyle"} className={"tab" + (tab === "hookstyle" ? " on" : "")} onClick={() => setTab("hookstyle")}>{t("Hook")}</button>
+              <button role="tab" aria-selected={tab === "color"} className={"tab" + (tab === "color" ? " on" : "")} onClick={() => setTab("color")}>{t("Colour")}{lookErr && <span className="tab-dot" />}</button>
+            </div>
           </div>
 
           {tab === "color" && (
@@ -2359,13 +2402,26 @@ export default function VideoStudio({
                   </div>
                 </div>
               ))}
-              <div><button className="btn sm" onClick={addHook}><Icon name="plus" size={13} />{t("Add a hook")}</button></div>
-              {hooks.length > 0 && (
+              <div className="row">
+                <button className="btn sm" onClick={addHook}><Icon name="plus" size={13} />{t("Add a hook")}</button>
+                {hooks.length > 0 && <button className="btn sm quiet" onClick={() => setTab("hookstyle")}>{t("Its style")} →</button>}
+              </div>
+            </div>
+          )}
+
+          {tab === "hookstyle" && (
+            <div className="tab-body">
+              {hooks.length === 0 ? (
+                <div className="stack">
+                  <p className="muted xs">{t("No hook on this video yet.")}</p>
+                  <div><button className="btn sm" onClick={() => { setTab("hook"); addHook(); }}><Icon name="plus" size={13} />{t("Add a hook")}</button></div>
+                </div>
+              ) : (
                 <>
                   <StylePresets presets={presets} onSave={(name) => onSavePreset(name, hookStyle)}
                     onApply={(p) => setV({ hookStyle: withPreset(hookStyle, p) })} onDelete={onDeletePreset} />
                   <div className="stack">
-                    <span className="label">{t("Hook style")}</span>
+                    <span className="label">{t("Text style")}</span>
                     <p className="muted xs">{settings.hookStyle ? t("Own style for the hooks.") : t("Same look as the lyrics, at the top, until you change something.")}</p>
                     <CaptionStyle
                       style={hookStyle}

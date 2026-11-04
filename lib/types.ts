@@ -158,7 +158,7 @@ export interface VideoGrade {
   /** How the camera recorded the colours: converted to DaVinci Wide Gamut / Intermediate first. */
   profile: "slog3-cine" | "slog3" | "rec709" | "applelog" | "hlg" | "pq" | "none";
   /** Look LUT made in DaVinci (input DWG / Intermediate), kept on this device (IndexedDB "lut:<id>"). */
-  lut?: { id: string; name: string };
+  lut?: { id: string; name: string; /** Copy in the user's Drive: any browser or device gets it from there. */ driveId?: string };
   /** Stops. */
   exposure: number;
   /** 1 = unchanged, around `pivot` (DaVinci Intermediate, default middle grey). */

@@ -161,9 +161,9 @@ async function appFolder(): Promise<string> {
  * Upload a file to the TkTgen folder of the user's Drive, in pieces (resumable upload): big camera files
  * go through, a network hiccup retries the piece. Returns the Drive file id.
  */
-export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal): Promise<string> {
+export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal, mime?: string): Promise<string> {
   const folder = await appFolder();
-  const type = blob.type || "video/mp4";
+  const type = mime || blob.type || "video/mp4";
   const start = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
     method: "POST",
     signal,
@@ -204,6 +204,13 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
     onProgress(at / blob.size);
   }
   throw new Error("upload incomplete");
+}
+
+/** A file the app put in the TkTgen folder, by its name (newest first). */
+export async function findInAppFolder(name: string): Promise<string | null> {
+  const q = `name = '${name.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}' and trashed = false and '${await appFolder()}' in parents`;
+  const data = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", orderBy: "modifiedTime desc", pageSize: "1" })}`)).json();
+  return data.files?.[0]?.id ?? null;
 }
 
 /** Download a Drive file with its progress (big video copies). */

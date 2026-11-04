@@ -9,9 +9,15 @@ import { Range } from "./ui";
 
 const LUTS_KEY = "tktgen-luts";
 
-/** Look LUTs imported on this device (the files are in IndexedDB "lut:<id>"). */
-function knownLuts(): { id: string; name: string }[] {
+/** Look LUTs this browser has (the files are in IndexedDB "lut:<id>"). */
+export function knownLuts(): { id: string; name: string }[] {
   try { return JSON.parse(localStorage.getItem(LUTS_KEY) ?? "[]"); } catch { return []; }
+}
+/** Note that this browser now has this LUT file. */
+export function rememberLut(id: string, name: string) {
+  const next = [...knownLuts().filter((l) => l.id !== id), { id, name }];
+  try { localStorage.setItem(LUTS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  return next;
 }
 
 /** The look LUT imported last on this device: log footage gets it by default. */
@@ -48,9 +54,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
       const id = lookErr && g.lut && g.lut.name === name0 ? g.lut.id : uid();
       await putMedia(`lut:${id}`, f);
       const name = f.name.replace(/\.cube$/i, "");
-      const next = [...luts.filter((l) => l.id !== id), { id, name }];
-      setLuts(next);
-      try { localStorage.setItem(LUTS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+      setLuts(rememberLut(id, name));
       set({ lut: { id, name } });
       onLutStored(id);
     } catch (e) {
