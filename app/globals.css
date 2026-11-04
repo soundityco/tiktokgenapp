@@ -288,6 +288,14 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
 .lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.hook-track { height: 26px; }
+.hook-track .cue { border-left-color: var(--blue); }
+.hook-track .cue.on { border-left-color: var(--blue); }
+.hook-track.off { opacity: .45; }
+.hook-item { display: grid; gap: var(--s2); padding-bottom: var(--s3); border-bottom: 1px solid var(--line); }
+.hook-item .nudge { display: inline-flex; align-items: center; gap: 2px; }
+.hook-item .nudge .btn { width: 24px; padding: 0; justify-content: center; }
+.hook-item .nudge .mono { min-width: 46px; text-align: center; }
 .lyric-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
 details.fine > summary { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: var(--s1) 0; }
 details.fine > summary:hover { color: var(--text); }

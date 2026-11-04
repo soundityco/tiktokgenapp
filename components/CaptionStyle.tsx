@@ -2,7 +2,7 @@
 import { useT } from "@/lib/i18n";
 import { defaultStyle } from "@/lib/defaults";
 import type { TextStyle } from "@/lib/types";
-import { FontPicker } from "./TextControls";
+import { CaseOptions, FontPicker, LookExtras } from "./TextControls";
 import { Range } from "./ui";
 
 /** Text studio of the video captions: same controls as the carousel inspector, plus loaded fonts. */
@@ -35,10 +35,11 @@ export default function CaptionStyle({
         <label className="field">{t("Text color")}<input type="color" value={style.color} onChange={(e) => onChange({ color: e.target.value })} /></label>
         <label className="field">{style.look === "box" ? t("Box color") : t("Outline color")}<input type="color" value={style.accent} onChange={(e) => onChange({ accent: e.target.value })} /></label>
       </div>
+      <LookExtras style={style} onChange={onChange} />
       <div className="cols2">
         <label className="field">{t("Case")}
           <select className="input" value={style.case} onChange={(e) => onChange({ case: e.target.value as TextStyle["case"] })}>
-            <option value="asis">{t("As typed")}</option><option value="upper">{t("UPPERCASE")}</option><option value="lower">{t("lowercase")}</option>
+            <CaseOptions />
           </select>
         </label>
         <label className="field">{t("Align")}

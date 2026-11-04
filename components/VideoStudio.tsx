@@ -8,12 +8,12 @@ import DriveBrowser from "./DriveBrowser";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
-import { clampPic, drawFramed, drawStyledText, TextBox, zoomPic } from "@/lib/render";
+import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, zoomPic } from "@/lib/render";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
 import { convertSegment, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFrame, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
+import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
 import { StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
@@ -43,6 +43,11 @@ const EXPORT_FPS = 30;
 /** The video frame settings in the carousel's photo terms, so both are drawn by the same code. */
 const picOf = (f: VideoFrame): PicSettings => ({ framing: f.framing ?? "fill", bars: f.bars ?? "blur", zoom: f.zoom, ox: f.ox, oy: f.oy, darken: 0 });
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** The hook on screen at official time `time` (the first one when several overlap). */
+const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
+  const rel = time - cfg.crop.start;
+  return cfg.hooks?.find((h) => h.text.trim() && rel >= h.from - 0.001 && rel < (h.to ?? cfg.crop.duration));
+};
 
 function saveBlob(blob: Blob, name: string) {
   const a = document.createElement("a");
@@ -388,6 +393,10 @@ export default function VideoStudio({
 
   const styleRef = useRef(captionStyle);
   styleRef.current = captionStyle;
+  // The hooks look like the lyrics until they get their own style, but at the top of the picture.
+  const hookStyle: TextStyle = useMemo(() => settings.hookStyle ?? { ...captionStyle, y: 16 }, [settings.hookStyle, captionStyle]);
+  const hookStyleRef = useRef(hookStyle);
+  hookStyleRef.current = hookStyle;
   const activeRef = useRef<(time: number) => string | null>(() => null);
   activeRef.current = (time: number) => {
     // Lyrics generated from the audio win; hand-placed lines are the fallback.
@@ -408,22 +417,42 @@ export default function VideoStudio({
     const inVideo = time >= off - 0.001 && (!Number.isFinite(el?.duration) || time <= off + (el?.duration ?? 0) + 0.001);
     return el && el.videoWidth && inVideo ? { src: el, w: el.videoWidth, h: el.videoHeight } : null;
   };
-  /** The picture of the post at official time `time`: the framed camera video, then the lyrics. Used by the preview and the export. */
-  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number): TextBox | null => {
+  /**
+   * The picture of the post at official time `time`: the framed camera video, the lyrics, then the hook.
+   * Used by the preview and the export. Returns where the texts were drawn, to drag them on the preview.
+   */
+  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number) => {
     const cfg = settingsRef.current;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
     if (pic && pic.w && pic.h) drawFramed(g, pic.src, pic.w, pic.h, picOf(cfg.frame ?? DEFAULT_VIDEO.frame), W, H);
-    if (!cfg.captions) return null;
-    const text = activeRef.current(time);
-    return text ? drawStyledText(g, text, styleRef.current, W, H) : null;
+    const text = cfg.captions ? activeRef.current(time) : null;
+    const caption = text ? drawStyledText(g, text, styleRef.current, W, H) : null;
+    const hook = cfg.showHooks === false ? undefined : hookAt(cfg, time);
+    return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
   }, []);
   const captionBox = useRef<TextBox | null>(null);
+  const hookBox = useRef<TextBox | null>(null);
+  /** Editing aids of the preview (TikTok zones, centre lines while a text is dragged): never in the export. */
+  const [aids, setAidsRaw] = useState<{ zones: boolean; guides: boolean }>(() => {
+    try { return { zones: false, guides: true, ...JSON.parse(localStorage.getItem("tktgen-video-aids") ?? "{}") }; } catch { return { zones: false, guides: true }; }
+  });
+  const setAids = (patch: Partial<typeof aids>) => setAidsRaw((cur) => {
+    const next = { ...cur, ...patch };
+    try { localStorage.setItem("tktgen-video-aids", JSON.stringify(next)); } catch { /* private mode */ }
+    return next;
+  });
+  const [snap, setSnap] = useState({ v: false, h: false });
+  const aidsRef = useRef({ zones: false, guideV: false, guideH: false });
+  aidsRef.current = { zones: aids.zones && settings.format !== "16:9", guideV: aids.guides && snap.v, guideH: aids.guides && snap.h };
   const drawAt = useCallback((time: number) => {
     const c = canvasRef.current;
     const g = c?.getContext("2d");
     if (!c || !g) return;
-    captionBox.current = drawScene(g, c.width, c.height, pictureOf(videoRef.current, time), time);
+    const boxes = drawScene(g, c.width, c.height, pictureOf(videoRef.current, time), time);
+    captionBox.current = boxes.caption;
+    hookBox.current = boxes.hook;
+    drawHelpers(g, c.width, c.height, aidsRef.current);
   }, [drawScene]);
 
   const stop = useCallback(() => {
@@ -671,7 +700,7 @@ export default function VideoStudio({
 
   useEffect(() => {
     if (!playing) drawAt(head);
-  }, [drawAt, head, playing, settings, timed, cues, captionStyle, videoUrl, fonts]);
+  }, [drawAt, head, playing, settings, timed, cues, captionStyle, hookStyle, videoUrl, fonts, aids, snap]);
 
   // Paused: keep the picture on the frame that matches the playhead, so trimming and re-syncing are seen live.
   useEffect(() => {
@@ -1036,13 +1065,18 @@ export default function VideoStudio({
   const syncAll = async () => {
     // autoSync starts the audio capture of the video right away: it must run inside the click.
     const video = videoBlob ? autoSync() : Promise.resolve();
+    await video;
+    await syncLyrics();
+  };
+
+  /** The written lyrics on the official audio only. They do not depend on the video: changing it never moves them. */
+  const syncLyrics = async () => {
     let next = project;
     if (writtenSrc === "song" && paste.trim() !== (project.songLyrics ?? "").trim()) {
       const text = paste.trim();
       next = { ...project, songLyrics: text, heardWords: project.heardWords };
       onProject((p) => ({ ...p, songLyrics: text }));
     }
-    await video;
     if (!hasLyrics || !audioBuf) return;
     if (next.heardWords?.length) resyncLyrics(writtenSrc, next);
     else await generateLyrics(audioBuf, next, writtenSrc);
@@ -1318,49 +1352,58 @@ export default function VideoStudio({
     const p = clampPic(picOf(f), el.videoWidth, el.videoHeight, c.width, c.height);
     return { ...f, ox: p.ox, oy: p.oy };
   };
-  const pdrag = useRef<null | { kind: "text" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number }>(null);
+  const pdrag = useRef<null | { kind: "text" | "hook" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number }>(null);
   const toCv = (e: { clientX: number; clientY: number }) => {
     const c = canvasRef.current!;
     const r = c.getBoundingClientRect();
     const k = c.width / r.width;
     return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k, k };
   };
-  const inCaption = (x: number, y: number) => {
-    const b = captionBox.current;
+  const inBox = (b: TextBox | null, x: number, y: number) => {
     const pad = 30;
     return !!b && x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad;
   };
+  /** Which text is under the pointer: the hook (drawn on top), the lyrics, or none. */
+  const textAt = (x: number, y: number): "hook" | "text" | null =>
+    inBox(hookBox.current, x, y) ? "hook" : inBox(captionBox.current, x, y) ? "text" : null;
   const cvDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!videoBlob) return;
     const c = toCv(e);
     e.currentTarget.setPointerCapture(e.pointerId);
-    const isText = inCaption(c.x, c.y);
+    const kind = textAt(c.x, c.y);
     const f = fitFrame(settingsRef.current.frame ?? DEFAULT_VIDEO.frame);
-    const st = styleRef.current;
-    pdrag.current = { kind: isText ? "text" : "pic", sx: e.clientX, sy: e.clientY, ox: isText ? st.x : f.ox, oy: isText ? st.y : f.oy, k: c.k };
+    const st = kind === "hook" ? hookStyleRef.current : styleRef.current;
+    pdrag.current = { kind: kind ?? "pic", sx: e.clientX, sy: e.clientY, ox: kind ? st.x : f.ox, oy: kind ? st.y : f.oy, k: c.k };
   };
   const cvMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const d = pdrag.current, c = canvasRef.current;
     if (!d || !c) return;
     const dx = (e.clientX - d.sx) * d.k, dy = (e.clientY - d.sy) * d.k;
-    if (d.kind === "text") {
+    if (d.kind !== "pic") {
       let x = clamp(d.ox + (dx / c.width) * 100, 0, 100), y = clamp(d.oy + (dy / c.height) * 100, 0, 100);
-      if (Math.abs(x - 50) < 1.5) x = 50; // snaps to the centre
-      setV({ captionStyle: { ...styleRef.current, x, y } });
+      // Snaps to the centre lines, shown in blue while dragging.
+      const sv = Math.abs(x - 50) < 1.5, sh = Math.abs(y - 50) < 1.5;
+      if (sv) x = 50;
+      if (sh) y = 50;
+      if (sv !== snap.v || sh !== snap.h) setSnap({ v: sv, h: sh });
+      if (d.kind === "hook") setV({ hookStyle: { ...hookStyleRef.current, x, y } });
+      else setV({ captionStyle: { ...styleRef.current, x, y } });
     } else {
       setV({ frame: fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: d.ox + dx / c.width, oy: d.oy + dy / c.height }) });
     }
   };
-  const cvUp = () => { pdrag.current = null; };
+  const cvUp = () => { pdrag.current = null; if (snap.v || snap.h) setSnap({ v: false, h: false }); };
   const wheelRef = useRef<(e: WheelEvent) => void>(() => {});
   wheelRef.current = (e) => {
     if (!videoBlob) return;
     e.preventDefault();
     const c = toCv(e);
     const dir = e.deltaY < 0 ? 1 : -1;
-    if (inCaption(c.x, c.y)) {
-      const st = styleRef.current;
-      setV({ captionStyle: { ...st, size: clamp(Math.round(st.size + dir * 3), 18, 200) } });
+    const kind = textAt(c.x, c.y);
+    if (kind) {
+      const st = kind === "hook" ? hookStyleRef.current : styleRef.current;
+      const next = { ...st, size: clamp(Math.round(st.size + dir * 3), 18, 200) };
+      setV(kind === "hook" ? { hookStyle: next } : { captionStyle: next });
       return;
     }
     const f = fitFrame(settingsRef.current.frame ?? DEFAULT_VIDEO.frame);
@@ -1376,12 +1419,12 @@ export default function VideoStudio({
   }, []);
   const cvDouble = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const c = toCv(e);
-    if (!inCaption(c.x, c.y)) setFrame({ zoom: 1, ox: 0, oy: 0 });
+    if (!textAt(c.x, c.y)) setFrame({ zoom: 1, ox: 0, oy: 0 });
   };
   const [outW, outH] = OUT_SIZE(settings.format);
 
   // ---- layout ----
-  const [tab, setTab] = useState<"media" | "lyrics" | "style">(() =>
+  const [tab, setTab] = useState<"media" | "lyrics" | "hook" | "style">(() =>
     (project.audioName ?? settings.audioName) && settings.videoName ? "lyrics" : "media");
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
@@ -1391,6 +1434,27 @@ export default function VideoStudio({
     : settings.score === undefined ? { text: t("Not synced yet"), tone: "warn" }
     : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };
   const segLen = Math.max(0.1, end - settings.crop.start);
+  const placed = (project.lyricWords?.length ?? 0) > 0;
+  /** Nothing synced yet: one button does both. Afterwards each has its own, so changing the video never touches the lyrics. */
+  const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
+  const hooks = settings.hooks ?? [];
+  const setHooks = (list: VideoHook[]) => setV({ hooks: list });
+  const editHook = (id: string, patch: Partial<VideoHook>) => setHooks(hooks.map((h) => (h.id === id ? { ...h, ...patch } : h)));
+  const addHook = () => {
+    const last = hooks[hooks.length - 1];
+    const from = last ? round2(Math.min(segLen - 1, last.to ?? Math.min(3, segLen / 2))) : 0;
+    const list = last && last.to === undefined ? hooks.map((h) => (h === last ? { ...h, to: from } : h)) : hooks;
+    setHooks([...list, { id: uid(), text: "", from, to: last ? round2(Math.min(segLen, from + 3)) : undefined }]);
+    if (settings.showHooks === false) setV({ showHooks: true });
+  };
+  /** Move one edge of a hook by `d` seconds, inside the segment and never shorter than 0.3 s. */
+  const nudgeHook = (h: VideoHook, edge: "from" | "to", d: number) => {
+    const to = h.to ?? segLen;
+    if (edge === "from") editHook(h.id, { from: round2(clamp(h.from + d, 0, to - 0.3)) });
+    else editHook(h.id, { to: round2(clamp(to + d, h.from + 0.3, segLen)) });
+    stop();
+    setHead(round2(settings.crop.start + (edge === "from" ? clamp(h.from + d, 0, to - 0.3) : Math.max(h.from, clamp(to + d, h.from + 0.3, segLen) - 0.3))));
+  };
   const current = activeCue(cues, head);
 
   /** Retime one caption by 0.1 s: "start" moves the whole line, "end" only when it leaves the screen. Never over its neighbours. */
@@ -1515,6 +1579,23 @@ export default function VideoStudio({
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
               onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
           </div>
+          <div className="row">
+            <span className="label">{t("On the video")}</span>
+            <button className={"btn sm" + (settings.captions ? " primary" : "")} aria-pressed={settings.captions}
+              onClick={() => setV({ captions: !settings.captions })}>{t("Lyrics")}</button>
+            <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " primary" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
+              onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}>{t("Hook")}</button>
+          </div>
+          <div className="row">
+            <label className="check xs">
+              <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
+              {t("TikTok zones")}
+            </label>
+            <label className="check xs">
+              <input type="checkbox" checked={aids.guides} onChange={(e) => setAids({ guides: e.target.checked })} />
+              {t("Alignment guides")}
+            </label>
+          </div>
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
             onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
             onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
@@ -1554,12 +1635,25 @@ export default function VideoStudio({
                     </button>
                   )}
                   <span className="grow" />
-                  {!syncBusy && !genBusy ? (
-                    <button className="btn sm primary" onClick={() => void syncAll()} disabled={!videoBlob && !hasLyrics}
-                      title={!videoBlob && !hasLyrics ? t("Import the video or paste the lyrics first.") : undefined}>
-                      <Icon name="refresh" size={14} />
-                      {hasLyrics ? (videoBlob ? t("Sync lyrics and video") : t("Sync the lyrics")) : t("Sync the video")}
+                  {!syncBusy && !genBusy && firstSync ? (
+                    <button className="btn sm primary" onClick={() => void syncAll()}>
+                      <Icon name="refresh" size={14} />{t("Sync lyrics and video")}
                     </button>
+                  ) : !syncBusy && !genBusy ? (
+                    <>
+                      {videoBlob && (
+                        <button className={"btn sm" + (settings.score === undefined ? " primary" : "")} onClick={() => void autoSync()}
+                          title={t("Find where the camera video sits in the official audio. The lyrics do not move.")}>
+                          <Icon name="refresh" size={14} />{t("Sync the video")}
+                        </button>
+                      )}
+                      {(hasLyrics || !videoBlob) && (
+                        <button className={"btn sm" + (!placed ? " primary" : "")} onClick={() => void syncLyrics()} disabled={!hasLyrics}
+                          title={!hasLyrics ? t("Import the video or paste the lyrics first.") : placed ? t("Place the lyrics again on the audio. Your retouches are kept.") : undefined}>
+                          <Icon name="refresh" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <>
                       <span className="badge">
@@ -1585,6 +1679,19 @@ export default function VideoStudio({
                 )}
                 <canvas ref={waveRef} className="wave" width={1200} height={90}
                   onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={waveUp} />
+                {hooks.length > 0 && (
+                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")}>
+                    {hooks.map((h, i) => (
+                      <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
+                        style={{ left: `${(clamp(h.from, 0, segLen) / segLen) * 100}%`, width: `${((clamp(h.to ?? segLen, 0, segLen) - clamp(h.from, 0, segLen)) / segLen) * 100}%` }}
+                        title={h.text || t("Hook {n}", { n: i + 1 })}
+                        onClick={() => { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); }}>
+                        {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
+                      </button>
+                    ))}
+                    <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
+                  </div>
+                )}
                 <div className="lyric-track" role="group" aria-label={t("Lyrics of the segment")}
                   onPointerDown={(e) => {
                     if (e.target !== e.currentTarget) return;
@@ -1679,7 +1786,8 @@ export default function VideoStudio({
               {t("Media")}{(!audioBlob || !videoBlob) && <span className="tab-dot" />}
             </button>
             <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
-            <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Style")}</button>
+            <button role="tab" aria-selected={tab === "hook"} className={"tab" + (tab === "hook" ? " on" : "")} onClick={() => setTab("hook")}>{t("Hook")}</button>
+            <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Lyrics style")}</button>
           </div>
 
           {tab === "media" && (
@@ -1799,16 +1907,66 @@ export default function VideoStudio({
             </div>
           )}
 
+          {tab === "hook" && (
+            <div className="tab-body">
+              <p className="muted xs">{t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")}</p>
+              {hooks.map((h, i) => (
+                <div key={h.id} className="hook-item">
+                  <div className="row">
+                    <span className="label grow">{t("Hook {n}", { n: i + 1 })}</span>
+                    <button className="btn sm quiet" onClick={() => { stop(); setHead(round2(settings.crop.start + h.from)); }}>{t("Go to it")}</button>
+                    <button className="btn sm quiet danger" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))}>{t("Remove")}</button>
+                  </div>
+                  <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
+                    onChange={(e) => editHook(h.id, { text: e.target.value })} />
+                  <div className="row">
+                    <span className="nudge">
+                      <span className="muted xs">{t("From")}</span>
+                      <button className="btn sm quiet" aria-label={t("Earlier")} onClick={() => nudgeHook(h, "from", -0.1)}>−</button>
+                      <span className="mono xs">{(h.from).toFixed(1)} s</span>
+                      <button className="btn sm quiet" aria-label={t("Later")} onClick={() => nudgeHook(h, "from", 0.1)}>+</button>
+                    </span>
+                    <span className="nudge">
+                      <span className="muted xs">{t("To")}</span>
+                      <button className="btn sm quiet" aria-label={t("Shorter")} onClick={() => nudgeHook(h, "to", -0.1)}>−</button>
+                      <span className="mono xs">{(h.to ?? segLen).toFixed(1)} s</span>
+                      <button className="btn sm quiet" aria-label={t("Longer")} onClick={() => nudgeHook(h, "to", 0.1)}>+</button>
+                    </span>
+                    <label className="check">
+                      <input type="checkbox" checked={h.to === undefined}
+                        onChange={(e) => editHook(h.id, { to: e.target.checked ? undefined : round2(Math.min(segLen, h.from + 3)) })} />
+                      {t("Until the end")}
+                    </label>
+                  </div>
+                </div>
+              ))}
+              <div><button className="btn sm" onClick={addHook}><Icon name="plus" size={13} />{t("Add a hook")}</button></div>
+              {hooks.length > 0 && (
+                <>
+                  <StylePresets presets={presets} onSave={(name) => onSavePreset(name, hookStyle)}
+                    onApply={(p) => setV({ hookStyle: withPreset(hookStyle, p) })} onDelete={onDeletePreset} />
+                  <div className="stack">
+                    <span className="label">{t("Hook style")}</span>
+                    <p className="muted xs">{settings.hookStyle ? t("Own style for the hooks.") : t("Same look as the lyrics, at the top, until you change something.")}</p>
+                    <CaptionStyle
+                      style={hookStyle}
+                      fonts={fonts}
+                      onChange={(patch) => setV({ hookStyle: { ...hookStyle, ...patch } })}
+                      onFonts={onFonts}
+                      onReset={() => setV({ hookStyle: undefined })}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {tab === "style" && (
             <div className="tab-body">
               <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
                 onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
               <div className="stack">
                 <span className="label">{t("Display")}</span>
-                <label className="check">
-                  <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
-                  {t("Lyrics on the video")}
-                </label>
                 <div className="row">
                   <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
                   <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>

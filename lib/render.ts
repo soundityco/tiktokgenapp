@@ -114,6 +114,7 @@ function layout(ctx: CanvasRenderingContext2D, raw: string, st: TextStyle, W: nu
   let text = raw.replace(/\|/g, "\n");
   if (st.case === "upper") text = text.toUpperCase();
   if (st.case === "lower") text = text.toLowerCase();
+  if (st.case === "sentence") text = text.toLowerCase().replace(/(^|\n)(\P{L}*)(\p{L})/gu, (_, a, b, c) => a + b + c.toUpperCase());
   const maxW = (st.width / 100) * W;
   const maxH = H * 0.92;
   let size = st.size;
@@ -180,16 +181,18 @@ export function drawStyledText(
     const lx = st.align === "left" ? left : st.align === "right" ? left + bw - lw : cx - lw / 2;
     const ly = y + L.lh / 2;
     if (st.look === "box") {
-      const padX = L.size * 0.3, padY = L.size * 0.08;
+      const padX = L.size * (st.padX ?? 30) / 100, inset = L.size * 0.08 - L.size * (st.padY ?? 0) / 100;
       ctx.fillStyle = st.accent;
       ctx.beginPath();
-      ctx.roundRect(lx - padX, ly - L.lh / 2 + padY, lw + padX * 2, L.lh - padY * 2, L.size * 0.2);
+      ctx.roundRect(lx - padX, ly - L.lh / 2 + inset, lw + padX * 2, L.lh - inset * 2, L.size * 0.2);
       ctx.fill();
     }
     ctx.textAlign = "left";
-    if (st.look === "outline") {
+    // The stroke is centred on the edge of the letters and the fill covers its inner half: only the outside shows.
+    const stroke = st.stroke ?? 20;
+    if (st.look === "outline" && stroke > 0) {
       ctx.strokeStyle = st.accent;
-      ctx.lineWidth = Math.max(3, L.size * 0.2);
+      ctx.lineWidth = Math.max(2, L.size * stroke / 100);
       ctx.strokeText(line, lx, ly);
     }
     if (st.look === "shadow") {
@@ -226,6 +229,12 @@ export function renderSlide(
   const st = cfg.style;
   const box = drawStyledText(ctx, text, st, W, H);
 
+  drawHelpers(ctx, W, H, overlay);
+  return { box, w: W, h: H };
+}
+
+/** Editing aids, never exported: TikTok's interface zones (red) and the centre lines a dragged text snaps to (blue). */
+export function drawHelpers(ctx: CanvasRenderingContext2D, W: number, H: number, overlay: Overlay) {
   if (overlay.zones) {
     ctx.fillStyle = "rgba(207,31,57,.28)";
     ctx.fillRect(0, 0, W, H * 0.1); // top
@@ -234,13 +243,12 @@ export function renderSlide(
   }
   if (overlay.guideV || overlay.guideH) {
     ctx.strokeStyle = "rgba(80,140,255,.9)";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(2, W / 540);
     ctx.beginPath();
     if (overlay.guideV) { ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); }
     if (overlay.guideH) { ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); }
     ctx.stroke();
   }
-  return { box, w: W, h: H };
 }
 
 /** Make sure the bundled font is ready before the first render. */

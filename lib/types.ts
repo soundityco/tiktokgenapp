@@ -15,7 +15,14 @@ export interface TextStyle {
   /** Font file loaded by the user (see lib/fonts.ts). Overrides `font` when set. */
   customFont?: string;
   look: "outline" | "box" | "shadow" | "plain";
-  case: "asis" | "upper" | "lower";
+  /** "sentence": lower case with a capital at the start of each line. */
+  case: "asis" | "upper" | "lower" | "sentence";
+  /** Outline thickness, % of the text size (default 20). Drawn outside the letters. */
+  stroke?: number;
+  /** Box mode: padding left and right of the text, % of the text size (default 30). */
+  padX?: number;
+  /** Box mode: extra padding above and below the text, % of the text size (default 0). */
+  padY?: number;
   size: number; // px at 1080 wide
   width: number; // % of canvas width
   lineHeight: number; // multiplier
@@ -137,6 +144,15 @@ export interface VideoTake {
   musicEnd: number;
 }
 
+/** A title shown over the video (the hook). Times in seconds from the start of the segment. */
+export interface VideoHook {
+  id: string;
+  text: string;
+  from: number;
+  /** Leaves the screen at this time; none = until the end of the segment. */
+  to?: number;
+}
+
 export interface VideoSettings {
   audioName?: string;
   videoName?: string;
@@ -165,6 +181,12 @@ export interface VideoSettings {
   lineChars?: number;
   /** Own text style for the captions; falls back to the selected carousel slide's style. */
   captionStyle?: TextStyle;
+  /** Titles over the video, one after the other or all along. */
+  hooks?: VideoHook[];
+  /** Show the hooks on the video (default yes). */
+  showHooks?: boolean;
+  /** Text style of the hooks; falls back to the caption style, placed at the top. */
+  hookStyle?: TextStyle;
   frame: VideoFrame;
 }
 

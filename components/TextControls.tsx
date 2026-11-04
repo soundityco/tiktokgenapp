@@ -5,6 +5,7 @@ import { useT } from "@/lib/i18n";
 import { addFont, removeFont } from "@/lib/fonts";
 import type { FontId, StylePreset, TextStyle } from "@/lib/types";
 import Icon from "./Icon";
+import { Range } from "./ui";
 
 /** Font select with the bundled fonts and the ones loaded by the user (shared by both studios). */
 export function FontPicker({
@@ -114,4 +115,32 @@ export function StylePresets({
 }
 
 /** Apply a preset on a style without moving the text. */
+/** Settings of the chosen look: outline thickness, or the padding of the box. */
+export function LookExtras({ style, onChange }: { style: TextStyle; onChange: (patch: Partial<TextStyle>) => void }) {
+  const { t } = useT();
+  if (style.look === "outline") {
+    const v = style.stroke ?? 20;
+    return <Range label={t("Outline thickness")} value={v} display={`${v}%`} min={0} max={50} onChange={(n) => onChange({ stroke: n })} onReset={() => onChange({ stroke: undefined })} />;
+  }
+  if (style.look !== "box") return null;
+  const x = style.padX ?? 30, y = style.padY ?? 0;
+  return (
+    <div className="cols2">
+      <Range label={t("Box padding, sides")} value={x} display={`${x}%`} min={0} max={120} onChange={(n) => onChange({ padX: n })} onReset={() => onChange({ padX: undefined })} />
+      <Range label={t("Box padding, height")} value={y} display={`${y}%`} min={0} max={60} onChange={(n) => onChange({ padY: n })} onReset={() => onChange({ padY: undefined })} />
+    </div>
+  );
+}
+
+/** The case options, shared by the carousel and the video. */
+export function CaseOptions() {
+  const { t } = useT();
+  return (
+    <>
+      <option value="asis">{t("As typed")}</option><option value="upper">{t("UPPERCASE")}</option>
+      <option value="lower">{t("lowercase")}</option><option value="sentence">{t("First letter capital")}</option>
+    </>
+  );
+}
+
 export const withPreset = (cur: TextStyle, p: StylePreset): TextStyle => ({ ...p.style, x: cur.x, y: cur.y });

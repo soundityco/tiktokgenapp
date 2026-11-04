@@ -3,7 +3,7 @@ import { defaultPic, defaultStyle } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
 import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
-import { FontPicker, StylePresets } from "./TextControls";
+import { CaseOptions, FontPicker, LookExtras, StylePresets } from "./TextControls";
 import { Range, Section } from "./ui";
 
 interface Props {
@@ -78,10 +78,11 @@ export default function Inspector({
             <label className="field">{t("Text color")}<input type="color" value={st.color} onChange={(e) => setS({ color: e.target.value })} /></label>
             <label className="field">{st.look === "box" ? t("Box color") : t("Outline color")}<input type="color" value={st.accent} onChange={(e) => setS({ accent: e.target.value })} /></label>
           </div>
+          <LookExtras style={st} onChange={setS} />
           <div className="cols2">
             <label className="field">{t("Case")}
               <select className="input" value={st.case} onChange={(e) => setS({ case: e.target.value as TextStyle["case"] })}>
-                <option value="asis">{t("As typed")}</option><option value="upper">{t("UPPERCASE")}</option><option value="lower">{t("lowercase")}</option>
+                <CaseOptions />
               </select>
             </label>
             <label className="field">{t("Align")}
