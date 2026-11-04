@@ -3,16 +3,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { delMedia, getMedia, putMedia } from "@/lib/idb";
-import { activeCue, alignLyrics, buildCues, cleanHeard } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, parseLyrics } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify } from "@/lib/notify";
-import { drawStyledText } from "@/lib/render";
+import { clampPic, drawFramed, drawStyledText, TextBox, zoomPic } from "@/lib/render";
+import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import type { LyricWord, Project, StylePreset, TextStyle, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
+import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFrame, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
 import { StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
-import { Range, Section } from "./ui";
+import { Modal, Range, Section } from "./ui";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -32,6 +33,11 @@ function clipsOf(p: Project): VideoSetup[] {
 }
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** Export size for each shape of video. */
+const OUT_SIZE = (f?: VideoSettings["format"]): [number, number] => (f === "16:9" ? [1920, 1080] : [1080, 1920]);
+const EXPORT_FPS = 30;
+/** The video frame settings in the carousel's photo terms, so both are drawn by the same code. */
+const picOf = (f: VideoFrame): PicSettings => ({ framing: f.framing ?? "fill", bars: f.bars ?? "blur", zoom: f.zoom, ox: f.ox, oy: f.oy, darken: 0 });
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function saveBlob(blob: Blob, name: string) {
@@ -212,6 +218,9 @@ export default function VideoStudio({
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncPct, setSyncPct] = useState(0);
   const [exporting, setExporting] = useState(false);
+  /** Export window: progress 0-1 and current step ("record" = realtime fallback). */
+  const [exp, setExp] = useState<null | { p: number; step: ExportStep | "record"; done?: boolean; file?: string }>(null);
+  const exportRef = useRef<AbortController | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState(project.lyricsSectionId ?? project.lyrics[0]?.id ?? "");
@@ -222,7 +231,16 @@ export default function VideoStudio({
   const [genInfo, setGenInfo] = useState<string | null>(null);
   const [model, setModel] = useState<AsrModel>("base");
   const [language, setLanguage] = useState(lang === "fr" ? "french" : "auto");
-  const [useWritten, setUseWritten] = useState(true);
+  /**
+   * Written lyrics the heard words are placed on: "song" (the lyrics pasted in the video studio),
+   * "all" (every section of the carousel lyrics), a section id, or "none".
+   */
+  const [writtenSrc, setWrittenSrc] = useState(project.songLyrics?.trim() || !project.lyrics.length ? "song" : "all");
+  const [paste, setPaste] = useState(project.songLyrics ?? "");
+  const pasted = useMemo(() => {
+    const r = parseLyrics(paste);
+    return { parts: r.parts, lines: r.text ? r.text.split("\n").length : 0 };
+  }, [paste]);
   const genRef = useRef<AbortController | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -290,29 +308,25 @@ export default function VideoStudio({
 
   const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
 
-  const drawAt = useCallback((time: number) => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const g = c.getContext("2d");
-    if (!g) return;
-    const W = c.width, H = c.height;
+  /** The picture of the post at official time `time`: the framed camera video, then the lyrics. Used by the preview and the export. */
+  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, el: HTMLVideoElement | null, time: number): TextBox | null => {
     const cfg = settingsRef.current;
-    const frame = cfg.frame ?? DEFAULT_VIDEO.frame;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
-    const el = videoRef.current;
     // Outside the part of the track the camera recorded, there is no picture: black.
     const inVideo = time >= cfg.offset - 0.001 && (!Number.isFinite(el?.duration) || time <= cfg.offset + (el?.duration ?? 0) + 0.001);
-    if (el && el.videoWidth && inVideo) {
-      const s = Math.max(W / el.videoWidth, H / el.videoHeight) * frame.zoom;
-      const dw = el.videoWidth * s, dh = el.videoHeight * s;
-      g.drawImage(el, (W - dw) / 2 + frame.ox * W, (H - dh) / 2 + frame.oy * H, dw, dh);
-    }
-    if (cfg.captions) {
-      const text = activeRef.current(time);
-      if (text) drawStyledText(g, text, styleRef.current, W, H);
-    }
+    if (el && el.videoWidth && inVideo) drawFramed(g, el, el.videoWidth, el.videoHeight, picOf(cfg.frame ?? DEFAULT_VIDEO.frame), W, H);
+    if (!cfg.captions) return null;
+    const text = activeRef.current(time);
+    return text ? drawStyledText(g, text, styleRef.current, W, H) : null;
   }, []);
+  const captionBox = useRef<TextBox | null>(null);
+  const drawAt = useCallback((time: number) => {
+    const c = canvasRef.current;
+    const g = c?.getContext("2d");
+    if (!c || !g) return;
+    captionBox.current = drawScene(g, c.width, c.height, videoRef.current, time);
+  }, [drawScene]);
 
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -394,7 +408,7 @@ export default function VideoStudio({
     setAudioBlob(f);
     setAudioBuf(null);
     setPeaks([]);
-    setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
+    setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     try { await putMedia(`audio:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
     try {
@@ -420,7 +434,7 @@ export default function VideoStudio({
     setErr(null);
     setVideoBlob(f);
     setVideoDur(0);
-    setV({ videoName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
+    setV({ videoName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
     try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
@@ -433,7 +447,7 @@ export default function VideoStudio({
     setAudioBlob(null);
     setAudioBuf(null);
     setPeaks([]);
-    setV({ audioName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
+    setV({ audioName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
     await delMedia(`audio:${clip.id}`);
     onSaveNow();
@@ -444,7 +458,7 @@ export default function VideoStudio({
     stop();
     setVideoBlob(null);
     setVideoDur(0);
-    setV({ videoName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
+    setV({ videoName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
     await delMedia(`video:${clip.id}`);
     onSaveNow();
@@ -477,6 +491,7 @@ export default function VideoStudio({
           musicEnd: undefined,
           anchors: undefined,
           takes: undefined,
+          linked: false,
         },
       ],
       videoId: id,
@@ -594,10 +609,18 @@ export default function VideoStudio({
         outcome = { title: t("Sync failed"), body: t("No match found in the official audio. Check it is the right track, or sync by ear.") };
       } else {
         const takes = r.takes.map((k) => ({ offset: round2(k.offset), musicStart: round2(k.musicStart), musicEnd: round2(k.musicEnd) }));
-        setV({ score: round2(r.score), anchors: r.anchors, takes: takes.length > 1 ? takes : undefined });
+        const kept = takes.length > 1 ? takes : undefined;
+        setV({ score: round2(r.score), anchors: r.anchors, takes: kept });
         const used = takes.find((k) => Math.abs(k.offset - r.offset) < 0.02);
-        if (used) applyTake(used);
-        else setV({ offset: round2(r.offset), musicStart: r.musicStart === null ? undefined : round2(r.musicStart), musicEnd: r.musicEnd === null ? undefined : round2(r.musicEnd) });
+        if (used) applyTake(used, kept);
+        else {
+          // No clear take: link on the whole video.
+          const cur = settingsRef.current;
+          const range = linkRangeOf({ ...cur, offset: round2(r.offset), takes: undefined });
+          const crop = range ? fitCrop(cur.crop.start, cur.crop.duration, range) : cur.crop;
+          setV({ offset: round2(r.offset), musicStart: r.musicStart === null ? undefined : round2(r.musicStart), musicEnd: r.musicEnd === null ? undefined : round2(r.musicEnd), linked: true, crop });
+          setHead(crop.start);
+        }
         setNote(takes.length > 1
           ? t("{n} takes found in the video", { n: takes.length }) + " · " + t("Sync quality {n}%", { n: Math.round(r.score * 100) })
           : t("Sync quality {n}%", { n: Math.round(r.score * 100) }));
@@ -623,37 +646,53 @@ export default function VideoStudio({
     setSyncPct(0);
   };
 
-  /**
-   * Use one take of the video. If the segment of the post is not filmed in it, the segment
-   * moves to the start of the take (same length), so the preview shows that take at once.
-   */
-  const applyTake = (k: VideoTake) => {
+  // ---- audio ↔ video link ----
+  /** Where the segment may sit while linked: the synced take when the video holds several, else the whole video. */
+  const linkRangeOf = (v: Pick<VideoSettings, "offset" | "musicStart" | "musicEnd" | "takes">): [number, number] | null => {
+    if (!audioBuf || !videoBlob || videoDur <= 0) return null;
+    const multi = (v.takes?.length ?? 0) > 1 && v.musicStart != null && v.musicEnd != null;
+    const lo = Math.max(0, v.offset + (multi ? v.musicStart! : 0));
+    const hi = Math.min(audioBuf.duration, v.offset + (multi ? v.musicEnd! : videoDur));
+    return hi - lo >= 1 ? [lo, hi] : null;
+  };
+  /** Limits of the segment: the linked range, else the whole official track. */
+  const boundsOf = (v: VideoSettings): [number, number] =>
+    (v.linked && linkRangeOf(v)) || [0, audioBuf?.duration ?? v.crop.start + v.crop.duration];
+  const fitCrop = (start: number, duration: number, [lo, hi]: [number, number]) => {
+    const d = clamp(duration, 1, Math.max(1, hi - lo));
+    return { start: round2(clamp(start, lo, Math.max(lo, hi - d))), duration: round2(d) };
+  };
+
+  /** Use one take of the video: audio and video get linked on it, and the segment moves inside it if needed. */
+  const applyTake = (k: VideoTake, takes = settingsRef.current.takes) => {
     const cur = settingsRef.current;
-    const from = k.offset + k.musicStart, to = k.offset + k.musicEnd;
-    const covered = Math.min(to, cur.crop.start + cur.crop.duration) - Math.max(from, cur.crop.start);
-    const patch: Partial<VideoSettings> = { offset: k.offset, musicStart: k.musicStart, musicEnd: k.musicEnd };
-    if (covered < Math.min(2, cur.crop.duration / 2)) {
-      const total = audioBuf?.duration ?? Infinity;
-      const start = round2(Math.max(0, Math.min(from, total - cur.crop.duration)));
-      patch.crop = { ...cur.crop, start };
-      setHead(start);
-    }
-    setV(patch);
+    const range = linkRangeOf({ offset: k.offset, musicStart: k.musicStart, musicEnd: k.musicEnd, takes });
+    const crop = range ? fitCrop(cur.crop.start, cur.crop.duration, range) : cur.crop;
+    setV({ offset: k.offset, musicStart: k.musicStart, musicEnd: k.musicEnd, linked: true, crop });
+    if (crop.start !== cur.crop.start) setHead(crop.start);
     onSaveNow();
   };
+
+  const toggleLink = () => {
+    const cur = settingsRef.current;
+    if (cur.linked) { setV({ linked: false }); return; }
+    const range = linkRangeOf(cur);
+    const crop = range ? fitCrop(cur.crop.start, cur.crop.duration, range) : cur.crop;
+    setV({ linked: true, crop });
+    setHead(crop.start);
+  };
+  const linked = !!settings.linked && !!linkRangeOf(settings);
 
   // ---- crop ----
   const setCropStart = (v: number) => {
     const cfg = settingsRef.current;
-    const start = clamp(v, 0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - cfg.crop.duration));
-    setV({ crop: { ...cfg.crop, start: round2(start) } });
-    setHead(round2(start));
+    const crop = fitCrop(v, cfg.crop.duration, boundsOf(cfg));
+    setV({ crop });
+    setHead(crop.start);
   };
   const setCropDuration = (v: number) => {
     const cfg = settingsRef.current;
-    const duration = clamp(v, 1, Math.max(1, audioBuf?.duration ?? v));
-    const start = clamp(cfg.crop.start, 0, Math.max(0, (audioBuf?.duration ?? duration) - duration));
-    setV({ crop: { start: round2(start), duration: round2(duration) } });
+    setV({ crop: fitCrop(cfg.crop.start, v, boundsOf(cfg)) });
   };
 
   const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset"; x: number; start: number; duration: number }>(null);
@@ -669,7 +708,7 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     // Top strip of the blue "video available" band: slide it to move the sync by hand.
     const rect = e.currentTarget.getBoundingClientRect();
-    if (videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2) {
+    if (!cfg.linked && videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2) {
       const o0 = cfg.offset / audioBuf.duration, o1 = (cfg.offset + videoDur) / audioBuf.duration;
       if (f >= o0 && f <= o1) {
         dragWave.current = { mode: "offset", x: f, start: cfg.offset, duration: 0 };
@@ -682,10 +721,10 @@ export default function VideoStudio({
     else if (Math.abs(f - x1) < 0.02) dragWave.current = { mode: "end", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
     else if (f > x0 && f < x1) dragWave.current = { mode: "move", x: f, start: cfg.crop.start, duration: cfg.crop.duration };
     else {
-      const start = clamp(f * audioBuf.duration, 0, Math.max(0, audioBuf.duration - cfg.crop.duration));
-      setV({ crop: { start: round2(start), duration: cfg.crop.duration } });
-      setHead(round2(start));
-      dragWave.current = { mode: "move", x: f, start, duration: cfg.crop.duration };
+      const crop = fitCrop(f * audioBuf.duration, cfg.crop.duration, boundsOf(cfg));
+      setV({ crop });
+      setHead(crop.start);
+      dragWave.current = { mode: "move", x: f, start: crop.start, duration: crop.duration };
     }
   };
   const waveMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -693,21 +732,19 @@ export default function VideoStudio({
     if (!d || !audioBuf) return;
     const f = wavePos(e);
     const delta = (f - d.x) * audioBuf.duration;
+    const bounds = boundsOf(settingsRef.current);
     // The preview follows the edge being dragged: the picture shown is the one under that edge.
     if (d.mode === "offset") {
-      setV({ offset: round2(clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - 1))) });
-    } else if (d.mode === "start") {
-      const start = clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - d.duration));
-      setV({ crop: { start: round2(start), duration: d.duration } });
-      setHead(round2(start));
+      // The video may start before the song (negative offset) or end after it.
+      setV({ offset: round2(clamp(d.start + delta, 1 - videoDur, Math.max(0, audioBuf.duration - 1))) });
     } else if (d.mode === "end") {
-      const duration = clamp(d.duration + delta, 1, Math.max(1, audioBuf.duration - d.start));
+      const duration = clamp(d.duration + delta, 1, Math.max(1, bounds[1] - d.start));
       setV({ crop: { start: d.start, duration: round2(duration) } });
       setHead(round2(Math.max(d.start, d.start + duration - 0.1)));
     } else {
-      const start = clamp(d.start + delta, 0, Math.max(0, audioBuf.duration - d.duration));
-      setV({ crop: { start: round2(start), duration: d.duration } });
-      setHead(round2(start));
+      const crop = fitCrop(d.start + delta, d.duration, bounds);
+      setV({ crop });
+      setHead(crop.start);
     }
   };
   const waveUp = () => { dragWave.current = null; };
@@ -745,6 +782,13 @@ export default function VideoStudio({
       const h = Math.max(1, v * (H - 14));
       g.fillRect(i * bw, (H - h) / 2, Math.max(1, bw - 0.6), h);
     });
+    // Linked: what lies outside the synced video is out of reach for the segment.
+    const range = settings.linked ? linkRangeOf(settings) : null;
+    if (range) {
+      g.fillStyle = "rgba(10,10,14,.62)";
+      g.fillRect(0, 0, (range[0] / dur) * W, H);
+      g.fillRect((range[1] / dur) * W, 0, W - (range[1] / dur) * W, H);
+    }
     g.fillStyle = "#f03a56";
     g.fillRect(x0 - 1, 0, 3, H);
     g.fillRect(x1 - 2, 0, 3, H);
@@ -758,7 +802,7 @@ export default function VideoStudio({
         g.fillText("VIDEO", v0 + 6, 12);
       }
     }
-  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, head, audioBuf, videoBlob, videoDur]);
+  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur]);
 
   // ---- lyrics timing ----
   const saveTimes = (id: string, times: (number | null)[]) =>
@@ -791,12 +835,63 @@ export default function VideoStudio({
   };
 
   // ---- lyrics from the official audio ----
+  const writtenOf = (src: string, p: Project) =>
+    parseLyrics(src === "none" ? "" : src === "song" ? p.songLyrics ?? ""
+      : src === "all" ? p.lyrics.map((l) => l.text).join("\n") : p.lyrics.find((l) => l.id === src)?.text ?? "").text;
+
+  /**
+   * Put the written lyrics on the heard words: the text shown is exactly the written one, the speech
+   * model only says when each word is sung. The whole song is placed on the whole track; one section
+   * only on the post's segment.
+   */
+  const placeWords = (heard: LyricWord[], src: string, p: Project, segFrom: number, segTo: number): { words: LyricWord[]; info: string } => {
+    const written = writtenOf(src, p);
+    if (!written.trim()) return { words: heard, info: t("{n} words heard", { n: heard.length }) };
+    const miss = { words: heard, info: t("Your written lyrics do not match what was heard: the words are shown as heard.") };
+    if (src === "song" || src === "all") {
+      const aligned = alignSong(written, heard);
+      return aligned
+        ? { words: aligned.words, info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
+        : miss;
+    }
+    const inSeg = heard.filter((x) => x.e > segFrom && x.s < segTo);
+    const aligned = inSeg.length ? alignLyrics(written, inSeg) : null;
+    if (!aligned) return miss;
+    return {
+      words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...aligned.words].sort((x, y) => x.s - y.s),
+      info: t("{n} words heard, the segment placed on your written lyrics", { n: heard.length }),
+    };
+  };
+
+  /** Place the written lyrics again on the words already heard: instant, no new analysis. */
+  const resyncLyrics = (src = writtenSrc, p = project) => {
+    const heard = p.heardWords;
+    if (!heard?.length) { void generateLyrics(); return; }
+    const cfg = settingsRef.current;
+    const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
+    onProject((x) => ({ ...x, lyricWords: r.words }));
+    setGenInfo(r.info);
+    if (!cfg.captions) setV({ captions: true });
+    onSaveNow();
+  };
+
+  /** Lyrics pasted in the video studio: kept on the project, then synced on the audio. */
+  const applyPasted = () => {
+    const text = paste.trim();
+    if (!text) return;
+    const next: Project = { ...project, songLyrics: text };
+    onProject((p) => ({ ...p, songLyrics: text }));
+    setWrittenSrc("song");
+    if (next.heardWords?.length) resyncLyrics("song", next);
+    else if (audioBuf && !genBusy) void generateLyrics(audioBuf, next, "song");
+  };
+
   /**
    * Hear the whole track, window by window (the speech engine reports no progress inside one window):
    * the windows of the post's segment go first, and the words show up as each window is done.
    * Runs by itself when the official audio is imported.
    */
-  const generateLyrics = async (buf: AudioBuffer | null = audioBuf) => {
+  const generateLyrics = async (buf: AudioBuffer | null = audioBuf, proj: Project = project, src = writtenSrc) => {
     if (!buf) return;
     genRef.current?.abort();
     const ac = new AbortController();
@@ -839,21 +934,9 @@ export default function VideoStudio({
         setErr(msg);
         outcome = { title: t("Lyrics not found"), body: msg };
       } else {
-        let words = heard;
-        let info = t("{n} words heard", { n: heard.length });
-        const written = useWritten ? section?.text ?? "" : "";
-        const inSeg = heard.filter((x) => x.e > segFrom && x.s < segTo);
-        if (written.trim() && inSeg.length) {
-          // The written lyrics are those of the post's segment: only its words are corrected.
-          const aligned = alignLyrics(written, inSeg);
-          if (aligned) {
-            words = [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...aligned.words].sort((x, y) => x.s - y.s);
-            info = t("{n} words heard, the segment placed on your written lyrics", { n: heard.length });
-          } else {
-            info = t("Your written lyrics do not match what was heard: the words are shown as heard.");
-          }
-        }
-        onProject((p) => ({ ...p, lyricWords: words }));
+        const { words, info } = placeWords(heard, src, proj, segFrom, segTo);
+        // The heard words are kept: editing the written lyrics re-places them without a new analysis.
+        onProject((p) => ({ ...p, heardWords: heard, lyricWords: words }));
         setGenInfo(info);
         outcome = { title: t("Lyrics ready"), body: info };
         onSaveNow();
@@ -885,69 +968,185 @@ export default function VideoStudio({
   };
 
   // ---- export ----
+  /** Last resort when the browser cannot encode MP4 itself: record a hidden playback in real time. */
+  const recordRealtime = async (el: HTMLVideoElement, W: number, H: number, from: number, until: number, signal: AbortSignal) => {
+    const buf = audioBuf!;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const g = canvas.getContext("2d")!;
+    const ctx = getCtx();
+    await ctx.resume();
+    const dest = ctx.createMediaStreamDestination(); // not connected to the speakers: the export is silent
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(dest);
+    const mime = ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
+      .find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
+    const rec = new MediaRecorder(new MediaStream([...canvas.captureStream(EXPORT_FPS).getVideoTracks(), ...dest.stream.getAudioTracks()]),
+      mime ? { mimeType: mime, videoBitsPerSecond: 10_000_000 } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    const type = mime.startsWith("video/mp4") ? "video/mp4" : "video/webm";
+    const finished = new Promise<Blob>((resolve) => { rec.onstop = () => resolve(new Blob(chunks, { type })); });
+    const offset = settingsRef.current.offset;
+    await seekVideo(el, Math.max(0, from - offset));
+    rec.start(250);
+    const origin = ctx.currentTime;
+    src.start(0, from, until - from);
+    void el.play().catch(() => {});
+    await new Promise<void>((resolve) => {
+      const tick = () => {
+        const now = from + (ctx.currentTime - origin);
+        if (now >= until || signal.aborted) { drawScene(g, W, H, el, Math.min(now, until)); resolve(); return; }
+        const target = Math.max(0, now - offset);
+        if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+        drawScene(g, W, H, el, now);
+        setExp({ p: (now - from) / (until - from), step: "record" });
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    rec.stop();
+    try { src.stop(); } catch { /* already ended */ }
+    el.pause();
+    if (signal.aborted) throw new DOMException("aborted", "AbortError");
+    return { blob: await finished, ext: type === "video/mp4" ? "mp4" : "webm" };
+  };
+
+  /**
+   * Export the segment as an MP4 (H.264 + AAC, 1080×1920 or 1920×1080). The frames are drawn and
+   * encoded one by one on a hidden copy of the video: nothing plays on screen, a window shows the progress.
+   */
   const exportVideo = async () => {
-    const canvas = canvasRef.current;
-    if (!audioBuf || !canvas || !videoBlob) return;
-    if (typeof MediaRecorder === "undefined" || !canvas.captureStream) {
-      setErr(t("Video export failed"));
+    if (!audioBuf || !videoUrl) return;
+    stop();
+    const cfg = settingsRef.current;
+    const from = cfg.crop.start;
+    const until = Math.min(audioBuf.duration, from + cfg.crop.duration);
+    if (until - from < 0.5) { setErr(t("Video export failed")); return; }
+    void askNotifyPermission();
+    const ac = new AbortController();
+    exportRef.current = ac;
+    setErr(null); setNote(null); setExporting(true); setExp({ p: 0, step: "audio" });
+    const [W, H] = OUT_SIZE(cfg.format);
+    const name = `${project.name || "TkTgen"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
+    const el = document.createElement("video");
+    el.src = videoUrl;
+    el.muted = true;
+    el.playsInline = true;
+    el.preload = "auto";
+    try {
+      await whenReady(el);
+      let blob: Blob, ext = "mp4";
+      if (await mp4Support(W, H, audioBuf.sampleRate, Math.min(2, audioBuf.numberOfChannels))) {
+        blob = await exportMp4({
+          width: W, height: H, fps: EXPORT_FPS, from, until, audio: audioBuf, signal: ac.signal,
+          onProgress: (p, step) => setExp({ p, step }),
+          frame: async (g, time) => {
+            const target = time - cfg.offset;
+            if (target >= 0 && target <= el.duration) await seekVideo(el, target);
+            drawScene(g, W, H, el, time);
+          },
+        });
+      } else {
+        ({ blob, ext } = await recordRealtime(el, W, H, from, until, ac.signal));
+      }
+      const file = `${name} clip.${ext}`;
+      saveBlob(blob, file);
+      setExp({ p: 1, step: "finish", done: true, file });
+      notify(t("Video exported"), t("{name} is in your downloads.", { name: file }));
+    } catch (e) {
+      const cancelled = ac.signal.aborted || (e instanceof DOMException && e.name === "AbortError");
+      setExp(null);
+      if (!cancelled) {
+        console.error("video export failed", e);
+        setErr(t("Video export failed"));
+        notify(t("Video export failed"), t("The export stopped before the end. Try again."));
+      }
+    } finally {
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
+      if (exportRef.current === ac) exportRef.current = null;
+      setExporting(false);
+    }
+  };
+  const closeExport = () => {
+    exportRef.current?.abort();
+    setExp(null);
+  };
+
+  // ---- framing on the preview: drag the video or the lyrics, wheel to zoom / resize, double-click to reset ----
+  const frame = settings.frame ?? DEFAULT_VIDEO.frame;
+  const setFrame = (patch: Partial<VideoFrame>) => setV({ frame: { ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ...patch } });
+  /** Offsets kept in bounds, as for the carousel photos (a drag reacts at once in the other direction). */
+  const fitFrame = (f: VideoFrame): VideoFrame => {
+    const el = videoRef.current, c = canvasRef.current;
+    if (!el?.videoWidth || !c) return f;
+    const p = clampPic(picOf(f), el.videoWidth, el.videoHeight, c.width, c.height);
+    return { ...f, ox: p.ox, oy: p.oy };
+  };
+  const pdrag = useRef<null | { kind: "text" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number }>(null);
+  const toCv = (e: { clientX: number; clientY: number }) => {
+    const c = canvasRef.current!;
+    const r = c.getBoundingClientRect();
+    const k = c.width / r.width;
+    return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k, k };
+  };
+  const inCaption = (x: number, y: number) => {
+    const b = captionBox.current;
+    const pad = 30;
+    return !!b && x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad;
+  };
+  const cvDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!videoBlob) return;
+    const c = toCv(e);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const isText = inCaption(c.x, c.y);
+    const f = fitFrame(settingsRef.current.frame ?? DEFAULT_VIDEO.frame);
+    const st = styleRef.current;
+    pdrag.current = { kind: isText ? "text" : "pic", sx: e.clientX, sy: e.clientY, ox: isText ? st.x : f.ox, oy: isText ? st.y : f.oy, k: c.k };
+  };
+  const cvMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = pdrag.current, c = canvasRef.current;
+    if (!d || !c) return;
+    const dx = (e.clientX - d.sx) * d.k, dy = (e.clientY - d.sy) * d.k;
+    if (d.kind === "text") {
+      let x = clamp(d.ox + (dx / c.width) * 100, 0, 100), y = clamp(d.oy + (dy / c.height) * 100, 0, 100);
+      if (Math.abs(x - 50) < 1.5) x = 50; // snaps to the centre
+      setV({ captionStyle: { ...styleRef.current, x, y } });
+    } else {
+      setV({ frame: fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: d.ox + dx / c.width, oy: d.oy + dy / c.height }) });
+    }
+  };
+  const cvUp = () => { pdrag.current = null; };
+  const wheelRef = useRef<(e: WheelEvent) => void>(() => {});
+  wheelRef.current = (e) => {
+    if (!videoBlob) return;
+    e.preventDefault();
+    const c = toCv(e);
+    const dir = e.deltaY < 0 ? 1 : -1;
+    if (inCaption(c.x, c.y)) {
+      const st = styleRef.current;
+      setV({ captionStyle: { ...st, size: clamp(Math.round(st.size + dir * 3), 18, 200) } });
       return;
     }
-    stop();
-    setErr(null); setNote(null); setExporting(true);
-    try {
-      const ctx = getCtx();
-      await ctx.resume();
-      const cfg = settingsRef.current;
-      const from = cfg.crop.start;
-      const until = Math.min(audioBuf.duration, from + cfg.crop.duration);
-      if (until - from < 0.5) throw new Error("short");
-      const stream = canvas.captureStream(30);
-      const dest = ctx.createMediaStreamDestination();
-      const src = ctx.createBufferSource();
-      src.buffer = audioBuf;
-      src.connect(dest);
-      const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-      const rec = new MediaRecorder(new MediaStream([...stream.getVideoTracks(), ...dest.stream.getAudioTracks()]),
-        mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined);
-      const chunks: Blob[] = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      const finished = new Promise<Blob>((resolve) => { rec.onstop = () => resolve(new Blob(chunks, { type: "video/webm" })); });
-      const el = videoRef.current;
-      if (el) {
-        el.muted = true;
-        await whenReady(el);
-        el.currentTime = Math.max(0, from - cfg.offset);
-      }
-      rec.start(250);
-      originRef.current = ctx.currentTime;
-      src.start(0, from, until - from);
-      if (el) void el.play().catch(() => {});
-      await new Promise<void>((resolve) => {
-        const tick = () => {
-          const now = from + (ctx.currentTime - originRef.current);
-          if (now >= until) { drawAt(until); resolve(); return; }
-          if (el) {
-            const target = Math.max(0, now - settingsRef.current.offset);
-            if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
-          }
-          drawAt(now);
-          rafRef.current = requestAnimationFrame(tick);
-        };
-        rafRef.current = requestAnimationFrame(tick);
-      });
-      rec.stop();
-      try { src.stop(); } catch { /* already ended */ }
-      el?.pause();
-      setPlaying(false);
-      const blob = await finished;
-      const name = `${project.name || "TkTgen"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
-      saveBlob(blob, `${name} clip.webm`);
-      setNote(t("Video exported"));
-    } catch {
-      setErr(t("Video export failed"));
-    }
-    setExporting(false);
+    const f = fitFrame(settingsRef.current.frame ?? DEFAULT_VIDEO.frame);
+    const z = zoomPic(picOf(f), clamp(+(f.zoom + dir * 0.05).toFixed(2), 0.5, 4));
+    setV({ frame: fitFrame({ ...f, zoom: z.zoom, ox: z.ox, oy: z.oy }) });
   };
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const h = (e: WheelEvent) => wheelRef.current(e);
+    el.addEventListener("wheel", h, { passive: false });
+    return () => el.removeEventListener("wheel", h);
+  }, []);
+  const cvDouble = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const c = toCv(e);
+    if (!inCaption(c.x, c.y)) setFrame({ zoom: 1, ox: 0, oy: 0 });
+  };
+  const [outW, outH] = OUT_SIZE(settings.format);
 
   return (
     <div className="video-page">
@@ -970,7 +1169,10 @@ export default function VideoStudio({
       </div>
       <div className="video-grid">
         <div className="stack">
-          <div className="cv-wrap"><canvas ref={canvasRef} className="cv" width={1080} height={1920} /></div>
+          <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")}>
+            <canvas ref={canvasRef} className="cv" width={outW} height={outH}
+              onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
+          </div>
           <div className="row">
             <button className="btn icon" aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause") : t("Play")}
               onClick={() => (playing ? stop() : void play())} disabled={!audioBuf}>
@@ -1001,7 +1203,17 @@ export default function VideoStudio({
               <>
                 <canvas ref={waveRef} className="wave" width={900} height={90}
                   onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={waveUp} />
-                <p className="muted xs">{t("Drag the edges to trim, the middle to move the segment. Drag the top of the blue band to move the sync.")}</p>
+                <p className="muted xs">{linked
+                  ? t("Drag the edges to trim, the middle to move the segment. Linked: the sync stays and the segment stays inside the video.")
+                  : t("Drag the edges to trim, the middle to move the segment. Drag the top of the blue band to move the sync.")}</p>
+                {videoBlob && videoDur > 0 && (
+                  <div className="row">
+                    <button className={"btn sm" + (linked ? " primary" : "")} aria-pressed={linked} onClick={toggleLink}
+                      title={linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment")}>
+                      <Icon name={linked ? "lock" : "unlock"} size={13} />{linked ? t("Audio and video linked") : t("Link audio and video")}
+                    </button>
+                  </div>
+                )}
                 <div className="row">
                   {PRESETS.map((d) => (
                     <button key={d} className={"btn sm" + (Math.abs(settings.crop.duration - d) < 0.01 ? " primary" : "")}
@@ -1040,6 +1252,32 @@ export default function VideoStudio({
             )}
           </Section>
 
+          <Section title={t("Format & framing")}>
+            <div className="row">
+              <button className={"btn sm" + (settings.format !== "16:9" ? " primary" : "")} aria-pressed={settings.format !== "16:9"}
+                onClick={() => setV({ format: "9:16" })}>{t("Vertical 9:16")}</button>
+              <button className={"btn sm" + (settings.format === "16:9" ? " primary" : "")} aria-pressed={settings.format === "16:9"}
+                onClick={() => setV({ format: "16:9" })}>{t("Horizontal 16:9")}</button>
+              <span className="mono xs muted">{outW}×{outH}</span>
+            </div>
+            <label className="field">{t("Framing")}
+              <select className="input" value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFrame(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
+                }}>
+                <option value="fill">{t("Fill (crop)")}</option>
+                <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
+                <option value="fit-black">{t("Fit whole, black bars")}</option>
+              </select>
+            </label>
+            <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
+              onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
+              onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
+            <div><button className="btn sm" onClick={() => setFrame({ zoom: 1, ox: 0, oy: 0 })}>{t("Reset framing")}</button></div>
+            <p className="muted xs">{t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}</p>
+          </Section>
+
           <Section title={t("Sync with the official audio")}>
             <div className="row">
               <button className="btn sm primary" onClick={() => void autoSync()} disabled={!audioBuf || !videoBlob || syncBusy}>
@@ -1049,21 +1287,22 @@ export default function VideoStudio({
               {!!settings.anchors && <span className="badge">{t("{n} anchors", { n: settings.anchors })}</span>}
             </div>
             <label className="field">{t("Offset (s)")}
-              <input className="input" type="number" step={0.05} value={round2(settings.offset)}
+              <input className="input" type="number" step={0.05} value={round2(settings.offset)} disabled={linked}
                 onChange={(e) => setV({ offset: round2(Number(e.target.value) || 0) })} />
             </label>
             <div className="row">
-              <button className="btn sm" onClick={() => setV({ offset: round2(settings.offset - 0.1) })}>−0,1</button>
-              <button className="btn sm" onClick={() => setV({ offset: round2(settings.offset + 0.1) })}>+0,1</button>
-              <button className="btn sm" onClick={() => setV({ offset: Math.max(0, settings.crop.start) })}>{t("Set here")}</button>
+              <button className="btn sm" disabled={linked} onClick={() => setV({ offset: round2(settings.offset - 0.1) })}>−0,1</button>
+              <button className="btn sm" disabled={linked} onClick={() => setV({ offset: round2(settings.offset + 0.1) })}>+0,1</button>
+              <button className="btn sm" disabled={linked} onClick={() => setV({ offset: Math.max(0, settings.crop.start) })}>{t("Set here")}</button>
             </div>
+            {linked && <p className="muted xs">{t("Audio and video are linked: unlink them to change the offset by hand.")}</p>}
             {settings.takes && settings.takes.length > 1 && (
               <div className="stack" style={{ gap: 4 }}>
                 <span className="muted xs">{t("Takes found in the video (pick the one to use):")}</span>
                 <div className="row">
                   {settings.takes.map((k, i) => (
                     <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " primary" : "")}
-                      aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k)}>
+                      aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}>
                       {t("Take {n}", { n: i + 1 })} <span className="mono xs">{fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)}</span>
                     </button>
                   ))}
@@ -1101,19 +1340,31 @@ export default function VideoStudio({
                 </select>
               </label>
             </div>
-            {project.lyrics.length > 0 && (
-              <>
-                <label className="field">{t("Section")}
-                  <select className="input" value={section?.id ?? ""} onChange={(e) => setSectionId(e.target.value)}>
-                    {project.lyrics.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </label>
-                <label className="check">
-                  <input type="checkbox" checked={useWritten} onChange={(e) => setUseWritten(e.target.checked)} />
-                  {t("Correct the words with the written lyrics of this section")}
-                </label>
-              </>
+            <label className="field">{t("Paste the lyrics of the song")}
+              <textarea className="input" rows={6} value={paste} onChange={(e) => setPaste(e.target.value)}
+                placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
+            </label>
+            {pasted.parts.length > 0 && (
+              <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
             )}
+            <div className="row">
+              <button className="btn sm primary" disabled={!paste.trim() || genBusy || !audioBuf} onClick={applyPasted}>
+                {t("Sync these lyrics on the audio")}
+              </button>
+              {!audioBuf && <span className="muted xs">{t("Import the official audio first.")}</span>}
+            </div>
+            {project.lyrics.length > 0 && (
+              <label className="field">{t("Written lyrics")}
+                <select className="input" value={writtenSrc} disabled={genBusy}
+                  onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
+                  <option value="song">{t("Lyrics pasted above")}</option>
+                  <option value="all">{t("Carousel lyrics (all sections)")}</option>
+                  {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
+                  <option value="none">{t("None: words as heard")}</option>
+                </select>
+              </label>
+            )}
+            <p className="muted xs">{t("With your written lyrics the text is exact: the audio is only used to know when each word is sung.")}</p>
             <div className="row">
               {!genBusy ? (
                 <button className="btn sm primary" onClick={() => void generateLyrics()} disabled={!audioBuf}>
@@ -1161,6 +1412,11 @@ export default function VideoStudio({
             )}
           </Section>
 
+          <Section title={t("Style presets")}>
+            <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
+              onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
+          </Section>
+
           <Section title={t("Text style")}>
             <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Follows the style of the selected carousel slide until you change something.")}</p>
             <CaptionStyle
@@ -1172,10 +1428,6 @@ export default function VideoStudio({
             />
           </Section>
 
-          <Section title={t("Style presets")} open={false}>
-            <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
-              onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
-          </Section>
 
           <Section title={t("Place lines by hand")} open={false}>
             {project.lyrics.length === 0 && <p className="muted xs">{t("No lyrics in this section.")}</p>}
@@ -1208,11 +1460,33 @@ export default function VideoStudio({
       <div className="modal-foot">
         <span className="muted grow xs">{audioBuf && videoBlob ? t("Ready to export") : t("Import the release audio")}</span>
         <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}>
-          <Icon name="download" />{exporting ? t("Exporting…") : t("Export video")}
+          <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
         </button>
         <button className="btn" onClick={close}>{t("Done")}</button>
       </div>
       </div>
+      {exp && (
+        <Modal title={exp.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
+          <div className="stack">
+            <p>
+              {exp.done ? t("{name} is in your downloads.", { name: exp.file ?? "" })
+                : exp.step === "audio" ? t("Preparing the sound…")
+                : exp.step === "video" ? t("Building the frames… {n}%", { n: Math.round(exp.p * 100) })
+                : exp.step === "record" ? t("Recording in real time (this browser cannot encode MP4 by itself)… {n}%", { n: Math.round(exp.p * 100) })
+                : t("Finishing the MP4…")}
+            </p>
+            <div className="bar export-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(exp.p * 100)}>
+              <div style={{ width: `${exp.p * 100}%` }} />
+            </div>
+            <p className="muted xs">{outW}×{outH} · H.264 · {EXPORT_FPS} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
+          </div>
+          <div className="modal-foot">
+            {exp.done
+              ? <button className="btn primary" onClick={closeExport}>{t("Close")}</button>
+              : <button className="btn quiet" onClick={closeExport}>{t("Cancel")}</button>}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

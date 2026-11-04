@@ -251,7 +251,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-head .display { font-size: 28px; line-height: 1; }
 .video-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--s5); align-items: start; }
 .video-grid .cv-wrap { max-width: 280px; }
-.video-grid .cv { cursor: default; touch-action: auto; }
+.video-grid .cv { cursor: grab; touch-action: none; }
+.video-grid .cv-wrap.landscape { max-width: 100%; }
+.export-bar { height: 6px; border-radius: 3px; }
 .video-side { display: grid; gap: var(--s2); min-width: 0; }
 .video-src { position: fixed; left: -9999px; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 .wave { width: 100%; height: 90px; display: block; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); touch-action: none; cursor: ew-resize; }

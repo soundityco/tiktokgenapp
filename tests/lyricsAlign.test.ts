@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCue, alignLyrics, buildCues, cleanHeard, norm } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader } from "@/lib/lyricsAlign";
 import type { LyricWord } from "@/lib/types";
 
 const w = (text: string, s: number, e: number, line?: number): LyricWord => ({ w: text, s, e, ...(line === undefined ? {} : { line }) });
@@ -28,6 +28,22 @@ describe("alignLyrics", () => {
     const seul = r.words[2];
     expect(seul.s).toBeGreaterThanOrEqual(1.7 - 1e-6);
     expect(seul.e).toBeLessThanOrEqual(2.4 + 1e-6);
+    for (let i = 1; i < r.words.length; i++) expect(r.words[i].s).toBeGreaterThanOrEqual(r.words[i - 1].s - 1e-6);
+  });
+
+  it("places a whole song on a badly heard track: exact text, heard timing", () => {
+    const song = Array.from({ length: 12 }, (_, k) => `ligne numero ${k} avec des mots chantes`).join("\n");
+    const truth = song.split(/\s+/);
+    const heard: LyricWord[] = [w("yeah", 0, 0.3), w("ouais", 0.4, 0.7)]; // ad-libs before the song
+    truth.forEach((x, i) => {
+      if (i % 5 === 2) return; // missed word
+      const said = i % 7 === 3 ? "bla" : i % 4 === 1 ? x + "e" : x; // misheard, slightly misheard
+      heard.push(w(said, 2 + i * 0.4, 2 + i * 0.4 + 0.3));
+    });
+    const r = alignLyrics(song, heard, 0.2)!;
+    expect(r).not.toBeNull();
+    expect(r.words.map((x) => x.w)).toEqual(truth);
+    expect(r.words[1].s).toBeCloseTo(2.4);
     for (let i = 1; i < r.words.length; i++) expect(r.words[i].s).toBeGreaterThanOrEqual(r.words[i - 1].s - 1e-6);
   });
 
@@ -97,5 +113,69 @@ describe("cleanHeard", () => {
   });
   it("norm strips accents and punctuation", () => {
     expect(norm("L'Étoile,")).toBe("letoile");
+  });
+});
+
+describe("parseLyrics (lyrics pasted as found online)", () => {
+  it("recognises part titles, in French and English, with or without brackets", () => {
+    for (const h of ["[Refrain]", "Couplet 1 :", "[Couplet 2 : Artiste]", "(Chorus)", "Pré-refrain", "[Pre-Chorus]", "Verse 2", "HOOK", "[Bridge]", "Pont", "Outro", "[Refrain x2]", "Refrain final"]) {
+      expect(partHeader(h), h).not.toBeNull();
+    }
+    for (const l of ["Je refrain mes envies", "Hook me up tonight", "Verse after verse I fall", "(Ooh ooh)", "Le refrain de ma vie"]) {
+      expect(partHeader(l), l).toBeNull();
+    }
+    expect(partHeader("[Refrain x2]")!.times).toBe(2);
+  });
+
+  it("removes the titles, writes out repeated parts and lines marked (x2)", () => {
+    const r = parseLyrics(`[Couplet 1]
+Je marche seul
+Dans la nuit
+
+[Refrain]
+Oh oh je chante
+Pour toi (x2)
+
+[Couplet 2]
+Les étoiles brillent
+
+[Refrain]
+
+[Outro]
+Fin`);
+    expect(r.text.split("\n")).toEqual([
+      "Je marche seul", "Dans la nuit",
+      "Oh oh je chante", "Pour toi", "Pour toi",
+      "Les étoiles brillent",
+      "Oh oh je chante", "Pour toi", "Pour toi",
+      "Fin",
+    ]);
+    expect(r.parts).toEqual(["Couplet 1", "Refrain", "Couplet 2", "Refrain", "Outro"]);
+  });
+
+  it("repeats a part announced with x2", () => {
+    expect(parseLyrics("[Hook x2]\nOn y va\nEncore").text.split("\n")).toEqual(["On y va", "Encore", "On y va", "Encore"]);
+  });
+});
+
+describe("alignSong (whole song on the whole track)", () => {
+  it("keeps every written word, even where the start of the song was badly heard", () => {
+    const song = Array.from({ length: 10 }, (_, k) => `ligne ${k} avec des mots chantes ici`).join("\n");
+    const truth = song.split(/\s+/);
+    const heard: LyricWord[] = [w("merci", 0, 0.3)];
+    truth.forEach((x, i) => {
+      const said = i < 12 ? "zzz" + i : i % 6 === 2 ? "bla" : x; // the first two lines are not recognised at all
+      if (i % 9 !== 4) heard.push(w(said, 2 + i * 0.4, 2 + i * 0.4 + 0.3));
+    });
+    const r = alignSong(song, heard)!;
+    expect(r).not.toBeNull();
+    expect(r.words.map((x) => x.w)).toEqual(truth);
+    for (let i = 1; i < r.words.length; i++) expect(r.words[i].s).toBeGreaterThanOrEqual(r.words[i - 1].s - 1e-6);
+    expect(r.words[30].s).toBeCloseTo(2 + 30 * 0.4);
+  });
+
+  it("does not invent a placement for unrelated lyrics", () => {
+    const heard = "the quick brown fox jumps over the lazy dog again and again".split(" ").map((x, i) => w(x, i, i + 0.4));
+    expect(alignSong("je marche seul dans la nuit\nles étoiles me regardent", heard)).toBeNull();
   });
 });

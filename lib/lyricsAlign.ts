@@ -54,8 +54,10 @@ export interface AlignResult {
  * its own verse or chorus inside the whole text). The written spelling always wins; words the
  * model missed inside the sung span get a time between their neighbours; words outside it are dropped.
  * Returns null when the lyrics do not resemble what was heard.
+ * `minCoverage`: share of the heard words that must match. A whole track has intros, ad-libs and
+ * misheard stretches, so it is aligned with a lower bar than a short segment.
  */
-export function alignLyrics(text: string, heard: LyricWord[]): AlignResult | null {
+export function alignLyrics(text: string, heard: LyricWord[], minCoverage = 0.35): AlignResult | null {
   const lyr = splitWords(text);
   const hrd = heard.filter((h) => norm(h.w));
   if (!lyr.length || !hrd.length) return null;
@@ -87,7 +89,7 @@ export function alignLyrics(text: string, heard: LyricWord[]): AlignResult | nul
   }
   const exact = [...pair].filter(([a, b]) => similarity(ln[a], hn[b]) >= 0.6).length;
   const coverage = exact / m;
-  if (exact < 2 || coverage < 0.35) return null;
+  if (exact < 2 || coverage < minCoverage) return null;
 
   const idx = [...pair.keys()].sort((a, b) => a - b);
   const first = idx[0], last = idx[idx.length - 1];
@@ -117,6 +119,152 @@ export function alignLyrics(text: string, heard: LyricWord[]): AlignResult | nul
     k = run;
   }
   return { words: out, coverage };
+}
+
+// ---------- pasted lyrics ----------
+
+// Longest names first, so "refrain final" is not read as "refrain" followed by a sung word.
+const PART = "refrain final|final chorus|pre ?refrain|pre ?chorus|post ?chorus|intro|outro|couplet|refrain|pont|bridge|verse|chorus|hook|interlude|break|drop|instrumental|ad ?libs?";
+const PART_RE = new RegExp(`^(${PART})\\b(.*)$`);
+const plain = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/-/g, " ").trim();
+
+/** "[Refrain x2]", "Couplet 2 :", "(Chorus)", "Pre-chorus - Artist"… → the part's name and how many times it is sung. Null for a sung line. */
+export function partHeader(line: string): { key: string; label: string; times: number } | null {
+  const raw = line.trim();
+  if (!raw || raw.length > 60) return null;
+  const bracketed = /^[[(].*[\])]$/.test(raw);
+  const inner = plain(raw.replace(/^[[(]\s*|\s*[\])]$/g, ""));
+  const m = PART_RE.exec(inner);
+  if (!m) return null;
+  const rest = m[2];
+  // Without brackets only a bare title counts ("Refrain", "Couplet 1 :", "Hook x2"), not a sung line starting with "hook".
+  if (!bracketed && !/^[\s\d:.#()x×–—-]*$/.test(rest) && !/:\s*$/.test(rest) && !/^\s*\d*\s*[:–—-]/.test(rest)) return null;
+  const num = /^\s*(\d+)/.exec(rest)?.[1] ?? "";
+  const times = Number(/[x×]\s*(\d+)/.exec(rest)?.[1] ?? 1) || 1;
+  const label = raw.replace(/^[[(]\s*|\s*[\])]$/g, "").replace(/\s*[:：]\s*$/, "");
+  return { key: m[1].replace(/\s+/g, "") + num, label, times: Math.min(8, times) };
+}
+
+export interface ParsedLyrics {
+  /** Only the sung lines, in the order they are sung (repeats written out). */
+  text: string;
+  /** Titles found, in order (for display). */
+  parts: string[];
+}
+
+/**
+ * Lyrics pasted as found online: part titles are removed, a part announced again without its text
+ * ("[Refrain]" alone, "Refrain x2") is written out again, a line ending in "(x2)" is repeated.
+ */
+export function parseLyrics(input: string): ParsedLyrics {
+  const lines = input.replace(/\r/g, "").split("\n");
+  const bodies = new Map<string, string[]>();
+  const out: string[] = [];
+  const parts: string[] = [];
+  let cur: { key: string; times: number; body: string[] } | null = null;
+  const flush = () => {
+    if (!cur) return;
+    const body = cur.body.length ? cur.body : bodies.get(cur.key) ?? [];
+    if (cur.body.length) bodies.set(cur.key, cur.body);
+    for (let k = 0; k < cur.times; k++) out.push(...body);
+    cur = null;
+  };
+  for (const line of lines) {
+    const h = partHeader(line);
+    if (h) {
+      flush();
+      parts.push(h.times > 1 ? `${h.label}` : h.label);
+      cur = { key: h.key, times: h.times, body: [] };
+      continue;
+    }
+    const t = line.trim();
+    if (!t) continue;
+    const rep = /\s*\(?\s*[x×]\s*(\d+)\s*\)?\s*$/i.exec(t);
+    const sung = rep && rep.index > 0 ? t.slice(0, rep.index).trim() : t;
+    const n = rep && rep.index > 0 ? Math.min(8, Number(rep[1]) || 1) : 1;
+    for (let k = 0; k < n; k++) (cur ? cur.body : out).push(sung);
+  }
+  flush();
+  return { text: out.join("\n"), parts };
+}
+
+/**
+ * Place a whole song on the words heard in the whole track. Unlike `alignLyrics` (which looks for the
+ * best matching stretch), every written word is kept, in order: misheard or missed stretches get a time
+ * between their neighbours instead of being dropped, and what the model heard outside the song
+ * (ad-libs, hallucinations in instrumental parts) is skipped. Null when the lyrics do not match at all.
+ */
+export function alignSong(text: string, heard: LyricWord[]): AlignResult | null {
+  const lyr = splitWords(text);
+  const hrd = heard.filter((h) => norm(h.w));
+  if (!lyr.length || !hrd.length) return null;
+  const ln = lyr.map((x) => norm(x.w));
+  const hn = hrd.map((x) => norm(x.w));
+  const n = ln.length, m = hn.length;
+  const SKIP_LYR = -1, SKIP_HRD = -0.6;
+  // Semi-global: free start and end in the heard words, every written word consumed.
+  const H: Float64Array[] = Array.from({ length: n + 1 }, () => new Float64Array(m + 1));
+  const sub: Float32Array[] = Array.from({ length: n }, () => new Float32Array(m));
+  for (let i = 1; i <= n; i++) {
+    H[i][0] = H[i - 1][0] + SKIP_LYR;
+    for (let j = 1; j <= m; j++) {
+      const sim = similarity(ln[i - 1], hn[j - 1]);
+      const sc = sim >= 0.6 ? 3 * sim : -1;
+      sub[i - 1][j - 1] = sc;
+      H[i][j] = Math.max(H[i - 1][j - 1] + sc, H[i - 1][j] + SKIP_LYR, H[i][j - 1] + SKIP_HRD);
+    }
+  }
+  let bj = 0;
+  for (let j = 1; j <= m; j++) if (H[n][j] > H[n][bj]) bj = j;
+  const pair = new Map<number, number>();
+  let i = n, j = bj;
+  while (i > 0 && j > 0) {
+    const sc = sub[i - 1][j - 1];
+    if (sc > 0 && H[i][j] === H[i - 1][j - 1] + sc) { pair.set(i - 1, j - 1); i--; j--; }
+    else if (H[i][j] === H[i - 1][j] + SKIP_LYR) i--;
+    else if (H[i][j] === H[i][j - 1] + SKIP_HRD) j--;
+    else { i--; j--; } // a mismatch taken as a pair: both words skipped
+  }
+  const idx = [...pair.keys()].sort((a, b) => a - b);
+  if (idx.length < 2 || idx.length / n < 0.2) return null;
+
+  const out: LyricWord[] = [];
+  const first = idx[0], last = idx[idx.length - 1];
+  const AVG = 0.35;
+  // Before the first heard word / after the last one: words keep an average length, back to back.
+  for (let k = 0; k < first; k++) {
+    const s0 = Math.max(0, hrd[pair.get(first)!].s - (first - k) * AVG);
+    out.push({ w: lyr[k].w, s: s0, e: s0 + AVG * 0.9, line: lyr[k].line });
+  }
+  let k = first;
+  while (k <= last) {
+    const h = pair.get(k);
+    if (h !== undefined) {
+      out.push({ w: lyr[k].w, s: hrd[h].s, e: Math.max(hrd[h].e, hrd[h].s + 0.05), line: lyr[k].line });
+      k++;
+      continue;
+    }
+    let run = k;
+    while (run <= last && !pair.has(run)) run++;
+    const prev = out[out.length - 1];
+    const next = hrd[pair.get(run)!];
+    const a = prev.e, b = Math.max(next.s, a + 0.05 * (run - k));
+    const weights = lyr.slice(k, run).map((x) => norm(x.w).length + 1);
+    const total = weights.reduce((x, y) => x + y, 0);
+    let at = a;
+    for (let q = k; q < run; q++) {
+      const d = ((b - a) * weights[q - k]) / total;
+      out.push({ w: lyr[q].w, s: at, e: at + d, line: lyr[q].line });
+      at += d;
+    }
+    k = run;
+  }
+  const end = out[out.length - 1].e;
+  for (let q = last + 1; q < n; q++) {
+    const s0 = end + (q - last - 1) * AVG;
+    out.push({ w: lyr[q].w, s: s0, e: s0 + AVG * 0.9, line: lyr[q].line });
+  }
+  return { words: out, coverage: idx.length / n };
 }
 
 /** Words as the model heard them, tidied (no empty ones, ordered, no overlaps). */

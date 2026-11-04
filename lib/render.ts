@@ -55,21 +55,28 @@ export function zoomPic(pic: PicSettings, zoom: number): PicSettings {
   return { ...pic, zoom, ox: pic.ox * k, oy: pic.oy * k };
 }
 
-function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: number, H: number) {
-  const iw = img.width, ih = img.height;
-  const { framing, bars, zoom, ox, oy, darken } = clampPic(cfg.pic, iw, ih, W, H);
+let blurCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * Draw a picture (photo, video frame) framed like a slide: fill (crop), or fit with blurred or black
+ * bars, zoomed around the centre and moved by the offset. Shared by the carousel and the video studio.
+ */
+export function drawFramed(ctx: CanvasRenderingContext2D, src: CanvasImageSource, iw: number, ih: number, pic: PicSettings, W: number, H: number) {
+  const { framing, bars, zoom, ox, oy, darken } = clampPic(pic, iw, ih, W, H);
   if (framing === "fill") {
     const s = Math.max(W / iw, H / ih) * zoom;
     const dw = iw * s, dh = ih * s;
-    ctx.drawImage(img, (W - dw) / 2 + ox * W, (H - dh) / 2 + oy * H, dw, dh);
+    ctx.drawImage(src, (W - dw) / 2 + ox * W, (H - dh) / 2 + oy * H, dw, dh);
   } else {
     if (bars === "blur") {
       // Cheap blur that works in every browser (no ctx.filter): shrink, then stretch with smoothing.
-      const sm = tmp(24, Math.max(8, Math.round((24 * H) / W)));
+      const sw = 24, sh = Math.max(8, Math.round((24 * H) / W));
+      const sm = (blurCanvas ??= tmp(sw, sh));
+      if (sm.width !== sw || sm.height !== sh) { sm.width = sw; sm.height = sh; }
       const sctx = sm.getContext("2d")!;
       sctx.imageSmoothingQuality = "high";
-      const cs = Math.max(sm.width / iw, sm.height / ih);
-      sctx.drawImage(img, (sm.width - iw * cs) / 2, (sm.height - ih * cs) / 2, iw * cs, ih * cs);
+      const cs = Math.max(sw / iw, sh / ih);
+      sctx.drawImage(src, (sw - iw * cs) / 2, (sh - ih * cs) / 2, iw * cs, ih * cs);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(sm, 0, 0, W, H);
@@ -81,12 +88,16 @@ function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: 
     }
     const s = Math.min(W / iw, H / ih) * zoom;
     const dw = iw * s, dh = ih * s;
-    ctx.drawImage(img, (W - dw) / 2 + ox * W, (H - dh) / 2 + oy * H, dw, dh);
+    ctx.drawImage(src, (W - dw) / 2 + ox * W, (H - dh) / 2 + oy * H, dw, dh);
   }
   if (darken > 0) {
     ctx.fillStyle = `rgba(0,0,0,${Math.min(0.9, darken / 100)})`;
     ctx.fillRect(0, 0, W, H);
   }
+}
+
+function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: number, H: number) {
+  drawFramed(ctx, img, img.width, img.height, cfg.pic, W, H);
 }
 
 function setFont(ctx: CanvasRenderingContext2D, st: TextStyle, size: number) {

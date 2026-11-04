@@ -121,6 +121,9 @@ export interface VideoFrame {
   zoom: number;
   ox: number; // fraction of the canvas
   oy: number;
+  /** Same choices as the carousel photos: fill (crop) or fit with blurred / black bars. Default fill. */
+  framing?: PicSettings["framing"];
+  bars?: PicSettings["bars"];
 }
 
 /** One take found in the camera video: where its music plays and its own offset. */
@@ -146,6 +149,10 @@ export interface VideoSettings {
   anchors?: number;
   /** When the video holds the passage several times: every take found by the sync (the user picks one). */
   takes?: VideoTake[];
+  /** Shape of the exported video: vertical 1080×1920 (default) or horizontal 1920×1080. */
+  format?: "9:16" | "16:9";
+  /** Audio and video locked together: the offset does not move and the segment stays inside the synced video. */
+  linked?: boolean;
   /** Burn the timed lyrics on the video. */
   captions: boolean;
   /** How the generated lyrics are cut into captions: one word at a time or one phrase at a time. */
@@ -171,6 +178,10 @@ export interface Project {
   lyricsSectionId: string | null;
   /** Words heard in the official audio, timed (from the lyrics generator of the video studio). */
   lyricWords?: LyricWord[];
+  /** Raw words of the last analysis of the whole track: the written lyrics are re-placed on them without a new analysis. */
+  heardWords?: LyricWord[];
+  /** Full lyrics of the song pasted in the video studio, synced on the official audio. */
+  songLyrics?: string;
   generated: GenSlide[] | null;
   selectedSlide: number;
   /** @deprecated Single video setup of older workspaces; migrated to `videos` on load. */
