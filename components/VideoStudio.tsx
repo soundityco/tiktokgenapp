@@ -11,7 +11,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, zoomPic } from "@/lib/render";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
-import { convertSegment, type ConvertStep } from "@/lib/convert";
+import { convertSegment, cropFor, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -425,7 +425,13 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
-    if (pic && pic.w && pic.h) drawFramed(g, pic.src, pic.w, pic.h, picOf(cfg.frame ?? DEFAULT_VIDEO.frame), W, H);
+    if (pic && pic.w && pic.h) {
+      let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame);
+      // Progressive zoom: ×1 at the start of the segment, `push` on its last frame, around the centre.
+      const push = cfg.push ?? 1;
+      if (push > 1) f = zoomPic(f, f.zoom * (1 + (push - 1) * clamp((time - cfg.crop.start) / Math.max(0.1, cfg.crop.duration), 0, 1)));
+      drawFramed(g, pic.src, pic.w, pic.h, f, W, H, pic.part);
+    }
     const text = cfg.captions ? activeRef.current(time) : null;
     const caption = text ? drawStyledText(g, text, styleRef.current, W, H) : null;
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, time);
@@ -1263,6 +1269,9 @@ export default function VideoStudio({
         const vdur = el.duration;
         /** Camera time at the start of the frames `source` gives (not 0 when they come from a converted segment). */
         let base = 0;
+        /** The converted copy holds only this region of the camera picture (ow×oh). */
+        let part: ConvertCrop | undefined;
+        const ow = el.videoWidth, oh = el.videoHeight;
         let detail = source?.codec ?? "";
         if (!source && videoBlob && !ac.signal.aborted) {
           // A format the browser cannot decode (4:2:2 10-bit, ProRes…): ffmpeg converts the segment first.
@@ -1271,14 +1280,16 @@ export default function VideoStudio({
           const ve = Math.min(Number.isFinite(vdur) ? vdur : Infinity, until - cfg.offset + 0.2);
           if (ve > vs) {
             try {
-              const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}`;
+              // Only what the post shows, at the camera's resolution (unknown size: the whole picture, not scaled).
+              const crop = ow && oh ? cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1) : undefined;
+              const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}|${JSON.stringify(crop ?? null)}`;
               let proxy = proxyRef.current?.key === key ? proxyRef.current.blob : null;
               if (!proxy) {
-                proxy = await convertSegment(videoBlob, vs, ve, (p, step) => setExp({ p, step }), ac.signal);
+                proxy = await convertSegment(videoBlob, vs, ve, (p, step) => setExp({ p, step }), ac.signal, crop);
                 proxyRef.current = { key, blob: proxy }; // exporting the same segment again skips the conversion
               }
               source = await VideoSource.open(proxy, 0, ve - vs, (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal);
-              if (source) { base = vs; detail = t("converted from {format}", { format: why.replace(/ not decodable.*$/, "") }); }
+              if (source) { base = vs; part = crop; detail = t("converted from {format}", { format: why.replace(/ not decodable.*$/, "") }); }
             } catch (e) {
               if (ac.signal.aborted || (e instanceof DOMException && e.name === "AbortError")) throw e;
               console.warn("[export] conversion failed, using the browser's player", e);
@@ -1313,7 +1324,10 @@ export default function VideoStudio({
             const target = time - cfg.offset;
             const inside = target >= -0.001 && (!Number.isFinite(vdur) || target <= vdur + 0.001);
             let pic: Picture | null = null;
-            if (inside && src) pic = await src.frameAt(target - base);
+            if (inside && src) {
+              pic = await src.frameAt(target - base);
+              if (pic && part) pic = { src: pic.src, w: ow, h: oh, part };
+            }
             else if (inside) {
               await visible();
               await (player ??= playerFrames(el, Math.max(0, target))).frameAt(target);
@@ -1630,6 +1644,13 @@ export default function VideoStudio({
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
             onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
             onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
+          <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>
+            <span className="label">{t("Progressive zoom")}</span>
+            {[undefined, 1.05, 1.1].map((v) => (
+              <button key={v ?? 0} className={"btn sm" + ((settings.push ?? undefined) === v ? " primary" : "")} aria-pressed={(settings.push ?? undefined) === v}
+                onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
+            ))}
+          </div>
           <p className="muted xs">{videoBlob
             ? t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")
             : t("Nothing to preview yet.")} <span className="mono">{outW}×{outH}</span></p>

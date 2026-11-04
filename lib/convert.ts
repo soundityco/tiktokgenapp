@@ -1,13 +1,36 @@
 /**
  * Conversion of camera formats the browser cannot decode (H.264 / HEVC 4:2:2 10-bit, ProRes…) with
  * ffmpeg compiled to WebAssembly (public/ffmpeg/worker.js). Only the segment of the post is converted,
- * to a light H.264 4:2:0 file (upright, at most 1920 px), which the export then decodes like any phone video.
+ * to an H.264 4:2:0 file the export then decodes like any phone video. No detail is lost: only the part
+ * of the picture seen in the post is kept, at the camera's own resolution (or just what the export needs).
  *
  * The ffmpeg engine (~32 MB) is downloaded from jsDelivr the first time, then kept by the browser.
  * The camera file is read from the disk: it is never copied whole into memory, and never leaves the device.
  */
 
+import { visibleRegion } from "./render";
+import type { PicSettings } from "./types";
+
 export type ConvertStep = "engine" | "convert";
+
+/** Keep only this rectangle of the (upright) camera picture, scaled to `out`. Even numbers. */
+export interface ConvertCrop { x: number; y: number; w: number; h: number; out: { w: number; h: number } }
+
+/**
+ * What to keep of an iw×ih camera picture for a W×H export: the region seen in the post, with no more
+ * pixels than the export can show (`push`: the progressive zoom reaches this factor, so it needs that much more).
+ */
+export function cropFor(pic: PicSettings, iw: number, ih: number, W: number, H: number, push = 1): ConvertCrop {
+  const r = visibleRegion(pic, iw, ih, W, H);
+  const down = (n: number) => Math.floor(n / 2) * 2;
+  const x = down(r.x), y = down(r.y);
+  const w = Math.min(down(iw) - x, Math.ceil((r.x + r.w - x) / 2) * 2);
+  const h = Math.min(down(ih) - y, Math.ceil((r.y + r.h - y) / 2) * 2);
+  // Export pixels per camera pixel at the strongest zoom; never upscaled.
+  const s = (pic.framing === "fill" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih)) * pic.zoom * push;
+  const k = Math.min(1, s * 1.05);
+  return { x, y, w, h, out: { w: Math.max(2, down(w * k)), h: Math.max(2, down(h * k)) } };
+}
 
 let worker: Worker | null = null;
 
@@ -21,6 +44,7 @@ export function convertSegment(
   to: number,
   onProgress: (p: number, step: ConvertStep) => void,
   signal: AbortSignal,
+  crop?: ConvertCrop,
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
@@ -58,8 +82,10 @@ export function convertSegment(
         "-ss", from.toFixed(3), "-t", dur.toFixed(3),
         "-i", "/in/source",
         "-map", "0:v:0", "-an", "-sn", "-dn",
-        // Upright (ffmpeg applies the phone's rotation), at most 1920 px on the long side, 8-bit 4:2:0.
-        "-vf", "scale=1920:1920:force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p",
+        // Upright (ffmpeg applies the rotation before the filters), the visible part only, 8-bit 4:2:0.
+        "-vf", crop
+          ? `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y},scale=${crop.out.w}:${crop.out.h}:flags=lanczos,format=yuv420p`
+          : "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "17", "-g", "30", "-bf", "0",
         "-movflags", "+faststart",
         "out.mp4",

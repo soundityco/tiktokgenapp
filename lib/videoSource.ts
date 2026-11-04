@@ -1,4 +1,5 @@
 import { createFile, DataStream, Endianness, MP4BoxBuffer, type Sample, type Track } from "mp4box";
+import type { Region } from "./render";
 
 /**
  * Frames of the camera video for the export, decoded with WebCodecs from the file itself.
@@ -9,7 +10,14 @@ import { createFile, DataStream, Endianness, MP4BoxBuffer, type Sample, type Tra
  * call returns the frame shown at that time, whatever the tab does.
  */
 
-export interface Picture { src: CanvasImageSource; w: number; h: number }
+export interface Picture {
+  src: CanvasImageSource;
+  /** Size of the whole picture. */
+  w: number;
+  h: number;
+  /** `src` is a cropped copy holding only this region of the w×h picture (converted camera files). */
+  part?: Region;
+}
 
 const CHUNK = 16 * 1024 * 1024;
 /** Chunks fed beyond the frames already decoded: covers the reordering of B-frames (at most 16). */

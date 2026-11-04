@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { mergeFolder } from "../lib/drive";
 import { aacConfig } from "../lib/exportVideo";
 import { codecLabel, rotationOf } from "../lib/videoSource";
-import { clampPic, zoomPic } from "../lib/render";
+import { clampPic, visibleRegion, zoomPic } from "../lib/render";
+import { cropFor } from "../lib/convert";
 import { defaultPic } from "../lib/defaults";
 import type { PicRef } from "../lib/types";
 
@@ -73,5 +74,38 @@ describe("codecLabel", () => {
     expect(codecLabel("avc1.7a1033")).toMatch(/4:2:2 10-bit/);
     expect(codecLabel("avc1.640028")).toMatch(/^H.264 High ·/);
     expect(codecLabel("hvc1.4.10.L153.90")).toMatch(/4:2:2/);
+  });
+});
+
+describe("cropped copy of a camera video for the export", () => {
+  const fill = { ...defaultPic(), framing: "fill" as const };
+
+  it("keeps the vertical band seen in a 9:16 post, at the camera's resolution", () => {
+    const r = visibleRegion(fill, 3840, 2160, 1080, 1920);
+    expect(r.h).toBeCloseTo(2160);
+    expect(r.w).toBeCloseTo(1215, 0);
+    expect(r.x).toBeCloseTo((3840 - 1215) / 2, 0);
+    const c = cropFor(fill, 3840, 2160, 1080, 1920, 1.1);
+    expect(c.h).toBe(2160);
+    expect(c.out).toEqual({ w: c.w, h: c.h }); // the export needs every pixel: not scaled down
+    expect(c.x % 2 + c.y % 2 + c.w % 2 + c.h % 2).toBe(0);
+  });
+
+  it("follows the framing: moved to the left edge, zoomed in", () => {
+    const r = visibleRegion({ ...fill, zoom: 2, ox: 10 }, 3840, 2160, 1080, 1920); // as far right as it goes
+    expect(r.x).toBe(0);
+    expect(r.w).toBeCloseTo(1215 / 2, 0);
+    expect(r.h).toBeCloseTo(1080);
+  });
+
+  it("scales a 16:9 post down to what the export can show, with room for the zoom", () => {
+    const c = cropFor(fill, 3840, 2160, 1920, 1080, 1.1);
+    expect(c.w).toBe(3840);
+    expect(c.out.w).toBeGreaterThanOrEqual(1920 * 1.1);
+    expect(c.out.w).toBeLessThan(3840);
+  });
+
+  it("keeps the whole picture when it is fitted with bars", () => {
+    expect(visibleRegion({ ...fill, framing: "fit" }, 3840, 2160, 1080, 1920)).toEqual({ x: 0, y: 0, w: 3840, h: 2160 });
   });
 });

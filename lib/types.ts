@@ -181,6 +181,8 @@ export interface VideoSettings {
   lineChars?: number;
   /** Own text style for the captions; falls back to the selected carousel slide's style. */
   captionStyle?: TextStyle;
+  /** Progressive zoom over the segment: ×1 on the first frame, this factor on the last (e.g. 1.05). None: off. */
+  push?: number;
   /** Titles over the video, one after the other or all along. */
   hooks?: VideoHook[];
   /** Show the hooks on the video (default yes). */

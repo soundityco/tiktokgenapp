@@ -55,18 +55,42 @@ export function zoomPic(pic: PicSettings, zoom: number): PicSettings {
   return { ...pic, zoom, ox: pic.ox * k, oy: pic.oy * k };
 }
 
+/** A rectangle of a picture, in its pixels. */
+export interface Region { x: number; y: number; w: number; h: number }
+
+/**
+ * The part of a picture (iw×ih) seen on a W×H canvas with these settings. Fit shows it whole.
+ * Zooming in further around the centre (see zoomPic) only ever shows a part of this region.
+ */
+export function visibleRegion(pic: PicSettings, iw: number, ih: number, W: number, H: number): Region {
+  if (pic.framing !== "fill") return { x: 0, y: 0, w: iw, h: ih };
+  const { zoom, ox, oy } = clampPic(pic, iw, ih, W, H);
+  const s = Math.max(W / iw, H / ih) * zoom;
+  const dx = (W - iw * s) / 2 + ox * W, dy = (H - ih * s) / 2 + oy * H;
+  const x0 = Math.max(0, -dx / s), y0 = Math.max(0, -dy / s);
+  const x1 = Math.min(iw, (W - dx) / s), y1 = Math.min(ih, (H - dy) / s);
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+}
+
 let blurCanvas: HTMLCanvasElement | null = null;
 
 /**
  * Draw a picture (photo, video frame) framed like a slide: fill (crop), or fit with blurred or black
  * bars, zoomed around the centre and moved by the offset. Shared by the carousel and the video studio.
  */
-export function drawFramed(ctx: CanvasRenderingContext2D, src: CanvasImageSource, iw: number, ih: number, pic: PicSettings, W: number, H: number) {
+export function drawFramed(
+  ctx: CanvasRenderingContext2D, src: CanvasImageSource, iw: number, ih: number, pic: PicSettings, W: number, H: number,
+  /** `src` holds only this region of the iw×ih picture (a cropped copy, see visibleRegion). */
+  part?: Region
+) {
   const { framing, bars, zoom, ox, oy, darken } = clampPic(pic, iw, ih, W, H);
+  const put = (s: number) => {
+    const x = (W - iw * s) / 2 + ox * W, y = (H - ih * s) / 2 + oy * H;
+    if (part) ctx.drawImage(src, x + part.x * s, y + part.y * s, part.w * s, part.h * s);
+    else ctx.drawImage(src, x, y, iw * s, ih * s);
+  };
   if (framing === "fill") {
-    const s = Math.max(W / iw, H / ih) * zoom;
-    const dw = iw * s, dh = ih * s;
-    ctx.drawImage(src, (W - dw) / 2 + ox * W, (H - dh) / 2 + oy * H, dw, dh);
+    put(Math.max(W / iw, H / ih) * zoom);
   } else {
     if (bars === "blur") {
       // Cheap blur that works in every browser (no ctx.filter): shrink, then stretch with smoothing.
@@ -86,9 +110,7 @@ export function drawFramed(ctx: CanvasRenderingContext2D, src: CanvasImageSource
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, W, H);
     }
-    const s = Math.min(W / iw, H / ih) * zoom;
-    const dw = iw * s, dh = ih * s;
-    ctx.drawImage(src, (W - dw) / 2 + ox * W, (H - dh) / 2 + oy * H, dw, dh);
+    put(Math.min(W / iw, H / ih) * zoom);
   }
   if (darken > 0) {
     ctx.fillStyle = `rgba(0,0,0,${Math.min(0.9, darken / 100)})`;
