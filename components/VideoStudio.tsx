@@ -598,7 +598,10 @@ export default function VideoStudio({
   const loadT0 = useRef(0);
 
 
+  /** Each start or stop gets a number: a start still waiting gives up when it is no longer the last one. */
+  const playToken = useRef(0);
   const stop = useCallback(() => {
+    playToken.current++;
     cancelAnimationFrame(rafRef.current);
     if (sourceRef.current) {
       try { sourceRef.current.stop(); } catch { /* already stopped */ }
@@ -959,17 +962,22 @@ export default function VideoStudio({
 
   // ---- playback ----
   const play = async () => {
-    if (!audioBuf) return;
+    // Not before the video can play: a click would otherwise start everything later, by surprise.
+    if (!audioBuf || (videoUrl && !playerReady)) return;
+    const token = ++playToken.current;
     const ctx = getCtx();
     await ctx.resume();
-    stop();
+    if (token !== playToken.current) return;
+    stop(); // a start that waited is dropped when another start or a stop came meanwhile
+    const mine = ++playToken.current;
     const cfg = settingsRef.current;
     const until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
     const from = head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
     const el = videoRef.current;
     if (el) {
       el.muted = true;
-      await whenReady(el, playerReady ? 3000 : 30_000);
+      await whenReady(el);
+      if (mine !== playToken.current) return;
       el.currentTime = Math.max(0, from - cfg.offset);
     }
     const src = ctx.createBufferSource();
@@ -989,8 +997,16 @@ export default function VideoStudio({
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
       }
       drawAt(now);
+      // Measure of the sync while playing (console, debug level): video behind (+) or ahead (−) of the sound.
+      if (el && performance.now() - lastLog > 1000) {
+        lastLog = performance.now();
+        const target = now - settingsRef.current.offset;
+        const ac = ctx as AudioContext & { outputLatency?: number };
+        console.debug(`[sync] video ${((target - el.currentTime) * 1000).toFixed(0)} ms behind · readyState ${el.readyState} · audio output delay ${Math.round(((ac.outputLatency ?? 0) + ac.baseLatency) * 1000)} ms`);
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
+    let lastLog = 0;
     rafRef.current = requestAnimationFrame(tick);
   };
 
@@ -1926,14 +1942,17 @@ export default function VideoStudio({
           <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")} style={{ position: "relative" }}>
               <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
                 onError={() => setPlayerReady(true)}
+                onCanPlay={() => setPlayerReady(true)}
                 onLoadedMetadata={(e) => {
                   setVideoDur(e.currentTarget.duration);
-                  setPlayerReady(true);
+                  // Safari may load nothing more before a click: the file is open, a click on Play will start it.
+                  window.setTimeout(() => setPlayerReady(true), 4000);
                   console.debug(`[load] video opened (duration known) after ${Math.round(performance.now() - loadT0.current)} ms`);
                 }}
                 onSeeked={(e) => { if (!playing) drawWhenShown(e.currentTarget); }}
                 onLoadedData={(e) => {
                   console.debug(`[load] first picture decoded after ${Math.round(performance.now() - loadT0.current)} ms`);
+              setPlayerReady(true);
                   if (!playing) drawWhenShown(e.currentTarget);
                 }} />
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
@@ -2010,6 +2029,7 @@ export default function VideoStudio({
               <>
                 <div className="row">
                   <button className="btn icon" aria-label={playing ? t("Pause") : t("Play")} title={(playing ? t("Pause") : t("Play")) + " (Espace)"}
+                    disabled={!playing && !!videoUrl && !playerReady}
                     onClick={() => (playing ? stop() : void play())}>
                     {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden /> : <Icon name={playing ? "pause" : "play"} />}
                   </button>
