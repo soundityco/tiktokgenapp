@@ -17,6 +17,8 @@ export interface Picture {
   h: number;
   /** `src` is a cropped copy holding only this region of the w×h picture (converted camera files). */
   part?: Region;
+  /** The colour grade is already in the pixels (applied by ffmpeg on the camera file). */
+  graded?: boolean;
 }
 
 const CHUNK = 16 * 1024 * 1024;

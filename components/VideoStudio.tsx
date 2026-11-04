@@ -2,16 +2,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
+import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
-import { downloadDriveFile, type DriveItem } from "@/lib/drive";
+import { canWriteDrive, downloadDriveFile, downloadDriveFileProgress, type DriveItem, uploadToDrive } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
-import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, zoomPic } from "@/lib/render";
+import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
+import { buildGradeLut, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
+import { probeVideo } from "@/lib/probe";
+import { copyRegion, Grader } from "@/lib/gradeGL";
+import ColorGrade, { lastLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
-import { convertSegment, cropFor, type ConvertCrop, type ConvertStep } from "@/lib/convert";
+import { convertSegment, cropFor, grabFrame, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -28,6 +33,8 @@ const LYRICS_WIN = 28;
 const LYRICS_LAP = 2;
 
 const DEFAULT_VIDEO: VideoSettings = defaultVideo();
+/** Look LUTs already read on this page (id → LUT). */
+const LOOKS = new Map<string, CubeLut>();
 
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 function clipsOf(p: Project): VideoSetup[] {
@@ -237,12 +244,12 @@ function fingerprint(src: CanvasImageSource): string {
 }
 
 /** Resolves once the video knows its metadata, so a seek is not silently dropped. */
-function whenReady(el: HTMLVideoElement): Promise<void> {
+function whenReady(el: HTMLVideoElement, wait = 3000): Promise<void> {
   if (el.readyState >= 1) return Promise.resolve();
   return new Promise((resolve) => {
     const done = () => { el.removeEventListener("loadedmetadata", done); resolve(); };
     el.addEventListener("loadedmetadata", done);
-    window.setTimeout(done, 3000);
+    window.setTimeout(done, wait);
   });
 }
 
@@ -283,6 +290,14 @@ export default function VideoStudio({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  /** The browser opened the camera file (it can play it): until then the timeline shows it is loading. */
+  const [playerReady, setPlayerReady] = useState(false);
+  /** The user let the app create files in their Drive (null: not known yet). */
+  const [driveWrite, setDriveWrite] = useState<boolean | null>(null);
+  /** Transfer with Drive in progress. */
+  const [driveJob, setDriveJob] = useState<null | { kind: "send" | "fetch"; p: number }>(null);
+  const [driveErr, setDriveErr] = useState<string | null>(null);
+  const driveAc = useRef<AbortController | null>(null);
   const [audioBuf, setAudioBuf] = useState<AudioBuffer | null>(null);
   const [peaks, setPeaks] = useState<number[]>([]);
   const [videoDur, setVideoDur] = useState(0);
@@ -411,26 +426,116 @@ export default function VideoStudio({
 
   const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
 
+  // ---- colour grade: one LUT (camera log → look), applied live on the GPU ----
+  const grade = settings.grade;
+  const [look, setLook] = useState<CubeLut | null>(null);
+  const [lookErr, setLookErr] = useState<string | null>(null);
+  /** Show the camera picture as recorded (log), to compare. Preview only. */
+  const [rawView, setRawView] = useState(false);
+  const rawRef = useRef(rawView);
+  rawRef.current = rawView;
+  const graderRef = useRef<Grader | null>(null);
+  const [lutRev, setLutRev] = useState(0);
+  const lutId = grade?.lut?.id;
+  useEffect(() => {
+    let off = false;
+    setLook(LOOKS.get(lutId ?? "") ?? null); setLookErr(null);
+    if (!lutId) return;
+    const known = LOOKS.get(lutId);
+    if (known) { setLook(known); return; }
+    void getMedia(`lut:${lutId}`).then(async (b) => {
+      if (off) return;
+      if (!b) { setLookErr(t("This LUT is not on this device: import it again.")); return; }
+      try { const l = parseCube(await b.text()); LOOKS.set(lutId, l); if (!off) setLook(l); }
+      catch (e) { if (!off) setLookErr(e instanceof Error ? e.message : String(e)); }
+    });
+    return () => { off = true; };
+  }, [lutId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colourKey = gradeKey(grade);
+  /** The grade of this video is still loading (its LUT): the preview waits rather than showing the log. */
+  const gradePendingRef = useRef(false);
+  gradePendingRef.current = !!colourKey && !lookErr && (lutRev === 0 || (!!lutId && !look));
+  useEffect(() => {
+    if (!colourKey || !grade || (lutId && !look && !lookErr)) return;
+    graderRef.current ??= Grader.create();
+    // A lighter LUT for the preview, so the sliders react at once; the export uses 65 points.
+    graderRef.current?.setLut(buildGradeLut(grade, lutId ? look : null, 33), 33);
+    setLutRev((n) => n + 1);
+  }, [colourKey, look, lookErr]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Frame of the camera file at the playhead, read with ffmpeg while the player gives none (see pictureOf). */
+  const stillRef = useRef<{ src: string; at: number; bmp: ImageBitmap } | null>(null);
+  const stillWant = useRef<number | null>(null);
+
+  // ---- poster: the last graded picture of the clip, shown at once while a big camera file opens ----
+  const posterRef = useRef<ImageBitmap | HTMLCanvasElement | null>(null);
+  const posterTimer = useRef(0);
+  const posterKey = `poster:${clip.id}`;
+  const posterKeyRef = useRef(posterKey);
+  posterKeyRef.current = posterKey;
+  /** Copy the picture just drawn (before the texts) and save it a moment after the preview stops moving. */
+  const keepPoster = useCallback((src: HTMLCanvasElement) => {
+    const c = document.createElement("canvas");
+    c.width = Math.round(src.width / 2); c.height = Math.round(src.height / 2);
+    c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
+    posterRef.current = c;
+    clearTimeout(posterTimer.current);
+    const key = posterKeyRef.current;
+    posterTimer.current = window.setTimeout(() => {
+      c.toBlob((b) => { if (b) void putMedia(key, b).catch(() => {}); }, "image/jpeg", 0.85);
+    }, 1500);
+  }, []);
+  useEffect(() => () => clearTimeout(posterTimer.current), []);
+
   /** The <video> as a picture at official time `time`; none outside the part of the track the camera recorded. */
   const pictureOf = (el: HTMLVideoElement | null, time: number): Picture | null => {
     const off = settingsRef.current.offset;
     const inVideo = time >= off - 0.001 && (!Number.isFinite(el?.duration) || time <= off + (el?.duration ?? 0) + 0.001);
+    // No picture from the player yet (Safari, before the first play): the frame read from the file.
+    const still = stillRef.current;
+    // While playing starts, keep it on screen until the player has its first picture (no black flash).
+    if (el && inVideo && el.readyState < 2 && still && still.src === el.currentSrc && (!el.paused || Math.abs(still.at - (time - off)) < 0.08)) {
+      const w = el.videoWidth || still.bmp.width, h = el.videoHeight || still.bmp.height;
+      return { src: still.bmp, w, h, part: { x: 0, y: 0, w, h } };
+    }
     return el && el.videoWidth && inVideo ? { src: el, w: el.videoWidth, h: el.videoHeight } : null;
   };
   /**
    * The picture of the post at official time `time`: the framed camera video, the lyrics, then the hook.
    * Used by the preview and the export. Returns where the texts were drawn, to drag them on the preview.
    */
-  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number) => {
+  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number, preview?: { raw: boolean; keep: boolean }) => {
     const cfg = settingsRef.current;
+    const raw = !!preview?.raw;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
+    // Preview, before the video is ready (a big camera file takes a while to open): its last picture.
+    if (preview && !pic && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
     if (pic && pic.w && pic.h) {
       let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame);
       // Progressive zoom: ×1 at the start of the segment, `push` on its last frame, around the centre.
       const push = cfg.push ?? 1;
       if (push > 1) f = zoomPic(f, f.zoom * (1 + (push - 1) * clamp((time - cfg.crop.start) / Math.max(0.1, cfg.crop.duration), 0, 1)));
-      drawFramed(g, pic.src, pic.w, pic.h, f, W, H, pic.part);
+      const grader = graderRef.current;
+      const wantGrade = !raw && !pic.graded && gradesColour(cfg.grade);
+      if (wantGrade && !grader?.ready && gradePendingRef.current) { console.debug("[grade] waiting for the grade (LUT loading)"); pic = null; }
+      else if (wantGrade && grader?.ready) {
+        // Grade only what the post shows, at the size it is drawn.
+        const region = visibleRegion(f, pic.w, pic.h, W, H);
+        const s = (f.framing === "fill" ? Math.max(W / pic.w, H / pic.h) : Math.min(W / pic.w, H / pic.h)) * f.zoom;
+        const ow = Math.min(4096, region.w * s), oh = Math.min(4096, region.h * s);
+        const paused = pic.src instanceof HTMLVideoElement && pic.src.paused;
+        const graded = grader.grade(pic, region, ow, oh);
+        // A paused video can reach the GPU black: grade a 2D copy of it instead.
+        const black = paused && grader.gotBlack();
+        if (black) console.debug("[grade] paused video reached the GPU black: graded from a 2D copy");
+        pic = black ? grader.grade(copyRegion(pic, region, ow, oh), region, ow, oh) : graded;
+      }
+      if (pic) {
+        drawFramed(g, pic.src, pic.w, pic.h, f, W, H, pic.part);
+        if (!raw && cfg.grade) drawLook(g, W, H, cfg.grade, Math.round(time * EXPORT_FPS));
+        if (preview?.keep && !raw) keepPoster(g.canvas);
+      } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
     const text = cfg.captions ? activeRef.current(time) : null;
     const caption = text ? drawStyledText(g, text, styleRef.current, W, H) : null;
@@ -455,11 +560,28 @@ export default function VideoStudio({
     const c = canvasRef.current;
     const g = c?.getContext("2d");
     if (!c || !g) return;
-    const boxes = drawScene(g, c.width, c.height, pictureOf(videoRef.current, time), time);
+    const el = videoRef.current;
+    const keep = !sourceRef.current && !!el && el.readyState >= 2;
+    const boxes = drawScene(g, c.width, c.height, pictureOf(el, time), time, { raw: rawRef.current, keep });
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
     drawHelpers(g, c.width, c.height, aidsRef.current);
   }, [drawScene]);
+
+  /**
+   * Draw the paused picture now, and again a little later: right after a load or a seek, the frame of the
+   * hidden <video> may not be decoded yet (the browser gives black). Timers, not requestVideoFrameCallback:
+   * that one waits for the video to be painted on screen, which never happens for the hidden player.
+   */
+  const headRef = useRef(head);
+  headRef.current = head;
+  const drawWhenShown = useCallback((el: HTMLVideoElement) => {
+    drawAt(headRef.current);
+    for (const ms of [80, 250, 600]) setTimeout(() => { if (el.paused && !sourceRef.current) drawAt(headRef.current); }, ms);
+  }, [drawAt]);
+
+  const loadT0 = useRef(0);
+
 
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -488,8 +610,16 @@ export default function VideoStudio({
     setHead(settingsRef.current.crop.start);
     void (async () => {
       try {
+        const t0 = performance.now();
+        posterRef.current = null;
+        void getMedia(`poster:${clip.id}`).then(async (p) => {
+          if (!p || off || token !== ioRef.current) return;
+          try { posterRef.current = await createImageBitmap(p); drawAt(settingsRef.current.crop.start); } catch { /* not a picture */ }
+        });
         const [shared, legacy, b] = await Promise.all([getMedia(projectAudioKey), getMedia(`audio:${clip.id}`), getMedia(`video:${clip.id}`)]);
         if (off || token !== ioRef.current) return;
+        console.debug(`[load] files read from the device in ${Math.round(performance.now() - t0)} ms (video ${b ? Math.round(b.size / 1e6) + " MB" : "none"})`);
+        loadT0.current = t0;
         // The release has one official audio; older workspaces kept a copy per video: it becomes the project's.
         let a = shared ?? legacy;
         // Not on this device (another computer, browser data cleared): back from the Drive file.
@@ -511,9 +641,11 @@ export default function VideoStudio({
         }
         if (a) {
           setAudioBlob(a);
+          const ta = performance.now();
           decodeAudio(getCtx(), a)
             .then((buf) => {
               if (off || token !== ioRef.current) return;
+              console.debug(`[load] official audio decoded in ${Math.round(performance.now() - ta)} ms (${Math.round(a.size / 1e6)} MB, ready to play ${Math.round(performance.now() - t0)} ms after opening)`);
               setAudioBuf(buf);
               setPeaks(peaksOf(buf.getChannelData(0)));
             })
@@ -539,9 +671,58 @@ export default function VideoStudio({
       return;
     }
     const url = URL.createObjectURL(videoBlob);
+    setPlayerReady(false);
     setVideoUrl(url);
-    return () => URL.revokeObjectURL(url);
+    // Never stuck on "opening" if the browser stays silent: the timeline comes back after 30 s anyway.
+    const late = window.setTimeout(() => setPlayerReady(true), 30_000);
+    return () => { clearTimeout(late); URL.revokeObjectURL(url); };
   }, [videoBlob]);
+
+  // ---- Google Drive: the camera file, on request, to open the clip on another device ----
+  useEffect(() => { void canWriteDrive().then(setDriveWrite).catch(() => setDriveWrite(false)); }, []);
+  useEffect(() => () => driveAc.current?.abort(), []);
+  const driveName = (what: string) => `${project.name || "TkTgen"} - ${clip.name} - ${what}.mp4`.replace(/[\\/:*?"<>|]+/g, "-");
+  const setDrive = (patch: Partial<NonNullable<VideoSettings["drive"]>>) => setV({ drive: { ...(settingsRef.current.drive ?? {}), ...patch } });
+  const sendToDrive = async (blob: Blob) => {
+    if (driveJob) return;
+    const ac = new AbortController();
+    driveAc.current = ac;
+    setDriveErr(null);
+    setDriveJob({ kind: "send", p: 0 });
+    try {
+      const id = await uploadToDrive(blob, driveName(t("original")), (p) => setDriveJob({ kind: "send", p }), ac.signal);
+      setDrive({ originalId: id });
+      onSaveNow();
+    } catch (e) {
+      if (!ac.signal.aborted) {
+        console.warn("[drive] upload failed", e);
+        setDriveErr(t("Sending to Google Drive failed. Check your connection and try again."));
+      }
+    } finally {
+      if (driveAc.current === ac) driveAc.current = null;
+      setDriveJob(null);
+    }
+  };
+  /** The camera file from Drive, on a device that does not have it. */
+  const fetchOriginal = async () => {
+    const id = settings.drive?.originalId;
+    if (!id || driveJob) return;
+    const ac = new AbortController();
+    driveAc.current = ac;
+    setDriveErr(null);
+    setDriveJob({ kind: "fetch", p: 0 });
+    try {
+      const blob = await downloadDriveFileProgress(id, (p) => setDriveJob({ kind: "fetch", p }), ac.signal);
+      await putMedia(`video:${clip.id}`, blob).catch(() => {});
+      setVideoBlob(blob);
+    } catch (e) {
+      if (!ac.signal.aborted) setDriveErr(t("The camera file could not be fetched from Google Drive."));
+      console.warn("[drive] original download failed", e);
+    } finally {
+      if (driveAc.current === ac) driveAc.current = null;
+      setDriveJob(null);
+    }
+  };
 
   useEffect(() => () => { stop(); syncRef.current?.abort(); genRef.current?.abort(); stopTranscribe(); ctxRef.current?.close().catch(() => {}); }, [stop]);
 
@@ -591,14 +772,46 @@ export default function VideoStudio({
     syncRef.current?.abort();
     stop();
     setErr(null);
+    // The light copy and the picture of the previous file go first, so they are never shown for this one.
+    posterRef.current = null;
+    stillRef.current = null;
+    await delMedia(posterKey).catch(() => {});
     setVideoBlob(f);
     setVideoDur(0);
-    setV({ videoName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+    setV({ videoName: f.name, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
     void askPersistentStorage();
+    void describeVideo(f, true);
     try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
   };
+
+  /**
+   * Read what the file is (camera or phone, log / HDR / SDR). Log and HDR footage gets the matching
+   * conversion at once (log: with the last look LUT imported); standard SDR footage is left as it is.
+   */
+  const describeVideo = async (f: Blob, fresh: boolean) => {
+    const info = await probeVideo(f);
+    const cur = settingsRef.current;
+    const patch: Partial<VideoSettings> = { source: info };
+    const keep = cur.grade && !fresh;
+    if (!keep && info.profile) {
+      const last = lastLut();
+      patch.grade = { ...NEUTRAL_GRADE, ...(cur.grade ?? {}), profile: info.profile, lut: info.colour === "log" ? cur.grade?.lut ?? last : undefined };
+    } else if (fresh && cur.grade && info.colour === "sdr") {
+      patch.grade = { ...cur.grade, profile: "rec709" };
+    }
+    setV(patch);
+  };
+  // Videos imported before the detection existed (or before it read the duration): read them once.
+  useEffect(() => {
+    if (videoBlob && (!settings.source || settings.source.duration === undefined)) void describeVideo(videoBlob, false);
+  }, [videoBlob, clip.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The duration read from the file's index: the video band shows at once, before the player opened the file.
+  useEffect(() => {
+    const d = settings.source?.duration;
+    if (videoBlob && d && !videoDur) setVideoDur(d);
+  }, [videoBlob, settings.source?.duration, videoDur]);
 
   const removeAudio = async () => {
     ioRef.current++;
@@ -621,9 +834,11 @@ export default function VideoStudio({
     stop();
     setVideoBlob(null);
     setVideoDur(0);
-    setV({ videoName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+    setV({ videoName: undefined, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
+    posterRef.current = null;
     await delMedia(`video:${clip.id}`);
+    await delMedia(posterKey);
     onSaveNow();
   };
 
@@ -679,6 +894,7 @@ export default function VideoStudio({
     onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => c.id !== id), videoId: rest[Math.max(0, clips.indexOf(clip) - 1)].id }));
     onSaveNow();
     await delMedia(`video:${id}`).catch(() => {});
+    await delMedia(`poster:${id}`).catch(() => {});
     await delMedia(`audio:${id}`).catch(() => {});
   };
 
@@ -702,7 +918,7 @@ export default function VideoStudio({
     const el = videoRef.current;
     if (el) {
       el.muted = true;
-      await whenReady(el);
+      await whenReady(el, playerReady ? 3000 : 30_000);
       el.currentTime = Math.max(0, from - cfg.offset);
     }
     const src = ctx.createBufferSource();
@@ -729,7 +945,7 @@ export default function VideoStudio({
 
   useEffect(() => {
     if (!playing) drawAt(head);
-  }, [drawAt, head, playing, settings, timed, cues, captionStyle, hookStyle, videoUrl, fonts, aids, snap]);
+  }, [drawAt, head, playing, settings, timed, cues, captionStyle, hookStyle, videoUrl, fonts, aids, snap, lutRev, rawView]);
 
   // Paused: keep the picture on the frame that matches the playhead, so trimming and re-syncing are seen live.
   useEffect(() => {
@@ -741,6 +957,30 @@ export default function VideoStudio({
     if (Math.abs(el.currentTime - target) > 0.01) el.currentTime = target;
     else drawAt(head);
   }, [head, settings.offset, playing, videoUrl, videoDur, drawAt]);
+
+  // Safari shows no picture of a paused video before it played: read the frame under the playhead from the file.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (playing || exporting || !videoBlob || !videoDur || !el) return;
+    const target = head - settings.offset;
+    if (target < 0 || target > videoDur) return;
+    const id = window.setTimeout(() => {
+      if (el.readyState >= 2 || !el.paused) return; // the player has pictures: nothing to do
+      const s = stillRef.current;
+      if (s && s.src === el.currentSrc && Math.abs(s.at - target) < 0.08) return;
+      const src = el.currentSrc;
+      stillWant.current = target;
+      const t0 = performance.now();
+      grabFrame(videoBlob, target).then((bmp) => {
+        if (stillWant.current !== target) { bmp.close(); return; } // the playhead moved on
+        console.debug(`[load] frame read from the file in ${Math.round(performance.now() - t0)} ms`);
+        stillRef.current?.bmp.close();
+        stillRef.current = { src, at: target, bmp };
+        drawAt(headRef.current);
+      }).catch((e) => console.debug("[load] could not read a frame from the file", e));
+    }, 250);
+    return () => clearTimeout(id);
+  }, [head, settings.offset, playing, exporting, videoBlob, videoDur, drawAt]);
 
   // ---- audio sync ----
   const autoSync = async () => {
@@ -1265,7 +1505,11 @@ export default function VideoStudio({
       if (await mp4Support(W, H, audioBuf.sampleRate, Math.min(2, audioBuf.numberOfChannels))) {
         // Frames decoded from the file itself (works in a background tab); the hidden <video> only as a fallback.
         setExp({ p: 0, step: "read" });
-        source = videoBlob ? await VideoSource.open(videoBlob, from - cfg.offset, until - cfg.offset, (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal) : null;
+        // A colour grade is applied by ffmpeg on the camera file itself (10-bit), not on the 8-bit frames of the browser.
+        const bake = gradesColour(cfg.grade) && (!cfg.grade.lut || !!look);
+        const direct = () => videoBlob ? VideoSource.open(videoBlob, from - cfg.offset, until - cfg.offset, (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal) : Promise.resolve(null);
+        source = bake ? null : await direct();
+        let graded = false;
         const vdur = el.duration;
         /** Camera time at the start of the frames `source` gives (not 0 when they come from a converted segment). */
         let base = 0;
@@ -1275,27 +1519,33 @@ export default function VideoStudio({
         let detail = source?.codec ?? "";
         if (!source && videoBlob && !ac.signal.aborted) {
           // A format the browser cannot decode (4:2:2 10-bit, ProRes…): ffmpeg converts the segment first.
-          const why = VideoSource.lastReason;
+          const why = bake ? "" : VideoSource.lastReason;
           const vs = Math.max(0, from - cfg.offset - 0.2);
           const ve = Math.min(Number.isFinite(vdur) ? vdur : Infinity, until - cfg.offset + 0.2);
           if (ve > vs) {
             try {
               // Only what the post shows, at the camera's resolution (unknown size: the whole picture, not scaled).
               const crop = ow && oh ? cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1) : undefined;
-              const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}|${JSON.stringify(crop ?? null)}`;
+              const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}|${JSON.stringify(crop ?? null)}|${bake ? gradeKey(cfg.grade) : ""}`;
               let proxy = proxyRef.current?.key === key ? proxyRef.current.blob : null;
               if (!proxy) {
-                proxy = await convertSegment(videoBlob, vs, ve, (p, step) => setExp({ p, step }), ac.signal, crop);
+                const lut = bake && cfg.grade ? new TextEncoder().encode(toCube(buildGradeLut(cfg.grade, cfg.grade.lut ? look : null, 65), 65)) : undefined;
+                proxy = await convertSegment(videoBlob, vs, ve, (p, step) => setExp({ p, step }), ac.signal, crop, lut);
                 proxyRef.current = { key, blob: proxy }; // exporting the same segment again skips the conversion
               }
               source = await VideoSource.open(proxy, 0, ve - vs, (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal);
-              if (source) { base = vs; part = crop; detail = t("converted from {format}", { format: why.replace(/ not decodable.*$/, "") }); }
+              if (source) {
+                base = vs; part = crop; graded = bake;
+                detail = bake ? t("colour grade applied on the camera file") : t("converted from {format}", { format: why.replace(/ not decodable.*$/, "") });
+              }
             } catch (e) {
               if (ac.signal.aborted || (e instanceof DOMException && e.name === "AbortError")) throw e;
               console.warn("[export] conversion failed, using the browser's player", e);
-              VideoSource.lastReason = `${why} · ${t("conversion failed")}: ${e instanceof Error ? e.message : String(e)}`;
+              VideoSource.lastReason = `${why || t("colour grade")} · ${t("conversion failed")}: ${e instanceof Error ? e.message : String(e)}`;
             }
           }
+          // The grade could not be applied by ffmpeg: frames decoded by the browser, graded on the GPU.
+          if (!source && bake && !ac.signal.aborted) source = await direct();
         }
         const src = source;
         setExpMode(src ? { direct: true, detail } : { direct: false, detail: VideoSource.lastReason });
@@ -1326,7 +1576,8 @@ export default function VideoStudio({
             let pic: Picture | null = null;
             if (inside && src) {
               pic = await src.frameAt(target - base);
-              if (pic && part) pic = { src: pic.src, w: ow, h: oh, part };
+              if (pic && part) pic = { src: pic.src, w: ow, h: oh, part, graded };
+              else if (pic && graded) pic = { ...pic, graded };
             }
             else if (inside) {
               await visible();
@@ -1461,7 +1712,9 @@ export default function VideoStudio({
   const [outW, outH] = OUT_SIZE(settings.format);
 
   // ---- layout ----
-  const [tab, setTab] = useState<"media" | "lyrics" | "hook" | "style">(() =>
+  /** Files still opening: the panels wait (greyed) so nothing is edited half-loaded. */
+  const studioLoading = !!audioBlob && (!audioBuf || (!!videoUrl && !playerReady));
+  const [tab, setTab] = useState<"media" | "lyrics" | "hook" | "style" | "color">(() =>
     (project.audioName ?? settings.audioName) && settings.videoName ? "lyrics" : "media");
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
@@ -1619,7 +1872,19 @@ export default function VideoStudio({
               <option value="fit-black">{t("Fit whole, black bars")}</option>
             </select>
           </div>
-          <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")}>
+          <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")} style={{ position: "relative" }}>
+              <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
+                onError={() => setPlayerReady(true)}
+                onLoadedMetadata={(e) => {
+                  setVideoDur(e.currentTarget.duration);
+                  setPlayerReady(true);
+                  console.debug(`[load] video opened (duration known) after ${Math.round(performance.now() - loadT0.current)} ms`);
+                }}
+                onSeeked={(e) => { if (!playing) drawWhenShown(e.currentTarget); }}
+                onLoadedData={(e) => {
+                  console.debug(`[load] first picture decoded after ${Math.round(performance.now() - loadT0.current)} ms`);
+                  if (!playing) drawWhenShown(e.currentTarget);
+                }} />
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
               onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
@@ -1651,28 +1916,45 @@ export default function VideoStudio({
                 onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
             ))}
           </div>
+          {(() => {
+            // One line for the work done in the background on the video, one step after the other.
+            const job = driveJob
+              ? { p: driveJob.p, text: driveJob.kind === "send" ? t("Sending the camera file to your Drive") : t("Getting the camera file from your Drive") }
+              : null;
+            if (job) return (
+              <div className="job" title={t("Keep this tab open until it is done. The export always uses the original file.")}>
+                <div className="row"><span className="xs">{job.text}</span><span className="xs mono muted">{Math.round(job.p * 100)} %</span></div>
+                <div className="job-bar"><i style={{ width: `${Math.max(2, job.p * 100)}%` }} /></div>
+              </div>
+            );
+            return videoBlob && !videoDur ? <p className="muted xs">{t("Opening the camera video…")}</p> : null;
+          })()}
           <p className="muted xs">{videoBlob
             ? t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")
             : t("Nothing to preview yet.")} <span className="mono">{outW}×{outH}</span></p>
-          <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
-            onLoadedMetadata={(e) => setVideoDur(e.currentTarget.duration)}
-            onSeeked={() => { if (!playing) drawAt(head); }}
-            onLoadedData={() => { if (!playing) drawAt(head); }} />
+
         </div>
 
-        <div className="video-side">
+        <div className={"video-side" + (studioLoading ? " is-loading" : "")}>
           <div className="timeline">
             {!audioBuf ? (
-              <div className="timeline-empty">
-                <p>{audioBlob ? t("Reading the audio…") : t("Import the official audio to see the timeline.")}</p>
-                {!audioBlob && audioPick}
-              </div>
+              audioBlob ? (
+                <div className="studio-loading" aria-busy="true">
+                  <span className="muted xs">{t("Reading the audio…")}</span>
+                  <div className="skel-wave" />
+                </div>
+              ) : (
+                <div className="timeline-empty">
+                  <p>{t("Import the official audio to see the timeline.")}</p>
+                  {audioPick}
+                </div>
+              )
             ) : (
               <>
                 <div className="row">
                   <button className="btn icon" aria-label={playing ? t("Pause") : t("Play")} title={(playing ? t("Pause") : t("Play")) + " (Espace)"}
                     onClick={() => (playing ? stop() : void play())}>
-                    <Icon name={playing ? "pause" : "play"} />
+                    {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden /> : <Icon name={playing ? "pause" : "play"} />}
                   </button>
                   <span className="mono xs">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>
                   <span className="sep" />
@@ -1840,7 +2122,16 @@ export default function VideoStudio({
             <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
             <button role="tab" aria-selected={tab === "hook"} className={"tab" + (tab === "hook" ? " on" : "")} onClick={() => setTab("hook")}>{t("Hook")}</button>
             <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Lyrics style")}</button>
+            <button role="tab" aria-selected={tab === "color"} className={"tab" + (tab === "color" ? " on" : "")} onClick={() => setTab("color")}>{t("Colour")}</button>
           </div>
+
+          {tab === "color" && (
+            <div className="tab-body">
+              <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
+                clips={clips.length}
+                onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
+            </div>
+          )}
 
           {tab === "media" && (
             <div className="tab-body">
@@ -1875,6 +2166,57 @@ export default function VideoStudio({
                   {videoBlob && <button className="btn sm quiet danger" onClick={() => void removeVideo()}>{t("Remove video")}</button>}
                   {videoDur > 0 && <span className="muted xs">{fmtTime(videoDur)}</span>}
                 </div>
+                {videoBlob && settings.source && (() => {
+                  const s = settings.source;
+                  const what = [
+                    s.device ?? (s.kind === "camera" ? t("Camera") : s.kind === "phone" ? t("Phone") : null),
+                    s.curve ?? (s.colour === "unknown" ? t("colours not specified") : null),
+                    s.codec,
+                  ].filter(Boolean).join(" · ");
+                  return (
+                    <div className="stack">
+                      <div className="row">
+                        <span className="badge">{s.colour === "log" ? "LOG" : s.colour === "hdr" ? "HDR" : s.colour === "sdr" ? "SDR" : "?"}</span>
+                        <span className="muted xs">{what}</span>
+                      </div>
+                      <p className="muted xs">
+                        {s.colour === "log" && (s.profile
+                          ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
+                          : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab."))}
+                        {s.colour === "hdr" && t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab.")}
+                        {s.colour === "sdr" && t("Standard footage: used as it is, nothing to convert.")}
+                        {s.colour === "unknown" && t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab.")}
+                        {" "}{s.convert && t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality.")}
+                      </p>
+                    </div>
+                  );
+                })()}
+                {(videoBlob || settings.drive?.originalId) && (() => {
+                  const d = settings.drive ?? {};
+                  const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
+                  return (
+                    <div className="stack">
+                      <span className="label">{t("Google Drive")}</span>
+                      {driveWrite === false && !d.originalId ? (
+                        <div className="row">
+                          <span className="muted xs grow">{t("To open this video on another device, allow the app to save it in your Drive.")}</span>
+                          <button className="btn sm" onClick={() => void signIn("google", { redirectTo: "/studio" })}>{t("Reconnect Google")}</button>
+                        </div>
+                      ) : (
+                        <div className="row">
+                          <span className="muted xs grow">{d.originalId
+                            ? (videoBlob ? t("The camera file is on your Drive (TkTgen folder).") : t("The camera file is on your Drive, not on this device."))
+                            : t("Put the camera file on your Drive to open this video on another device.")}</span>
+                          {driveJob ? <button className="btn sm quiet" onClick={() => driveAc.current?.abort()}>{t("Cancel")}</button>
+                            : !videoBlob && d.originalId ? <button className="btn sm primary" onClick={() => void fetchOriginal()}>{t("Get it on this device")}</button>
+                            : videoBlob && !d.originalId ? <button className="btn sm" disabled={!driveWrite} onClick={() => void sendToDrive(videoBlob)}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>
+                            : null}
+                        </div>
+                      )}
+                      {driveErr && <p className="notice bad xs">{driveErr}</p>}
+                    </div>
+                  );
+                })()}
                 {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
                   <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
                 )}

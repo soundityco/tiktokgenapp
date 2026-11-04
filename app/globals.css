@@ -260,7 +260,13 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 /* No transition: restarted on every update, an eased width never caught up with the real percentage. */
 .export-bar > div, .bar.live > div { transition: none; }
 .video-side { display: grid; gap: var(--s2); min-width: 0; }
-.video-src { position: fixed; left: -9999px; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
+/* The player stays on screen (under the preview, nearly invisible): Safari does not load a video hidden off screen. */
+.video-src { position: absolute; left: 0; top: 0; width: 2px; height: 2px; opacity: .01; pointer-events: none; z-index: 0; }
+.cv-wrap > canvas.cv { position: relative; z-index: 1; }
+.video-side.is-loading > :not(.timeline) { opacity: .4; pointer-events: none; user-select: none; transition: opacity .2s; }
+.spin-dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin-dot { animation-duration: 2.4s; } }
 .wave { width: 100%; height: 90px; display: block; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); touch-action: none; cursor: ew-resize; }
 .lyric-timing { display: grid; gap: var(--s1); max-height: 210px; overflow: auto; padding-right: 2px; }
 .cue-row { display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 1px 2px; border-radius: var(--r); }
@@ -282,6 +288,18 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .timeline { display: grid; gap: var(--s2); padding: var(--s3); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .timeline-empty { display: grid; gap: var(--s3); justify-items: start; padding: var(--s3) 0; color: var(--muted); }
 .timeline-empty p { margin: 0; }
+.studio-loading { display: grid; gap: var(--s3); }
+.job { display: grid; gap: 6px; }
+.job .row { justify-content: space-between; }
+.job-bar { height: 3px; background: var(--line-2); border-radius: 2px; overflow: hidden; }
+.job-bar i { display: block; height: 100%; background: var(--accent); transition: width .4s ease; }
+.skel-wave { height: 90px; border: 1px solid var(--line-2); border-radius: var(--r); background:
+  linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--text) 6%, transparent) 50%, transparent 100%) 0 0 / 40% 100% no-repeat,
+  repeating-linear-gradient(90deg, var(--line-2) 0 2px, transparent 2px 6px) center / 100% 30% no-repeat, var(--bg);
+  animation: skel 1.4s ease-in-out infinite; }
+@keyframes skel { from { background-position: -40% 0, center; } to { background-position: 140% 0, center; } }
+@media (prefers-reduced-motion: reduce) { .skel-wave { animation: none; } }
+
 .lyric-track { position: relative; height: 34px; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; cursor: pointer; touch-action: none; }
 .lyric-track .cue { position: absolute; top: 4px; bottom: 4px; min-width: 3px; padding: 0 6px; border: 0; border-left: 2px solid var(--line-2); border-radius: 2px;
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }

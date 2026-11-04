@@ -153,9 +153,57 @@ export interface VideoHook {
   to?: number;
 }
 
+/** Colour grade of a camera clip (see lib/grade.ts). Sliders are applied in linear light / DaVinci Intermediate. */
+export interface VideoGrade {
+  /** How the camera recorded the colours: converted to DaVinci Wide Gamut / Intermediate first. */
+  profile: "slog3-cine" | "slog3" | "rec709" | "applelog" | "hlg" | "pq" | "none";
+  /** Look LUT made in DaVinci (input DWG / Intermediate), kept on this device (IndexedDB "lut:<id>"). */
+  lut?: { id: string; name: string };
+  /** Stops. */
+  exposure: number;
+  /** 1 = unchanged, around `pivot` (DaVinci Intermediate, default middle grey). */
+  contrast: number;
+  pivot?: number;
+  /** -100 (cooler) to 100 (warmer). */
+  temp: number;
+  /** -100 (greener) to 100 (more magenta). */
+  tint: number;
+  /** 1 = unchanged. */
+  sat: number;
+  /** 0-100. */
+  vignette: number;
+  vignetteSize: number;
+  /** 0-100. */
+  grain: number;
+  /** Grain size, 1-4. */
+  grainSize: number;
+}
+
+/** What the imported camera / phone file is, read from its metadata (see lib/probe.ts). */
+export interface VideoSourceInfo {
+  kind: "camera" | "phone" | "unknown";
+  /** "Sony ILME-FX30", "iPhone 15 Pro"… */
+  device?: string;
+  colour: "log" | "hdr" | "sdr" | "unknown";
+  /** Camera profile to convert it with, when it is log or HDR. */
+  profile?: VideoGrade["profile"];
+  /** Human name of the recorded curve ("S-Log3 / S-Gamut3.Cine", "HDR HLG"…). */
+  curve?: string;
+  /** "H.264 4:2:2 10-bit"… */
+  codec?: string;
+  /** The browser cannot read it frame by frame: the export converts it with ffmpeg. */
+  convert: boolean;
+  /** Seconds, from the file's index. */
+  duration?: number;
+}
+
 export interface VideoSettings {
   audioName?: string;
   videoName?: string;
+  /** What the camera file is (read at import). */
+  source?: VideoSourceInfo;
+  /** The camera file kept in the user's Google Drive, to open the clip on another device. */
+  drive?: { originalId?: string };
   /** Part of the official audio used by the post (seconds). The imported file itself is never trimmed. */
   crop: { start: number; duration: number };
   /** Official-audio time of the first video frame (video t=0). */
@@ -183,6 +231,8 @@ export interface VideoSettings {
   captionStyle?: TextStyle;
   /** Progressive zoom over the segment: ×1 on the first frame, this factor on the last (e.g. 1.05). None: off. */
   push?: number;
+  /** Colour grade of the camera picture. None: the picture as recorded. */
+  grade?: VideoGrade;
   /** Titles over the video, one after the other or all along. */
   hooks?: VideoHook[];
   /** Show the hooks on the video (default yes). */

@@ -34,7 +34,7 @@ async function load() {
 }
 
 self.onmessage = async (e) => {
-  const { type, file, args, duration } = e.data || {};
+  const { type, file, files, args, duration, output = "out.mp4" } = e.data || {};
   if (type !== "convert") return;
   const log = [];
   try {
@@ -49,16 +49,19 @@ self.onmessage = async (e) => {
     });
     try { ff.FS.mkdir("/in"); } catch { /* already there */ }
     ff.FS.mount(ff.FS.filesystems.WORKERFS, { blobs: [{ name: "source", data: file }] }, "/in");
+    // Small extra inputs (the colour grade LUT) go in memory.
+    for (const f of files || []) ff.FS.writeFile(f.name, f.data);
     try {
       ff.exec(...args);
       const ret = ff.ret;
       ff.reset();
       if (ret !== 0) throw new Error(`ffmpeg stopped (code ${ret})`);
-      const out = ff.FS.readFile("out.mp4");
-      try { ff.FS.unlink("out.mp4"); } catch { /* nothing */ }
+      const out = ff.FS.readFile(output);
+      try { ff.FS.unlink(output); } catch { /* nothing */ }
       post({ type: "done", data: out }, [out.buffer]);
     } finally {
       try { ff.FS.unmount("/in"); } catch { /* nothing */ }
+      for (const f of files || []) try { ff.FS.unlink(f.name); } catch { /* nothing */ }
     }
   } catch (err) {
     post({ type: "error", message: String((err && err.message) || err), log: log.slice(-12) });

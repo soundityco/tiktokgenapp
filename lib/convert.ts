@@ -45,6 +45,8 @@ export function convertSegment(
   onProgress: (p: number, step: ConvertStep) => void,
   signal: AbortSignal,
   crop?: ConvertCrop,
+  /** Colour grade as a .cube 3D LUT, applied on the camera's own pixels (10-bit) before the 8-bit file is made. */
+  lut?: Uint8Array,
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
@@ -74,22 +76,78 @@ export function convertSegment(
     w.addEventListener("message", onMsg);
     w.addEventListener("error", onErr);
     signal.addEventListener("abort", onAbort, { once: true });
+    const size = crop ? `${crop.out.w}:${crop.out.h}` : "trunc(iw/2)*2:trunc(ih/2)*2";
+    const vf = [
+      ...(crop ? [`crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}`] : []),
+      ...(lut
+        ? [
+          // 16-bit RGB with the camera's matrix, the LUT, then back to video-level BT.709 8-bit.
+          `scale=${size}:flags=lanczos+accurate_rnd+full_chroma_int:in_color_matrix=bt709:in_range=tv`, "format=gbrp16le",
+          "lut3d=file=/grade.cube:interp=tetrahedral",
+          "scale=flags=accurate_rnd:out_color_matrix=bt709:out_range=tv", "format=yuv420p",
+        ]
+        : [`scale=${size}${crop ? ":flags=lanczos" : ""}`, "format=yuv420p"]),
+    ].join(",");
     w.postMessage({
       type: "convert",
       file,
+      files: lut ? [{ name: "/grade.cube", data: lut }] : [],
       duration: dur,
       args: [
         "-ss", from.toFixed(3), "-t", dur.toFixed(3),
         "-i", "/in/source",
         "-map", "0:v:0", "-an", "-sn", "-dn",
         // Upright (ffmpeg applies the rotation before the filters), the visible part only, 8-bit 4:2:0.
-        "-vf", crop
-          ? `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y},scale=${crop.out.w}:${crop.out.h}:flags=lanczos,format=yuv420p`
-          : "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+        "-vf", vf,
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "17", "-g", "30", "-bf", "0",
+        ...(lut ? ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"] : []),
         "-movflags", "+faststart",
         "out.mp4",
       ],
     });
   });
 }
+
+/** Run one ffmpeg job on the converter worker; resolves with the bytes of `output`. */
+function runJob(file: Blob, args: string[], output: string, duration: number, signal?: AbortSignal): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
+    worker ??= new Worker("/ffmpeg/worker.js", { type: "module" });
+    const w = worker;
+    const cleanup = () => { w.removeEventListener("message", onMsg); w.removeEventListener("error", onErr); signal?.removeEventListener("abort", onAbort); };
+    const drop = () => { w.terminate(); if (worker === w) worker = null; };
+    const onMsg = (e: MessageEvent) => {
+      const m = e.data;
+      if (m.type === "done") { cleanup(); resolve(m.data); }
+      else if (m.type === "error") { cleanup(); drop(); reject(new Error(m.message)); }
+    };
+    const onErr = (e: ErrorEvent) => { cleanup(); drop(); reject(new Error(e.message || "converter could not start")); };
+    const onAbort = () => { cleanup(); drop(); reject(new DOMException("aborted", "AbortError")); };
+    w.addEventListener("message", onMsg);
+    w.addEventListener("error", onErr);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    w.postMessage({ type: "convert", file, files: [], duration, args, output });
+  });
+}
+
+let grabbing: Promise<unknown> = Promise.resolve();
+
+/**
+ * One picture of the camera file at `at` seconds, at most `maxW` pixels wide, as the camera recorded it
+ * (no colour change: the grade is applied on it like on the video). For browsers that show no picture of a
+ * paused video before it played (Safari). Jobs run one after the other.
+ */
+export function grabFrame(file: Blob, at: number, maxW = 2048): Promise<ImageBitmap> {
+  const job = grabbing.catch(() => {}).then(async () => {
+    const data = await runJob(file, [
+      "-ss", Math.max(0, at).toFixed(3), "-i", "/in/source",
+      "-map", "0:v:0", "-an", "-sn", "-dn", "-frames:v", "1",
+      "-vf", `scale='min(${maxW},iw)':-2:flags=bicubic:in_color_matrix=bt709:in_range=tv,format=rgb24`,
+      "-f", "image2", "-c:v", "bmp", "frame.bmp",
+    ], "frame.bmp", 1);
+    return createImageBitmap(new Blob([data as BlobPart], { type: "image/bmp" }));
+  });
+  grabbing = job;
+  return job;
+}
+

@@ -2,7 +2,8 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 
-const SCOPE = "openid email profile https://www.googleapis.com/auth/drive.readonly";
+// drive.file: the app may create files in the user's Drive and use those only (copies of the camera videos).
+const SCOPE = "openid email profile https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file";
 
 const allowed = () =>
   (process.env.ALLOWED_EMAILS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -68,6 +69,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
           expiresAt: account.expires_at,
+          scope: account.scope,
         };
       }
       const t: any = token;
@@ -80,6 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       (session as any).accessToken = t.accessToken;
       (session as any).expiresAt = t.expiresAt;
       (session as any).error = t.error;
+      (session as any).scope = t.scope;
       return session;
     },
   },
