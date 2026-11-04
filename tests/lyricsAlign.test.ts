@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, keepManual, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, keepManual, retimeCue, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import type { LyricWord } from "@/lib/types";
 
 const w = (text: string, s: number, e: number, line?: number): LyricWord => ({ w: text, s, e, ...(line === undefined ? {} : { line }) });
@@ -117,6 +117,23 @@ describe("buildCues", () => {
     expect(buildCues(cut, "phrase", { lineChars: 40 })[0].end).toBeCloseTo(1.6);
     const later = buildCues(shiftCue(cut, buildCues(cut, "phrase", { lineChars: 40 })[0], 0.2), "phrase", { lineChars: 40 });
     expect(later[0].end).toBeCloseTo(1.8);
+  });
+
+  it("+ on the end of a line glued to the next one makes the next one come later", () => {
+    const o = { lineChars: 40 };
+    // Two lines back to back: the first stays on screen until the second.
+    const glued = [w("un", 0, 0.4, 0), w("deux", 0.4, 0.9, 0), w("trois", 1.1, 1.5, 1), w("quatre", 1.5, 2.2, 1)];
+    const cues = buildCues(glued, "phrase", o);
+    expect(cues[0].end).toBeCloseTo(cues[1].start);
+    const out = retimeCue(glued, cues, 0, "end", 0.1)!;
+    const after = buildCues(out, "phrase", o);
+    expect(after[0].end).toBeCloseTo(cues[0].end + 0.1);
+    expect(after[1].start).toBeCloseTo(cues[1].start + 0.1);
+    expect(after[1].end).toBeCloseTo(cues[1].end); // the next line still leaves when it did
+    // − on the start of the second line: the first one leaves sooner.
+    const back = buildCues(retimeCue(glued, cues, 1, "start", -0.1)!, "phrase", o);
+    expect(back[1].start).toBeCloseTo(cues[1].start - 0.1);
+    expect(back[0].end).toBeCloseTo(back[1].start);
   });
 
   it("keeps the lines retimed by hand when the lyrics are placed again", () => {

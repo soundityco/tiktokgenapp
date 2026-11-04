@@ -386,6 +386,42 @@ export function setCueEnd(all: LyricWord[], cue: Cue, end: number): LyricWord[] 
 }
 
 /**
+ * The ± buttons of a caption: `start` moves the whole line by `delta`, `end` changes when it leaves the screen.
+ * A line glued to its neighbour pushes the limit: a later end makes the next line appear later (its end stays),
+ * an earlier start makes the previous line leave sooner. Each line keeps at least 0.2 s. Null: nothing can move.
+ */
+export function retimeCue(all: LyricWord[], cues: Cue[], i: number, what: "start" | "end", delta: number): LyricWord[] | null {
+  const c = cues[i], prev = cues[i - 1], next = cues[i + 1];
+  if (!c) return null;
+  const MIN = 0.2;
+  if (what === "end") {
+    const hi = next ? next.end - MIN : c.end + 60;
+    const to = r3(Math.max(c.start + MIN, Math.min(hi, c.end + delta)));
+    if (Math.abs(to - c.end) < 0.005) return null;
+    let out = all;
+    if (next && to > next.start) {
+      // The next line comes later by as much, its words with it, but it still leaves when it did.
+      const d = to - next.start;
+      const shifted = new Map(next.words.map((x) => [x, { ...x, s: r3(x.s + d), e: r3(x.e + d), manual: true } as LyricWord]));
+      const lastNext = next.words[next.words.length - 1];
+      out = all.map((x) => {
+        const y = shifted.get(x);
+        return y ? (x === lastNext ? { ...y, until: r3(next.end) } : y) : x;
+      });
+    }
+    return setCueEnd(out, c, to);
+  }
+  const lo = prev ? prev.start + MIN - c.start : -c.start;
+  const hi = next ? next.start - c.words[c.words.length - 1].e - 0.02 : 60;
+  const d = Math.max(lo, Math.min(hi, delta));
+  if (Math.abs(d) < 0.005) return null;
+  let out = shiftCue(all, c, d);
+  // The previous line leaves when this one now comes.
+  if (prev && c.start + d < prev.end) out = setCueEnd(out, prev, c.start + d);
+  return out;
+}
+
+/**
  * The lyrics were placed again (text edited, synced again): the words retimed by hand keep their timing.
  * Old and new words are matched in order (longest common sequence of the words), so an edit elsewhere
  * in the text, or a line added or removed, leaves the other retouches where they were.

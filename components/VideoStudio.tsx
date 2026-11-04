@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { canWriteDrive, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, uploadToDrive } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, retimeCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
@@ -1871,23 +1871,12 @@ export default function VideoStudio({
 
   /** Retime one caption by 0.1 s: "start" moves the whole line, "end" only when it leaves the screen. Never over its neighbours. */
   const retime = (i: number, what: "start" | "end", dir: 1 | -1) => {
-    const c = cues[i], prev = cues[i - 1], next = cues[i + 1];
-    const words = project.lyricWords ?? [];
-    let out: LyricWord[];
-    if (what === "start") {
-      const lo = prev ? prev.words[prev.words.length - 1].e + 0.02 : 0;
-      const hi = next ? next.start - 0.02 : Infinity;
-      const d = clamp(dir * 0.1, lo - c.start, hi - c.words[c.words.length - 1].e);
-      if (Math.abs(d) < 0.005) return;
-      out = shiftCue(words, c, d);
-      setHead(round2(Math.max(settings.crop.start, c.start + d)));
-    } else {
-      const to = clamp(c.end + dir * 0.1, c.start + 0.2, next ? next.start : c.end + 60);
-      if (Math.abs(to - c.end) < 0.005) return;
-      out = setCueEnd(words, c, to);
-      setHead(round2(Math.max(c.start, to - 0.3)));
-    }
+    const c = cues[i];
+    const out = c && retimeCue(project.lyricWords ?? [], cues, i, what, dir * 0.1);
+    if (!out) return;
     stop();
+    // The preview shows the edge that moved.
+    setHead(round2(what === "start" ? Math.max(settings.crop.start, c.start + dir * 0.1) : Math.max(c.start, c.end + dir * 0.1 - 0.3)));
     onProject((p) => ({ ...p, lyricWords: out }));
   };
 
