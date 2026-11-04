@@ -2,7 +2,7 @@
 
 import { mixToMono } from "./syncAudio";
 export { syncAudio, mixToMono, NO_SYNC } from "./syncAudio";
-export type { SyncResult, Focus } from "./syncAudio";
+export type { SyncResult, Focus, Take } from "./syncAudio";
 
 const monoCache = new WeakMap<AudioBuffer, Float32Array>();
 /** All channels averaged, cached per buffer (the same array lets the sync reuse the track\'s analysis). */

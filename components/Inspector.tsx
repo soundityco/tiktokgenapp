@@ -124,6 +124,7 @@ export default function Inspector({
       </div>
 
       <p className="muted xs">{t("On the preview: drag the text to move it (it snaps to the centre), scroll on it to resize, drag the photo to reframe it, scroll on it to zoom, double-click it to reset.")}</p>
+      <p className="muted xs">{t("Space: full-size preview without the TikTok zones")}</p>
     </div>
   );
 }

@@ -12,7 +12,9 @@
  *      (all bands at once): chords, melody, bass line and timbre make the right spot stand out;
  *   4. every chunk votes for an offset, weighted by how much its best match beats the runner-up,
  *      so someone talking over the intro, or a repeated chorus, cannot decide alone;
- *   5. the winning offset is refined on the part where the music really plays.
+ *   5. at the strongest offsets, the stretches where the music really matches become "takes"
+ *      (a video can hold the same passage filmed 2-3 times, each with its own offset);
+ *   6. the take covering the post's segment is used, its offset refined where the music plays.
  *
  * Pure functions, no browser API: it runs the same in the app and in the tests.
  */
@@ -27,6 +29,20 @@ export interface SyncResult {
   musicEnd: number | null;
   /** How many chunks of the recording agreed on the offset. */
   anchors: number;
+  /**
+   * Every take found in the clip (several when the passage was filmed 2-3 times in one video),
+   * in clip order. `offset`/`musicStart`/`musicEnd` above are those of the take used.
+   */
+  takes: Take[];
+}
+
+/** One stretch of the clip where it plays a part of the official track. */
+export interface Take {
+  offset: number;
+  musicStart: number;
+  musicEnd: number;
+  /** Strength relative to the best take, 0 to 1. */
+  strength: number;
 }
 
 /** Official-audio window the post uses: breaks ties between identical repeats (verse 2 vs verse 1). */
@@ -35,7 +51,7 @@ export interface Focus {
   to: number;
 }
 
-export const NO_SYNC: SyncResult = { offset: 0, score: 0, musicStart: null, musicEnd: null, anchors: 0 };
+export const NO_SYNC: SyncResult = { offset: 0, score: 0, musicStart: null, musicEnd: null, anchors: 0, takes: [] };
 
 const FPS = 40; // feature frames per second (25 ms)
 const BANDS = 32;
@@ -348,11 +364,11 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
   clusters.sort((p, q) => q.weight - p.weight);
   const top = clusters[0];
 
-  // ---- candidates: the strongest clusters (not the same offset twice). With identical repeats
-  //      (copy-pasted chorus) several are equally good: the one that makes the chosen segment match wins.
+  // ---- candidates: the strongest clusters (not the same offset twice). A video with several takes
+  //      has one strong cluster per take; identical repeats (copy-pasted chorus) give equal ones.
   const candidates: Cluster[] = [];
   for (const c of clusters) {
-    if (c.weight < top.weight * 0.08 || candidates.length >= 6) break;
+    if (c.weight < top.weight * 0.05 || candidates.length >= 10) break;
     if (candidates.some((k) => Math.abs(k.off - c.off) < 0.4)) continue;
     candidates.push(c);
   }
@@ -370,6 +386,18 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
     }
     return { d, c2, r2 };
   };
+  /** Agreement over 1 s windows around every clip frame. */
+  const localCurve = (sh: number) => {
+    const { d, c2, r2 } = frameScores(sh);
+    const W = FPS;
+    const local = new Float32Array(clip.frames);
+    for (let i = 0; i < clip.frames; i++) {
+      const a = Math.max(0, i - W / 2), b = Math.min(clip.frames, i + W / 2);
+      if (b - a < W / 2) continue;
+      local[i] = (d[b] - d[a]) / Math.sqrt((c2[b] - c2[a]) * (r2[b] - r2[a]) + 1e-9);
+    }
+    return local;
+  };
   /** How well the clip matches over the frames that fall on the chosen segment (null: they do not overlap enough). */
   const focusMatch = (off: number): number | null => {
     if (!focus || focus.to <= focus.from) return null;
@@ -380,39 +408,47 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
     const { d, c2, r2 } = frameScores(sh);
     return (d[b] - d[a]) / Math.sqrt((c2[b] - c2[a]) * (r2[b] - r2[a]) + 1e-9);
   };
-  let chosen = top;
-  let chosenFocus: number | null = focusMatch(top.off);
+  /** Share of the chosen segment that a stretch of the clip [a, b) covers at this offset. */
+  const focusFit = (off: number, a: number, b: number) =>
+    !focus || focus.to <= focus.from ? 0 : overlap(off + a / FPS, off + b / FPS, focus.from, focus.to) / (focus.to - focus.from);
+
+  // ---- takes: at each candidate offset, the stretches of the clip where the music really matches.
+  //      Talking, silence or another passage between two takes breaks the stretch.
+  interface Region { c: Cluster; bs: number; be: number; strength: number; fit: number }
+  const GAP = Math.round(1.5 * FPS);
+  const minLen = Math.min(4 * FPS, Math.floor(clip.frames * 0.5));
+  const found: Region[] = [];
   for (const c of candidates) {
-    const f = focusMatch(c.off);
-    // A candidate replaces the leader only if the segment really matches under it (not by chance).
-    if (f !== null && f >= 0.25 && (chosenFocus === null || f > chosenFocus + 0.03)) { chosen = c; chosenFocus = f; }
+    const local = localCurve(Math.round(c.off * FPS));
+    const sorted = Array.from(local).sort((x, y) => x - y);
+    const thr = Math.max(0.1, (sorted[Math.floor(sorted.length * 0.97)] ?? 0) * 0.5);
+    const push = (a: number, b: number) => {
+      if (b - a < minLen) return;
+      let st = 0;
+      for (let i = a; i < b; i++) st += local[i];
+      found.push({ c, bs: a, be: b, strength: st, fit: focusFit(c.off, a, b) });
+    };
+    let s0 = -1, last = -1;
+    for (let i = 0; i < clip.frames; i++) {
+      if (local[i] >= thr) { if (s0 < 0) s0 = i; last = i; }
+      else if (s0 >= 0 && i - last > GAP) { push(s0, last + 1); s0 = -1; }
+    }
+    if (s0 >= 0) push(s0, last + 1);
   }
-  const group = chosen.votes;
-  let offset = chosen.off;
+  // Keep the best explanation of each part of the clip. Covering the post's segment is a small bonus,
+  // enough to settle identical repeats, not enough for a short repeated chorus to beat a whole take.
+  const rank = (r: Region) => r.strength * (1 + 0.2 * r.fit);
+  found.sort((p, q) => rank(q) - rank(p));
+  const kept: Region[] = [];
+  for (const r of found) {
+    if (kept.length >= 6 || (kept.length && r.strength < 0.2 * kept[0].strength)) continue;
+    const clash = kept.some((k) => overlap(k.bs, k.be, r.bs, r.be) > 0.3 * Math.min(k.be - k.bs, r.be - r.bs));
+    if (!clash) kept.push(r);
+  }
 
-  // ---- where the music really plays at this offset, and a fine offset measured only there
-  const shift = Math.round(offset * FPS);
-  const { d, c2, r2 } = frameScores(shift);
-  const W = FPS; // 1 s windows
-  const local = new Float32Array(clip.frames);
-  for (let i = 0; i < clip.frames; i++) {
-    const a = Math.max(0, i - W / 2), b = Math.min(clip.frames, i + W / 2);
-    if (b - a < W / 2) continue;
-    local[i] = (d[b] - d[a]) / Math.sqrt((c2[b] - c2[a]) * (r2[b] - r2[a]) + 1e-9);
-  }
-  const sorted = Array.from(local).sort((x, y) => x - y);
-  const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
-  const thr = Math.max(0.08, p90 * 0.5);
-  let bs = -1, be = -1, s0 = -1;
-  for (let i = 0; i <= clip.frames; i++) {
-    const ok = i < clip.frames && local[i] >= thr;
-    if (ok && s0 < 0) s0 = i;
-    if (!ok && s0 >= 0) { if (i - s0 > be - bs) { bs = s0; be = i; } s0 = -1; }
-  }
-  const hasRegion = bs >= 0 && be - bs >= FPS;
-
-  if (hasRegion) {
-    // fine search ±3 frames on the music-only part (capped at 30 s)
+  // Fine offset (±3 frames) measured on the music-only part of a take, capped at 30 s.
+  const refine = (off: number, bs: number, be: number): number => {
+    const shift = Math.round(off * FPS);
     const a = bs, b = Math.min(be, bs + 30 * FPS);
     const sc: number[] = [];
     for (let delta = -3; delta <= 3; delta++) {
@@ -434,24 +470,44 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
     }
     // keep the refinement only if it stays close to what the chunks agreed on
     const refined = (shift + (k - 3) + frac) / FPS;
-    if (Math.abs(refined - offset) < 0.1) offset = refined;
-  }
+    return Math.abs(refined - off) < 0.1 ? refined : off;
+  };
+
+  // ---- the take used: the one that covers the post's segment, else the strongest
+  let chosen: Region | null = kept[0] ?? null;
+  for (const r of kept) if (r.fit >= 0.3 && (!chosen || r.fit > chosen.fit + 0.05)) chosen = r;
+  const cluster = chosen?.c ?? top;
+  const group = cluster.votes;
+  const offset = chosen ? refine(cluster.off, chosen.bs, chosen.be) : cluster.off;
+  const chosenFocus = focusMatch(offset);
 
   // ---- confidence: agreeing chunks, how clean their matches are, and how much of the clip is music
   const best = group.reduce((m, v) => Math.max(m, v.score), 0);
   const bestMargin = group.reduce((m, v) => Math.max(m, v.margin), 0);
   const agree = group.length / Math.max(1, Math.min(usable, 4));
-  const musicFrac = hasRegion ? (be - bs) / clip.frames : 0.5;
+  const musicFrac = kept.length ? kept.reduce((n, r) => n + r.be - r.bs, 0) / clip.frames : 0.5;
   // Identical repeats leave no margin: then the segment itself must match well.
   const clean = Math.max(Math.min(1, bestMargin / 0.15), chosenFocus !== null && chosenFocus > 0.3 ? 1 : 0);
   const score = Math.max(0, Math.min(1, 0.45 * Math.min(1, best / 0.4) + 0.3 * clean + 0.25 * Math.min(1, agree)));
 
+  const round = (x: number) => Math.round(x * 1000) / 1000;
+  const strongest = kept[0]?.strength || 1;
+  const takes: Take[] = kept
+    .map((r) => ({
+      offset: round(r === chosen ? offset : refine(r.c.off, r.bs, r.be)),
+      musicStart: r.bs / FPS,
+      musicEnd: r.be / FPS,
+      strength: Math.round((r.strength / strongest) * 100) / 100,
+    }))
+    .sort((p, q) => p.musicStart - q.musicStart);
+
   return {
-    offset: Math.round(offset * 1000) / 1000,
+    offset: round(offset),
     score: score * (0.7 + 0.3 * Math.min(1, musicFrac * 1.5)),
-    musicStart: hasRegion ? bs / FPS : null,
-    musicEnd: hasRegion ? be / FPS : null,
+    musicStart: chosen ? chosen.bs / FPS : null,
+    musicEnd: chosen ? chosen.be / FPS : null,
     anchors: group.length,
+    takes,
   };
 }
 

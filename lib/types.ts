@@ -123,6 +123,13 @@ export interface VideoFrame {
   oy: number;
 }
 
+/** One take found in the camera video: where its music plays and its own offset. */
+export interface VideoTake {
+  offset: number;
+  musicStart: number;
+  musicEnd: number;
+}
+
 export interface VideoSettings {
   audioName?: string;
   videoName?: string;
@@ -137,6 +144,8 @@ export interface VideoSettings {
   musicEnd?: number;
   /** How many spread-out excerpts of the official track agreed on the offset. */
   anchors?: number;
+  /** When the video holds the passage several times: every take found by the sync (the user picks one). */
+  takes?: VideoTake[];
   /** Burn the timed lyrics on the video. */
   captions: boolean;
   /** How the generated lyrics are cut into captions: one word at a time or one phrase at a time. */

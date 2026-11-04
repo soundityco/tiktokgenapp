@@ -17,6 +17,7 @@ import Inspector from "./Inspector";
 import Logo from "./Logo";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
 import { withPreset } from "./TextControls";
+import SlidePreview from "./SlidePreview";
 import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "./ui";
@@ -68,6 +69,7 @@ export default function Studio({ userName }: { userName: string }) {
   const [studio, setStudio] = useState<"carousel" | "video">("carousel");
   const [toast, setToast] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [fonts, setFonts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
@@ -401,7 +403,10 @@ export default function Studio({ userName }: { userName: string }) {
     const k = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (studio === "carousel" && e.key.toLowerCase() === "g" && !document.querySelector(".ov")) generate();
+      if (studio !== "carousel" || document.querySelector(".ov")) return;
+      if (e.key.toLowerCase() === "g") generate();
+      // Space: clean full-size preview of the selected slide (and no page scroll / button press).
+      else if (e.key === " " && !el.isContentEditable) { e.preventDefault(); setPreview(true); }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -958,6 +963,10 @@ export default function Studio({ userName }: { userName: string }) {
           });
           say(t("{n} hooks added", { n: hooks.length }));
         }} />
+      )}
+      {preview && studio === "carousel" && (
+        <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}
+          onNav={(i) => updProject((p) => ({ ...p, selectedSlide: i }))} onClose={() => setPreview(false)} />
       )}
       {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} onCreate={createPool} onClose={() => setOverlay(null)} />}
       {overlay?.k === "newProject" && <PromptDialog title={t("New project")} label={t("Release name")} confirmLabel={t("Create")} onSubmit={createProject} onClose={() => setOverlay(null)} />}

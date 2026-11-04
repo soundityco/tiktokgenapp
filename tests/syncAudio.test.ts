@@ -182,4 +182,41 @@ describe("syncAudio (camera recording on the official audio)", () => {
     const onCopy = syncAudio(rec, SR, ref, SR, { from: p0 + 40 + 1, to: p0 + 40 + 7 });
     expect(Math.abs(onCopy.offset - (p0 - lead + 40))).toBeLessThan(0.05);
   });
+
+  /** Several takes in one video: excerpts of the track with a pause (silence) between them. */
+  const takes = (parts: [number, number][], pause: number) => {
+    const total = parts.reduce((n, [a, b]) => n + Math.round(b * SR) - Math.round(a * SR), 0) + (parts.length - 1) * pause * SR;
+    const out = new Float32Array(total);
+    let at = 0;
+    parts.forEach(([a, b], k) => {
+      if (k) at += pause * SR;
+      const piece = REF.subarray(Math.round(a * SR), Math.round(b * SR));
+      out.set(piece, at);
+      at += piece.length;
+    });
+    return out;
+  };
+
+  it("finds every take when the same passage was filmed three times", () => {
+    const lead = 2, pause = 4, len = 12;
+    const rec = phone(takes([[20, 32], [20, 32], [20, 32]], pause), lead, 41);
+    const r = syncAudio(rec, SR, REF, SR, { from: 22, to: 30 });
+    const want = [0, 1, 2].map((k) => 20 - (lead + k * (len + pause)));
+    expect(r.takes.length).toBe(3);
+    r.takes.forEach((tk, k) => expect(Math.abs(tk.offset - want[k])).toBeLessThan(0.05));
+    expect(want.some((w) => Math.abs(r.offset - w) < 0.05)).toBe(true);
+    expect(r.score).toBeGreaterThan(0.6);
+  });
+
+  it("uses the take that holds the post's segment when the takes are different passages", () => {
+    const lead = 1.5, pause = 3;
+    const rec = phone(takes([[10, 22], [40, 52]], pause), lead, 42);
+    const second = 40 - (lead + 12 + pause);
+    const r = syncAudio(rec, SR, REF, SR, { from: 42, to: 50 });
+    expect(r.takes.length).toBe(2);
+    expect(Math.abs(r.offset - second)).toBeLessThan(0.05);
+    expect(r.musicStart!).toBeGreaterThan(lead + 12 + pause - 1.5);
+    const first = syncAudio(rec, SR, REF, SR, { from: 12, to: 20 });
+    expect(Math.abs(first.offset - (10 - lead))).toBeLessThan(0.05);
+  });
 });

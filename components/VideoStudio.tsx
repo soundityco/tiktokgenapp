@@ -8,7 +8,7 @@ import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncA
 import { askNotifyPermission, notify } from "@/lib/notify";
 import { drawStyledText } from "@/lib/render";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import type { Project, StylePreset, TextStyle, VideoSettings, VideoSetup } from "@/lib/types";
+import type { LyricWord, Project, StylePreset, TextStyle, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
 import { StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
@@ -16,6 +16,11 @@ import { Range, Section } from "./ui";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
+/** Longest stretch of a video listened to in real time when the browser cannot decode its audio (10 min). */
+const MAX_CAPTURE = 600;
+/** The lyrics are heard in windows of this length (s), overlapping a little so no word is cut. */
+const LYRICS_WIN = 28;
+const LYRICS_LAP = 2;
 
 const DEFAULT_VIDEO: VideoSettings = defaultVideo();
 
@@ -213,6 +218,7 @@ export default function VideoStudio({
   const [genBusy, setGenBusy] = useState(false);
   const [genStep, setGenStep] = useState<AsrStep | null>(null);
   const [genPct, setGenPct] = useState(0);
+  const [genDone, setGenDone] = useState(0);
   const [genInfo, setGenInfo] = useState<string | null>(null);
   const [model, setModel] = useState<AsrModel>("base");
   const [language, setLanguage] = useState(lang === "fr" ? "french" : "auto");
@@ -388,7 +394,7 @@ export default function VideoStudio({
     setAudioBlob(f);
     setAudioBuf(null);
     setPeaks([]);
-    setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
     try { await putMedia(`audio:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
     try {
@@ -402,6 +408,7 @@ export default function VideoStudio({
       setV({ crop: { start, duration: d } });
       setHead(start);
       onSaveNow();
+      void generateLyrics(buf); // the lyrics come by themselves with the official audio
     } catch {
       if (token === ioRef.current) setErr(t("Could not read this audio file."));
     }
@@ -413,7 +420,7 @@ export default function VideoStudio({
     setErr(null);
     setVideoBlob(f);
     setVideoDur(0);
-    setV({ videoName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    setV({ videoName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
     setHead(settingsRef.current.crop.start);
     try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
@@ -426,7 +433,7 @@ export default function VideoStudio({
     setAudioBlob(null);
     setAudioBuf(null);
     setPeaks([]);
-    setV({ audioName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    setV({ audioName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
     setHead(settingsRef.current.crop.start);
     await delMedia(`audio:${clip.id}`);
     onSaveNow();
@@ -437,7 +444,7 @@ export default function VideoStudio({
     stop();
     setVideoBlob(null);
     setVideoDur(0);
-    setV({ videoName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined });
+    setV({ videoName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined });
     setHead(settingsRef.current.crop.start);
     await delMedia(`video:${clip.id}`);
     onSaveNow();
@@ -469,6 +476,7 @@ export default function VideoStudio({
           musicStart: undefined,
           musicEnd: undefined,
           anchors: undefined,
+          takes: undefined,
         },
       ],
       videoId: id,
@@ -556,7 +564,7 @@ export default function VideoStudio({
     const capAc = new AbortController();
     ac.signal.addEventListener("abort", () => capAc.abort());
     const capture = videoUrl
-      ? capturePcm(videoUrl, 60, (p) => setSyncPct(p), capAc.signal)
+      ? capturePcm(videoUrl, MAX_CAPTURE, (p) => setSyncPct(p), capAc.signal)
       : null;
     if (capture) void capture.catch(() => {});
     try {
@@ -585,14 +593,14 @@ export default function VideoStudio({
         setErr(t("No match found in the official audio. Check it is the right track, or sync by ear."));
         outcome = { title: t("Sync failed"), body: t("No match found in the official audio. Check it is the right track, or sync by ear.") };
       } else {
-        setV({
-          offset: round2(r.offset),
-          score: round2(r.score),
-          musicStart: r.musicStart === null ? undefined : round2(r.musicStart),
-          musicEnd: r.musicEnd === null ? undefined : round2(r.musicEnd),
-          anchors: r.anchors,
-        });
-        setNote(t("Sync quality {n}%", { n: Math.round(r.score * 100) }));
+        const takes = r.takes.map((k) => ({ offset: round2(k.offset), musicStart: round2(k.musicStart), musicEnd: round2(k.musicEnd) }));
+        setV({ score: round2(r.score), anchors: r.anchors, takes: takes.length > 1 ? takes : undefined });
+        const used = takes.find((k) => Math.abs(k.offset - r.offset) < 0.02);
+        if (used) applyTake(used);
+        else setV({ offset: round2(r.offset), musicStart: r.musicStart === null ? undefined : round2(r.musicStart), musicEnd: r.musicEnd === null ? undefined : round2(r.musicEnd) });
+        setNote(takes.length > 1
+          ? t("{n} takes found in the video", { n: takes.length }) + " · " + t("Sync quality {n}%", { n: Math.round(r.score * 100) })
+          : t("Sync quality {n}%", { n: Math.round(r.score * 100) }));
         if (r.score < 0.7) setErr(t("Low confidence: check the offset by ear."));
         outcome = {
           title: r.score < 0.7 ? t("Sync finished, low confidence") : t("Sync finished"),
@@ -613,6 +621,25 @@ export default function VideoStudio({
     if (syncRef.current === ac) syncRef.current = null;
     setSyncBusy(false);
     setSyncPct(0);
+  };
+
+  /**
+   * Use one take of the video. If the segment of the post is not filmed in it, the segment
+   * moves to the start of the take (same length), so the preview shows that take at once.
+   */
+  const applyTake = (k: VideoTake) => {
+    const cur = settingsRef.current;
+    const from = k.offset + k.musicStart, to = k.offset + k.musicEnd;
+    const covered = Math.min(to, cur.crop.start + cur.crop.duration) - Math.max(from, cur.crop.start);
+    const patch: Partial<VideoSettings> = { offset: k.offset, musicStart: k.musicStart, musicEnd: k.musicEnd };
+    if (covered < Math.min(2, cur.crop.duration / 2)) {
+      const total = audioBuf?.duration ?? Infinity;
+      const start = round2(Math.max(0, Math.min(from, total - cur.crop.duration)));
+      patch.crop = { ...cur.crop, start };
+      setHead(start);
+    }
+    setV(patch);
+    onSaveNow();
   };
 
   // ---- crop ----
@@ -764,44 +791,69 @@ export default function VideoStudio({
   };
 
   // ---- lyrics from the official audio ----
-  const generateLyrics = async () => {
-    if (!audioBuf) return;
+  /**
+   * Hear the whole track, window by window (the speech engine reports no progress inside one window):
+   * the windows of the post's segment go first, and the words show up as each window is done.
+   * Runs by itself when the official audio is imported.
+   */
+  const generateLyrics = async (buf: AudioBuffer | null = audioBuf) => {
+    if (!buf) return;
     genRef.current?.abort();
     const ac = new AbortController();
     genRef.current = ac;
     void askNotifyPermission();
-    setGenBusy(true); setGenStep("library"); setGenPct(0); setGenInfo(null); setErr(null); setNote(null);
+    setGenBusy(true); setGenStep("library"); setGenPct(0); setGenDone(0); setGenInfo(null); setErr(null); setNote(null);
     const cfg = settingsRef.current;
-    // A little margin so a word that straddles the edge of the segment is heard whole.
-    const from = Math.max(0, cfg.crop.start - 0.5);
-    const to = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration + 0.5);
+    const segFrom = Math.max(0, cfg.crop.start - 0.5);
+    const segTo = Math.min(buf.duration, cfg.crop.start + cfg.crop.duration + 0.5);
+    const wins: [number, number][] = [];
+    for (let a = 0; ; a += LYRICS_WIN - LYRICS_LAP) {
+      wins.push([a, Math.min(buf.duration, a + LYRICS_WIN)]);
+      if (a + LYRICS_WIN >= buf.duration) break;
+    }
+    const near = (w: [number, number]) => (w[1] > segFrom && w[0] < segTo ? 0 : Math.min(Math.abs(w[0] - segTo), Math.abs(w[1] - segFrom)) + 1);
+    const order = wins.map((_, i) => i).sort((i, j) => near(wins[i]) - near(wins[j]) || i - j);
+    const heard: LyricWord[] = [];
     let outcome: { title: string; body: string } | null = null;
     try {
-      const samples = await prepareAudio(audioBuf, from, to);
-      const heard = cleanHeard(await transcribe(samples, { model, language, base: from, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }));
-      if (ac.signal.aborted) return;
+      for (let k = 0; k < order.length; k++) {
+        const i = order[k];
+        const [a, b] = wins[i];
+        const samples = await prepareAudio(buf, a, b);
+        const words = cleanHeard(await transcribe(samples, { model, language, base: a, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }));
+        if (ac.signal.aborted) return;
+        // The overlap between two windows belongs to the one that hears it whole (its middle).
+        const lo = i === 0 ? -Infinity : a + LYRICS_LAP / 2;
+        const hi = i === wins.length - 1 ? Infinity : b - LYRICS_LAP / 2;
+        heard.push(...words.filter((w) => { const m = (w.s + w.e) / 2; return m >= lo && m < hi; }));
+        heard.sort((x, y) => x.s - y.s);
+        setGenDone((k + 1) / order.length);
+        if (heard.length) {
+          const now = [...heard];
+          onProject((p) => ({ ...p, lyricWords: now }));
+          if (!settingsRef.current.captions) setV({ captions: true });
+        }
+      }
       if (!heard.length) {
-        const msg = t("No words were heard in this segment. Try a more accurate model or set the language.");
+        const msg = t("No words were heard in this track. Try a more accurate model or set the language.");
         setErr(msg);
         outcome = { title: t("Lyrics not found"), body: msg };
       } else {
         let words = heard;
         let info = t("{n} words heard", { n: heard.length });
         const written = useWritten ? section?.text ?? "" : "";
-        if (written.trim()) {
-          const aligned = alignLyrics(written, heard);
+        const inSeg = heard.filter((x) => x.e > segFrom && x.s < segTo);
+        if (written.trim() && inSeg.length) {
+          // The written lyrics are those of the post's segment: only its words are corrected.
+          const aligned = alignLyrics(written, inSeg);
           if (aligned) {
-            words = aligned.words;
-            info = t("{n} words placed on your written lyrics", { n: aligned.words.length });
+            words = [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...aligned.words].sort((x, y) => x.s - y.s);
+            info = t("{n} words heard, the segment placed on your written lyrics", { n: heard.length });
           } else {
             info = t("Your written lyrics do not match what was heard: the words are shown as heard.");
           }
         }
-        onProject((p) => ({
-          ...p,
-          lyricWords: [...(p.lyricWords ?? []).filter((x) => x.e <= from || x.s >= to), ...words].sort((a, b) => a.s - b.s),
-        }));
-        setV({ captions: true });
+        onProject((p) => ({ ...p, lyricWords: words }));
         setGenInfo(info);
         outcome = { title: t("Lyrics ready"), body: info };
         onSaveNow();
@@ -1005,6 +1057,19 @@ export default function VideoStudio({
               <button className="btn sm" onClick={() => setV({ offset: round2(settings.offset + 0.1) })}>+0,1</button>
               <button className="btn sm" onClick={() => setV({ offset: Math.max(0, settings.crop.start) })}>{t("Set here")}</button>
             </div>
+            {settings.takes && settings.takes.length > 1 && (
+              <div className="stack" style={{ gap: 4 }}>
+                <span className="muted xs">{t("Takes found in the video (pick the one to use):")}</span>
+                <div className="row">
+                  {settings.takes.map((k, i) => (
+                    <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " primary" : "")}
+                      aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k)}>
+                      {t("Take {n}", { n: i + 1 })} <span className="mono xs">{fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {settings.musicStart != null && settings.musicEnd != null && (
               <p className="mono xs">
                 {t("Music detected from {a} to {b} in the video.", { a: fmtTime(settings.musicStart), b: fmtTime(settings.musicEnd) })}
@@ -1017,7 +1082,7 @@ export default function VideoStudio({
               <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
               {t("Lyrics on the video")}
             </label>
-            <p className="muted xs">{t("The words are heard in the official audio (not in the video), for the chosen segment only.")}</p>
+            <p className="muted xs">{t("The words are heard in the official audio (not in the video), as soon as it is imported.")}</p>
             <div className="cols2">
               <label className="field">{t("Accuracy")}
                 <select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
@@ -1052,14 +1117,14 @@ export default function VideoStudio({
             <div className="row">
               {!genBusy ? (
                 <button className="btn sm primary" onClick={() => void generateLyrics()} disabled={!audioBuf}>
-                  <Icon name="refresh" size={14} />{t("Generate lyrics from the audio")}
+                  <Icon name="refresh" size={14} />{project.lyricWords?.length ? t("Analyse the lyrics again") : t("Generate lyrics from the audio")}
                 </button>
               ) : (
                 <>
                   <span className="badge">
                     {genStep === "model" && genPct > 0 && genPct < 1
                       ? t("Downloading the speech model… {n}%", { n: Math.round(genPct * 100) })
-                      : genStep === "listen" ? t("Listening to the audio…") : t("Loading the speech engine…")}
+                      : genStep === "listen" || genDone > 0 ? t("Analysing the lyrics… {n}%", { n: Math.round(genDone * 100) }) : t("Loading the speech engine…")}
                   </span>
                   <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>
                 </>
@@ -1067,6 +1132,12 @@ export default function VideoStudio({
               {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button>}
             </div>
             <p className="muted xs">{t("The speech model ({name}) is downloaded once, then kept by the browser. Your audio never leaves this device.", { name: ASR_MODELS[model].split("/")[1].replace("_timestamped", "") })}</p>
+            {genBusy && (
+              <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100}
+                aria-valuenow={Math.round((genStep === "model" && genDone === 0 ? genPct : genDone) * 100)}>
+                <div style={{ width: `${(genStep === "model" && genDone === 0 ? genPct : genDone) * 100}%` }} />
+              </div>
+            )}
             {genInfo && <p className="notice xs">{genInfo}</p>}
 
             <div className="row">

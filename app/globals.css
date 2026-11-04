@@ -165,6 +165,10 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .modal.wide { width: min(820px, 100%); }
 .modal-foot { display: flex; gap: var(--s2); justify-content: flex-end; align-items: center; flex-wrap: wrap; padding-top: var(--s3); border-top: 1px solid var(--line); }
 .modal-foot .left { margin-right: auto; }
+.preview { display: grid; gap: var(--s2); max-width: 100%; }
+.preview-canvas { display: block; max-height: calc(92dvh - 48px); max-width: 100%; width: auto; height: auto; margin: 0 auto; border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+.preview-bar { display: flex; align-items: center; gap: var(--s2); color: var(--text); }
+.flip svg { transform: scaleX(-1); }
 .tabs { display: inline-flex; gap: var(--s4); border-bottom: 1px solid var(--line); width: 100%; }
 .tab { height: 34px; padding: 0; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); cursor: pointer; }
 .tab.on { color: var(--text); border-bottom-color: var(--accent-hi); }
