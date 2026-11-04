@@ -249,8 +249,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: var(--s4); }
 .video-head { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
 .video-head .display { font-size: 28px; line-height: 1; }
-.video-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--s5); align-items: start; }
-.video-grid .cv-wrap { max-width: 280px; }
+.video-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--s5); align-items: start; }
+.video-grid .cv-wrap { max-width: 300px; }
 .video-grid .cv { cursor: grab; touch-action: none; }
 .video-grid .cv-wrap.landscape { max-width: 100%; }
 .export-bar { height: 6px; border-radius: 3px; }
@@ -263,8 +263,33 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-src { position: fixed; left: -9999px; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 .wave { width: 100%; height: 90px; display: block; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); touch-action: none; cursor: ew-resize; }
 .lyric-timing { display: grid; gap: var(--s1); max-height: 210px; overflow: auto; padding-right: 2px; }
+.lyric-timing .btn.on { color: var(--text); background: var(--raised); }
+/* The preview stays in view while the panels on the right scroll. */
+.video-stage { position: sticky; top: var(--s4); }
+.video-stage .input.sm { height: var(--h-sm); font-size: var(--fs-sm); min-width: 0; }
+.video-status { height: var(--h); padding: 0 12px; }
+.cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s3); }
+.sep { width: 1px; align-self: stretch; background: var(--line-2); margin: 0 2px; }
+/* Timeline: transport, waveform of the whole track, lyrics of the segment. */
+.timeline { display: grid; gap: var(--s2); padding: var(--s3); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.timeline-empty { display: grid; gap: var(--s3); justify-items: start; padding: var(--s3) 0; color: var(--muted); }
+.timeline-empty p { margin: 0; }
+.lyric-track { position: relative; height: 34px; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; cursor: pointer; touch-action: none; }
+.lyric-track .cue { position: absolute; top: 4px; bottom: 4px; min-width: 3px; padding: 0 6px; border: 0; border-left: 2px solid var(--line-2); border-radius: 2px;
+  background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.lyric-track .cue:hover { color: var(--text); }
+.lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
+.lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.lyric-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
+details.fine > summary { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: var(--s1) 0; }
+details.fine > summary:hover { color: var(--text); }
+details.fine[open] > summary { margin-bottom: var(--s2); }
+.tab-body { display: grid; gap: var(--s4); padding-top: var(--s2); }
+.tab-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--warn); vertical-align: middle; }
 @media (max-width: 760px) {
   .video-grid { grid-template-columns: 1fr; }
+  .video-stage { position: static; }
+  .cols3 { grid-template-columns: 1fr 1fr; }
   .video-grid .cv-wrap { max-width: 200px; margin: 0 auto; }
   .video-page { padding: var(--s4); }
   .video-head .display { font-size: 24px; }

@@ -1368,10 +1368,76 @@ export default function VideoStudio({
   };
   const [outW, outH] = OUT_SIZE(settings.format);
 
+  // ---- layout ----
+  const [tab, setTab] = useState<"media" | "lyrics" | "style">(() =>
+    (project.audioName ?? settings.audioName) && settings.videoName ? "lyrics" : "media");
+  /** Where the release stands, shown next to the export button. */
+  const status: { text: string; tone: "" | "ok" | "warn" } =
+    !audioBlob ? { text: t("Audio missing"), tone: "warn" }
+    : !videoBlob ? { text: t("Video missing"), tone: "warn" }
+    : syncBusy || genBusy ? { text: t("Syncing…"), tone: "" }
+    : settings.score === undefined ? { text: t("Not synced yet"), tone: "warn" }
+    : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };
+  const segLen = Math.max(0.1, end - settings.crop.start);
+  const current = activeCue(cues, head);
+
+  // ---- keyboard: Space play, ←/→ previous/next line, Alt+←/→ offset, I/O segment start/end ----
+  const stepTo = (dir: 1 | -1) => {
+    const lo = settingsRef.current.crop.start;
+    let to = head + dir;
+    if (cues.length) {
+      const next = dir > 0 ? cues.find((c) => c.start > head + 0.05) : [...cues].reverse().find((c) => c.start < head - 0.3);
+      to = next ? next.start : dir > 0 ? end : lo;
+    }
+    setHead(round2(clamp(to, lo, end)));
+  };
+  const markIn = () => {
+    const cfg = settingsRef.current;
+    const crop = fitCrop(head, Math.max(1, cfg.crop.start + cfg.crop.duration - head), boundsOf(cfg));
+    setV({ crop });
+    setHead(crop.start);
+  };
+  const markOut = () => {
+    const cfg = settingsRef.current;
+    setV({ crop: fitCrop(cfg.crop.start, Math.max(1, head - cfg.crop.start), boundsOf(cfg)) });
+  };
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyRef.current = (e) => {
+    const el = e.target as HTMLElement;
+    if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable || e.metaKey || e.ctrlKey) return;
+    if (!audioBuf || document.querySelector(".ov")) return;
+    const k = e.key;
+    if (k === " ") { e.preventDefault(); if (playing) stop(); else void play(); }
+    else if ((k === "ArrowLeft" || k === "ArrowRight") && e.altKey) {
+      e.preventDefault();
+      if (!linked) setV({ offset: round2(settingsRef.current.offset + (k === "ArrowLeft" ? -0.1 : 0.1)) });
+    } else if (k === "ArrowLeft" || k === "ArrowRight") { e.preventDefault(); stop(); stepTo(k === "ArrowRight" ? 1 : -1); }
+    else if (k.toLowerCase() === "i") markIn();
+    else if (k.toLowerCase() === "o") markOut();
+  };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => keyRef.current(e);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
+  const audioPick = (
+    <div className="row">
+      <button className="btn sm primary" onClick={() => setDriveOpen(true)} disabled={driveBusy}>
+        <Icon name="folder" size={14} />{driveBusy ? t("Downloading…") : t("From Google Drive")}
+      </button>
+      <label className="btn sm">
+        {t("From this computer")}
+        <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
+      </label>
+    </div>
+  );
+
   return (
-    <div className="video-page">
+    <div className="video-page" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}>
       <div className="video-wrap">
       <div className="video-head">
+        <button className="btn icon quiet" aria-label={t("Back")} title={t("Back")} onClick={close}><Icon name="back" /></button>
         <div className="stack" style={{ gap: 2 }}>
           <span className="label">{t("Video studio")}</span>
           <h2 className="display">{project.name}</h2>
@@ -1385,307 +1451,332 @@ export default function VideoStudio({
             </select>
           </label>
           <button className="btn icon" aria-label={t("New video")} title={t("New video")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}>{status.text}</span>
           <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
-            title={audioBuf && videoBlob ? t("Ready to export") : t("Import the release audio")}>
+            title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
             <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
           </button>
         </div>
       </div>
       <div className="video-grid">
-        <div className="stack">
+        <div className="stack video-stage">
+          <div className="row">
+            <button className={"btn sm" + (settings.format !== "16:9" ? " primary" : "")} aria-pressed={settings.format !== "16:9"}
+              onClick={() => setV({ format: "9:16" })}>9:16</button>
+            <button className={"btn sm" + (settings.format === "16:9" ? " primary" : "")} aria-pressed={settings.format === "16:9"}
+              onClick={() => setV({ format: "16:9" })}>16:9</button>
+            <select className="input sm grow" aria-label={t("Framing")}
+              value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFrame(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
+              }}>
+              <option value="fill">{t("Fill (crop)")}</option>
+              <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
+              <option value="fit-black">{t("Fit whole, black bars")}</option>
+            </select>
+          </div>
           <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")}>
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
+              title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
               onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
           </div>
-          <div className="row">
-            <button className="btn icon" aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause") : t("Play")}
-              onClick={() => (playing ? stop() : void play())} disabled={!audioBuf}>
-              <Icon name={playing ? "pause" : "play"} />
-            </button>
-            <span className="mono xs">{fmtTime(head)} / {fmtTime(end)}</span>
-            <span className="grow" />
-            <span className="muted xs">{t("Files stay on this device.")}</span>
-          </div>
+          <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
+            onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
+            onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
+          <p className="muted xs">{videoBlob
+            ? t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")
+            : t("Nothing to preview yet.")} <span className="mono">{outW}×{outH}</span></p>
           <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
             onLoadedMetadata={(e) => setVideoDur(e.currentTarget.duration)}
             onSeeked={() => { if (!playing) drawAt(head); }}
             onLoadedData={() => { if (!playing) drawAt(head); }} />
-          {!videoBlob && <p className="muted xs">{t("Nothing to preview yet.")}</p>}
         </div>
 
         <div className="video-side">
-          <Section title={t("Official audio")}>
-            <div className="row">
-              <button className="btn sm primary" onClick={() => setDriveOpen(true)} disabled={driveBusy}>
-                <Icon name="folder" size={14} />{driveBusy ? t("Downloading…") : t("From Google Drive")}
-              </button>
-              <label className="btn sm">
-                {t("From this computer")}
-                <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
-              </label>
-              {audioBlob ? <span className="badge ok truncate">{project.audioName ?? settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
-              {audioBlob && project.audioDriveId && <span className="badge">{t("Saved in Drive")}</span>}
-              {audioBlob && !confirmRemove && <button className="btn sm quiet danger" onClick={() => setConfirmRemove(true)}>{t("Remove audio")}</button>}
-              {audioBlob && confirmRemove && (
-                <>
-                  <span className="xs">{t("Remove it from every video of this release, with the lyrics timing?")}</span>
-                  <button className="btn sm danger" onClick={() => void removeAudio()}>{t("Remove")}</button>
-                  <button className="btn sm quiet" onClick={() => setConfirmRemove(false)}>{t("Cancel")}</button>
-                </>
-              )}
-            </div>
-            {audioBlob && !project.audioDriveId && (
-              <p className="muted xs">{t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")}</p>
-            )}
-            {audioBuf && (
+          <div className="timeline">
+            {!audioBuf ? (
+              <div className="timeline-empty">
+                <p>{audioBlob ? t("Reading the audio…") : t("Import the official audio to see the timeline.")}</p>
+                {!audioBlob && audioPick}
+              </div>
+            ) : (
               <>
-                <canvas ref={waveRef} className="wave" width={900} height={90}
-                  onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={waveUp} />
-                <p className="muted xs">{linked
-                  ? t("Drag the edges to trim, the middle to move the segment. Linked: the sync stays and the segment stays inside the video.")
-                  : t("Drag the edges to trim, the middle to move the segment. Drag the top of the blue band to move the sync.")}</p>
-                {videoBlob && videoDur > 0 && (
-                  <div className="row">
-                    <button className={"btn sm" + (linked ? " primary" : "")} aria-pressed={linked} onClick={toggleLink}
-                      title={linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment")}>
-                      <Icon name={linked ? "lock" : "unlock"} size={13} />{linked ? t("Audio and video linked") : t("Link audio and video")}
-                    </button>
-                  </div>
-                )}
                 <div className="row">
+                  <button className="btn icon" aria-label={playing ? t("Pause") : t("Play")} title={(playing ? t("Pause") : t("Play")) + " (Espace)"}
+                    onClick={() => (playing ? stop() : void play())}>
+                    <Icon name={playing ? "pause" : "play"} />
+                  </button>
+                  <span className="mono xs">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>
+                  <span className="sep" />
                   {PRESETS.map((d) => (
                     <button key={d} className={"btn sm" + (Math.abs(settings.crop.duration - d) < 0.01 ? " primary" : "")}
                       onClick={() => setCropDuration(d)}>{d}s</button>
                   ))}
+                  {videoBlob && videoDur > 0 && (
+                    <button className={"btn sm" + (linked ? " primary" : "")} aria-pressed={linked} onClick={toggleLink}
+                      title={linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment")}>
+                      <Icon name={linked ? "lock" : "unlock"} size={13} />{linked ? t("Audio and video linked") : t("Link audio and video")}
+                    </button>
+                  )}
+                  <span className="grow" />
+                  {!syncBusy && !genBusy ? (
+                    <button className="btn sm primary" onClick={() => void syncAll()} disabled={!videoBlob && !hasLyrics}
+                      title={!videoBlob && !hasLyrics ? t("Import the video or paste the lyrics first.") : undefined}>
+                      <Icon name="refresh" size={14} />
+                      {hasLyrics ? (videoBlob ? t("Sync lyrics and video") : t("Sync the lyrics")) : t("Sync the video")}
+                    </button>
+                  ) : (
+                    <>
+                      <span className="badge">
+                        {syncBusy ? t("Syncing the video… {n}%", { n: Math.round(syncPct * 100) })
+                          : genStep === "model" && genPct > 0 && genPct < 1 ? t("Downloading the speech model… {n}%", { n: Math.round(genPct * 100) })
+                          : genStep === "listen" || genDone > 0 ? t("Placing the lyrics… {n}%", { n: Math.round(genDone * 100) })
+                          : t("Loading the speech engine…")}
+                      </span>
+                      {genBusy && <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>}
+                    </>
+                  )}
                 </div>
-                <div className="cols2">
-                  <label className="field">{t("Start (s)")}
-                    <input className="input" type="number" min={0} step={0.1} value={round2(settings.crop.start)}
-                      onChange={(e) => setCropStart(Number(e.target.value) || 0)} />
-                  </label>
-                  <label className="field">{t("Length (s)")}
-                    <input className="input" type="number" min={1} step={0.1} value={round2(settings.crop.duration)}
-                      onChange={(e) => setCropDuration(Number(e.target.value) || 1)} />
-                  </label>
+                {settings.takes && settings.takes.length > 1 && (
+                  <div className="row">
+                    <span className="muted xs">{t("Takes found in the video (pick the one to use):")}</span>
+                    {settings.takes.map((k, i) => (
+                      <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " primary" : "")}
+                        aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}>
+                        {t("Take {n}", { n: i + 1 })} <span className="mono xs">{fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <canvas ref={waveRef} className="wave" width={1200} height={90}
+                  onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={waveUp} />
+                <div className="lyric-track" role="group" aria-label={t("Lyrics of the segment")}
+                  onPointerDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    const r = e.currentTarget.getBoundingClientRect();
+                    stop();
+                    setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
+                  }}>
+                  {cues.map((c, i) => (
+                    <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
+                      style={{
+                        left: `${(clamp(c.start - settings.crop.start, 0, segLen) / segLen) * 100}%`,
+                        width: `${((clamp(c.end, settings.crop.start, end) - clamp(c.start, settings.crop.start, end)) / segLen) * 100}%`,
+                      }}
+                      onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
+                      {c.text.replace(/\n/g, " ")}
+                    </button>
+                  ))}
+                  {!cues.length && <span className="muted xs lyric-track-empty">{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                 </div>
-                <p className="mono xs">{t("Segment")} {fmtTime(settings.crop.start)} → {fmtTime(end)}</p>
+                {genBusy && (
+                  <div className="bar live" role="progressbar" aria-valuemin={0} aria-valuemax={100}
+                    aria-valuenow={Math.round((genStep === "model" && genDone === 0 ? genPct : genDone) * 100)}>
+                    <div style={{ width: `${(genStep === "model" && genDone === 0 ? genPct : genDone) * 100}%` }} />
+                  </div>
+                )}
+                {genInfo && <p className="notice xs">{genInfo}</p>}
+                {err && <p className="notice bad xs">{err}</p>}
+                {note && <p className="notice xs">{note}</p>}
+                <details className="fine">
+                  <summary>{t("Fine tuning")}</summary>
+                  <div className="stack">
+                    <p className="muted xs">{linked
+                      ? t("Drag the edges to trim, the middle to move the segment. Linked: the sync stays and the segment stays inside the video.")
+                      : t("Drag the edges to trim, the middle to move the segment. Drag the top of the blue band to move the sync.")}</p>
+                    <div className="cols3">
+                      <label className="field">{t("Start (s)")}
+                        <input className="input" type="number" min={0} step={0.1} value={round2(settings.crop.start)}
+                          onChange={(e) => setCropStart(Number(e.target.value) || 0)} />
+                      </label>
+                      <label className="field">{t("Length (s)")}
+                        <input className="input" type="number" min={1} step={0.1} value={round2(settings.crop.duration)}
+                          onChange={(e) => setCropDuration(Number(e.target.value) || 1)} />
+                      </label>
+                      <label className="field">{t("Offset (s)")}
+                        <input className="input" type="number" step={0.05} value={round2(settings.offset)} disabled={linked}
+                          onChange={(e) => setV({ offset: round2(Number(e.target.value) || 0) })} />
+                      </label>
+                    </div>
+                    <div className="row">
+                      <button className="btn sm" disabled={linked} onClick={() => setV({ offset: round2(settings.offset - 0.1) })}>−0,1</button>
+                      <button className="btn sm" disabled={linked} onClick={() => setV({ offset: round2(settings.offset + 0.1) })}>+0,1</button>
+                      <button className="btn sm" disabled={linked} onClick={() => setV({ offset: Math.max(0, settings.crop.start) })}>{t("Set here")}</button>
+                      {!!settings.anchors && <span className="badge">{t("{n} anchors", { n: settings.anchors })}</span>}
+                      {linked && <span className="muted xs">{t("Audio and video are linked: unlink them to change the offset by hand.")}</span>}
+                    </div>
+                    {settings.musicStart != null && settings.musicEnd != null && (
+                      <p className="mono xs">
+                        {t("Music detected from {a} to {b} in the video.", { a: fmtTime(settings.musicStart), b: fmtTime(settings.musicEnd) })}
+                      </p>
+                    )}
+                    <div className="cols2">
+                      <label className="field">{t("Language")}
+                        <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)} disabled={genBusy}>
+                          <option value="auto">{t("Detect")}</option>
+                          <option value="french">Français</option><option value="english">English</option>
+                          <option value="spanish">Español</option><option value="portuguese">Português</option>
+                          <option value="italian">Italiano</option><option value="german">Deutsch</option>
+                          <option value="dutch">Nederlands</option><option value="arabic">العربية</option>
+                        </select>
+                      </label>
+                      <label className="field">{t("Accuracy")}
+                        <select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
+                          <option value="tiny">{t("Fast")}</option>
+                          <option value="base">{t("Balanced")}</option>
+                          <option value="small">{t("Precise (slower)")}</option>
+                        </select>
+                      </label>
+                    </div>
+                    <p className="muted xs">{t("The speech model ({name}) is downloaded once, then kept by the browser. Your audio never leaves this device.", { name: ASR_MODELS[model].split("/")[1].replace("_timestamped", "") })}</p>
+                    <p className="muted xs">{t("Shortcuts: Space play · ←/→ previous/next line · I/O start/end of the segment here · Alt+←/→ offset ±0.1 s")}</p>
+                  </div>
+                </details>
               </>
             )}
-          </Section>
+            {!audioBuf && err && <p className="notice bad xs">{err}</p>}
+            {!audioBuf && note && <p className="notice xs">{note}</p>}
+          </div>
 
-          <Section title={t("Playback video")}>
-            <div className="drop" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}
-              onClick={() => document.getElementById("video-file")?.click()}>
-              {settings.videoName ?? t("Import the video recorded with the camera")}
-            </div>
-            <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
-            <div className="row">
-              {videoBlob && <span className="badge ok truncate">{settings.videoName ?? "video"}</span>}
-              {!videoBlob && <span className="muted xs">{t("No video imported yet")}</span>}
-              {videoBlob && <button className="btn sm quiet danger" onClick={() => void removeVideo()}>{t("Remove video")}</button>}
-              {videoDur > 0 && <span className="muted xs">{fmtTime(videoDur)}</span>}
-            </div>
-            {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
-              <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
-            )}
-          </Section>
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={tab === "media"} className={"tab" + (tab === "media" ? " on" : "")} onClick={() => setTab("media")}>
+              {t("Media")}{(!audioBlob || !videoBlob) && <span className="tab-dot" />}
+            </button>
+            <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
+            <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Style")}</button>
+          </div>
 
-          <Section title={t("Format & framing")}>
-            <div className="row">
-              <button className={"btn sm" + (settings.format !== "16:9" ? " primary" : "")} aria-pressed={settings.format !== "16:9"}
-                onClick={() => setV({ format: "9:16" })}>{t("Vertical 9:16")}</button>
-              <button className={"btn sm" + (settings.format === "16:9" ? " primary" : "")} aria-pressed={settings.format === "16:9"}
-                onClick={() => setV({ format: "16:9" })}>{t("Horizontal 16:9")}</button>
-              <span className="mono xs muted">{outW}×{outH}</span>
-            </div>
-            <label className="field">{t("Framing")}
-              <select className="input" value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setFrame(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
-                }}>
-                <option value="fill">{t("Fill (crop)")}</option>
-                <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
-                <option value="fit-black">{t("Fit whole, black bars")}</option>
-              </select>
-            </label>
-            <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
-              onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
-              onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
-            <div><button className="btn sm" onClick={() => setFrame({ zoom: 1, ox: 0, oy: 0 })}>{t("Reset framing")}</button></div>
-            <p className="muted xs">{t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}</p>
-          </Section>
-
-          <Section title={t("Lyrics")}>
-            <label className="field">{t("Paste the lyrics of the song")}
-              <textarea className="input" rows={6} value={paste} onChange={(e) => setPaste(e.target.value)}
-                placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
-            </label>
-            {pasted.parts.length > 0 && (
-              <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
-            )}
-            {project.lyrics.length > 0 && (
-              <label className="field">{t("Written lyrics")}
-                <select className="input" value={writtenSrc} disabled={genBusy}
-                  onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
-                  <option value="song">{t("Lyrics pasted above")}</option>
-                  <option value="all">{t("Carousel lyrics (all sections)")}</option>
-                  {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
-                </select>
-              </label>
-            )}
-            <p className="muted xs">{t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")}</p>
-            <div className="cols2">
-              <label className="field">{t("Language")}
-                <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)} disabled={genBusy}>
-                  <option value="auto">{t("Detect")}</option>
-                  <option value="french">Français</option><option value="english">English</option>
-                  <option value="spanish">Español</option><option value="portuguese">Português</option>
-                  <option value="italian">Italiano</option><option value="german">Deutsch</option>
-                  <option value="dutch">Nederlands</option><option value="arabic">العربية</option>
-                </select>
-              </label>
-              <label className="field">{t("Accuracy")}
-                <select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
-                  <option value="tiny">{t("Fast")}</option>
-                  <option value="base">{t("Balanced")}</option>
-                  <option value="small">{t("Precise (slower)")}</option>
-                </select>
-              </label>
-            </div>
-            <label className="check">
-              <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
-              {t("Lyrics on the video")}
-            </label>
-            <div className="row">
-              <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
-              <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
-            </div>
-            {mode === "phrase" && (
-              <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
-                onChange={(v) => setV({ lineChars: v })} />
-            )}
-            {cues.length > 0 && (
-              <div className="lyric-timing">
-                {cues.map((c, i) => (
-                  <button key={i} className="btn sm quiet row nowrap" style={{ justifyContent: "flex-start" }}
-                    onClick={() => { stop(); setHead(round2(c.start)); }}>
-                    <span className="mono xs">{fmtTime(c.start)}</span>
-                    <span className="grow truncate xs">{c.text.replace(/\n/g, " ⏎ ")}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
-          </Section>
-
-          <Section title={t("Sync with the official audio")}>
-            <div className="row">
-              {!syncBusy && !genBusy ? (
-                <button className="btn sm primary" onClick={() => void syncAll()} disabled={!audioBuf || (!videoBlob && !hasLyrics)}>
-                  <Icon name="refresh" size={14} />
-                  {hasLyrics ? (videoBlob ? t("Sync lyrics and video") : t("Sync the lyrics")) : t("Sync the video")}
-                </button>
-              ) : (
-                <>
-                  <span className="badge">
-                    {syncBusy ? t("Syncing the video… {n}%", { n: Math.round(syncPct * 100) })
-                      : genStep === "model" && genPct > 0 && genPct < 1 ? t("Downloading the speech model… {n}%", { n: Math.round(genPct * 100) })
-                      : genStep === "listen" || genDone > 0 ? t("Placing the lyrics… {n}%", { n: Math.round(genDone * 100) })
-                      : t("Loading the speech engine…")}
-                  </span>
-                  {genBusy && <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>}
-                </>
-              )}
-              {settings.score !== undefined && <span className="badge">{t("Sync quality {n}%", { n: Math.round(settings.score * 100) })}</span>}
-              {!!settings.anchors && <span className="badge">{t("{n} anchors", { n: settings.anchors })}</span>}
-            </div>
-            {!audioBuf && <p className="muted xs">{t("Import the official audio first.")}</p>}
-            {genBusy && (
-              <div className="bar live" role="progressbar" aria-valuemin={0} aria-valuemax={100}
-                aria-valuenow={Math.round((genStep === "model" && genDone === 0 ? genPct : genDone) * 100)}>
-                <div style={{ width: `${(genStep === "model" && genDone === 0 ? genPct : genDone) * 100}%` }} />
-              </div>
-            )}
-            {genInfo && <p className="notice xs">{genInfo}</p>}
-            {hasLyrics && <p className="muted xs">{t("The speech model ({name}) is downloaded once, then kept by the browser. Your audio never leaves this device.", { name: ASR_MODELS[model].split("/")[1].replace("_timestamped", "") })}</p>}
-            <label className="field">{t("Offset (s)")}
-              <input className="input" type="number" step={0.05} value={round2(settings.offset)} disabled={linked}
-                onChange={(e) => setV({ offset: round2(Number(e.target.value) || 0) })} />
-            </label>
-            <div className="row">
-              <button className="btn sm" disabled={linked} onClick={() => setV({ offset: round2(settings.offset - 0.1) })}>−0,1</button>
-              <button className="btn sm" disabled={linked} onClick={() => setV({ offset: round2(settings.offset + 0.1) })}>+0,1</button>
-              <button className="btn sm" disabled={linked} onClick={() => setV({ offset: Math.max(0, settings.crop.start) })}>{t("Set here")}</button>
-            </div>
-            {linked && <p className="muted xs">{t("Audio and video are linked: unlink them to change the offset by hand.")}</p>}
-            {settings.takes && settings.takes.length > 1 && (
-              <div className="stack" style={{ gap: 4 }}>
-                <span className="muted xs">{t("Takes found in the video (pick the one to use):")}</span>
+          {tab === "media" && (
+            <div className="tab-body">
+              <div className="stack">
+                <span className="label">{t("Official audio")}</span>
+                {audioPick}
                 <div className="row">
-                  {settings.takes.map((k, i) => (
-                    <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " primary" : "")}
-                      aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}>
-                      {t("Take {n}", { n: i + 1 })} <span className="mono xs">{fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)}</span>
+                  {audioBlob ? <span className="badge ok truncate">{project.audioName ?? settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
+                  {audioBlob && project.audioDriveId && <span className="badge">{t("Saved in Drive")}</span>}
+                  {audioBlob && !confirmRemove && <button className="btn sm quiet danger" onClick={() => setConfirmRemove(true)}>{t("Remove audio")}</button>}
+                  {audioBlob && confirmRemove && (
+                    <>
+                      <span className="xs">{t("Remove it from every video of this release, with the lyrics timing?")}</span>
+                      <button className="btn sm danger" onClick={() => void removeAudio()}>{t("Remove")}</button>
+                      <button className="btn sm quiet" onClick={() => setConfirmRemove(false)}>{t("Cancel")}</button>
+                    </>
+                  )}
+                </div>
+                {audioBlob && !project.audioDriveId && (
+                  <p className="muted xs">{t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")}</p>
+                )}
+              </div>
+              <div className="stack">
+                <span className="label">{t("Playback video")}</span>
+                <div className="drop" onClick={() => document.getElementById("video-file")?.click()}>
+                  {settings.videoName ?? t("Import the video recorded with the camera")}
+                </div>
+                <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
+                <div className="row">
+                  {videoBlob && <span className="badge ok truncate">{settings.videoName ?? "video"}</span>}
+                  {!videoBlob && <span className="muted xs">{t("No video imported yet")}</span>}
+                  {videoBlob && <button className="btn sm quiet danger" onClick={() => void removeVideo()}>{t("Remove video")}</button>}
+                  {videoDur > 0 && <span className="muted xs">{fmtTime(videoDur)}</span>}
+                </div>
+                {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
+                  <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
+                )}
+              </div>
+              <p className="muted xs">{t("Files stay on this device.")} {t("You can also drop an audio or video file anywhere on this page.")}</p>
+            </div>
+          )}
+
+          {tab === "lyrics" && (
+            <div className="tab-body">
+              <label className="field">{t("Paste the lyrics of the song")}
+                <textarea className="input" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)}
+                  placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
+              </label>
+              {pasted.parts.length > 0 && (
+                <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
+              )}
+              {project.lyrics.length > 0 && (
+                <label className="field">{t("Written lyrics")}
+                  <select className="input" value={writtenSrc} disabled={genBusy}
+                    onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
+                    <option value="song">{t("Lyrics pasted above")}</option>
+                    <option value="all">{t("Carousel lyrics (all sections)")}</option>
+                    {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
+                  </select>
+                </label>
+              )}
+              <p className="muted xs">{t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")}</p>
+              {cues.length > 0 && (
+                <div className="lyric-timing">
+                  {cues.map((c, i) => (
+                    <button key={i} className={"btn sm quiet row nowrap" + (c === current ? " on" : "")} style={{ justifyContent: "flex-start" }}
+                      onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
+                      <span className="mono xs">{fmtTime(c.start)}</span>
+                      <span className="grow truncate xs">{c.text.replace(/\n/g, " ⏎ ")}</span>
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
-            {settings.musicStart != null && settings.musicEnd != null && (
-              <p className="mono xs">
-                {t("Music detected from {a} to {b} in the video.", { a: fmtTime(settings.musicStart), b: fmtTime(settings.musicEnd) })}
-              </p>
-            )}
-          </Section>
+              )}
+              {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
+              {project.lyrics.length > 0 && (
+                <Section title={t("Place lines by hand")} open={false}>
+                  <div className="row">
+                    <button className="btn sm" onClick={autoPlace} disabled={!lines.length}>{t("Auto place")}</button>
+                    <span className="muted xs">{cues.length ? t("Used only when no lyrics were generated from the audio.") : t("Pick a section to place its lines.")}</span>
+                  </div>
+                  <div className="lyric-timing">
+                    {lines.map((l) => (
+                      <div className="row nowrap" key={l.i}>
+                        <span className="grow truncate xs">{l.text}</span>
+                        <input className="input" style={{ width: 82 }} type="number" step={0.1} placeholder="–"
+                          aria-label={t("Line {n}", { n: l.i + 1 })}
+                          value={section?.times?.[l.i] ?? ""}
+                          onChange={(e) => setLine(l.i, e.target.value === "" ? null : round2(Number(e.target.value)))} />
+                        <button className="btn sm" onClick={() => setLine(l.i, round2(head))}>{t("Set here")}</button>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+            </div>
+          )}
 
-          <Section title={t("Style presets")}>
-            <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
-              onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
-          </Section>
-
-          <Section title={t("Text style")}>
-            <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Follows the style of the selected carousel slide until you change something.")}</p>
-            <CaptionStyle
-              style={captionStyle}
-              fonts={fonts}
-              onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
-              onFonts={onFonts}
-              onReset={() => setV({ captionStyle: undefined })}
-            />
-          </Section>
-
-
-          <Section title={t("Place lines by hand")} open={false}>
-            {project.lyrics.length === 0 && <p className="muted xs">{t("No lyrics in this section.")}</p>}
-            {project.lyrics.length > 0 && (
-              <>
+          {tab === "style" && (
+            <div className="tab-body">
+              <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
+                onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
+              <div className="stack">
+                <span className="label">{t("Display")}</span>
+                <label className="check">
+                  <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
+                  {t("Lyrics on the video")}
+                </label>
                 <div className="row">
-                  <button className="btn sm" onClick={autoPlace} disabled={!lines.length}>{t("Auto place")}</button>
-                  <span className="muted xs">{cues.length ? t("Used only when no lyrics were generated from the audio.") : t("Pick a section to place its lines.")}</span>
+                  <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
+                  <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
                 </div>
-                <div className="lyric-timing">
-                  {lines.map((l) => (
-                    <div className="row nowrap" key={l.i}>
-                      <span className="grow truncate xs">{l.text}</span>
-                      <input className="input" style={{ width: 82 }} type="number" step={0.1} placeholder="–"
-                        aria-label={t("Line {n}", { n: l.i + 1 })}
-                        value={section?.times?.[l.i] ?? ""}
-                        onChange={(e) => setLine(l.i, e.target.value === "" ? null : round2(Number(e.target.value)))} />
-                      <button className="btn sm" onClick={() => setLine(l.i, round2(head))}>{t("Set here")}</button>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </Section>
-
-          {err && <p className="notice bad xs">{err}</p>}
-          {note && <p className="notice xs">{note}</p>}
+                {mode === "phrase" && (
+                  <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
+                    onChange={(v) => setV({ lineChars: v })} />
+                )}
+              </div>
+              <div className="stack">
+                <span className="label">{t("Text style")}</span>
+                <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Follows the style of the selected carousel slide until you change something.")}</p>
+                <CaptionStyle
+                  style={captionStyle}
+                  fonts={fonts}
+                  onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
+                  onFonts={onFonts}
+                  onReset={() => setV({ captionStyle: undefined })}
+                />
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-      <div className="modal-foot">
-        <button className="btn" onClick={close}>{t("Done")}</button>
       </div>
       </div>
       {driveOpen && <DriveBrowser onPick={(f) => void pickFromDrive(f)} onClose={() => setDriveOpen(false)} />}
