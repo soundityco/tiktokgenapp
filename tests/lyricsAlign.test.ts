@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, keepManual, retimeCue, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, keepManual, repairOrder, retimeCue, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
 import type { LyricWord } from "@/lib/types";
 
 const w = (text: string, s: number, e: number, line?: number): LyricWord => ({ w: text, s, e, ...(line === undefined ? {} : { line }) });
@@ -130,10 +130,29 @@ describe("buildCues", () => {
     expect(after[0].end).toBeCloseTo(cues[0].end + 0.1);
     expect(after[1].start).toBeCloseTo(cues[1].start + 0.1);
     expect(after[1].end).toBeCloseTo(cues[1].end); // the next line still leaves when it did
+    // Pushed far: the next line is squeezed, it never passes the line after it, its words stay in order.
+    const three = [...glued, w("cinq", 2.2, 2.6, 2), w("six", 2.6, 3.0, 2)];
+    let ws = three;
+    for (let k = 0; k < 8; k++) ws = retimeCue(ws, buildCues(ws, "phrase", o), 1, "end", 0.1) ?? ws;
+    const c3 = buildCues(three, "phrase", o);
+    for (let k = 0; k < 8; k++) ws = retimeCue(ws, buildCues(ws, "phrase", o), 0, "end", 0.1) ?? ws;
+    const after3 = buildCues(ws, "phrase", o);
+    expect(after3.map((c) => c.text)).toEqual(c3.map((c) => c.text));
+    expect(after3[1].start).toBeLessThan(after3[2].start);
+    expect(after3[1].end - after3[1].start).toBeGreaterThanOrEqual(0.19);
     // − on the start of the second line: the first one leaves sooner.
     const back = buildCues(retimeCue(glued, cues, 1, "start", -0.1)!, "phrase", o);
     expect(back[1].start).toBeCloseTo(cues[1].start - 0.1);
     expect(back[0].end).toBeCloseTo(back[1].start);
+  });
+
+  it("puts words saved out of the order of the text back in place", () => {
+    // "mois" (line 0) was pushed after "Oh" (line 1), with an end before its new start.
+    const broken = [w("depuis", 1.6, 1.8, 0), w("des", 1.8, 2.0, 0), { ...w("mois", 2.2, 2.4, 0), until: 2.1 }, w("Oh", 2.1, 2.3, 1), w("non", 2.5, 2.8, 1)];
+    const fixed = repairOrder(broken);
+    expect(buildCues(fixed, "phrase", { lineChars: 40 }).map((c) => c.text)).toEqual(["depuis des mois", "Oh non"]);
+    expect(repairOrder(fixed)).toBe(fixed);
+    expect(repairOrder(words)).toBe(words);
   });
 
   it("keeps the lines retimed by hand when the lyrics are placed again", () => {

@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { canWriteDrive, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, uploadToDrive } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, retimeCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, repairOrder, retimeCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
@@ -1870,6 +1870,12 @@ export default function VideoStudio({
   const current = activeCue(cues, head);
 
   /** Retime one caption by 0.1 s: "start" moves the whole line, "end" only when it leaves the screen. Never over its neighbours. */
+  // Lyrics saved out of order by an older version of the ± buttons: put back in the order of the text, once.
+  useEffect(() => {
+    const ws = project.lyricWords;
+    if (ws?.length && repairOrder(ws) !== ws) onProject((p) => ({ ...p, lyricWords: repairOrder(p.lyricWords ?? []) }));
+  }, [project.lyricWords]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const retime = (i: number, what: "start" | "end", dir: 1 | -1) => {
     const c = cues[i];
     const out = c && retimeCue(project.lyricWords ?? [], cues, i, what, dir * 0.1);

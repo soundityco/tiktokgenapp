@@ -386,6 +386,27 @@ export function setCueEnd(all: LyricWord[], cue: Cue, end: number): LyricWord[] 
 }
 
 /**
+ * Words placed out of the order of the written lines (an old retouch pushed a line past the next one):
+ * put back in the order of the text, a hundredth of a second apart, and an end set before its own start dropped.
+ * Returns the same array when nothing is wrong.
+ */
+export function repairOrder(words: LyricWord[]): LyricWord[] {
+  const lined = words.filter((x) => x.line !== undefined);
+  if (lined.length < 2) return words;
+  const byText = [...lined].sort((a, b) => a.line! - b.line! || a.s - b.s);
+  const fix = new Map<LyricWord, LyricWord>();
+  let last = -Infinity;
+  for (const x of byText) {
+    let y = x;
+    if (x.s <= last) { const s0 = r3(last + 0.01); y = { ...x, s: s0, e: r3(Math.max(x.e, s0 + 0.05)) }; }
+    if (y.until !== undefined && y.until <= y.s) { const { until: _drop, ...rest } = y; y = rest; }
+    if (y !== x) fix.set(x, y);
+    last = y.s;
+  }
+  return fix.size ? words.map((x) => fix.get(x) ?? x) : words;
+}
+
+/**
  * The ± buttons of a caption: `start` moves the whole line by `delta`, `end` changes when it leaves the screen.
  * A line glued to its neighbour pushes the limit: a later end makes the next line appear later (its end stays),
  * an earlier start makes the previous line leave sooner. Each line keeps at least 0.2 s. Null: nothing can move.
@@ -400,14 +421,16 @@ export function retimeCue(all: LyricWord[], cues: Cue[], i: number, what: "start
     if (Math.abs(to - c.end) < 0.005) return null;
     let out = all;
     if (next && to > next.start) {
-      // The next line comes later by as much, its words with it, but it still leaves when it did.
-      const d = to - next.start;
-      const shifted = new Map(next.words.map((x) => [x, { ...x, s: r3(x.s + d), e: r3(x.e + d), manual: true } as LyricWord]));
+      // The next line comes later, but it still leaves when it did: only its words sung before the new start
+      // wait for it (in order), the others stay. Nothing goes past the line after it.
       const lastNext = next.words[next.words.length - 1];
-      out = all.map((x) => {
-        const y = shifted.get(x);
-        return y ? (x === lastNext ? { ...y, until: r3(next.end) } : y) : x;
+      const late = new Map<LyricWord, LyricWord>();
+      next.words.forEach((x, k) => {
+        if (x.s >= to + k * 0.01) { if (x === lastNext) late.set(x, { ...x, until: r3(next.end), manual: true }); return; }
+        const ns = r3(to + k * 0.01);
+        late.set(x, { ...x, s: ns, e: r3(Math.max(x.e, ns + 0.05)), manual: true, ...(x === lastNext ? { until: r3(next.end) } : {}) });
       });
+      out = all.map((x) => late.get(x) ?? x);
     }
     return setCueEnd(out, c, to);
   }
