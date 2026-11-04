@@ -254,6 +254,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-grid .cv { cursor: grab; touch-action: none; }
 .video-grid .cv-wrap.landscape { max-width: 100%; }
 .export-bar { height: 6px; border-radius: 3px; }
+/* No transition: restarted on every update, an eased width never caught up with the real percentage. */
+.export-bar > div, .bar.live > div { transition: none; }
 .video-side { display: grid; gap: var(--s2); min-width: 0; }
 .video-src { position: fixed; left: -9999px; top: 0; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
 .wave { width: 100%; height: 90px; display: block; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); touch-action: none; cursor: ew-resize; }

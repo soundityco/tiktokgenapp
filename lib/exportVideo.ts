@@ -6,7 +6,7 @@ import { ArrayBufferTarget, Muxer } from "mp4-muxer";
  * not depend on the machine keeping up, and it is usually faster than real time.
  */
 
-export type ExportStep = "audio" | "video" | "finish";
+export type ExportStep = "read" | "audio" | "video" | "finish";
 
 export interface ExportJob {
   width: number;
@@ -36,13 +36,23 @@ export async function mp4Support(width: number, height: number, sampleRate: numb
     } catch { /* next */ }
   }
   if (!video) return null;
-  for (const [codec, mux] of [["mp4a.40.2", "aac"], ["opus", "opus"]] as const) {
-    try {
-      const r = await AudioEncoder.isConfigSupported({ codec, sampleRate, numberOfChannels: channels, bitrate: 192_000 });
-      if (r.supported) return { video, audio: codec, audioMux: mux };
-    } catch { /* next */ }
-  }
+  // AAC only: Opus inside an MP4 is silent in QuickTime, on iPhones and in some editors.
+  try {
+    const r = await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: channels, bitrate: 192_000 });
+    if (r.supported) return { video, audio: "mp4a.40.2" };
+  } catch { /* not supported */ }
   return null;
+}
+
+const AAC_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+/**
+ * AudioSpecificConfig of AAC-LC (2 bytes). Players need it to decode the sound; some browsers do not
+ * hand it with the encoded chunks, and an MP4 without it plays silent.
+ */
+export function aacConfig(sampleRate: number, channels: number): Uint8Array {
+  const idx = Math.max(0, AAC_RATES.indexOf(sampleRate));
+  const v = (2 << 11) | (idx << 7) | (channels << 3);
+  return new Uint8Array([v >> 8, v & 0xff]);
 }
 
 const aborted = () => new DOMException("aborted", "AbortError");
@@ -57,15 +67,25 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
     video: { codec: "avc", width, height, frameRate: fps },
-    audio: { codec: codecs.audioMux, sampleRate: sr, numberOfChannels: channels },
+    audio: { codec: "aac", sampleRate: sr, numberOfChannels: channels },
     fastStart: "in-memory", // index at the start: plays at once on phones and on TikTok's upload
     firstTimestampBehavior: "offset",
   });
   let failure: unknown = null;
 
   // ---- audio first: it is quick, and the progress bar then follows the frames
-  const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => { failure = e; } });
-  aenc.configure({ codec: codecs.audio, sampleRate: sr, numberOfChannels: channels, bitrate: 192_000 });
+  let audioChunks = 0;
+  const asc = aacConfig(sr, channels);
+  const aenc = new AudioEncoder({
+    output: (c, m) => {
+      audioChunks++;
+      const desc = m?.decoderConfig?.description;
+      const ok = desc && (desc as ArrayBuffer).byteLength > 0;
+      muxer.addAudioChunk(c, ok ? m : { decoderConfig: { codec: "mp4a.40.2", sampleRate: sr, numberOfChannels: channels, description: asc } });
+    },
+    error: (e) => { failure = e; },
+  });
+  aenc.configure({ codec: codecs.audio, sampleRate: sr, numberOfChannels: channels, bitrate: 192_000, aac: { format: "aac" } } as AudioEncoderConfig);
   const s0 = Math.round(from * sr), s1 = Math.min(audio.length, Math.round(until * sr));
   const BLOCK = 4096;
   for (let a = s0; a < s1; a += BLOCK) {
@@ -80,6 +100,8 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
   }
   await aenc.flush();
   aenc.close();
+  if (failure) throw failure;
+  if (!audioChunks) throw new Error("no-audio"); // never deliver a silent video
 
   // ---- video, frame by frame
   const canvas = document.createElement("canvas");
@@ -98,8 +120,9 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
       const vf = new VideoFrame(canvas, { timestamp: Math.round(i * step), duration: Math.round(step) });
       venc.encode(vf, { keyFrame: i % (fps * 2) === 0 });
       vf.close();
-      // Do not let frames pile up in the encoder (memory).
-      while (venc.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
+      // Do not let frames pile up in the encoder (memory). Wait on the encoder itself, not on a timer:
+      // timers are slowed down to once a second in a background tab.
+      while (venc.encodeQueueSize > 6) await new Promise((r) => venc.addEventListener("dequeue", r, { once: true }));
       job.onProgress(0.05 + ((i + 1) / n) * 0.9, "video");
     }
     job.onProgress(0.96, "finish");

@@ -25,6 +25,7 @@ import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "
 const VERSION = "v0.5";
 const HISTORY_KEY = "tktgen-undo";
 const MAX_SLIDES = 35;
+const STUDIO_KEY = "tktgen-studio";
 /**
  * Photos of each list downloaded ahead of time, so Generate shows them at once. A small window that
  * moves forward with the shuffle bag: enough for several Generates, without downloading whole folders.
@@ -67,6 +68,10 @@ export default function Studio({ userName }: { userName: string }) {
   const [editor, setEditor] = useState<Editor>(null);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [studio, setStudio] = useState<"carousel" | "video">("carousel");
+  // The studio in use survives a reload (read after mount: the server render has no localStorage).
+  useEffect(() => {
+    try { if (localStorage.getItem(STUDIO_KEY) === "video") setStudio("video"); } catch { /* private mode */ }
+  }, []);
   const [toast, setToast] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const [preview, setPreview] = useState(false);
@@ -702,6 +707,7 @@ export default function Studio({ userName }: { userName: string }) {
     setEditor(null);
     setOverlay(null);
     setStudio(next);
+    try { localStorage.setItem(STUDIO_KEY, next); } catch { /* private mode */ }
   };
 
   if (loadErr) return <div className="login"><div className="login-card"><h2 className="title">{t("Could not load your data")}</h2><p className="muted">{loadErr}</p><button className="btn primary" onClick={() => location.reload()}>{t("Try again")}</button></div></div>;

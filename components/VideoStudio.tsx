@@ -5,9 +5,11 @@ import { useT } from "@/lib/i18n";
 import { delMedia, getMedia, putMedia } from "@/lib/idb";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, parseLyrics } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
-import { askNotifyPermission, notify } from "@/lib/notify";
+import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawStyledText, TextBox, zoomPic } from "@/lib/render";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
+import { type Picture, VideoSource } from "@/lib/videoSource";
+import { convertSegment, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFrame, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -163,6 +165,70 @@ async function capturePcm(
   }
 }
 
+/**
+ * Frames of a hidden player, played in real time from `start` (video seconds). For formats the
+ * browser plays but cannot decode frame by frame (4:2:2 10-bit from pro cameras): seeking every frame
+ * made its decoder give up, a normal playback does not. The export then takes the clip's own length.
+ */
+function playerFrames(el: HTMLVideoElement, start: number) {
+  let latest = -1;
+  let wake: (() => void) | null = null;
+  let running = true;
+  // Rendered (tiny, invisible) so the browser really presents the frames.
+  el.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1";
+  document.body.appendChild(el);
+  const watch = () => {
+    if (!running) return;
+    if ("requestVideoFrameCallback" in el) {
+      el.requestVideoFrameCallback((_now, meta) => { latest = meta.mediaTime; wake?.(); watch(); });
+    } else {
+      requestAnimationFrame(() => { latest = (el as HTMLVideoElement).currentTime; wake?.(); watch(); });
+    }
+  };
+  const begin = seekVideo(el, start).then(() => { watch(); return el.play().catch(() => {}); });
+  return {
+    /**
+     * Wait until the player shows the frame at `target` (or a later one). When it cannot keep up
+     * (heavy formats decoded in software), it plays slower: taking a late frame instead gave a slow-motion look.
+     */
+    async frameAt(target: number) {
+      await begin;
+      const start = performance.now();
+      let slowed = false;
+      while (running && latest < target - 1 / 120 && !el.ended) {
+        await new Promise<void>((r) => { wake = () => { wake = null; r(); }; setTimeout(r, 250); });
+        const waited = performance.now() - start;
+        if (!slowed && waited > 500 && el.playbackRate > 0.125) { el.playbackRate /= 2; slowed = true; }
+        if (el.paused && !document.hidden) void el.play().catch(() => {});
+        if (waited > 20000) break; // the player is stuck: the frozen-picture check stops the export
+      }
+    },
+    stop() {
+      running = false;
+      el.pause();
+      el.remove();
+    },
+  };
+}
+
+/** The export stopped because the hidden player kept showing the same picture. */
+class FrozenVideo extends Error {
+  constructor(readonly at: number) { super("frozen"); }
+}
+
+let printCanvas: HTMLCanvasElement | null = null;
+/** Tiny 16×16 copy of a picture: two different frames of a camera video never give the same one (sensor noise). */
+function fingerprint(src: CanvasImageSource): string {
+  const c = (printCanvas ??= Object.assign(document.createElement("canvas"), { width: 16, height: 16 }));
+  const g = c.getContext("2d", { willReadFrequently: true });
+  if (!g) return "";
+  g.drawImage(src, 0, 0, 16, 16);
+  const d = g.getImageData(0, 0, 16, 16).data;
+  let h = 0;
+  for (let i = 0; i < d.length; i++) h = (h * 31 + d[i]) | 0;
+  return String(h);
+}
+
 /** Resolves once the video knows its metadata, so a seek is not silently dropped. */
 function whenReady(el: HTMLVideoElement): Promise<void> {
   if (el.readyState >= 1) return Promise.resolve();
@@ -219,8 +285,17 @@ export default function VideoStudio({
   const [syncPct, setSyncPct] = useState(0);
   const [exporting, setExporting] = useState(false);
   /** Export window: progress 0-1 and current step ("record" = realtime fallback). */
-  const [exp, setExp] = useState<null | { p: number; step: ExportStep | "record"; done?: boolean; file?: string }>(null);
+  const [exp, setExpRaw] = useState<null | { p: number; step: ExportStep | ConvertStep | "record"; done?: boolean; file?: string }>(null);
+  /** Progress updates only when the whole percentage or the step changes: no re-render per frame. */
+  const setExp = useCallback((next: null | { p: number; step: ExportStep | ConvertStep | "record"; done?: boolean; file?: string }) => {
+    setExpRaw((cur) => (cur && next && !next.done && cur.step === next.step && Math.floor(cur.p * 100) === Math.floor(next.p * 100) ? cur : next));
+  }, []);
   const exportRef = useRef<AbortController | null>(null);
+  /** Last converted segment (pro camera formats), reused when the same segment is exported again. */
+  const proxyRef = useRef<{ key: string; blob: Blob } | null>(null);
+  /** How the export gets the camera frames: decoded from the file, or read from a hidden player (needs the tab visible). */
+  const [expMode, setExpMode] = useState<null | { direct: boolean; detail: string }>(null);
+  const [expPaused, setExpPaused] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState(project.lyricsSectionId ?? project.lyrics[0]?.id ?? "");
@@ -308,14 +383,18 @@ export default function VideoStudio({
 
   const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
 
+  /** The <video> as a picture at official time `time`; none outside the part of the track the camera recorded. */
+  const pictureOf = (el: HTMLVideoElement | null, time: number): Picture | null => {
+    const off = settingsRef.current.offset;
+    const inVideo = time >= off - 0.001 && (!Number.isFinite(el?.duration) || time <= off + (el?.duration ?? 0) + 0.001);
+    return el && el.videoWidth && inVideo ? { src: el, w: el.videoWidth, h: el.videoHeight } : null;
+  };
   /** The picture of the post at official time `time`: the framed camera video, then the lyrics. Used by the preview and the export. */
-  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, el: HTMLVideoElement | null, time: number): TextBox | null => {
+  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number): TextBox | null => {
     const cfg = settingsRef.current;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
-    // Outside the part of the track the camera recorded, there is no picture: black.
-    const inVideo = time >= cfg.offset - 0.001 && (!Number.isFinite(el?.duration) || time <= cfg.offset + (el?.duration ?? 0) + 0.001);
-    if (el && el.videoWidth && inVideo) drawFramed(g, el, el.videoWidth, el.videoHeight, picOf(cfg.frame ?? DEFAULT_VIDEO.frame), W, H);
+    if (pic && pic.w && pic.h) drawFramed(g, pic.src, pic.w, pic.h, picOf(cfg.frame ?? DEFAULT_VIDEO.frame), W, H);
     if (!cfg.captions) return null;
     const text = activeRef.current(time);
     return text ? drawStyledText(g, text, styleRef.current, W, H) : null;
@@ -325,7 +404,7 @@ export default function VideoStudio({
     const c = canvasRef.current;
     const g = c?.getContext("2d");
     if (!c || !g) return;
-    captionBox.current = drawScene(g, c.width, c.height, videoRef.current, time);
+    captionBox.current = drawScene(g, c.width, c.height, pictureOf(videoRef.current, time), time);
   }, [drawScene]);
 
   const stop = useCallback(() => {
@@ -408,6 +487,7 @@ export default function VideoStudio({
     setAudioBlob(f);
     setAudioBuf(null);
     setPeaks([]);
+    onProject((p) => ({ ...p, heardWords: undefined, lyricWords: undefined })); // timings of another audio
     setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     try { await putMedia(`audio:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
@@ -422,7 +502,6 @@ export default function VideoStudio({
       setV({ crop: { start, duration: d } });
       setHead(start);
       onSaveNow();
-      void generateLyrics(buf); // the lyrics come by themselves with the official audio
     } catch {
       if (token === ioRef.current) setErr(t("Could not read this audio file."));
     }
@@ -846,8 +925,9 @@ export default function VideoStudio({
    */
   const placeWords = (heard: LyricWord[], src: string, p: Project, segFrom: number, segTo: number): { words: LyricWord[]; info: string } => {
     const written = writtenOf(src, p);
-    if (!written.trim()) return { words: heard, info: t("{n} words heard", { n: heard.length }) };
-    const miss = { words: heard, info: t("Your written lyrics do not match what was heard: the words are shown as heard.") };
+    if (!written.trim()) return { words: [], info: t("No lyrics: paste them to show them on the video.") };
+    // Never words "as heard": without a match there are no lyrics rather than wrong ones.
+    const miss = { words: [], info: t("Your lyrics could not be placed on this audio. Check it is the same song, or set the language.") };
     if (src === "song" || src === "all") {
       const aligned = alignSong(written, heard);
       return aligned
@@ -871,20 +951,32 @@ export default function VideoStudio({
     const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
     onProject((x) => ({ ...x, lyricWords: r.words }));
     setGenInfo(r.info);
-    if (!cfg.captions) setV({ captions: true });
+    if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
   };
 
-  /** Lyrics pasted in the video studio: kept on the project, then synced on the audio. */
-  const applyPasted = () => {
-    const text = paste.trim();
-    if (!text) return;
-    const next: Project = { ...project, songLyrics: text };
-    onProject((p) => ({ ...p, songLyrics: text }));
-    setWrittenSrc("song");
-    if (next.heardWords?.length) resyncLyrics("song", next);
-    else if (audioBuf && !genBusy) void generateLyrics(audioBuf, next, "song");
+  /** Lyrics there are to place: the pasted ones (even not saved yet) or the chosen carousel ones. */
+  const hasLyrics = !!(writtenSrc === "song" ? parseLyrics(paste).text.trim() : writtenOf(writtenSrc, project).trim());
+
+  /**
+   * The one sync button: the video on the official audio (when there is one), then the written
+   * lyrics on the audio (when there are some). The words already heard are reused: no new analysis.
+   */
+  const syncAll = async () => {
+    // autoSync starts the audio capture of the video right away: it must run inside the click.
+    const video = videoBlob ? autoSync() : Promise.resolve();
+    let next = project;
+    if (writtenSrc === "song" && paste.trim() !== (project.songLyrics ?? "").trim()) {
+      const text = paste.trim();
+      next = { ...project, songLyrics: text, heardWords: project.heardWords };
+      onProject((p) => ({ ...p, songLyrics: text }));
+    }
+    await video;
+    if (!hasLyrics || !audioBuf) return;
+    if (next.heardWords?.length) resyncLyrics(writtenSrc, next);
+    else await generateLyrics(audioBuf, next, writtenSrc);
   };
+
 
   /**
    * Hear the whole track, window by window (the speech engine reports no progress inside one window):
@@ -923,11 +1015,6 @@ export default function VideoStudio({
         heard.push(...words.filter((w) => { const m = (w.s + w.e) / 2; return m >= lo && m < hi; }));
         heard.sort((x, y) => x.s - y.s);
         setGenDone((k + 1) / order.length);
-        if (heard.length) {
-          const now = [...heard];
-          onProject((p) => ({ ...p, lyricWords: now }));
-          if (!settingsRef.current.captions) setV({ captions: true });
-        }
       }
       if (!heard.length) {
         const msg = t("No words were heard in this track. Try a more accurate model or set the language.");
@@ -937,6 +1024,7 @@ export default function VideoStudio({
         const { words, info } = placeWords(heard, src, proj, segFrom, segTo);
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
         onProject((p) => ({ ...p, heardWords: heard, lyricWords: words }));
+        if (words.length && !settingsRef.current.captions) setV({ captions: true });
         setGenInfo(info);
         outcome = { title: t("Lyrics ready"), body: info };
         onSaveNow();
@@ -997,10 +1085,10 @@ export default function VideoStudio({
     await new Promise<void>((resolve) => {
       const tick = () => {
         const now = from + (ctx.currentTime - origin);
-        if (now >= until || signal.aborted) { drawScene(g, W, H, el, Math.min(now, until)); resolve(); return; }
+        if (now >= until || signal.aborted) { drawScene(g, W, H, pictureOf(el, Math.min(now, until)), Math.min(now, until)); resolve(); return; }
         const target = Math.max(0, now - offset);
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
-        drawScene(g, W, H, el, now);
+        drawScene(g, W, H, pictureOf(el, now), now);
         setExp({ p: (now - from) / (until - from), step: "record" });
         requestAnimationFrame(tick);
       };
@@ -1027,9 +1115,11 @@ export default function VideoStudio({
     void askNotifyPermission();
     const ac = new AbortController();
     exportRef.current = ac;
-    setErr(null); setNote(null); setExporting(true); setExp({ p: 0, step: "audio" });
+    setErr(null); setNote(null); setExporting(true); setExpMode(null); setExp({ p: 0, step: "audio" });
     const [W, H] = OUT_SIZE(cfg.format);
     const name = `${project.name || "TkTgen"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
+    let source: VideoSource | null = null;
+    let stopPlayer = () => {};
     const el = document.createElement("video");
     el.src = videoUrl;
     el.muted = true;
@@ -1037,20 +1127,84 @@ export default function VideoStudio({
     el.preload = "auto";
     try {
       await whenReady(el);
-      let blob: Blob, ext = "mp4";
+      let blob: Blob | null = null, ext = "mp4";
       if (await mp4Support(W, H, audioBuf.sampleRate, Math.min(2, audioBuf.numberOfChannels))) {
+        // Frames decoded from the file itself (works in a background tab); the hidden <video> only as a fallback.
+        setExp({ p: 0, step: "read" });
+        source = videoBlob ? await VideoSource.open(videoBlob, from - cfg.offset, until - cfg.offset, (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal) : null;
+        const vdur = el.duration;
+        /** Camera time at the start of the frames `source` gives (not 0 when they come from a converted segment). */
+        let base = 0;
+        let detail = source?.codec ?? "";
+        if (!source && videoBlob && !ac.signal.aborted) {
+          // A format the browser cannot decode (4:2:2 10-bit, ProRes…): ffmpeg converts the segment first.
+          const why = VideoSource.lastReason;
+          const vs = Math.max(0, from - cfg.offset - 0.2);
+          const ve = Math.min(Number.isFinite(vdur) ? vdur : Infinity, until - cfg.offset + 0.2);
+          if (ve > vs) {
+            try {
+              const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}`;
+              let proxy = proxyRef.current?.key === key ? proxyRef.current.blob : null;
+              if (!proxy) {
+                proxy = await convertSegment(videoBlob, vs, ve, (p, step) => setExp({ p, step }), ac.signal);
+                proxyRef.current = { key, blob: proxy }; // exporting the same segment again skips the conversion
+              }
+              source = await VideoSource.open(proxy, 0, ve - vs, (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal);
+              if (source) { base = vs; detail = t("converted from {format}", { format: why.replace(/ not decodable.*$/, "") }); }
+            } catch (e) {
+              if (ac.signal.aborted || (e instanceof DOMException && e.name === "AbortError")) throw e;
+              console.warn("[export] conversion failed, using the browser's player", e);
+              VideoSource.lastReason = `${why} · ${t("conversion failed")}: ${e instanceof Error ? e.message : String(e)}`;
+            }
+          }
+        }
+        const src = source;
+        setExpMode(src ? { direct: true, detail } : { direct: false, detail: VideoSource.lastReason });
+        let lastSig = "", sameSince = from;
+        let player: ReturnType<typeof playerFrames> | null = null;
+        stopPlayer = () => player?.stop();
+        /** The hidden player only shows new frames while the tab is visible: wait instead of freezing the picture. */
+        const visible = () => new Promise<void>((resolve) => {
+          if (!document.hidden) { resolve(); return; }
+          setExpPaused(true);
+          el.pause();
+          const back = () => {
+            if (document.hidden) return;
+            document.removeEventListener("visibilitychange", back);
+            setExpPaused(false);
+            if (player) void el.play().catch(() => {});
+            resolve();
+          };
+          document.addEventListener("visibilitychange", back);
+          ac.signal.addEventListener("abort", () => { document.removeEventListener("visibilitychange", back); resolve(); }, { once: true });
+        });
         blob = await exportMp4({
           width: W, height: H, fps: EXPORT_FPS, from, until, audio: audioBuf, signal: ac.signal,
-          onProgress: (p, step) => setExp({ p, step }),
+          onProgress: (p, step) => setExp({ p: 0.05 + p * 0.95, step }),
           frame: async (g, time) => {
             const target = time - cfg.offset;
-            if (target >= 0 && target <= el.duration) await seekVideo(el, target);
-            drawScene(g, W, H, el, time);
+            const inside = target >= -0.001 && (!Number.isFinite(vdur) || target <= vdur + 0.001);
+            let pic: Picture | null = null;
+            if (inside && src) pic = await src.frameAt(target - base);
+            else if (inside) {
+              await visible();
+              await (player ??= playerFrames(el, Math.max(0, target))).frameAt(target);
+              pic = pictureOf(el, time);
+              // The player can stop decoding a format it does not really handle: the picture would
+              // stay frozen while sound and lyrics go on. Stop with an explanation instead.
+              const sig = pic ? fingerprint(pic.src) : "";
+              if (sig && sig === lastSig) { if (time - sameSince >= 2) throw new FrozenVideo(target); }
+              else { lastSig = sig; sameSince = time; }
+            }
+            drawScene(g, W, H, pic, time);
           },
+        }).catch((e) => {
+          // The encoder gave no sound: record instead of handing over a silent video.
+          if (e instanceof Error && e.message === "no-audio") return null;
+          throw e;
         });
-      } else {
-        ({ blob, ext } = await recordRealtime(el, W, H, from, until, ac.signal));
       }
+      if (!blob) ({ blob, ext } = await recordRealtime(el, W, H, from, until, ac.signal));
       const file = `${name} clip.${ext}`;
       saveBlob(blob, file);
       setExp({ p: 1, step: "finish", done: true, file });
@@ -1058,12 +1212,19 @@ export default function VideoStudio({
     } catch (e) {
       const cancelled = ac.signal.aborted || (e instanceof DOMException && e.name === "AbortError");
       setExp(null);
-      if (!cancelled) {
+      if (e instanceof FrozenVideo) {
+        const msg = t("The camera video stopped giving pictures at {s}: this browser cannot read its format frame by frame ({why}). Export it as H.264 or HEVC, 8-bit 4:2:0 (from DaVinci, or use the camera's proxy file), then import that file.", { s: fmtTime(e.at), why: VideoSource.lastReason || "?" });
+        setErr(msg);
+        notify(t("Video export failed"), msg);
+      } else if (!cancelled) {
         console.error("video export failed", e);
         setErr(t("Video export failed"));
         notify(t("Video export failed"), t("The export stopped before the end. Try again."));
       }
     } finally {
+      source?.close();
+      stopPlayer();
+      setExpPaused(false);
       el.pause();
       el.removeAttribute("src");
       el.load();
@@ -1157,7 +1318,7 @@ export default function VideoStudio({
           <h2 className="display">{project.name}</h2>
         </div>
         <span className="grow" />
-        <div className="row nowrap">
+        <div className="row nowrap" style={{ alignItems: "flex-end" }}>
           <label className="field" style={{ margin: 0 }}>{t("Video")}
             <select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
@@ -1165,6 +1326,10 @@ export default function VideoStudio({
             </select>
           </label>
           <button className="btn icon" aria-label={t("New video")} title={t("New video")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
+            title={audioBuf && videoBlob ? t("Ready to export") : t("Import the release audio")}>
+            <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
+          </button>
         </div>
       </div>
       <div className="video-grid">
@@ -1278,14 +1443,99 @@ export default function VideoStudio({
             <p className="muted xs">{t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}</p>
           </Section>
 
+          <Section title={t("Lyrics")}>
+            <label className="field">{t("Paste the lyrics of the song")}
+              <textarea className="input" rows={6} value={paste} onChange={(e) => setPaste(e.target.value)}
+                placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
+            </label>
+            {pasted.parts.length > 0 && (
+              <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
+            )}
+            {project.lyrics.length > 0 && (
+              <label className="field">{t("Written lyrics")}
+                <select className="input" value={writtenSrc} disabled={genBusy}
+                  onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
+                  <option value="song">{t("Lyrics pasted above")}</option>
+                  <option value="all">{t("Carousel lyrics (all sections)")}</option>
+                  {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
+                </select>
+              </label>
+            )}
+            <p className="muted xs">{t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")}</p>
+            <div className="cols2">
+              <label className="field">{t("Language")}
+                <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)} disabled={genBusy}>
+                  <option value="auto">{t("Detect")}</option>
+                  <option value="french">Français</option><option value="english">English</option>
+                  <option value="spanish">Español</option><option value="portuguese">Português</option>
+                  <option value="italian">Italiano</option><option value="german">Deutsch</option>
+                  <option value="dutch">Nederlands</option><option value="arabic">العربية</option>
+                </select>
+              </label>
+              <label className="field">{t("Accuracy")}
+                <select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
+                  <option value="tiny">{t("Fast")}</option>
+                  <option value="base">{t("Balanced")}</option>
+                  <option value="small">{t("Precise (slower)")}</option>
+                </select>
+              </label>
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
+              {t("Lyrics on the video")}
+            </label>
+            <div className="row">
+              <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
+              <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
+            </div>
+            {mode === "phrase" && (
+              <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
+                onChange={(v) => setV({ lineChars: v })} />
+            )}
+            {cues.length > 0 && (
+              <div className="lyric-timing">
+                {cues.map((c, i) => (
+                  <button key={i} className="btn sm quiet row nowrap" style={{ justifyContent: "flex-start" }}
+                    onClick={() => { stop(); setHead(round2(c.start)); }}>
+                    <span className="mono xs">{fmtTime(c.start)}</span>
+                    <span className="grow truncate xs">{c.text.replace(/\n/g, " ⏎ ")}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
+          </Section>
+
           <Section title={t("Sync with the official audio")}>
             <div className="row">
-              <button className="btn sm primary" onClick={() => void autoSync()} disabled={!audioBuf || !videoBlob || syncBusy}>
-                <Icon name="refresh" size={14} />{syncBusy ? t("Analysing… {n}%", { n: Math.round(syncPct * 100) }) : t("Auto sync")}
-              </button>
+              {!syncBusy && !genBusy ? (
+                <button className="btn sm primary" onClick={() => void syncAll()} disabled={!audioBuf || (!videoBlob && !hasLyrics)}>
+                  <Icon name="refresh" size={14} />
+                  {hasLyrics ? (videoBlob ? t("Sync lyrics and video") : t("Sync the lyrics")) : t("Sync the video")}
+                </button>
+              ) : (
+                <>
+                  <span className="badge">
+                    {syncBusy ? t("Syncing the video… {n}%", { n: Math.round(syncPct * 100) })
+                      : genStep === "model" && genPct > 0 && genPct < 1 ? t("Downloading the speech model… {n}%", { n: Math.round(genPct * 100) })
+                      : genStep === "listen" || genDone > 0 ? t("Placing the lyrics… {n}%", { n: Math.round(genDone * 100) })
+                      : t("Loading the speech engine…")}
+                  </span>
+                  {genBusy && <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>}
+                </>
+              )}
               {settings.score !== undefined && <span className="badge">{t("Sync quality {n}%", { n: Math.round(settings.score * 100) })}</span>}
               {!!settings.anchors && <span className="badge">{t("{n} anchors", { n: settings.anchors })}</span>}
             </div>
+            {!audioBuf && <p className="muted xs">{t("Import the official audio first.")}</p>}
+            {genBusy && (
+              <div className="bar live" role="progressbar" aria-valuemin={0} aria-valuemax={100}
+                aria-valuenow={Math.round((genStep === "model" && genDone === 0 ? genPct : genDone) * 100)}>
+                <div style={{ width: `${(genStep === "model" && genDone === 0 ? genPct : genDone) * 100}%` }} />
+              </div>
+            )}
+            {genInfo && <p className="notice xs">{genInfo}</p>}
+            {hasLyrics && <p className="muted xs">{t("The speech model ({name}) is downloaded once, then kept by the browser. Your audio never leaves this device.", { name: ASR_MODELS[model].split("/")[1].replace("_timestamped", "") })}</p>}
             <label className="field">{t("Offset (s)")}
               <input className="input" type="number" step={0.05} value={round2(settings.offset)} disabled={linked}
                 onChange={(e) => setV({ offset: round2(Number(e.target.value) || 0) })} />
@@ -1313,102 +1563,6 @@ export default function VideoStudio({
               <p className="mono xs">
                 {t("Music detected from {a} to {b} in the video.", { a: fmtTime(settings.musicStart), b: fmtTime(settings.musicEnd) })}
               </p>
-            )}
-          </Section>
-
-          <Section title={t("Lyrics from the audio")}>
-            <label className="check">
-              <input type="checkbox" checked={settings.captions} onChange={(e) => setV({ captions: e.target.checked })} />
-              {t("Lyrics on the video")}
-            </label>
-            <p className="muted xs">{t("The words are heard in the official audio (not in the video), as soon as it is imported.")}</p>
-            <div className="cols2">
-              <label className="field">{t("Accuracy")}
-                <select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
-                  <option value="tiny">{t("Fast")}</option>
-                  <option value="base">{t("Balanced")}</option>
-                  <option value="small">{t("Precise (slower)")}</option>
-                </select>
-              </label>
-              <label className="field">{t("Language")}
-                <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)} disabled={genBusy}>
-                  <option value="auto">{t("Detect")}</option>
-                  <option value="french">Français</option><option value="english">English</option>
-                  <option value="spanish">Español</option><option value="portuguese">Português</option>
-                  <option value="italian">Italiano</option><option value="german">Deutsch</option>
-                  <option value="dutch">Nederlands</option><option value="arabic">العربية</option>
-                </select>
-              </label>
-            </div>
-            <label className="field">{t("Paste the lyrics of the song")}
-              <textarea className="input" rows={6} value={paste} onChange={(e) => setPaste(e.target.value)}
-                placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
-            </label>
-            {pasted.parts.length > 0 && (
-              <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
-            )}
-            <div className="row">
-              <button className="btn sm primary" disabled={!paste.trim() || genBusy || !audioBuf} onClick={applyPasted}>
-                {t("Sync these lyrics on the audio")}
-              </button>
-              {!audioBuf && <span className="muted xs">{t("Import the official audio first.")}</span>}
-            </div>
-            {project.lyrics.length > 0 && (
-              <label className="field">{t("Written lyrics")}
-                <select className="input" value={writtenSrc} disabled={genBusy}
-                  onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
-                  <option value="song">{t("Lyrics pasted above")}</option>
-                  <option value="all">{t("Carousel lyrics (all sections)")}</option>
-                  {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
-                  <option value="none">{t("None: words as heard")}</option>
-                </select>
-              </label>
-            )}
-            <p className="muted xs">{t("With your written lyrics the text is exact: the audio is only used to know when each word is sung.")}</p>
-            <div className="row">
-              {!genBusy ? (
-                <button className="btn sm primary" onClick={() => void generateLyrics()} disabled={!audioBuf}>
-                  <Icon name="refresh" size={14} />{project.lyricWords?.length ? t("Analyse the lyrics again") : t("Generate lyrics from the audio")}
-                </button>
-              ) : (
-                <>
-                  <span className="badge">
-                    {genStep === "model" && genPct > 0 && genPct < 1
-                      ? t("Downloading the speech model… {n}%", { n: Math.round(genPct * 100) })
-                      : genStep === "listen" || genDone > 0 ? t("Analysing the lyrics… {n}%", { n: Math.round(genDone * 100) }) : t("Loading the speech engine…")}
-                  </span>
-                  <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>
-                </>
-              )}
-              {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button>}
-            </div>
-            <p className="muted xs">{t("The speech model ({name}) is downloaded once, then kept by the browser. Your audio never leaves this device.", { name: ASR_MODELS[model].split("/")[1].replace("_timestamped", "") })}</p>
-            {genBusy && (
-              <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100}
-                aria-valuenow={Math.round((genStep === "model" && genDone === 0 ? genPct : genDone) * 100)}>
-                <div style={{ width: `${(genStep === "model" && genDone === 0 ? genPct : genDone) * 100}%` }} />
-              </div>
-            )}
-            {genInfo && <p className="notice xs">{genInfo}</p>}
-
-            <div className="row">
-              <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
-              <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
-            </div>
-            {mode === "phrase" && (
-              <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
-                onChange={(v) => setV({ lineChars: v })} />
-            )}
-            {cues.length > 0 && (
-              <div className="lyric-timing">
-                {cues.map((c, i) => (
-                  <button key={i} className="btn sm quiet row nowrap" style={{ justifyContent: "flex-start" }}
-                    onClick={() => { stop(); setHead(round2(c.start)); }}>
-                    <span className="mono xs">{fmtTime(c.start)}</span>
-                    <span className="grow truncate xs">{c.text.replace(/\n/g, " ⏎ ")}</span>
-                  </button>
-                ))}
-              </div>
             )}
           </Section>
 
@@ -1458,10 +1612,6 @@ export default function VideoStudio({
         </div>
       </div>
       <div className="modal-foot">
-        <span className="muted grow xs">{audioBuf && videoBlob ? t("Ready to export") : t("Import the release audio")}</span>
-        <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}>
-          <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
-        </button>
         <button className="btn" onClick={close}>{t("Done")}</button>
       </div>
       </div>
@@ -1470,6 +1620,9 @@ export default function VideoStudio({
           <div className="stack">
             <p>
               {exp.done ? t("{name} is in your downloads.", { name: exp.file ?? "" })
+                : exp.step === "engine" ? t("Downloading the video converter (once)… {n}%", { n: Math.round(exp.p * 100) })
+                : exp.step === "convert" ? t("Converting the camera format… {n}%", { n: Math.round(exp.p * 100) })
+                : exp.step === "read" ? t("Reading the camera video…")
                 : exp.step === "audio" ? t("Preparing the sound…")
                 : exp.step === "video" ? t("Building the frames… {n}%", { n: Math.round(exp.p * 100) })
                 : exp.step === "record" ? t("Recording in real time (this browser cannot encode MP4 by itself)… {n}%", { n: Math.round(exp.p * 100) })
@@ -1478,7 +1631,14 @@ export default function VideoStudio({
             <div className="bar export-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(exp.p * 100)}>
               <div style={{ width: `${exp.p * 100}%` }} />
             </div>
-            <p className="muted xs">{outW}×{outH} · H.264 · {EXPORT_FPS} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
+            <p className="muted xs">{outW}×{outH} · H.264 + AAC · {EXPORT_FPS} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
+            {expMode && (expMode.direct
+              ? <p className="muted xs">{t("Camera frames decoded from the file ({codec}): you can switch tabs.", { codec: expMode.detail })}</p>
+              : <p className="notice warn xs">{t("Camera frames read by the browser's player ({why}): the export plays the clip in real time. Keep this tab visible, it pauses while hidden.", { why: expMode.detail || "?" })}</p>)}
+            {expPaused && <p className="notice warn xs">{t("Paused: come back to this tab to continue.")}</p>}
+            {!exp.done && expMode?.direct !== false && (notifyBlocked()
+              ? <p className="notice warn xs">{t("Notifications are blocked for this site: allow them in the browser to be told when the video is ready. The tab title will show it anyway.")}</p>
+              : <p className="muted xs">{t("You can switch tabs: you will be notified when the video is ready.")}</p>)}
           </div>
           <div className="modal-foot">
             {exp.done

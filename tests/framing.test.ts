@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mergeFolder } from "../lib/drive";
+import { aacConfig } from "../lib/exportVideo";
+import { codecLabel, rotationOf } from "../lib/videoSource";
 import { clampPic, zoomPic } from "../lib/render";
 import { defaultPic } from "../lib/defaults";
 import type { PicRef } from "../lib/types";
@@ -45,5 +47,31 @@ describe("photo framing", () => {
   it("zooms around the centre of the canvas", () => {
     const p = zoomPic({ ...defaultPic(), zoom: 1, ox: 0.1, oy: -0.05 }, 2);
     expect(p).toMatchObject({ zoom: 2, ox: 0.2, oy: -0.1 });
+  });
+});
+
+describe("aacConfig (sound of the exported MP4)", () => {
+  it("writes the AAC-LC AudioSpecificConfig players need", () => {
+    expect([...aacConfig(44100, 2)]).toEqual([0x12, 0x10]);
+    expect([...aacConfig(48000, 2)]).toEqual([0x11, 0x90]);
+    expect([...aacConfig(48000, 1)]).toEqual([0x11, 0x88]);
+  });
+});
+
+describe("rotationOf (phone videos stored turned)", () => {
+  const F = 65536;
+  it("reads the rotation from the track matrix", () => {
+    expect(rotationOf([F, 0, 0, 0, F, 0, 0, 0, 0x40000000])).toBe(0);
+    expect(rotationOf([0, F, 0, -F, 0, 0, 0, 0, 0x40000000])).toBe(90); // iPhone portrait
+    expect(rotationOf([-F, 0, 0, 0, -F, 0, 0, 0, 0x40000000])).toBe(180);
+    expect(rotationOf([0, -F, 0, F, 0, 0, 0, 0, 0x40000000])).toBe(270);
+  });
+});
+
+describe("codecLabel", () => {
+  it("names the formats of pro cameras", () => {
+    expect(codecLabel("avc1.7a1033")).toMatch(/4:2:2 10-bit/);
+    expect(codecLabel("avc1.640028")).toMatch(/^H.264 High ·/);
+    expect(codecLabel("hvc1.4.10.L153.90")).toMatch(/4:2:2/);
   });
 });
