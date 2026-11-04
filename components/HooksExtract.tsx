@@ -11,6 +11,11 @@ interface Item { id: number; url: string; text: string; conf: number; status: St
 interface Post { id: string; title: string; cover: string; views: number; likes: number; created: number; url: string }
 interface TTStatus { configured: boolean; connected: boolean; name: string | null }
 export interface NewHook { text: string; views?: number }
+/** Destination value meaning "a new list of imported hooks". */
+export const NEW_IMPORT_POOL = "__new_import";
+/** Name of the list imported hooks go to by default (kept apart from the lists made by hand). */
+export const isImportPool = (name: string) => name === "Imported hooks" || name === "Hooks importés";
+const PRESETS = [10, 20, 30, 50];
 
 const badge = (s: Status) => (s === "New" ? "ok" : s === "Check spelling" ? "warn" : s === "No text found" ? "bad" : "dim");
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -21,7 +26,13 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
   const { t } = useT();
   const hookPools = pools.filter((p) => p.kind === "hooks");
   const [source, setSource] = useState<"screens" | "tiktok">(initialSource ?? "screens");
-  const [poolId, setPoolId] = useState(initialPoolId && hookPools.some((p) => p.id === initialPoolId) ? initialPoolId : hookPools[0]?.id ?? "");
+  // TikTok imports go to their own list by default: the lists made by hand stay as they are.
+  const importPool = hookPools.find((p) => isImportPool(p.name));
+  const [poolId, setPoolId] = useState(
+    initialSource === "tiktok" || !initialPoolId
+      ? importPool?.id ?? NEW_IMPORT_POOL
+      : hookPools.some((p) => p.id === initialPoolId) ? initialPoolId : hookPools[0]?.id ?? NEW_IMPORT_POOL
+  );
   const [files, setFiles] = useState<File[]>([]);
   const [crop, setCrop] = useState<Crop>({ top: 8, bottom: 20, right: 12 });
   const [workers, setWorkers] = useState(2);
@@ -41,9 +52,9 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
   const [tt, setTt] = useState<TTStatus | null>(null);
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [loadingPosts, setLoadingPosts] = useState(false);
-  const [mode, setMode] = useState<"top" | "min">("top");
-  const [topN, setTopN] = useState(25);
-  const [minViews, setMinViews] = useState(1000);
+  /** Posts ticked for the import (ids). Preset buttons tick the N most viewed; each can be changed by hand. */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [topN, setTopN] = useState(20);
 
   const previewUrl = useMemo(() => (files[0] ? URL.createObjectURL(files[0]) : null), [files]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
@@ -55,11 +66,11 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
   }, [source, tt]);
 
   const pool = hookPools.find((p) => p.id === poolId);
-  const selected = useMemo(() => {
-    if (!posts) return [];
-    const byViews = [...posts].sort((a, b) => b.views - a.views);
-    return mode === "top" ? byViews.slice(0, Math.max(1, topN)) : byViews.filter((p) => p.views >= minViews);
-  }, [posts, mode, topN, minViews]);
+  const toNew = poolId === NEW_IMPORT_POOL;
+  const byViews = useMemo(() => (posts ? [...posts].sort((a, b) => b.views - a.views) : []), [posts]);
+  const selected = byViews.filter((p) => picked.has(p.id));
+  const pickTop = (n: number) => { setTopN(n); setPicked(new Set(byViews.slice(0, Math.max(0, n)).map((p) => p.id))); };
+  const togglePost = (id: string) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   async function loadPosts() {
     setLoadingPosts(true); setErr(null);
@@ -69,14 +80,16 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
       if (r.status === 409) { setTt((t) => (t ? { ...t, connected: false } : t)); throw new Error(t("TikTok connection expired. Connect again.")); }
       if (!r.ok) throw new Error(j.error ?? t("Could not load your posts"));
       setPosts(j.posts);
+      const sorted = [...(j.posts as Post[])].sort((a, b) => b.views - a.views);
+      setPicked(new Set(sorted.slice(0, topN).map((p) => p.id)));
     } catch (e: any) { setErr(e.message); }
     setLoadingPosts(false);
   }
 
   async function run(jobs: { get: () => Promise<Blob>; views?: number }[], cropUsed: Crop) {
-    if (!jobs.length || !pool) return;
+    if (!jobs.length || (!pool && !toNew)) return;
     cancel.current = false; setRunning(true); setErr(null); setItems([]); setDone(0); setTotal(jobs.length); seen.current = new Set(); started.current = Date.now();
-    const existing = new Set(textItems(pool).map((t) => norm(t.replace(/\|/g, " "))));
+    const existing = new Set(pool ? textItems(pool).map((t) => norm(t.replace(/\|/g, " "))) : []);
     let ocr: Awaited<ReturnType<typeof createOcr>> | null = null;
     try {
       ocr = await createOcr(workers);
@@ -188,19 +201,32 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
               </div>
               {posts && (
                 <>
-                  <p className="muted" style={{ margin: 0 }}>{t("{n} posts found.", { n: posts.length })}</p>
+                  <p className="muted" style={{ margin: 0 }}>{t("{n} posts found, most viewed first.", { n: posts.length })}</p>
                   <div className="row">
-                    <select className="input" style={{ width: 230 }} value={mode} onChange={(e) => setMode(e.target.value as "top" | "min")}>
-                      <option value="top">{t("My best posts (by views)")}</option>
-                      <option value="min">{t("Posts with at least … views")}</option>
-                    </select>
-                    {mode === "top"
-                      ? <input className="input" style={{ width: 100 }} type="number" min={1} value={topN} onChange={(e) => setTopN(+e.target.value || 1)} aria-label={t("Number of posts")} />
-                      : <input className="input" style={{ width: 130 }} type="number" min={0} value={minViews} onChange={(e) => setMinViews(+e.target.value || 0)} aria-label={t("Minimum views")} />}
-                    <span className="muted">
+                    <span className="muted xs">{t("Best")}</span>
+                    {PRESETS.map((n) => (
+                      <button key={n} className={"btn sm" + (selected.length === Math.min(n, byViews.length) && topN === n ? " primary" : "")} disabled={running} onClick={() => pickTop(n)}>{n}</button>
+                    ))}
+                    <button className="btn sm" disabled={running} onClick={() => pickTop(byViews.length)}>{t("All")}</button>
+                    <input className="input" style={{ width: 80 }} type="number" min={0} max={byViews.length} value={topN} disabled={running}
+                      onChange={(e) => pickTop(Math.max(0, Math.min(byViews.length, +e.target.value || 0)))} aria-label={t("Number of posts")} />
+                    <button className="btn sm quiet" disabled={running} onClick={() => setPicked(new Set())}>{t("Select none")}</button>
+                    <span className="muted xs">
                       {t("{n} posts selected", { n: selected.length })}
                       {selected.length ? ` · ${t("{a} to {b} views", { a: fmt(selected[selected.length - 1].views), b: fmt(selected[0].views) })}` : ""}
                     </span>
+                  </div>
+                  <div className="post-pick" style={{ maxHeight: "30dvh", overflow: "auto" }}>
+                    {byViews.map((p, i) => (
+                      <label key={p.id} className={"item row nowrap" + (picked.has(p.id) ? " on" : "")}>
+                        <input type="checkbox" checked={picked.has(p.id)} disabled={running} onChange={() => togglePost(p.id)} />
+                        <span className="idx">{String(i + 1).padStart(2, "0")}</span>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {p.cover ? <img src={"/api/tiktok/cover?u=" + encodeURIComponent(p.cover)} alt="" loading="lazy" className="post-cover" /> : <span className="post-cover" />}
+                        <span className="grow truncate xs">{p.title || t("(no caption)")}</span>
+                        <span className="mono xs">{t("{n} views", { n: fmt(p.views) })}</span>
+                      </label>
+                    ))}
                   </div>
                 </>
               )}
@@ -212,6 +238,7 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
       <div className="cols2">
         <label className="field">{t("Add hooks to")}
           <select className="input" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
+            {!importPool && <option value={NEW_IMPORT_POOL}>{t("New list: {name}", { name: t("Imported hooks") })}</option>}
             {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </label>
@@ -221,7 +248,9 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
       </div>
       <div className="row">
         {!running
-          ? <button className="btn primary" disabled={!pool || (source === "screens" ? !files.length : !selected.length)} onClick={source === "screens" ? startScreens : startTikTok}>{t("Start")}</button>
+          ? <button className="btn primary" disabled={(!pool && !toNew) || (source === "screens" ? !files.length : !selected.length)} onClick={source === "screens" ? startScreens : startTikTok}>
+              {source === "tiktok" ? t("Read the hooks of {n} posts", { n: selected.length }) : t("Start")}
+            </button>
           : <button className="btn" onClick={() => { cancel.current = true; }}>{t("Cancel")}</button>}
       </div>
 
@@ -260,7 +289,7 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
       )}
       <div className="modal-foot">
         <button className="btn quiet" onClick={() => { cancel.current = true; onClose(); }}>{t("Close")}</button>
-        <button className="btn primary" disabled={!checked.length || !pool} onClick={() => { onAdd(poolId, checked.map((i) => ({ text: i.text.trim(), views: i.views }))); onClose(); }}>
+        <button className="btn primary" disabled={!checked.length || (!pool && !toNew)} onClick={() => { onAdd(poolId, checked.map((i) => ({ text: i.text.trim(), views: i.views }))); onClose(); }}>
           {t("Add {n} to the list", { n: checked.length })}
         </button>
       </div>

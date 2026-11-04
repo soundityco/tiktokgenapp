@@ -11,7 +11,7 @@ import { useT } from "@/lib/i18n";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
-import HooksExtract, { NewHook } from "./HooksExtract";
+import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
 import Inspector from "./Inspector";
 import Logo from "./Logo";
@@ -974,6 +974,15 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {overlay?.k === "import" && (
         <HooksExtract pools={vText} initialPoolId={overlay.poolId} initialSource={overlay.source} onClose={() => setOverlay(null)} onAdd={(id, hooks: NewHook[]) => {
+          if (id === NEW_IMPORT_POOL) {
+            // Their own list, shared by every release: the lists made by hand are never touched.
+            const views: Record<string, number> = {};
+            hooks.forEach((h) => { if (h.views !== undefined) views[hookKey(h.text)] = h.views; });
+            const pool: TextPool = { id: uid(), name: t("Imported hooks"), scope: "shared", kind: "hooks", text: hooks.map((h) => h.text).join("\n"), ...(Object.keys(views).length ? { views } : {}) };
+            upd((w) => ({ ...w, textPools: [...w.textPools, pool] }));
+            say(t("{n} hooks added to “{name}”", { n: hooks.length, name: pool.name }));
+            return;
+          }
           setTextPool(id, (x) => {
             const views = { ...(x.views ?? {}) };
             hooks.forEach((h) => { if (h.views !== undefined) views[hookKey(h.text)] = h.views; });
