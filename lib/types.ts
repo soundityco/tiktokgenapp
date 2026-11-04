@@ -182,6 +182,12 @@ export interface Project {
   heardWords?: LyricWord[];
   /** Full lyrics of the song pasted in the video studio, synced on the official audio. */
   songLyrics?: string;
+  /** Name of the official audio of the release: one file per project, shared by all its videos (IndexedDB "audio:project:<id>"). */
+  audioName?: string;
+  /** Size in bytes of that file: importing the same file again keeps the lyrics timing. */
+  audioSize?: number;
+  /** Google Drive file of that audio, when picked from Drive: fetched again when this device lost its copy. */
+  audioDriveId?: string;
   generated: GenSlide[] | null;
   selectedSlide: number;
   /** @deprecated Single video setup of older workspaces; migrated to `videos` on load. */

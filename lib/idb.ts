@@ -17,6 +17,19 @@ const db = () => (opening ??= new Promise<IDBDatabase>((resolve, reject) => {
   req.onerror = () => reject(req.error);
 }));
 
+/**
+ * Ask the browser to keep this site's files even when the disk runs low (otherwise IndexedDB is
+ * "best effort" and can be cleared). Granted silently by Chrome for sites in use, asked in Firefox.
+ */
+export async function askPersistentStorage(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false;
+    return (await navigator.storage.persisted()) || (await navigator.storage.persist());
+  } catch {
+    return false;
+  }
+}
+
 export async function putMedia(key: string, blob: Blob): Promise<void> {
   const d = await db();
   await new Promise<void>((resolve, reject) => {

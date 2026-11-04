@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
-import { delMedia, getMedia, putMedia } from "@/lib/idb";
+import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
+import { downloadDriveFile, type DriveItem } from "@/lib/drive";
+import DriveBrowser from "./DriveBrowser";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, parseLyrics } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
@@ -312,6 +314,23 @@ export default function VideoStudio({
    */
   const [writtenSrc, setWrittenSrc] = useState(project.songLyrics?.trim() || !project.lyrics.length ? "song" : "all");
   const [paste, setPaste] = useState(project.songLyrics ?? "");
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
+  const pickFromDrive = async (f: DriveItem) => {
+    setDriveBusy(true); setErr(null);
+    try {
+      const blob = await downloadDriveFile(f.id);
+      await pickAudio(new File([blob], f.name, { type: blob.type || f.mimeType }), f.id);
+    } catch {
+      setErr(t("The official audio could not be fetched from Google Drive. Check it is still there, or import it again."));
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+  /** One official audio per release, shared by all its videos. */
+  const projectAudioKey = `audio:project:${project.id}`;
+  useEffect(() => { setPaste(project.songLyrics ?? ""); setConfirmRemove(false); }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const pasted = useMemo(() => {
     const r = parseLyrics(paste);
     return { parts: r.parts, lines: r.text ? r.text.split("\n").length : 0 };
@@ -434,8 +453,27 @@ export default function VideoStudio({
     setHead(settingsRef.current.crop.start);
     void (async () => {
       try {
-        const [a, b] = await Promise.all([getMedia(`audio:${clip.id}`), getMedia(`video:${clip.id}`)]);
+        const [shared, legacy, b] = await Promise.all([getMedia(projectAudioKey), getMedia(`audio:${clip.id}`), getMedia(`video:${clip.id}`)]);
         if (off || token !== ioRef.current) return;
+        // The release has one official audio; older workspaces kept a copy per video: it becomes the project's.
+        let a = shared ?? legacy;
+        // Not on this device (another computer, browser data cleared): back from the Drive file.
+        if (!a && project.audioDriveId) {
+          setNote(t("Getting the official audio back from Google Drive…"));
+          try {
+            const blob = await downloadDriveFile(project.audioDriveId);
+            if (off || token !== ioRef.current) return;
+            a = blob;
+            void putMedia(projectAudioKey, blob).catch(() => {});
+            setNote(null);
+          } catch {
+            if (!off) setErr(t("The official audio could not be fetched from Google Drive. Check it is still there, or import it again."));
+          }
+        }
+        if (!shared && legacy) {
+          void putMedia(projectAudioKey, legacy).then(() => delMedia(`audio:${clip.id}`)).catch(() => {});
+          if (!project.audioName && settingsRef.current.audioName) onProject((p) => ({ ...p, audioName: settingsRef.current.audioName }));
+        }
         if (a) {
           setAudioBlob(a);
           decodeAudio(getCtx(), a)
@@ -451,7 +489,7 @@ export default function VideoStudio({
     })();
     return () => { off = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clip.id]);
+  }, [clip.id, project.id]);
 
   useEffect(() => {
     setSectionId(project.lyricsSectionId ?? project.lyrics[0]?.id ?? "");
@@ -479,7 +517,8 @@ export default function VideoStudio({
     return () => clearTimeout(id);
   }, [note]);
 
-  const pickAudio = async (f: File) => {
+  /** Import the official audio. `driveId`: picked from Google Drive, so it can be fetched again anywhere. */
+  const pickAudio = async (f: File, driveId?: string) => {
     const token = ++ioRef.current;
     syncRef.current?.abort();
     stop();
@@ -487,9 +526,15 @@ export default function VideoStudio({
     setAudioBlob(f);
     setAudioBuf(null);
     setPeaks([]);
-    onProject((p) => ({ ...p, heardWords: undefined, lyricWords: undefined })); // timings of another audio
-    setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
-    try { await putMedia(`audio:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
+    // Same file again (lost from this device, or another computer): the lyrics timing and the sync stay.
+    // Another file: its timings are void; the pasted lyrics stay.
+    const same = project.audioSize === f.size && project.audioName === f.name;
+    onProject((p) => (same
+      ? { ...p, audioName: f.name, audioDriveId: driveId ?? p.audioDriveId }
+      : { ...p, audioName: f.name, audioSize: f.size, audioDriveId: driveId, heardWords: undefined, lyricWords: undefined }));
+    if (!same) setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+    void askPersistentStorage();
+    try { await putMedia(projectAudioKey, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
     try {
       const buf = await decodeAudio(getCtx(), f);
@@ -515,6 +560,7 @@ export default function VideoStudio({
     setVideoDur(0);
     setV({ videoName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
+    void askPersistentStorage();
     try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
   };
@@ -526,8 +572,11 @@ export default function VideoStudio({
     setAudioBlob(null);
     setAudioBuf(null);
     setPeaks([]);
+    setConfirmRemove(false);
+    onProject((p) => ({ ...p, audioName: undefined, audioSize: undefined, audioDriveId: undefined, heardWords: undefined, lyricWords: undefined }));
     setV({ audioName: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
+    await delMedia(projectAudioKey);
     await delMedia(`audio:${clip.id}`);
     onSaveNow();
   };
@@ -549,10 +598,7 @@ export default function VideoStudio({
     stop();
     const id = uid();
     const name = `Video ${clips.length + 1}`;
-    let copied = false;
-    if (audioBlob) {
-      try { await putMedia(`audio:${id}`, audioBlob); copied = true; } catch { /* private mode: keep it in memory */ }
-    }
+    const copied = !!audioBlob; // the audio is the project's: the new video uses it as is
     const cur = settingsRef.current;
     onProject((p) => ({
       ...p,
@@ -954,6 +1000,19 @@ export default function VideoStudio({
     if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
   };
+
+  // Pasted lyrics are saved as you type (nothing lost on a reload), and once the song has been
+  // heard, every edit re-places the lyrics at once: the timed lines below follow the text.
+  useEffect(() => {
+    if (paste === (project.songLyrics ?? "")) return;
+    const id = setTimeout(() => {
+      onProject((p) => ({ ...p, songLyrics: paste }));
+      if (writtenSrc === "song" && project.heardWords?.length && !genBusy) resyncLyrics("song", { ...project, songLyrics: paste });
+      else onSaveNow();
+    }, 700);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paste]);
 
   /** Lyrics there are to place: the pasted ones (even not saved yet) or the chosen carousel ones. */
   const hasLyrics = !!(writtenSrc === "song" ? parseLyrics(paste).text.trim() : writtenOf(writtenSrc, project).trim());
@@ -1357,13 +1416,27 @@ export default function VideoStudio({
         <div className="video-side">
           <Section title={t("Official audio")}>
             <div className="row">
+              <button className="btn sm primary" onClick={() => setDriveOpen(true)} disabled={driveBusy}>
+                <Icon name="folder" size={14} />{driveBusy ? t("Downloading…") : t("From Google Drive")}
+              </button>
               <label className="btn sm">
-                <Icon name="folder" size={14} />{t("Import audio")}
+                {t("From this computer")}
                 <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
               </label>
-              {audioBlob ? <span className="badge ok truncate">{settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
-              {audioBlob && <button className="btn sm quiet danger" onClick={() => void removeAudio()}>{t("Remove audio")}</button>}
+              {audioBlob ? <span className="badge ok truncate">{project.audioName ?? settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
+              {audioBlob && project.audioDriveId && <span className="badge">{t("Saved in Drive")}</span>}
+              {audioBlob && !confirmRemove && <button className="btn sm quiet danger" onClick={() => setConfirmRemove(true)}>{t("Remove audio")}</button>}
+              {audioBlob && confirmRemove && (
+                <>
+                  <span className="xs">{t("Remove it from every video of this release, with the lyrics timing?")}</span>
+                  <button className="btn sm danger" onClick={() => void removeAudio()}>{t("Remove")}</button>
+                  <button className="btn sm quiet" onClick={() => setConfirmRemove(false)}>{t("Cancel")}</button>
+                </>
+              )}
             </div>
+            {audioBlob && !project.audioDriveId && (
+              <p className="muted xs">{t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")}</p>
+            )}
             {audioBuf && (
               <>
                 <canvas ref={waveRef} className="wave" width={900} height={90}
@@ -1615,6 +1688,7 @@ export default function VideoStudio({
         <button className="btn" onClick={close}>{t("Done")}</button>
       </div>
       </div>
+      {driveOpen && <DriveBrowser onPick={(f) => void pickFromDrive(f)} onClose={() => setDriveOpen(false)} />}
       {exp && (
         <Modal title={exp.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
           <div className="stack">

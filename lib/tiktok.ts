@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { loadTikTok, saveTikTok, TikTokTokens } from "./db";
 
 // Base URLs can be overridden to run against a local mock in development.
@@ -11,13 +12,28 @@ export const tiktokConfigured = () => !!process.env.TIKTOK_CLIENT_KEY && !!proce
 export const redirectUri = (req: Request) =>
   process.env.TIKTOK_REDIRECT_URI ?? `${new URL(req.url).origin}/api/tiktok/callback`;
 
-export function authorizeUrl(req: Request, state: string) {
+/**
+ * PKCE, required by TikTok's login ("code_challenge" error without it): a random secret kept in a
+ * cookie, its SHA-256 sent with the login, the secret itself with the token exchange.
+ * TikTok's documentation encodes the hash in hex (not base64url as in RFC 7636): TIKTOK_PKCE_ENCODING
+ * can switch to "base64url" if their side changes.
+ */
+export function pkcePair() {
+  const verifier = randomBytes(48).toString("base64url"); // 64 characters, all allowed by RFC 7636
+  const hash = createHash("sha256").update(verifier);
+  const challenge = process.env.TIKTOK_PKCE_ENCODING === "base64url" ? hash.digest("base64url") : hash.digest("hex");
+  return { verifier, challenge };
+}
+
+export function authorizeUrl(req: Request, state: string, challenge: string) {
   const p = new URLSearchParams({
     client_key: process.env.TIKTOK_CLIENT_KEY!,
     scope: SCOPES,
     response_type: "code",
     redirect_uri: redirectUri(req),
     state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
   });
   return `${AUTH_URL}?${p}`;
 }
@@ -40,8 +56,8 @@ async function tokenCall(body: Record<string, string>) {
   };
 }
 
-export const exchangeCode = (req: Request, code: string) =>
-  tokenCall({ grant_type: "authorization_code", code, redirect_uri: redirectUri(req) });
+export const exchangeCode = (req: Request, code: string, verifier: string) =>
+  tokenCall({ grant_type: "authorization_code", code, redirect_uri: redirectUri(req), code_verifier: verifier });
 
 /** Return a valid access token for this user, refreshing it when needed. Null if not connected. */
 export async function validToken(email: string): Promise<string | null> {

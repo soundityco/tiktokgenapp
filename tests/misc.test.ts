@@ -163,4 +163,55 @@ describe("workspace revision (no silent overwrite between devices)", () => {
     expect(b).toEqual({ ok: true, rev: 2 });
     expect(((await loadWorkspace("me@x.com")) as any).rev).toBe(2);
   });
+
+  it("keeps a version history, at most one copy per 10 minutes, readable only by its owner", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tktgen-"));
+    process.chdir(dir);
+    delete process.env.DATABASE_URL; delete process.env.NETLIFY_DATABASE_URL;
+    const { saveWorkspaceCas, listVersions, loadVersion } = await import("../lib/db");
+    await saveWorkspaceCas("me@x.com", { v: 1, projects: [{ id: "a" }] }, 0);
+    await saveWorkspaceCas("me@x.com", { v: 1, projects: [{ id: "a" }, { id: "b" }] }, 1); // within 10 min: no new copy
+    const versions = await listVersions("me@x.com");
+    expect(versions).toHaveLength(1);
+    expect(versions[0]).toMatchObject({ rev: 1, projects: 1 });
+    expect(((await loadVersion("me@x.com", versions[0].id)) as any).projects).toHaveLength(1);
+    expect(await loadVersion("other@x.com", versions[0].id)).toBeNull();
+    expect(await listVersions("other@x.com")).toEqual([]);
+  });
+});
+
+describe("TikTok tokens and login", () => {
+  const tokens = { accessToken: "act.SECRET-ACCESS", refreshToken: "rft.SECRET-REFRESH", expiresAt: 1, refreshExpiresAt: 2, name: "Artist" };
+
+  it("stores the tokens encrypted, re-encrypts old clear ones, and refuses another secret", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "tktgen-"));
+    process.chdir(dir);
+    delete process.env.DATABASE_URL; delete process.env.NETLIFY_DATABASE_URL;
+    process.env.AUTH_SECRET = "test-secret-1";
+    const { saveTikTok, loadTikTok, openTokens, sealTokens } = await import("../lib/db");
+    await saveTikTok("me@x.com", tokens);
+    const onDisk = readFileSync(path.join(dir, ".data", "tiktok.json"), "utf8");
+    expect(onDisk).not.toContain("SECRET-ACCESS");
+    expect(onDisk).not.toContain("SECRET-REFRESH");
+    expect(await loadTikTok("me@x.com")).toEqual(tokens);
+    // A token saved in clear before this version is still read, and stored encrypted again.
+    expect(openTokens(tokens)).toEqual({ tokens, legacy: true });
+    const sealed = sealTokens(tokens);
+    process.env.AUTH_SECRET = "another-secret";
+    expect(openTokens(sealed).tokens).toBeNull();
+    delete process.env.AUTH_SECRET;
+  });
+
+  it("sends a PKCE challenge with the login (TikTok refuses the login without it)", async () => {
+    process.env.TIKTOK_CLIENT_KEY = "key";
+    const { pkcePair, authorizeUrl } = await import("../lib/tiktok");
+    const { verifier, challenge } = pkcePair();
+    expect(verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
+    const { createHash } = await import("node:crypto");
+    expect(challenge).toBe(createHash("sha256").update(verifier).digest("hex"));
+    const url = new URL(authorizeUrl(new Request("https://app.test/api/tiktok/login"), "st", challenge));
+    expect(url.searchParams.get("code_challenge")).toBe(challenge);
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("redirect_uri")).toBe("https://app.test/api/tiktok/callback");
+  });
 });

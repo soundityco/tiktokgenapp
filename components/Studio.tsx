@@ -18,6 +18,7 @@ import Logo from "./Logo";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
 import { withPreset } from "./TextControls";
 import SlidePreview from "./SlidePreview";
+import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "./ui";
@@ -75,6 +76,7 @@ export default function Studio({ userName }: { userName: string }) {
   const [toast, setToast] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const [fonts, setFonts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
@@ -87,6 +89,10 @@ export default function Studio({ userName }: { userName: string }) {
   const conflict = useRef(false);
   const saveBusy = useRef(false);
   const saveAgain = useRef(false);
+  /** Failed saves (server or network hiccup) are tried again by themselves: 2 s, 5 s, 15 s, then every 30 s. */
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retries = useRef(0);
+  const flushRef = useRef<() => Promise<void>>(async () => {});
   const wsRef = useRef<Workspace | null>(null);
   const past = useRef<Workspace[]>([]);
   const future = useRef<Workspace[]>([]);
@@ -176,7 +182,10 @@ export default function Studio({ userName }: { userName: string }) {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? "Could not load your data");
         rev.current = j.data?.rev ?? 0;
-        const next = normalizeWorkspace(j.data && j.data.v === 1 ? (j.data as Workspace) : defaultWorkspace());
+        // Saved data this version cannot read must never be replaced by an empty workspace (the next
+        // autosave would overwrite it): stop with an error instead.
+        if (j.data && (j.data.v !== 1 || !Array.isArray(j.data.projects))) throw new Error("Your saved data could not be read by this version of the app. Nothing was changed.");
+        const next = normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace());
         wsRef.current = next;
         setWs(next);
         past.current = []; future.current = []; lastHistory.current = 0;
@@ -190,7 +199,7 @@ export default function Studio({ userName }: { userName: string }) {
         } catch { /* ignore */ }
         syncHistory();
       })
-      .catch((e) => setLoadErr(String(e.message ?? e)));
+      .catch((e) => setLoadErr(t(String(e.message ?? e))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -199,10 +208,15 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       const r = await fetch("/api/workspace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, baseRev: rev.current }) });
       const j = await r.json().catch(() => ({}));
-      if (r.ok) { rev.current = j.rev; setSaveState("saved"); }
-      else if (r.status === 409) { rev.current = j.rev; conflict.current = true; setSaveState("conflict"); }
-      else setSaveState("error");
+      if (r.ok) { rev.current = j.rev; retries.current = 0; setSaveState("saved"); return; }
+      if (r.status === 409) { rev.current = j.rev; conflict.current = true; setSaveState("conflict"); return; }
+      setSaveState("error");
     } catch { setSaveState("error"); }
+    // Not saved: try again a little later (a new edit also saves at once).
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    const delay = [2000, 5000, 15000][retries.current] ?? 30000;
+    retries.current++;
+    retryTimer.current = setTimeout(() => { retryTimer.current = null; void flushRef.current(); }, delay);
   }, []);
 
   // Serialise saves: an immediate save (video studio) and the debounce can overlap, and two
@@ -221,6 +235,7 @@ export default function Studio({ userName }: { userName: string }) {
       saveBusy.current = false;
     }
   }, [saveWorkspace]);
+  flushRef.current = flushSave;
 
   useEffect(() => {
     if (!ws || conflict.current) return;
@@ -603,7 +618,7 @@ export default function Studio({ userName }: { userName: string }) {
   const deleteProject = () => {
     const gone = wsRef.current?.projects.find((x) => x.id === wsRef.current!.currentProjectId);
     if (gone) {
-      const keys = new Set<string>([`audio:${gone.id}`, `video:${gone.id}`]);
+      const keys = new Set<string>([`audio:project:${gone.id}`, `audio:${gone.id}`, `video:${gone.id}`]);
       gone.videos?.forEach((v) => { keys.add(`audio:${v.id}`); keys.add(`video:${v.id}`); });
       keys.forEach((k) => void delMedia(k));
     }
@@ -784,6 +799,7 @@ export default function Studio({ userName }: { userName: string }) {
             <div className="sep" />
             <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
             <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
+            <button onClick={() => { close(); setVersionsOpen(true); }}>{t("Version history")}</button>
             <div className="sep" />
             <div className="label cap truncate">{userName}</div>
             <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>
@@ -969,6 +985,10 @@ export default function Studio({ userName }: { userName: string }) {
           });
           say(t("{n} hooks added", { n: hooks.length }));
         }} />
+      )}
+      {versionsOpen && (
+        <VersionHistory onClose={() => setVersionsOpen(false)}
+          onRestore={(data) => { apply(normalizeWorkspace(data)); say(t("Version restored: undo to go back")); }} />
       )}
       {preview && studio === "carousel" && (
         <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}

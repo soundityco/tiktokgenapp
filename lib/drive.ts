@@ -26,6 +26,11 @@ export async function getToken(): Promise<string> {
 export interface DriveItem { id: string; name: string; mimeType: string; thumbnailLink?: string }
 export const isFolder = (i: DriveItem) => i.mimeType === "application/vnd.google-apps.folder";
 export const isImage = (i: DriveItem) => !isFolder(i) && looksLikeImage(i.name, i.mimeType);
+export const isAudio = (i: DriveItem) =>
+  !isFolder(i) && (i.mimeType.startsWith("audio/") || /\.(mp3|wav|m4a|aac|flac|ogg|opus|aiff?)$/i.test(i.name));
+/** What a Drive listing keeps besides folders: photos (carousel) or audio files (official audio of a release). */
+export type DriveKind = "images" | "audio";
+const keep = (kind: DriveKind) => (i: DriveItem) => isFolder(i) || (kind === "audio" ? isAudio(i) : isImage(i));
 
 /** Thumbnail links seen while listing folders: spares one request per thumbnail (see lib/thumb.ts). */
 export const thumbLinks = new Map<string, string>();
@@ -47,7 +52,7 @@ async function api(url: string) {
 }
 
 /** List a folder ("root", a folder id, or "shared" for "Shared with me"). Folders first, then images. */
-export async function listFolder(folder: string): Promise<DriveItem[]> {
+export async function listFolder(folder: string, kind: DriveKind = "images"): Promise<DriveItem[]> {
   const q =
     folder === "shared"
       ? "sharedWithMe = true and trashed = false"
@@ -69,11 +74,11 @@ export async function listFolder(folder: string): Promise<DriveItem[]> {
     keepThumbs(data.files ?? []);
     pageToken = data.nextPageToken ?? "";
   } while (pageToken);
-  return items.filter((i) => isFolder(i) || isImage(i));
+  return items.filter(keep(kind));
 }
 
 /** Search the whole Drive by name (folders and supported images). */
-export async function searchDrive(query: string): Promise<DriveItem[]> {
+export async function searchDrive(query: string, kind: DriveKind = "images"): Promise<DriveItem[]> {
   const q = `trashed = false and name contains '${query.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
   const items: DriveItem[] = [];
   let pageToken = "";
@@ -92,7 +97,7 @@ export async function searchDrive(query: string): Promise<DriveItem[]> {
     keepThumbs(data.files ?? []);
     pageToken = data.nextPageToken ?? "";
   } while (pageToken);
-  return items.filter((i) => isFolder(i) || isImage(i));
+  return items.filter(keep(kind));
 }
 
 /**
@@ -109,6 +114,11 @@ export function mergeFolder(pics: PicRef[], folderId: string, listed: DriveItem[
     .filter((i) => isImage(i) && !have.has(i.id) && !skip.has(i.id))
     .map((i): PicRef => ({ id: i.id, name: i.name, folder: folderId }));
   return kept.length === pics.length && !added.length ? pics : [...kept, ...added];
+}
+
+/** Download a Drive file as it is (the official audio of a release). */
+export async function downloadDriveFile(id: string): Promise<Blob> {
+  return (await api(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`)).blob();
 }
 
 // ---- Device cache: photos already downloaded stay in IndexedDB (downscaled, as JPEG) ----
