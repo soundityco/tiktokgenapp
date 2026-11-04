@@ -535,4 +535,11 @@ export const FR: Record<string, string> = {
   "First letter capital": "Première lettre en majuscule",
   "TikTok zones": "Zones TikTok",
   "Alignment guides": "Repères d'alignement",
+  "Video {n}": "Vidéo {n}",
+  "New video: same audio, lyrics and settings, another camera take": "Nouvelle vidéo : même audio, mêmes paroles et réglages, autre prise caméra",
+  "Video menu": "Menu de la vidéo",
+  "Delete this video": "Supprimer cette vidéo",
+  "Rename the video": "Renommer la vidéo",
+  "“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.": "« {name} » et son fichier caméra seront retirés de cette sortie. L'audio officiel, les paroles et les autres vidéos restent tels quels.",
+  "Default video style, with the font of the selected carousel slide, until you change something.": "Style vidéo par défaut, avec la police de la slide sélectionnée du carrousel, tant que tu ne changes rien.",
 };

@@ -12,8 +12,11 @@ export default function CaptionStyle({
   onChange,
   onFonts,
   onReset,
+  defaults = defaultStyle(),
 }: {
   style: TextStyle;
+  /** Values a double-click on a slider goes back to. */
+  defaults?: TextStyle;
   fonts: string[];
   onChange: (patch: Partial<TextStyle>) => void;
   onFonts: (names: string[]) => void;
@@ -30,7 +33,7 @@ export default function CaptionStyle({
           <option value="shadow">{t("Shadow")}</option><option value="plain">{t("Plain")}</option>
         </select>
       </label>
-      <Range label={t("Size")} value={style.size} min={18} max={200} onChange={(v) => onChange({ size: v })} onReset={() => onChange({ size: defaultStyle().size })} />
+      <Range label={t("Size")} value={style.size} min={18} max={200} onChange={(v) => onChange({ size: v })} onReset={() => onChange({ size: defaults.size })} />
       <div className="cols2">
         <label className="field">{t("Text color")}<input type="color" value={style.color} onChange={(e) => onChange({ color: e.target.value })} /></label>
         <label className="field">{style.look === "box" ? t("Box color") : t("Outline color")}<input type="color" value={style.accent} onChange={(e) => onChange({ accent: e.target.value })} /></label>
@@ -48,8 +51,8 @@ export default function CaptionStyle({
           </select>
         </label>
       </div>
-      <Range label={t("Max text block width")} value={style.width} display={`${style.width}%`} min={20} max={100} onChange={(v) => onChange({ width: v })} onReset={() => onChange({ width: defaultStyle().width })} />
-      <Range label={t("Line spacing")} value={style.lineHeight} display={style.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => onChange({ lineHeight: v })} onReset={() => onChange({ lineHeight: defaultStyle().lineHeight })} />
+      <Range label={t("Max text block width")} value={style.width} display={`${style.width}%`} min={20} max={100} onChange={(v) => onChange({ width: v })} onReset={() => onChange({ width: defaults.width })} />
+      <Range label={t("Line spacing")} value={style.lineHeight} display={style.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => onChange({ lineHeight: v })} onReset={() => onChange({ lineHeight: defaults.lineHeight })} />
       <Range label={t("Horizontal")} value={Math.round(style.x)} display={`${Math.round(style.x)}%`} min={0} max={100} onChange={(v) => onChange({ x: v })} />
       <Range label={t("Vertical")} value={Math.round(style.y)} display={`${Math.round(style.y)}%`} min={0} max={100} onChange={(v) => onChange({ y: v })} />
       <div className="row">

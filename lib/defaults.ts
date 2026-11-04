@@ -16,6 +16,16 @@ export const defaultStyle = (): TextStyle => ({
   y: 50,
 });
 
+/** Lyrics of the video studio: white with a black outline, lower case, in the lower third. */
+export const defaultCaptionStyle = (font?: Pick<TextStyle, "font" | "customFont">): TextStyle => ({
+  ...defaultStyle(),
+  ...(font ? { font: font.font, ...(font.customFont ? { customFont: font.customFont } : {}) } : {}),
+  case: "lower",
+  stroke: 20,
+  width: 80,
+  y: 70,
+});
+
 export const defaultPic = (): PicSettings => ({ framing: "fill", bars: "blur", zoom: 1, darken: 0, ox: 0, oy: 0 });
 
 export const defaultVideo = (): VideoSettings => ({

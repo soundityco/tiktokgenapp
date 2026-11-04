@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { defaultStyle, defaultVideo, uid } from "@/lib/defaults";
+import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { downloadDriveFile, type DriveItem } from "@/lib/drive";
@@ -17,7 +17,7 @@ import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFram
 import CaptionStyle from "./CaptionStyle";
 import { StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
-import { Modal, Range, Section } from "./ui";
+import { ConfirmDialog, Menu, Modal, PromptDialog, Range, Section } from "./ui";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -378,11 +378,11 @@ export default function VideoStudio({
       .sort((a, b) => a.at - b.at);
   }, [section, lines]);
 
-  // By default the captions follow the selected carousel slide; the text studio overrides it per clip.
-  const slideStyle: TextStyle = useMemo(() => {
-    const base = project.slides[project.selectedSlide]?.style ?? project.slides[0]?.style ?? defaultStyle();
-    return { ...base, y: 78, size: Math.min(base.size, 72), width: 84 };
-  }, [project.slides, project.selectedSlide]);
+  // Default look of the lyrics; only the font follows the selected carousel slide. The text studio overrides it per clip.
+  const slideStyle: TextStyle = useMemo(
+    () => defaultCaptionStyle(project.slides[project.selectedSlide]?.style ?? project.slides[0]?.style),
+    [project.slides, project.selectedSlide]
+  );
   const captionStyle: TextStyle = settings.captionStyle ?? slideStyle;
   const mode = settings.captionMode ?? "phrase";
   const lineChars = settings.lineChars ?? 22;
@@ -626,7 +626,8 @@ export default function VideoStudio({
     syncRef.current?.abort();
     stop();
     const id = uid();
-    const name = `Video ${clips.length + 1}`;
+    // Next free number: after a deletion, clips.length + 1 could repeat a name.
+    const name = `Video ${Math.max(clips.length, ...clips.map((c) => Number(/^Video (\d+)$/.exec(c.name)?.[1] ?? 0))) + 1}`;
     const copied = !!audioBlob; // the audio is the project's: the new video uses it as is
     const cur = settingsRef.current;
     onProject((p) => ({
@@ -651,6 +652,28 @@ export default function VideoStudio({
       videoId: id,
     }));
     onSaveNow();
+  };
+
+  const [clipDialog, setClipDialog] = useState<null | "rename" | "delete">(null);
+  /** Shown name of a video: the automatic "Video 2" in the interface language. */
+  const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
+  const renameClip = (name: string) => {
+    const n = name.trim();
+    if (!n) return;
+    onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, name: n } : c)) }));
+    onSaveNow();
+  };
+  /** Remove this video from the release: its camera file and its own settings. The audio and the lyrics stay. */
+  const deleteClip = async () => {
+    if (clips.length < 2) return;
+    syncRef.current?.abort();
+    stop();
+    const id = clip.id;
+    const rest = clips.filter((c) => c.id !== id);
+    onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => c.id !== id), videoId: rest[Math.max(0, clips.indexOf(clip) - 1)].id }));
+    onSaveNow();
+    await delMedia(`video:${id}`).catch(() => {});
+    await delMedia(`audio:${id}`).catch(() => {});
   };
 
   const close = () => { syncRef.current?.abort(); stop(); onSaveNow(); onBack(); };
@@ -1545,10 +1568,18 @@ export default function VideoStudio({
           <label className="field" style={{ margin: 0 }}>{t("Video")}
             <select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
-              {clips.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
             </select>
           </label>
-          <button className="btn icon" aria-label={t("New video")} title={t("New video")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <button className="btn icon" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
+            {(closeMenu) => (<>
+              <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
+              <div className="sep" />
+              <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
+                onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
+            </>)}
+          </Menu>
           <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}>{status.text}</span>
           <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
             title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
@@ -1950,6 +1981,7 @@ export default function VideoStudio({
                     <p className="muted xs">{settings.hookStyle ? t("Own style for the hooks.") : t("Same look as the lyrics, at the top, until you change something.")}</p>
                     <CaptionStyle
                       style={hookStyle}
+                      defaults={slideStyle}
                       fonts={fonts}
                       onChange={(patch) => setV({ hookStyle: { ...hookStyle, ...patch } })}
                       onFonts={onFonts}
@@ -1978,9 +2010,10 @@ export default function VideoStudio({
               </div>
               <div className="stack">
                 <span className="label">{t("Text style")}</span>
-                <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Follows the style of the selected carousel slide until you change something.")}</p>
+                <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")}</p>
                 <CaptionStyle
                   style={captionStyle}
+                  defaults={slideStyle}
                   fonts={fonts}
                   onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
                   onFonts={onFonts}
@@ -1992,6 +2025,15 @@ export default function VideoStudio({
         </div>
       </div>
       </div>
+      {clipDialog === "rename" && (
+        <PromptDialog title={t("Rename the video")} label={t("Name")} initial={clipName(clip)} confirmLabel={t("Rename")}
+          onSubmit={renameClip} onClose={() => setClipDialog(null)} />
+      )}
+      {clipDialog === "delete" && (
+        <ConfirmDialog title={t("Delete this video")} confirmLabel={t("Delete")}
+          message={t("“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.", { name: clipName(clip) })}
+          onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
+      )}
       {driveOpen && <DriveBrowser onPick={(f) => void pickFromDrive(f)} onClose={() => setDriveOpen(false)} />}
       {exp && (
         <Modal title={exp.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
