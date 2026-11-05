@@ -84,6 +84,23 @@ export function weightedPickBag(
   return chosen;
 }
 
+/**
+ * One hook from a list, for the video studio: the same shuffle bag as the carousel, so a hook used
+ * on one side does not come back on the other before the list has been used up. Mutates `bags`.
+ */
+export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = []): string | null {
+  const pool = ws.textPools.find((p) => p.id === poolId);
+  if (!pool) return null;
+  const items = textItems(pool);
+  if (!items.length) return null;
+  const skip = new Set(exclude);
+  if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length) {
+    const rest = items.filter((i) => !skip.has(i));
+    return weightedPickBag(pool.id, rest.length ? rest : items, pool.views, bags, ws.noRepeat);
+  }
+  return pick(pool.id, items, bags, ws.noRepeat, skip);
+}
+
 /** The section a lyrics slide reads: its own, else the project's, else the first one. */
 export function lyricsSection(project: Project, sectionId?: string | null): LyricSection | undefined {
   return (

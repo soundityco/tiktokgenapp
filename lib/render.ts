@@ -14,6 +14,9 @@ const FONTS: Record<FontId, { family: string; weight: number; italic?: boolean }
   typewriter: { family: '"Courier New", Courier, monospace', weight: 700 },
 };
 
+/** CSS font of a bundled font, to show its name in it (font picker). */
+export const bundledFont = (id: FontId) => FONTS[id];
+
 export const canvasSize = (cfg: SlideCfg, img: Img | null): [number, number] => {
   if (cfg.format !== "orig") return FORMATS[cfg.format];
   if (!img) return FORMATS["9:16"];
@@ -125,6 +128,10 @@ function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: 
 function setFont(ctx: CanvasRenderingContext2D, st: TextStyle, size: number) {
   if (st.customFont) {
     ctx.font = `400 ${size}px "${st.customFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
+    return;
+  }
+  if (st.googleFont) {
+    ctx.font = `${st.weight ?? 400} ${size}px "${st.googleFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
     return;
   }
   const f = FONTS[st.font];

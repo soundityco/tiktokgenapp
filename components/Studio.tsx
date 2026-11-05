@@ -6,7 +6,8 @@ import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalize
 import { delMedia } from "@/lib/idb";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts } from "@/lib/fonts";
-import { generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
+import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
+import { drawHook, generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
@@ -188,6 +189,9 @@ export default function Studio({ userName }: { userName: string }) {
         const next = normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace());
         wsRef.current = next;
         setWs(next);
+        // Google fonts used by the texts: loaded, then everything is drawn again with them.
+        const gf = googleFontsIn(next);
+        if (gf.length) void Promise.all(gf.map((g) => loadGoogleFont(g.family, g.weight))).then(() => setFonts((f) => [...f]));
         past.current = []; future.current = []; lastHistory.current = 0;
         try {
           const raw = sessionStorage.getItem(HISTORY_KEY);
@@ -828,6 +832,13 @@ export default function Studio({ userName }: { userName: string }) {
         {studio === "video" ? (
           <VideoStudio
             project={project}
+            hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
+            onDrawHook={(poolId, exclude) => {
+              const bags = { ...ws.bags };
+              const hook = drawHook(ws, poolId, bags, exclude);
+              if (hook !== null) upd((w) => ({ ...w, bags: { ...w.bags, [poolId]: bags[poolId] ?? [] } }));
+              return hook;
+            }}
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
             onSaveNow={() => void flushSave()}
             onBack={() => switchStudio("carousel")}

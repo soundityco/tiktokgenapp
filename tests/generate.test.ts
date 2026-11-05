@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultWorkspace } from "../lib/defaults";
-import { generateAll, hookKey, lyricsText, pick, pickText, textItems, weightedPick, weightedPickBag } from "../lib/generate";
+import { drawHook, generateAll, hookKey, lyricsText, pick, pickText, textItems, weightedPick, weightedPickBag } from "../lib/generate";
 import type { TextPool } from "../lib/types";
 
 const pool = (kind: TextPool["kind"], text: string): TextPool => ({ id: "p", name: "p", scope: "shared", kind, text });
@@ -174,5 +174,20 @@ describe("favor top hooks + no repeat", () => {
     ]);
     expect(got.size).toBe(3);
     expect(bags.p).toEqual([]);
+  });
+});
+
+describe("drawHook (video studio)", () => {
+  it("draws from the carousel's shuffle bag: no hook comes back before the list is used up", () => {
+    const ws = { ...defaultWorkspace(), noRepeat: true, favorTop: false };
+    ws.textPools = [{ id: "h", name: "Hooks", scope: "shared", kind: "hooks", text: "un\ndeux\ntrois" }];
+    const bags: Record<string, string[]> = {};
+    const seen = [drawHook(ws, "h", bags), drawHook(ws, "h", bags), drawHook(ws, "h", bags)];
+    expect(new Set(seen).size).toBe(3);
+    expect(bags.h).toEqual([]);
+    // The hooks already on the video are not drawn again.
+    const ex = drawHook(ws, "h", {}, ["un", "deux"]);
+    expect(ex).toBe("trois");
+    expect(drawHook(ws, "nope", {})).toBeNull();
   });
 });

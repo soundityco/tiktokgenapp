@@ -12,8 +12,12 @@ export type FontId =
 
 export interface TextStyle {
   font: FontId;
-  /** Font file loaded by the user (see lib/fonts.ts). Overrides `font` when set. */
+  /** Font file loaded by the user (see lib/fonts.ts). Overrides `font` and `googleFont` when set. */
   customFont?: string;
+  /** Google font family (see lib/googleFonts.ts). Overrides `font` when set. */
+  googleFont?: string;
+  /** Weight of the Google font (default 400). */
+  weight?: number;
   look: "outline" | "box" | "shadow" | "plain";
   /** "sentence": lower case with a capital at the start of each line. */
   case: "asis" | "upper" | "lower" | "sentence";
@@ -235,6 +239,8 @@ export interface VideoSettings {
   push?: number;
   /** Colour grade of the camera picture. None: the picture as recorded. */
   grade?: VideoGrade;
+  /** Hook list the titles are drawn from; none: the list of the first carousel slide of the release. */
+  hookPoolId?: string;
   /** Titles over the video, one after the other or all along. */
   hooks?: VideoHook[];
   /** Show the hooks on the video (default yes). */

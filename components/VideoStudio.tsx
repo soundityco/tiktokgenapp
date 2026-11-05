@@ -12,13 +12,14 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
+import { textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
 import { convertSegment, cropFor, grabFrame, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import type { LyricWord, PicSettings, Project, StylePreset, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
+import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
 import { StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
@@ -260,6 +261,8 @@ function whenReady(el: HTMLVideoElement, wait = 3000): Promise<void> {
  */
 export default function VideoStudio({
   project,
+  hookPools,
+  onDrawHook,
   onProject,
   onSaveNow,
   onBack,
@@ -270,6 +273,10 @@ export default function VideoStudio({
   onDeletePreset,
 }: {
   project: Project;
+  /** Hook lists of the release (the same as the carousel's). */
+  hookPools: TextPool[];
+  /** Draw a hook from a list (shared shuffle bag with the carousel); `exclude`: hooks already on this video. */
+  onDrawHook: (poolId: string, exclude: string[]) => string | null;
   onProject: (fn: (p: Project) => Project) => void;
   onSaveNow: () => void;
   onBack: () => void;
@@ -1852,12 +1859,36 @@ export default function VideoStudio({
   const hooks = settings.hooks ?? [];
   const setHooks = (list: VideoHook[]) => setV({ hooks: list });
   const editHook = (id: string, patch: Partial<VideoHook>) => setHooks(hooks.map((h) => (h.id === id ? { ...h, ...patch } : h)));
-  const addHook = () => {
+  const addHook = (text = "") => {
     const last = hooks[hooks.length - 1];
     const from = last ? round2(Math.min(segLen - 1, last.to ?? Math.min(3, segLen / 2))) : 0;
     const list = last && last.to === undefined ? hooks.map((h) => (h === last ? { ...h, to: from } : h)) : hooks;
-    setHooks([...list, { id: uid(), text: "", from, to: last ? round2(Math.min(segLen, from + 3)) : undefined }]);
+    setHooks([...list, { id: uid(), text, from, to: last ? round2(Math.min(segLen, from + 3)) : undefined }]);
     if (settings.showHooks === false) setV({ showHooks: true });
+  };
+  // ---- hook lists: the same as the carousel's; by default the one of the first slide of the release ----
+  const slide1Pool = (() => {
+    const src = project.slides[0]?.textSource;
+    return src?.kind === "pool" && hookPools.some((p) => p.id === src.poolId) ? src.poolId : undefined;
+  })();
+  const hookPoolId = settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : slide1Pool ?? hookPools[0]?.id;
+  const hookPool = hookPools.find((p) => p.id === hookPoolId);
+  const hookItems = useMemo(() => (hookPool ? textItems(hookPool) : []), [hookPool]);
+  /** A hook drawn for this video, different from the ones already on it. */
+  const drawFor = (taken: string[]) => (hookPoolId ? onDrawHook(hookPoolId, taken) : null);
+  const drawInto = (id: string) => {
+    const text = drawFor(hooks.filter((h) => h.id !== id).map((h) => h.text));
+    if (text !== null) editHook(id, { text });
+  };
+  const drawAll = () => {
+    const taken: string[] = [];
+    const list = hooks.map((h) => {
+      const text = drawFor(taken);
+      if (text === null) return h;
+      taken.push(text);
+      return { ...h, text };
+    });
+    setHooks(list);
   };
   /** Move one edge of a hook by `d` seconds, inside the segment and never shorter than 0.3 s. */
   const nudgeHook = (h: VideoHook, edge: "from" | "to", d: number) => {
@@ -2437,6 +2468,18 @@ export default function VideoStudio({
           {tab === "hook" && (
             <div className="tab-body">
               <p className="muted xs">{t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")}</p>
+              <div className="row">
+                <label className="field grow">
+                  <span>{t("Hook list")}</span>
+                  <select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
+                    onChange={(e) => setV({ hookPoolId: e.target.value || undefined })} disabled={!hookPools.length}>
+                    <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
+                    {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
+                  </select>
+                </label>
+                {hooks.length > 1 && hookItems.length > 0 && <button className="btn sm" onClick={drawAll} title={t("A different hook from the list for each one")}>{t("Draw them all")}</button>}
+              </div>
+              {!hookPools.length && <p className="muted xs">{t("Make a hook list in the carousel (Import hooks): the video draws from the same lists.")}</p>}
               {hooks.map((h, i) => (
                 <div key={h.id} className="hook-item">
                   <div className="row">
@@ -2446,6 +2489,16 @@ export default function VideoStudio({
                   </div>
                   <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
                     onChange={(e) => editHook(h.id, { text: e.target.value })} />
+                  {hookItems.length > 0 && (
+                    <div className="row">
+                      <button className="btn sm" onClick={() => drawInto(h.id)} title={t("A hook from the list, not used lately (same draw as the carousel)")}>{t("Draw")}</button>
+                      <select className="input sm grow" value="" aria-label={t("Pick from the list")}
+                        onChange={(e) => { if (e.target.value) editHook(h.id, { text: e.target.value }); }}>
+                        <option value="">{t("Pick from the list…")}</option>
+                        {hookItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ")}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div className="row">
                     <span className="nudge">
                       <span className="muted xs">{t("From")}</span>
@@ -2468,7 +2521,8 @@ export default function VideoStudio({
                 </div>
               ))}
               <div className="row">
-                <button className="btn sm" onClick={addHook}><Icon name="plus" size={13} />{t("Add a hook")}</button>
+                <button className="btn sm" onClick={() => addHook()}><Icon name="plus" size={13} />{t("Add a hook")}</button>
+                {hookItems.length > 0 && <button className="btn sm" onClick={() => addHook(drawFor(hooks.map((h) => h.text)) ?? "")}>{t("Add a drawn hook")}</button>}
                 {hooks.length > 0 && <button className="btn sm quiet" onClick={() => setTab("hookstyle")}>{t("Its style")} →</button>}
               </div>
             </div>
