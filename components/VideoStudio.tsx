@@ -2668,7 +2668,7 @@ export default function VideoStudio({
                       onReset={() => setV({ hookStyle: undefined })}
                     />
                   </div>
-                  <Section id="hook-style-presets" title={t("Style presets") + (presetOf(presets, hookStyle) ? ` · ${presetOf(presets, hookStyle)!.name}` : "")} open={false}>
+                  <Section id="hook-style-presets" title={<>{t("Style presets")}{presetOf(presets, hookStyle) && <span className="sec-sub"> · {presetOf(presets, hookStyle)!.name}</span>}</>} open={false}>
                     <StylePresets presets={presets} current={hookStyle} onSave={(name) => onSavePreset(name, hookStyle)}
                       onApply={(p) => setV({ hookStyle: withPreset(hookStyle, p) })} onDelete={onDeletePreset} />
                   </Section>
@@ -2706,7 +2706,7 @@ export default function VideoStudio({
                   onFonts={onFonts}
                   onReset={() => setV({ captionStyle: undefined })}
                 />
-              <Section id="lyrics-style-presets" title={t("Style presets") + (presetOf(presets, captionStyle) ? ` · ${presetOf(presets, captionStyle)!.name}` : "")} open={false}>
+              <Section id="lyrics-style-presets" title={<>{t("Style presets")}{presetOf(presets, captionStyle) && <span className="sec-sub"> · {presetOf(presets, captionStyle)!.name}</span>}</>} open={false}>
                 <StylePresets presets={presets} current={captionStyle} onSave={(name) => onSavePreset(name, captionStyle)}
                   onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
               </Section>

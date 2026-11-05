@@ -109,7 +109,7 @@ export default function Inspector({
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
         </Section>
 
-        <Section id="slide-presets" title={t("Style presets") + (presetOf(presets, st) ? ` · ${presetOf(presets, st)!.name}` : "")} open={false}>
+        <Section id="slide-presets" title={<>{t("Style presets")}{presetOf(presets, st) && <span className="sec-sub"> · {presetOf(presets, st)!.name}</span>}</>} open={false}>
           <StylePresets presets={presets} current={st} onSave={onSavePreset} onApply={onApplyPreset} onDelete={onDeletePreset} />
         </Section>
 

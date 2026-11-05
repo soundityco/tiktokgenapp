@@ -173,7 +173,7 @@ export function Menu({ trigger, children, left }: { trigger: (open: boolean, tog
 /**
  * A panel that folds. With `id`, whether it is open is remembered on this device (`open`: the first time).
  */
-export function Section({ title, children, open = true, id }: { title: string; children: ReactNode; open?: boolean; id?: string }) {
+export function Section({ title, children, open = true, id }: { title: ReactNode; children: ReactNode; open?: boolean; id?: string }) {
   const key = id ? `tktgen-sec:${id}` : null;
   const [shown] = useState(() => {
     if (!key) return open;
