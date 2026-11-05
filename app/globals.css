@@ -274,8 +274,11 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-shell > .col.side { overflow-x: hidden; }
 .video-shell > .col.side > *, .video-shell > .col.side .stack > *, .video-shell > .col.side .field { min-width: 0; max-width: 100%; }
 .video-shell > .col.side .row { flex-wrap: wrap; min-width: 0; }
+/* "…" only shows on a plain block of text, not on a flex box: these become text blocks here. */
 .video-shell > .col.side .badge, .video-shell > .col.side .drop, .video-shell > .col.side .truncate {
   max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.video-shell > .col.side .badge.truncate { display: inline-block; vertical-align: middle; line-height: 22px; }
+.video-shell > .col.side .drop { display: block; text-align: center; }
 .video-shell > .col.side .input, .video-shell > .col.side select { max-width: 100%; min-width: 0; }
 .video-shell > .col.side .muted.xs { overflow-wrap: anywhere; }
 /* The phone tabs of the carousel hide its side panels: not those of the video studio. */
@@ -462,3 +465,13 @@ button.link { background: none; border: 0; padding: 0; color: var(--text); text-
 /* Installed app with the title bar hidden (window controls overlay): the top bar can drag the window. */
 @media (display-mode: window-controls-overlay) { .top { -webkit-app-region: drag; app-region: drag; padding-left: max(var(--s4), env(titlebar-area-x, 0px)); }
   .top button, .top select, .top a, .top input, .top label { -webkit-app-region: no-drag; app-region: no-drag; } }
+
+/* Scrollbars of the whole app: thin and rounded, hidden until the pointer is over what scrolls. */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: rgba(255,255,255,.18) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+*:hover::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,.16); }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.3) !important; }
+::-webkit-scrollbar-button { display: none; }
