@@ -141,7 +141,33 @@ function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: 
   drawFramed(ctx, img, img.width, img.height, cfg.pic, W, H);
 }
 
+// ---- letter spacing: the canvas does it itself where it can, else the letters are placed one by one ----
+type Ctx2D = CanvasRenderingContext2D & { letterSpacing?: string };
+const nativeTracking = (ctx: CanvasRenderingContext2D) => "letterSpacing" in ctx;
+/** Space between the letters in px, for this style at this size (set on the canvas when it can do it). */
+let tracking = 0;
+function setTracking(ctx: CanvasRenderingContext2D, st: TextStyle, size: number) {
+  tracking = (size * (st.tracking ?? 0)) / 100;
+  if (nativeTracking(ctx)) (ctx as Ctx2D).letterSpacing = `${tracking}px`;
+}
+/** Width of a line with the letter spacing (no space after its last letter). */
+function textW(ctx: CanvasRenderingContext2D, s: string): number {
+  const w = ctx.measureText(s).width;
+  if (!tracking) return w;
+  const n = Array.from(s).length;
+  return nativeTracking(ctx) ? w - tracking : w + tracking * Math.max(0, n - 1);
+}
+/** Fill or stroke a line with the letter spacing. */
+function paintText(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, how: "fill" | "stroke") {
+  if (!tracking || nativeTracking(ctx)) { if (how === "fill") ctx.fillText(s, x, y); else ctx.strokeText(s, x, y); return; }
+  for (const ch of Array.from(s)) {
+    if (how === "fill") ctx.fillText(ch, x, y); else ctx.strokeText(ch, x, y);
+    x += ctx.measureText(ch).width + tracking;
+  }
+}
+
 function setFont(ctx: CanvasRenderingContext2D, st: TextStyle, size: number) {
+  setTracking(ctx, st, size);
   if (st.customFont) {
     // A family of loaded files: the browser picks the file of this weight, italic and width.
     const stretch = st.stretch && st.stretch !== "normal" ? `${st.stretch} ` : "";
@@ -174,13 +200,13 @@ function layout(ctx: CanvasRenderingContext2D, raw: string, st: TextStyle, W: nu
       let cur = "";
       for (const word of para.split(/\s+/).filter(Boolean)) {
         const test = cur ? cur + " " + word : word;
-        if (ctx.measureText(test).width <= maxW || !cur) {
+        if (textW(ctx, test) <= maxW || !cur) {
           cur = test;
-          if (ctx.measureText(cur).width > maxW) tooWide = true;
+          if (textW(ctx, cur) > maxW) tooWide = true;
         } else {
           lines.push(cur);
           cur = word;
-          if (ctx.measureText(cur).width > maxW) tooWide = true;
+          if (textW(ctx, cur) > maxW) tooWide = true;
         }
       }
       lines.push(cur);
@@ -216,7 +242,7 @@ export function drawStyledText(
   setFont(ctx, st, L.size);
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
-  const widths = L.lines.map((l) => (l ? ctx.measureText(l).width : 0));
+  const widths = L.lines.map((l) => (l ? textW(ctx, l) : 0));
   const bw = Math.max(...widths, 1);
   const cx = (st.x / 100) * W, cy = (st.y / 100) * H;
   const left = cx - bw / 2, top = cy - L.height / 2;
@@ -240,7 +266,7 @@ export function drawStyledText(
     if (st.look === "outline" && stroke > 0) {
       ctx.strokeStyle = st.accent;
       ctx.lineWidth = Math.max(2, L.size * stroke / 100);
-      ctx.strokeText(line, lx, ly);
+      paintText(ctx, line, lx, ly, "stroke");
     }
     if (st.look === "shadow") {
       ctx.shadowColor = withAlpha(st.accent, (st.shadowOpacity ?? 100) / 100);
@@ -249,13 +275,15 @@ export function drawStyledText(
       ctx.shadowOffsetY = L.size * (st.shadowY ?? 5) / 100;
     }
     ctx.fillStyle = st.color;
-    ctx.fillText(line, lx, ly);
+    paintText(ctx, line, lx, ly, "fill");
     ctx.shadowColor = "transparent";
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
     y += L.lh;
   });
+  if (nativeTracking(ctx)) (ctx as Ctx2D).letterSpacing = "0px";
+  tracking = 0;
   return box;
 }
 

@@ -659,4 +659,10 @@ export const FR: Record<string, string> = {
   "Shadow opacity": "Opacité de l'ombre",
   "Shadow offset, sideways": "Décalage de l'ombre, côté",
   "Shadow offset, down": "Décalage de l'ombre, bas",
+  "Content or style": "Contenu ou style",
+  "Default hook style: white with a black outline, at the top, until you change something.": "Style de hook par défaut : blanc avec un contour noir, en haut, tant que tu ne changes rien.",
+  "Look": "Apparence",
+  "Layout": "Mise en page",
+  "Profile and LUT": "Profil et LUT",
+  "Letter spacing": "Espacement des lettres",
 };

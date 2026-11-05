@@ -148,9 +148,18 @@ export function Menu({ trigger, children, left }: { trigger: (open: boolean, tog
   );
 }
 
-export function Section({ title, children, open = true }: { title: string; children: ReactNode; open?: boolean }) {
+/**
+ * A panel that folds. With `id`, whether it is open is remembered on this device (`open`: the first time).
+ */
+export function Section({ title, children, open = true, id }: { title: string; children: ReactNode; open?: boolean; id?: string }) {
+  const key = id ? `tktgen-sec:${id}` : null;
+  const [shown] = useState(() => {
+    if (!key) return open;
+    try { const v = localStorage.getItem(key); return v === null ? open : v === "1"; } catch { return open; }
+  });
   return (
-    <details className="sec" open={open}>
+    <details className="sec" open={shown}
+      onToggle={(e) => { if (key) try { localStorage.setItem(key, (e.currentTarget as HTMLDetailsElement).open ? "1" : "0"); } catch { /* private mode */ } }}>
       <summary>{title}</summary>
       <div className="body">{children}</div>
     </details>
@@ -165,7 +174,8 @@ export function Range(p: { label: string; value: number; display?: string; min: 
   return (
     <label className="field">
       <span>{p.label}<span className={"val" + (back ? " resettable" : "")} title={hint} onDoubleClick={back}>{p.display ?? p.value}</span></span>
-      <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={hint} />
+      <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={hint}
+        style={{ "--fill": `${((p.value - p.min) / Math.max(1e-9, p.max - p.min)) * 100}%` } as React.CSSProperties} />
     </label>
   );
 }

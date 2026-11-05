@@ -27,6 +27,8 @@ export interface TextStyle {
   case: "asis" | "upper" | "lower" | "sentence";
   /** Outline thickness, % of the text size (default 20). Drawn outside the letters. */
   stroke?: number;
+  /** Space added between the letters, % of the text size (default 0; negative: tighter). */
+  tracking?: number;
   /** Shadow mode: blur, % of the text size (default 35). */
   shadowBlur?: number;
   /** Shadow mode: offset right (+) / left (−) and down (+) / up (−), % of the text size (default 0 and 5). */

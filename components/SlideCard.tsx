@@ -5,6 +5,7 @@ import Icon from "./Icon";
 import { Menu } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
+import { textItems } from "@/lib/generate";
 import type { GenSlide, PicPool, SlideCfg, TextPool } from "@/lib/types";
 
 interface Props {
@@ -119,6 +120,9 @@ export default function SlideCard(p: Props) {
     if (!inText(c.x, c.y)) p.onCfg((s) => ({ ...s, pic: { ...s.pic, ox: 0, oy: 0, zoom: 1 } }));
   };
 
+  // The texts of the list this slide draws from, to pick one by hand.
+  const listPool = cfg.textSource.kind === "pool" ? p.textPools.find((x) => cfg.textSource.kind === "pool" && x.id === cfg.textSource.poolId) : undefined;
+  const listItems = listPool ? textItems(listPool) : [];
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
   return (
@@ -154,6 +158,13 @@ export default function SlideCard(p: Props) {
       </div>
       {err && <span className="notice bad">{err}</span>}
       <textarea className="input" rows={3} aria-label={t("Caption")} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
+      {listItems.length > 1 && !p.locked && (
+        <select className="input sm" value="" aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
+          onChange={(e) => { if (e.target.value) p.onText(e.target.value); }}>
+          <option value="">{t("Pick from the list…")}</option>
+          {listItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ").slice(0, 120)}</option>)}
+        </select>
+      )}
       <div className="cols2 fields">
         <label className="field">{t("Text from")}
           <select className="input" value={textVal} onChange={(e) => {

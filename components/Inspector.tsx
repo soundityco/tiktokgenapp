@@ -41,7 +41,7 @@ export default function Inspector({
       </div>
 
       <div>
-        <Section title={t("Format & photo")}>
+        <Section id="slide-format" title={t("Format & photo")}>
           <label className="field">{t("Format")}
             <select className="input" value={cfg.format} onChange={(e) => onCfg((c) => ({ ...c, format: e.target.value as FormatId }))}>
               <option value="9:16">9:16 · 1080×1920</option>
@@ -68,7 +68,7 @@ export default function Inspector({
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, pic: { ...defaultPic(), framing: c.pic.framing, bars: c.pic.bars, darken: c.pic.darken } }))}>{t("Reset framing")}</button></div>
         </Section>
 
-        <Section title={t("Text")}>
+        <Section id="slide-text" title={t("Text")}>
           <FontPicker style={st} fonts={fonts} onChange={setS} onFonts={onFonts} onPreview={onPreview} />
           <label className="field">{t("Style")}
             <select className="input" value={st.look} onChange={(e) => setS({ look: e.target.value as TextStyle["look"] })}>
@@ -91,6 +91,8 @@ export default function Inspector({
             </label>
           </div>
           <Range label={t("Width")} value={st.width} display={`${st.width}%`} min={20} max={100} onChange={(v) => setS({ width: v })} onReset={() => setS({ width: defaultStyle().width })} />
+          <Range label={t("Letter spacing")} value={st.tracking ?? 0} display={`${st.tracking ?? 0}%`} min={-10} max={50}
+            onChange={(v) => setS({ tracking: v || undefined })} onReset={() => setS({ tracking: undefined })} />
           <Range label={t("Line spacing")} value={st.lineHeight} display={st.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => setS({ lineHeight: v })} onReset={() => setS({ lineHeight: defaultStyle().lineHeight })} />
           {cfg.textSource.kind === "lyrics" && (
             <label className="field">{t("Lyrics section for this slide")}
@@ -107,11 +109,11 @@ export default function Inspector({
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
         </Section>
 
-        <Section title={t("Style presets")} open={false}>
+        <Section id="slide-presets" title={t("Style presets")} open={false}>
           <StylePresets presets={presets} onSave={onSavePreset} onApply={onApplyPreset} onDelete={onDeletePreset} />
         </Section>
 
-        <Section title={t("Position")} open={false}>
+        <Section id="slide-position" title={t("Position")} open={false}>
           <Range label={t("Horizontal")} value={Math.round(st.x)} display={`${Math.round(st.x)}%`} min={0} max={100} onChange={(v) => setS({ x: v })} />
           <Range label={t("Vertical")} value={Math.round(st.y)} display={`${Math.round(st.y)}%`} min={0} max={100} onChange={(v) => setS({ y: v })} />
           <div className="row">

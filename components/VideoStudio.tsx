@@ -418,7 +418,12 @@ export default function VideoStudio({
   const styleRef = useRef(captionStyle);
   styleRef.current = fontPreview?.which === "caption" ? { ...captionStyle, ...fontPreview.patch } : captionStyle;
   // The hooks look like the lyrics until they get their own style, but at the top of the picture.
-  const hookStyle: TextStyle = useMemo(() => settings.hookStyle ?? { ...captionStyle, y: 16 }, [settings.hookStyle, captionStyle]);
+  /** Default look of the hooks: white, black outline (20 %), as typed, centred near the top. Font of the slide. */
+  const hookDefault: TextStyle = useMemo(() => ({
+    ...slideStyle, look: "outline", size: 56, color: "#ffffff", accent: "#000000", stroke: 20, case: "asis", align: "center",
+    width: 80, lineHeight: 1.15, x: 50, y: 20,
+  }), [slideStyle]);
+  const hookStyle: TextStyle = useMemo(() => settings.hookStyle ?? hookDefault, [settings.hookStyle, hookDefault]);
   const hookStyleRef = useRef(hookStyle);
   hookStyleRef.current = fontPreview?.which === "hook" ? { ...hookStyle, ...fontPreview.patch } : hookStyle;
   const activeRef = useRef<(time: number) => string | null>(() => null);
@@ -1864,6 +1869,8 @@ export default function VideoStudio({
   const studioLoading = !!audioBlob && (!audioBuf || (!!videoUrl && !playerReady));
   const [tab, setTab] = useState<"media" | "lyrics" | "hook" | "style" | "hookstyle" | "color">(() =>
     (project.audioName ?? settings.audioName) && settings.videoName ? "lyrics" : "media");
+  /** Last side (content or style) opened for the lyrics and for the hook: their tab opens on it. */
+  const side = useRef<{ lyrics: "lyrics" | "style"; hook: "hook" | "hookstyle" }>({ lyrics: "lyrics", hook: "hook" });
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
     !audioBlob ? { text: t("Audio missing"), tone: "warn" }
@@ -2287,23 +2294,28 @@ export default function VideoStudio({
             {!audioBuf && note && <p className="notice xs">{note}</p>}
           </div>
 
-          {/* What the video says (content), then how it looks (style). */}
-          <div className="tabs grouped" role="tablist">
-            <div className="tab-group">
-              <span className="tab-group-label">{t("Content")}</span>
-              <button role="tab" aria-selected={tab === "media"} className={"tab" + (tab === "media" ? " on" : "")} onClick={() => setTab("media")}>
-                {t("Media")}{(!audioBlob || !videoBlob) && <span className="tab-dot" />}
-              </button>
-              <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
-              <button role="tab" aria-selected={tab === "hook"} className={"tab" + (tab === "hook" ? " on" : "")} onClick={() => setTab("hook")}>{t("Hook")}</button>
-            </div>
-            <div className="tab-group">
-              <span className="tab-group-label">{t("Style")}</span>
-              <button role="tab" aria-selected={tab === "style"} className={"tab" + (tab === "style" ? " on" : "")} onClick={() => setTab("style")}>{t("Lyrics")}</button>
-              <button role="tab" aria-selected={tab === "hookstyle"} className={"tab" + (tab === "hookstyle" ? " on" : "")} onClick={() => setTab("hookstyle")}>{t("Hook")}</button>
-              <button role="tab" aria-selected={tab === "color"} className={"tab" + (tab === "color" ? " on" : "")} onClick={() => setTab("color")}>{t("Colour")}{lookErr && <span className="tab-dot" />}</button>
-            </div>
+          {/* One tab per element; the lyrics and the hook each switch between what they say and how they look. */}
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={tab === "media"} className={"tab" + (tab === "media" ? " on" : "")} onClick={() => setTab("media")}>
+              {t("Media")}{(!audioBlob || !videoBlob) && <span className="tab-dot" />}
+            </button>
+            <button role="tab" aria-selected={tab === "lyrics" || tab === "style"} className={"tab" + (tab === "lyrics" || tab === "style" ? " on" : "")}
+              onClick={() => setTab(side.current.lyrics)}>{t("Lyrics")}</button>
+            <button role="tab" aria-selected={tab === "hook" || tab === "hookstyle"} className={"tab" + (tab === "hook" || tab === "hookstyle" ? " on" : "")}
+              onClick={() => setTab(side.current.hook)}>{t("Hook")}</button>
+            <button role="tab" aria-selected={tab === "color"} className={"tab" + (tab === "color" ? " on" : "")} onClick={() => setTab("color")}>{t("Colour")}{lookErr && <span className="tab-dot" />}</button>
           </div>
+          {(tab === "lyrics" || tab === "style" || tab === "hook" || tab === "hookstyle") && (() => {
+            const lyr = tab === "lyrics" || tab === "style";
+            const content = lyr ? "lyrics" : "hook", look = lyr ? "style" : "hookstyle";
+            const go = (v: typeof tab) => { side.current[lyr ? "lyrics" : "hook"] = v as never; setTab(v); };
+            return (
+              <div className="seg" role="group" aria-label={t("Content or style")}>
+                <button className={tab === content ? "on" : ""} aria-pressed={tab === content} onClick={() => go(content)}>{t("Content")}</button>
+                <button className={tab === look ? "on" : ""} aria-pressed={tab === look} onClick={() => go(look)}>{t("Style")}</button>
+              </div>
+            );
+          })()}
 
           {tab === "color" && (
             <div className="tab-body">
@@ -2558,14 +2570,12 @@ export default function VideoStudio({
                 </div>
               ) : (
                 <>
-                  <StylePresets presets={presets} onSave={(name) => onSavePreset(name, hookStyle)}
-                    onApply={(p) => setV({ hookStyle: withPreset(hookStyle, p) })} onDelete={onDeletePreset} />
+                  <p className="muted xs">{settings.hookStyle ? t("Own style for the hooks.") : t("Default hook style: white with a black outline, at the top, until you change something.")}</p>
                   <div className="stack">
-                    <span className="label">{t("Text style")}</span>
-                    <p className="muted xs">{settings.hookStyle ? t("Own style for the hooks.") : t("Same look as the lyrics, at the top, until you change something.")}</p>
                     <CaptionStyle
+                      sid="hook-style"
                       style={hookStyle}
-                      defaults={slideStyle}
+                      defaults={hookDefault}
                       fonts={fonts}
                       onChange={(patch) => setV({ hookStyle: { ...hookStyle, ...patch } })}
                       onPreview={(patch) => setFontPreview(patch ? { which: "hook", patch } : null)}
@@ -2573,6 +2583,10 @@ export default function VideoStudio({
                       onReset={() => setV({ hookStyle: undefined })}
                     />
                   </div>
+                  <Section id="hook-style-presets" title={t("Style presets")} open={false}>
+                    <StylePresets presets={presets} onSave={(name) => onSavePreset(name, hookStyle)}
+                      onApply={(p) => setV({ hookStyle: withPreset(hookStyle, p) })} onDelete={onDeletePreset} />
+                  </Section>
                 </>
               )}
             </div>
@@ -2580,10 +2594,9 @@ export default function VideoStudio({
 
           {tab === "style" && (
             <div className="tab-body">
-              <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
-                onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
+              <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")}</p>
               <div className="stack">
-                <span className="label">{t("Display")}</span>
+              <Section id="lyrics-style-display" title={t("Display")}>
                 <div className="row">
                   <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
                   <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
@@ -2592,11 +2605,10 @@ export default function VideoStudio({
                   <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
                     onChange={(v) => setV({ lineChars: v })} />
                 )}
-              </div>
-              <div className="stack">
-                <span className="label">{t("Text style")}</span>
-                <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")}</p>
+              </Section>
                 <CaptionStyle
+                  sid="lyrics-style"
+                  firstOpen={false}
                   style={captionStyle}
                   defaults={slideStyle}
                   fonts={fonts}
@@ -2605,6 +2617,10 @@ export default function VideoStudio({
                   onFonts={onFonts}
                   onReset={() => setV({ captionStyle: undefined })}
                 />
+              <Section id="lyrics-style-presets" title={t("Style presets")} open={false}>
+                <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
+                  onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
+              </Section>
               </div>
             </div>
           )}

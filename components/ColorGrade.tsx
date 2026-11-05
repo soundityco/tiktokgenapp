@@ -5,7 +5,7 @@ import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { VideoGrade } from "@/lib/types";
-import { Range } from "./ui";
+import { Range, Section } from "./ui";
 
 const LUTS_KEY = "tktgen-luts";
 
@@ -76,7 +76,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
   const colour = g.profile !== "none";
   return (
     <>
-      <div className="stack">
+      <Section id="color-profile" title={t("Profile and LUT")}>
         <label className="field">
           <span>{t("Camera profile")}</span>
           <select className="input" value={g.profile} onChange={(e) => set({ profile: e.target.value as VideoGrade["profile"] })}>
@@ -105,11 +105,10 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}
           </>
         )}
-      </div>
+      </Section>
 
       {colour && (
-        <div className="stack">
-          <span className="label">{t("Corrections")}</span>
+        <Section id="color-corrections" title={t("Corrections")} open={false}>
           <Range label={t("Exposure")} value={g.exposure} display={`${g.exposure > 0 ? "+" : ""}${num(g.exposure)} EV`} min={-3} max={3} step={0.05}
             onChange={(v) => set({ exposure: v })} onReset={() => set({ exposure: 0 })} />
           <Range label={t("Contrast")} value={g.contrast} display={num(g.contrast)} min={0.5} max={2} step={0.01}
@@ -120,11 +119,10 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
             onChange={(v) => set({ tint: v })} onReset={() => set({ tint: 0 })} />
           <Range label={t("Saturation")} value={g.sat} display={`${Math.round(g.sat * 100)} %`} min={0} max={2} step={0.01}
             onChange={(v) => set({ sat: v })} onReset={() => set({ sat: 1 })} />
-        </div>
+        </Section>
       )}
 
-      <div className="stack">
-        <span className="label">{t("Finish")}</span>
+      <Section id="color-finish" title={t("Finish")} open={false}>
         <Range label={t("Vignette")} value={g.vignette} display={`${g.vignette}`} min={0} max={100}
           onChange={(v) => set({ vignette: v })} onReset={() => set({ vignette: 0 })} />
         {g.vignette > 0 && (
@@ -137,7 +135,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
           <Range label={t("Grain size")} value={g.grainSize} display={num(g.grainSize, 1)} min={1} max={4} step={0.5}
             onChange={(v) => set({ grainSize: v })} onReset={() => set({ grainSize: 1 })} />
         )}
-      </div>
+      </Section>
 
       <div className="row">
         {clips > 1 && <button className="btn sm" onClick={onApplyAll}>{t("Use this grade on every video of the release")}</button>}

@@ -66,7 +66,19 @@ select.input { appearance: none; padding-right: 28px; background-image: url("dat
 .field { display: grid; gap: 6px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .field .input, .field input, .field select, .field textarea { font-family: var(--sans); font-size: var(--fs); letter-spacing: normal; text-transform: none; color: var(--text); }
 .field .val { float: right; color: var(--text); letter-spacing: 0; } .field .val.resettable { cursor: pointer; user-select: none; }
-input[type=range] { width: 100%; height: 18px; margin: 0; background: transparent; accent-color: var(--accent-hi); }
+/* Sliders: a hairline track, the filled part in the accent, a small round thumb (same look in every browser). */
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 0; background: transparent; cursor: pointer;
+  --fill: 0%; }
+input[type=range]::-webkit-slider-runnable-track { height: 2px; border-radius: 1px; background: linear-gradient(to right, var(--accent-hi) var(--fill), var(--line-2) var(--fill)); }
+input[type=range]::-moz-range-track { height: 2px; border-radius: 1px; background: var(--line-2); }
+input[type=range]::-moz-range-progress { height: 2px; border-radius: 1px; background: var(--accent-hi); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%;
+  background: var(--text); border: 0; box-shadow: 0 0 0 3px var(--bg); transition: transform .12s; }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 0; box-shadow: 0 0 0 3px var(--bg); }
+input[type=range]:hover::-webkit-slider-thumb, input[type=range]:focus-visible::-webkit-slider-thumb { transform: scale(1.2); }
+input[type=range]:focus-visible { outline: none; }
+input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 4px var(--accent-hi); }
+input[type=range]:disabled { opacity: .4; cursor: default; }
 input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); }
 .check { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .check input { accent-color: var(--accent-hi); width: 15px; height: 15px; margin: 0; }
@@ -350,3 +362,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .color-field input[type="color"] { flex: none; width: 40px; }
 .color-field .input { width: 100%; min-width: 0; text-transform: lowercase; }
 .color-field .input.bad { border-color: var(--danger); }
+/* Content | Style switch of a tab. */
+.seg { display: inline-flex; width: fit-content; justify-self: start; align-self: flex-start; border: 1px solid var(--line-2); border-radius: var(--r); padding: 2px; gap: 2px; margin-top: var(--s3); }
+.seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 3px; background: none; color: var(--muted); font-size: var(--fs-sm); cursor: pointer; }
+.seg button.on { background: var(--raised); color: var(--text); }
