@@ -1,5 +1,5 @@
 "use client";
-import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 
 const stack: symbol[] = [];
@@ -129,7 +129,11 @@ export function Toast({ msg }: { msg: string | null }) {
 }
 
 /** Small popover menu that closes on outside click / Escape. */
-export function Menu({ trigger, children, left }: { trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; left?: boolean }) {
+export function Menu({ trigger, children, left, float }: {
+  trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; left?: boolean;
+  /** Placed on the screen, not in its column: it can spill over the next column (side panels hide what overflows). */
+  float?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -144,25 +148,43 @@ export function Menu({ trigger, children, left }: { trigger: (open: boolean, tog
   // and upwards near the bottom of the screen.
   const menu = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: boolean; up: boolean } | null>(null);
+  const [fixed, setFixed] = useState<CSSProperties | null>(null);
   useLayoutEffect(() => {
-    if (!open) { setPlace(null); return; }
+    if (!open) { setPlace(null); setFixed(null); return; }
     const m = menu.current;
     if (!m) return;
     const r = m.getBoundingClientRect();
+    if (float) {
+      // From the button: below it (above near the bottom), its right edge on the button's, kept on screen.
+      const b = ref.current!.getBoundingClientRect();
+      const up = b.bottom + 6 + r.height > window.innerHeight - 8 && b.top - r.height > 60;
+      const x = Math.min(window.innerWidth - 8 - r.width, Math.max(8, left ? b.left : b.right - r.width));
+      setFixed({ position: "fixed", left: x, right: "auto", top: up ? b.top - 6 - r.height : b.bottom + 6, bottom: "auto" });
+      setPlace({ left: false, up: false });
+      return;
+    }
     const area = (ref.current?.closest(".col, .video-side, .video-stage, [data-menu-bounds]") as HTMLElement | null)?.getBoundingClientRect();
     const lo = Math.max(8, area?.left ?? 0), hi = Math.min(window.innerWidth - 8, area?.right ?? window.innerWidth);
     let l = !!left;
     if (!l && r.left < lo) l = true; // spills out on the left: open to the right instead
     else if (l && r.right > hi) l = false;
     setPlace({ left: l, up: r.bottom > window.innerHeight - 8 && r.top - r.height > 60 });
-  }, [open, left]);
+  }, [open, left, float]);
+  // A floating menu stays where it was put: it closes when the page moves under it.
+  useEffect(() => {
+    if (!open || !float) return;
+    const shut = (e: Event) => { if (!menu.current?.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener("scroll", shut, true);
+    window.addEventListener("resize", shut);
+    return () => { window.removeEventListener("scroll", shut, true); window.removeEventListener("resize", shut); };
+  }, [open, float]);
   return (
     <div className="menu-wrap" ref={ref}>
       {trigger(open, () => setOpen((o) => !o))}
       {open && (
         <div ref={menu} role="menu"
           className={"menu" + ((place ? place.left : left) ? " left" : "") + (place?.up ? " up" : "")}
-          style={place ? undefined : { visibility: "hidden" }}>
+          style={place ? (fixed ?? undefined) : { visibility: "hidden", ...(float ? { position: "fixed", top: 0, left: 0 } : null) }}>
           {children(() => setOpen(false))}
         </div>
       )}
@@ -197,7 +219,7 @@ export function Range(p: { label: string; value: number; display?: string; min: 
     <label className="field">
       <span>{p.label}<span className={"val" + (back ? " resettable" : "")} title={hint} onDoubleClick={back}>{p.display ?? p.value}</span></span>
       <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={hint}
-        style={{ "--fill": `${((p.value - p.min) / Math.max(1e-9, p.max - p.min)) * 100}%` } as React.CSSProperties} />
+        style={{ "--fill": `${((p.value - p.min) / Math.max(1e-9, p.max - p.min)) * 100}%` } as CSSProperties} />
     </label>
   );
 }

@@ -2074,10 +2074,15 @@ export default function VideoStudio({
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
             <input id="audio-file" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
             <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
+            {/* The release holds the audio (shared by all its videos); this video holds its camera file and its framing. */}
+            <div className="tree-head" title={t("The audio and the lyrics belong to the release: every video of it uses them.")}>
+              <span className="label">{t("Release")}</span><span className="tree-name">{project.name}</span>
+            </div>
             <MediaTile icon="music" label={t("Official audio")}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
               meta={audioBlob && (<>
                 {audioBuf && <span className="mono">{fmtTime(audioBuf.duration)}</span>}
+                {clips.length > 1 && <span>{t("For its {n} videos", { n: clips.length })}</span>}
                 {project.audioDriveId ? <span>Drive</span>
                   : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")} /></span>}
               </>)}
@@ -2098,6 +2103,10 @@ export default function VideoStudio({
                 </div>
               )}
             </MediaTile>
+            <div className="tree-branch">
+            <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
+              <span className="label">{t("Video")}</span><span className="tree-name">{clipName(clip)}</span>
+            </div>
             {(() => {
               const d = settings.drive ?? {};
               const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
@@ -2145,7 +2154,6 @@ export default function VideoStudio({
             {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
               <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
             )}
-          </div>
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
             <button className={"btn sm" + (settings.format !== "16:9" ? " on" : "")} aria-pressed={settings.format !== "16:9"}
@@ -2184,6 +2192,8 @@ export default function VideoStudio({
             ))}
           </div>
           </Section>
+            </div>
+          </div>
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">
@@ -2768,7 +2778,7 @@ function MediaTile({ icon, label, name, meta, menu, warn, children }: {
           <span className="label">{label}</span>
           {name ? <span className="media-name" title={name}>{name}</span> : <span className="muted xs">{t("Drop it here, or:")}</span>}
         </div>
-        {menu && <Menu trigger={(_, toggle) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={toggle}><Icon name="more" /></button>}>{menu}</Menu>}
+        {menu && <Menu float trigger={(_, toggle) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={toggle}><Icon name="more" /></button>}>{menu}</Menu>}
       </div>
       {meta && <div className="media-meta">{meta}</div>}
       {children}

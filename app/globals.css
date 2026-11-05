@@ -532,3 +532,9 @@ details.sec > summary .sec-sub { color: var(--faint); text-transform: none; lett
 .media.warn .media-meta { color: var(--warn); }
 .media > .row, .media > .stack { padding-left: 40px; }
 .media > .row .btn { flex: 1 1 auto; min-width: 0; }
+/* The hierarchy: the release (its audio), then this video under it, on a branch. */
+.tree-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin-bottom: -4px; }
+.tree-name { color: var(--faint); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tree-branch { display: grid; gap: var(--s3); min-width: 0; margin-left: 14px; padding: 4px 0 0 12px; border-left: 1px solid var(--line-2); position: relative; }
+.tree-branch::before { content: ""; position: absolute; left: -1px; top: -12px; height: 12px; width: 1px; background: var(--line-2); }
+.tree-branch > .section, .tree-branch > section { margin-left: 0; }

@@ -1,5 +1,9 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Release": "Release",
+  "For its {n} videos": "Pour ses {n} vidéos",
+  "The audio and the lyrics belong to the release: every video of it uses them.": "L'audio et les paroles appartiennent à la release : toutes ses vidéos les utilisent.",
+  "The camera file and the framing belong to this video only.": "Le fichier caméra et le cadrage appartiennent à cette vidéo seulement.",
   "Camera video": "Vidéo caméra",
   "This computer only": "Seulement sur cet ordinateur",
   "Replace from Google Drive": "Remplacer depuis Google Drive",
