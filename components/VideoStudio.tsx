@@ -12,7 +12,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
-import { textItems } from "@/lib/generate";
+import { followLists, hookLink, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
@@ -1941,7 +1941,7 @@ export default function VideoStudio({
     const last = hooks[hooks.length - 1];
     const from = last ? round2(Math.min(segLen - 1, last.to ?? Math.min(3, segLen / 2))) : 0;
     const list = last && last.to === undefined ? hooks.map((h) => (h === last ? { ...h, to: from } : h)) : hooks;
-    setHooks([...list, { id: uid(), text, from, to: last ? round2(Math.min(segLen, from + 3)) : undefined }]);
+    setHooks([...list, { id: uid(), text, from, to: last ? round2(Math.min(segLen, from + 3)) : undefined, link: text ? hookLink(hookPool, text) : undefined }]);
     if (settings.showHooks === false) setV({ showHooks: true });
   };
   // ---- hook lists: the same as the carousel's; by default the one of the first slide of the release ----
@@ -1954,9 +1954,11 @@ export default function VideoStudio({
   const hookItems = useMemo(() => (hookPool ? textItems(hookPool) : []), [hookPool]);
   /** A hook drawn for this video, different from the ones already on it. */
   const drawFor = (taken: string[]) => (hookPoolId ? onDrawHook(hookPoolId, taken) : null);
+  /** A text of the list in a hook: linked to its line, so editing it in the list follows here. */
+  const fromList = (text: string): Partial<VideoHook> => ({ text, link: hookLink(hookPool, text) });
   const drawInto = (id: string) => {
     const text = drawFor(hooks.filter((h) => h.id !== id).map((h) => h.text));
-    if (text !== null) editHook(id, { text });
+    if (text !== null) editHook(id, fromList(text));
   };
   const drawAll = () => {
     const taken: string[] = [];
@@ -1964,10 +1966,19 @@ export default function VideoStudio({
       const text = drawFor(taken);
       if (text === null) return h;
       taken.push(text);
-      return { ...h, text };
+      return { ...h, ...fromList(text) };
     });
     setHooks(list);
   };
+  // A hook line edited in the carousel's list: every video of the release that uses it follows.
+  // The lists are made again at each render: only their text decides when to look.
+  const listsKey = hookPools.map((p) => `${p.id}\u0001${p.text}`).join("\u0002");
+  useEffect(() => {
+    // Nothing to follow: no change at all (no save, no undo step).
+    if (!clipsOf(project).some((c) => c.hooks?.length && followLists(c.hooks, hookPools) !== c.hooks)) return;
+    onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.hooks?.length ? { ...c, hooks: followLists(c.hooks, hookPools) } : c)) }));
+  }, [listsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Move one edge of a hook by `d` seconds, inside the segment and never shorter than 0.3 s. */
   const nudgeHook = (h: VideoHook, edge: "from" | "to", d: number) => {
     const to = h.to ?? segLen;
@@ -2581,12 +2592,12 @@ export default function VideoStudio({
                     <button className="btn sm quiet danger" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))}>{t("Remove")}</button>
                   </div>
                   <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
-                    onChange={(e) => editHook(h.id, { text: e.target.value })} />
+                    onChange={(e) => editHook(h.id, { text: e.target.value, link: undefined })} />
                   {hookItems.length > 0 && (
                     <div className="row">
                       <button className="btn sm quiet" onClick={() => drawInto(h.id)} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Another hook")}</button>
                       <select className="input sm grow" value="" aria-label={t("Pick from the list")}
-                        onChange={(e) => { if (e.target.value) editHook(h.id, { text: e.target.value }); }}>
+                        onChange={(e) => { if (e.target.value) editHook(h.id, fromList(e.target.value)); }}>
                         <option value="">{t("Pick from the list…")}</option>
                         {hookItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ")}</option>)}
                       </select>

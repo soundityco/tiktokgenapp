@@ -181,6 +181,8 @@ export interface VideoHook {
   from: number;
   /** Leaves the screen at this time; none = until the end of the segment. */
   to?: number;
+  /** Taken from a hook list: the line it came from, so an edit of that line in the list follows here. */
+  link?: { pool: string; line: number; text: string; count: number };
 }
 
 /** Colour grade of a camera clip (see lib/grade.ts). Sliders are applied in linear light / DaVinci Intermediate. */

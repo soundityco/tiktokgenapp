@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultWorkspace } from "../lib/defaults";
-import { drawHook, generateAll, hookKey, lyricsText, pick, pickText, textItems, weightedPick, weightedPickBag } from "../lib/generate";
+import { drawHook, followLists, generateAll, hookKey, hookLink, lyricsText, pick, pickText, textItems, weightedPick, weightedPickBag } from "../lib/generate";
 import type { TextPool } from "../lib/types";
 
 const pool = (kind: TextPool["kind"], text: string): TextPool => ({ id: "p", name: "p", scope: "shared", kind, text });
@@ -201,5 +201,27 @@ describe("drawHook with favourite hooks", () => {
     expect(got === "deux" || got === "trois").toBe(true);
     expect(bags.h).toContain("un"); // not drawn, still to come
     expect(bags.h).not.toContain(got);
+  });
+});
+
+describe("hooks linked to their list (video)", () => {
+  const pool = (text: string): TextPool => ({ id: "h", name: "Hooks", scope: "shared", kind: "hooks", text });
+  const hook = (p: TextPool, text: string) => ({ text, link: hookLink(p, text) });
+  it("an edited line follows; a moved line is found again; a deleted line leaves the hook as it was", () => {
+    const v1 = pool("un\ndeux\ntrois");
+    const hooks = [hook(v1, "deux")];
+    // Edited in place.
+    const e = followLists(hooks, [pool("un\nDEUX !\ntrois")]);
+    expect(e[0].text).toBe("DEUX !");
+    // A line added above: same text, new place, nothing else changes.
+    const m = followLists(hooks, [pool("zéro\nun\ndeux\ntrois")]);
+    expect(m[0].text).toBe("deux");
+    expect(m[0].link?.line).toBe(2);
+    // Deleted: the text stays, the link goes (it does not take the next line).
+    const d = followLists(hooks, [pool("un\ntrois")]);
+    expect(d[0].text).toBe("deux");
+    expect(d[0].link).toBeUndefined();
+    // Nothing changed: the same array.
+    expect(followLists(hooks, [v1])).toBe(hooks);
   });
 });

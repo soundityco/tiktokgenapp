@@ -821,7 +821,12 @@ export default function Studio({ userName }: { userName: string }) {
   };
 
   if (loadErr) return <div className="login"><div className="login-card"><h2 className="title">{t("Could not load your data")}</h2><p className="muted">{loadErr}</p><button className="btn primary" onClick={() => location.reload()}>{t("Try again")}</button></div></div>;
-  if (!ws || !project) return <div className="login"><p className="muted">{t("Loading…")}</p></div>;
+  if (!ws || !project) return (
+    <div className="boot" aria-busy="true">
+      <img src="/icon.svg" alt="" width={56} height={56} />
+      <p className="muted">{t("Loading…")}</p>
+    </div>
+  );
 
   const sel = Math.min(project.selectedSlide, project.slides.length - 1);
   const edText = editor?.k === "text" ? ws.textPools.find((x) => x.id === editor.id) : undefined;

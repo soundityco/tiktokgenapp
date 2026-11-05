@@ -105,6 +105,42 @@ export function drawHook(ws: Workspace, poolId: string, bags: Record<string, str
   return pick(pool.id, items, bags, ws.noRepeat, skip);
 }
 
+export type HookLink = { pool: string; line: number; text: string; count: number };
+
+/** The link of a hook taken from a list (see VideoHook.link), or none when the text is not one of its lines. */
+export function hookLink(pool: TextPool | undefined, text: string): HookLink | undefined {
+  if (!pool) return undefined;
+  const items = textItems(pool);
+  const line = items.indexOf(text);
+  return line < 0 ? undefined : { pool: pool.id, line, text, count: items.length };
+}
+
+/**
+ * Hooks of a video taken from lists, after the lists changed:
+ * - its line still there (maybe moved, lines added or removed above): found again by its text;
+ * - the list has as many lines but not this text: the line was edited, the hook takes its new text;
+ * - otherwise (line deleted, or edited while others came and went): the hook keeps its text, unlinked.
+ * Returns the same array when nothing changed.
+ */
+export function followLists<T extends { text: string; link?: HookLink }>(hooks: T[], pools: TextPool[]): T[] {
+  let changed = false;
+  const out = hooks.map((h) => {
+    const l = h.link;
+    if (!l) return h;
+    const pool = pools.find((p) => p.id === l.pool);
+    if (!pool) return h;
+    const items = textItems(pool);
+    if (items[l.line] === l.text && items.length === l.count) return h; // unchanged
+    changed = true;
+    const moved = items.indexOf(l.text);
+    if (moved >= 0) return { ...h, link: { ...l, line: moved, count: items.length } };
+    if (items.length === l.count && l.line < items.length) return { ...h, text: items[l.line], link: { ...l, text: items[l.line] } };
+    const { link: _gone, ...rest } = h;
+    return rest as T;
+  });
+  return changed ? out : hooks;
+}
+
 /** The section a lyrics slide reads: its own, else the project's, else the first one. */
 export function lyricsSection(project: Project, sectionId?: string | null): LyricSection | undefined {
   return (

@@ -435,3 +435,11 @@ button.link { background: none; border: 0; padding: 0; color: var(--text); text-
 .slides.drag-in .card:not(.locked) .cv-wrap::after { content: attr(data-drop); position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 11px; color: rgba(255,255,255,.75); pointer-events: none; z-index: 2; }
 .slides.drag-in .card:not(.locked) .cv-wrap.drop-here { outline: 2px dashed var(--accent-hi); }
 .drop-preview { width: 100%; max-height: 46vh; object-fit: contain; background: #000; border-radius: var(--r); }
+/* Loading of the studio: logo and message in the middle of the screen. */
+.boot { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: var(--s3); background: var(--bg); }
+.boot img { animation: boot 1.6s ease-in-out infinite; }
+@keyframes boot { 50% { opacity: .55; transform: scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .boot img { animation: none; } }
+/* Installed app with the title bar hidden (window controls overlay): the top bar can drag the window. */
+@media (display-mode: window-controls-overlay) { .top { -webkit-app-region: drag; app-region: drag; padding-left: max(var(--s4), env(titlebar-area-x, 0px)); }
+  .top button, .top select, .top a, .top input, .top label { -webkit-app-region: no-drag; app-region: no-drag; } }
