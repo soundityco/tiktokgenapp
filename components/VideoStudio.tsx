@@ -2056,47 +2056,9 @@ export default function VideoStudio({
   );
 
   return (
-    <div className="video-page" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}>
-      <div className="video-wrap">
-      {/* Same columns as the page: the title over the preview, the video controls over the timeline. */}
-      <div className="video-head">
-        <div className="row nowrap video-title">
-          <button className="btn icon quiet" aria-label={t("Back")} title={t("Back")} onClick={close}><Icon name="back" /></button>
-          <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-            <span className="label">{t("Video studio")}</span>
-            <h2 className="display truncate">{project.name}</h2>
-          </div>
-        </div>
-        <div className="row nowrap video-tools">
-          <label className="field" style={{ margin: 0 }}>{t("Video")}
-            <select className="input" style={{ width: 150 }} value={clip.id}
-              onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
-              {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
-            </select>
-          </label>
-          <button className="btn icon" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
-          <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
-            {(closeMenu) => (<>
-              <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
-              <div className="sep" />
-              <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
-                onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
-            </>)}
-          </Menu>
-          {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
-          <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
-          <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
-          <span className="grow" />
-          <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}>{status.text}</span>
-          <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
-            title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
-            <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
-          </button>
-        </div>
-      </div>
-      <div className="video-cols">
+    <div className="video-shell" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}>
         {/* Left: the files of the clip, and how the camera picture fits the post. */}
-        <aside className={"video-col video-col-l" + (studioLoading ? " is-loading" : "")}>
+        <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")}>
           <div className="stack">
               <div className="stack">
                 <span className="label">{t("Official audio")}</span>
@@ -2227,6 +2189,43 @@ export default function VideoStudio({
           </div>
           </Section>
         </aside>
+        {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
+        <main className="col center video-center">
+      <div className="video-head">
+        <div className="row nowrap video-title">
+          <button className="btn icon quiet" aria-label={t("Back")} title={t("Back")} onClick={close}><Icon name="back" /></button>
+          <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+            <span className="label">{t("Video studio")}</span>
+            <h2 className="display truncate">{project.name}</h2>
+          </div>
+        </div>
+        <div className="row nowrap video-tools">
+          <label className="field" style={{ margin: 0 }}>{t("Video")}
+            <select className="input" style={{ width: 150 }} value={clip.id}
+              onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
+              {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
+            </select>
+          </label>
+          <button className="btn icon" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
+            {(closeMenu) => (<>
+              <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
+              <div className="sep" />
+              <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
+                onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
+            </>)}
+          </Menu>
+          {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
+          <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
+          <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
+          <span className="grow" />
+          <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}>{status.text}</span>
+          <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
+            title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
+            <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
+          </button>
+        </div>
+      </div>
       <div className="video-grid">
         <div className="stack video-stage">
           <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")} style={{ position: "relative" }}>
@@ -2605,8 +2604,9 @@ export default function VideoStudio({
 
         </div>
       </div>
+        </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
-        <aside className={"video-col video-col-r" + (studioLoading ? " is-loading" : "")}>
+        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")}>
           {tab === "hook" ? (
             <div className="stack">
               <span className="label">{t("Hook style")}</span>
@@ -2680,8 +2680,6 @@ export default function VideoStudio({
                         </Section>
           </div>
         </aside>
-      </div>
-      </div>
       {clipDialog === "rename" && (
         <PromptDialog title={t("Rename the video")} label={t("Name")} initial={clipName(clip)} confirmLabel={t("Rename")}
           onSubmit={renameClip} onClose={() => setClipDialog(null)} />
