@@ -475,3 +475,11 @@ button.link { background: none; border: 0; padding: 0; color: var(--text); text-
 *:hover::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,.16); }
 ::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.3) !important; }
 ::-webkit-scrollbar-button { display: none; }
+/* A short line that unfolds into the details (media panel). */
+details.more > summary { list-style: none; display: flex; align-items: center; gap: var(--s2); cursor: pointer; min-width: 0; }
+details.more > summary::-webkit-details-marker { display: none; }
+.more-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+details.more > summary::after { content: "+"; font-family: var(--mono); color: var(--faint); font-size: 12px; }
+details.more[open] > summary::after { content: "−"; }
+.more-body { display: grid; gap: 4px; padding-top: 6px; }
+.more-body p { margin: 0; }

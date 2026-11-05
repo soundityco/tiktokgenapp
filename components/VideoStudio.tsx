@@ -2100,22 +2100,30 @@ export default function VideoStudio({
                     s.curve ?? (s.colour === "unknown" ? t("colours not specified") : null),
                     s.codec,
                   ].filter(Boolean).join(" · ");
+                  // One short line; the device, the codec and the long notes unfold.
+                  const short = s.colour === "log" ? (s.profile ? t("Converted from log, with your LUT.") : t("Log not converted yet: pick its profile."))
+                    : s.colour === "hdr" ? t("HDR brought down to SDR.")
+                    : s.colour === "sdr" ? t("Standard video, used as it is.")
+                    : t("Colours not specified.");
+                  const long = [
+                    s.colour === "log" && (s.profile
+                      ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
+                      : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab.")),
+                    s.colour === "hdr" && t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab."),
+                    s.colour === "unknown" && t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab."),
+                    s.convert && t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality."),
+                  ].filter(Boolean) as string[];
                   return (
-                    <div className="stack">
-                      <div className="row">
+                    <details className="more">
+                      <summary>
                         <span className="badge">{s.colour === "log" ? "LOG" : s.colour === "hdr" ? "HDR" : s.colour === "sdr" ? "SDR" : "?"}</span>
-                        <span className="muted xs">{what}</span>
+                        <span className="xs more-line">{short}</span>
+                      </summary>
+                      <div className="more-body muted xs">
+                        {what && <p>{what}</p>}
+                        {long.map((x, i) => <p key={i}>{x}</p>)}
                       </div>
-                      <p className="muted xs">
-                        {s.colour === "log" && (s.profile
-                          ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
-                          : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab."))}
-                        {s.colour === "hdr" && t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab.")}
-                        {s.colour === "sdr" && t("Standard footage: used as it is, nothing to convert.")}
-                        {s.colour === "unknown" && t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab.")}
-                        {" "}{s.convert && t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality.")}
-                      </p>
-                    </div>
+                    </details>
                   );
                 })()}
                 {(videoBlob || settings.drive?.originalId) && (() => {
@@ -2126,17 +2134,17 @@ export default function VideoStudio({
                       <span className="label">{t("Google Drive")}</span>
                       {driveWrite === false && !d.originalId ? (
                         <div className="row">
-                          <span className="muted xs grow">{t("To open this video on another device, allow the app to save it in your Drive.")}</span>
+                          <span className="muted xs grow" title={t("To open this video on another device, allow the app to save it in your Drive.")}>{t("Not allowed yet.")}</span>
                           <button className="btn sm" onClick={() => void signIn("google", { redirectTo: "/studio" })}>{t("Reconnect Google")}</button>
                         </div>
                       ) : (
                         <div className="row">
-                          <span className="muted xs grow">{d.originalId
-                            ? (videoBlob ? t("The camera file is on your Drive (Rollout folder).") : t("The camera file is on your Drive, not on this device."))
-                            : t("Put the camera file on your Drive to open this video on another device.")}</span>
+                          <span className="muted xs grow" title={d.originalId ? undefined : t("Put the camera file on your Drive to open this video on another device.")}>{d.originalId
+                            ? (videoBlob ? t("On your Drive.") : t("On your Drive, not here."))
+                            : t("Not on your Drive.")}</span>
                           {driveJob ? <button className="btn sm quiet" onClick={() => driveAc.current?.abort()}>{t("Cancel")}</button>
                             : !videoBlob && d.originalId ? <button className="btn sm primary" onClick={() => void fetchOriginal()}>{t("Get it on this device")}</button>
-                            : videoBlob && !d.originalId ? <button className="btn sm" disabled={!driveWrite} onClick={() => void sendToDrive(videoBlob)}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>
+                            : videoBlob && !d.originalId ? <button className="btn sm" disabled={!driveWrite} onClick={() => void sendToDrive(videoBlob)}>{t("Send ({size})", { size: gb(videoBlob.size) })}</button>
                             : null}
                         </div>
                       )}
@@ -2148,7 +2156,7 @@ export default function VideoStudio({
                   <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
                 )}
               </div>
-              <p className="muted xs">{t("Files stay on this device.")} {t("You can also drop an audio or video file anywhere on this page.")}</p>
+              <p className="muted xs" title={t("Files stay on this device.")}>{t("Drop a file anywhere to import it.")}</p>
                       </div>
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
