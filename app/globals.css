@@ -86,7 +86,7 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 /* ---------- Layout helpers ---------- */
 .row { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; } .row.nowrap { flex-wrap: nowrap; }
 .stack { display: grid; gap: var(--s3); } .grow { flex: 1; min-width: 0; }
-.cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+.cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s3); } /* columns may be narrower than a select's longest option */
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-family: var(--mono); font-size: var(--fs-xs);
   border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
@@ -139,7 +139,7 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 .card { display: grid; gap: var(--s3); min-width: 0; }
 /* A select takes the width of its longest option (a long text of the list): kept inside its card. */
 .card select, .card .input { width: 100%; min-width: 0; max-width: 100%; }
-.card-head { display: flex; align-items: center; gap: var(--s1); }
+.card-head { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; min-width: 0; }
 .card-head .btn.sm { padding: 0 8px; }
 .card-head .btn.icon.sm { width: 26px; padding: 0; }
 .menu button:disabled { opacity: .4; cursor: not-allowed; }
@@ -303,7 +303,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-stage { position: sticky; top: var(--s4); }
 .video-stage .input.sm { height: var(--h-sm); font-size: var(--fs-sm); min-width: 0; }
 .video-status { height: var(--h); padding: 0 12px; }
-.cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s3); }
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); }
 .sep { width: 1px; align-self: stretch; background: var(--line-2); margin: 0 2px; }
 /* Timeline: transport, waveform of the whole track, lyrics of the segment. */
 .timeline { display: grid; gap: var(--s2); padding: var(--s3); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); }
