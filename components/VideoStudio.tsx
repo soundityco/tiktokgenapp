@@ -2064,7 +2064,7 @@ export default function VideoStudio({
                 <span className="label">{t("Official audio")}</span>
                 {audioPick}
                 <div className="row">
-                  {audioBlob ? <span className="badge ok truncate">{project.audioName ?? settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
+                  {audioBlob ? <span className="badge ok truncate" title={project.audioName ?? settings.audioName ?? undefined}>{project.audioName ?? settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
                   {audioBlob && project.audioDriveId && <span className="badge">{t("Saved in Drive")}</span>}
                   {audioBlob && !confirmRemove && <button className="btn sm quiet danger" onClick={() => setConfirmRemove(true)}>{t("Remove audio")}</button>}
                   {audioBlob && confirmRemove && (
@@ -2081,14 +2081,14 @@ export default function VideoStudio({
               </div>
               <div className="stack">
                 <span className="label">{t("Playback video")}</span>
-                <div className="drop" onClick={() => document.getElementById("video-file")?.click()}>
+                <div className="drop" title={settings.videoName ?? undefined} onClick={() => document.getElementById("video-file")?.click()}>
                   {settings.videoName && !videoBlob
                     ? t("Pick {name} again: this browser does not have it. The sync and the settings are kept.", { name: settings.videoName })
                     : settings.videoName ?? t("Import the video recorded with the camera")}
                 </div>
                 <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
                 <div className="row">
-                  {videoBlob && <span className="badge ok truncate">{settings.videoName ?? "video"}</span>}
+                  {videoBlob && <span className="badge ok truncate" title={settings.videoName ?? undefined}>{settings.videoName ?? "video"}</span>}
                   {!videoBlob && <span className="muted xs">{t("No video imported yet")}</span>}
                   {videoBlob && <button className="btn sm quiet danger" onClick={() => void removeVideo()}>{t("Remove video")}</button>}
                   {videoDur > 0 && <span className="muted xs">{fmtTime(videoDur)}</span>}

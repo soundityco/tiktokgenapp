@@ -269,6 +269,15 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .main[data-studio="video"] { display: block; overflow: hidden; }
 .video-shell { display: grid; grid-template-columns: 240px minmax(0, 1fr) 288px; height: 100%; min-height: 0; }
 .video-shell > .col.side { display: grid; gap: var(--s4); align-content: start; }
+/* Nothing in a side panel is wider than it: rows wrap, long names end with "…" (full name on hover). */
+.video-shell > .col { min-width: 0; }
+.video-shell > .col.side { overflow-x: hidden; }
+.video-shell > .col.side > *, .video-shell > .col.side .stack > *, .video-shell > .col.side .field { min-width: 0; max-width: 100%; }
+.video-shell > .col.side .row { flex-wrap: wrap; min-width: 0; }
+.video-shell > .col.side .badge, .video-shell > .col.side .drop, .video-shell > .col.side .truncate {
+  max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.video-shell > .col.side .input, .video-shell > .col.side select { max-width: 100%; min-width: 0; }
+.video-shell > .col.side .muted.xs { overflow-wrap: anywhere; }
 /* The phone tabs of the carousel hide its side panels: not those of the video studio. */
 .main[data-studio="video"] .video-shell > .col.side { display: grid; }
 .video-center { display: grid; gap: var(--s4); align-content: start; }
