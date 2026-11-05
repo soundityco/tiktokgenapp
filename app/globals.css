@@ -564,3 +564,12 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .studio-head .stepper span { text-transform: none; color: var(--text); }
 .carousel-head { margin-bottom: var(--s5); }
 .carousel-release { margin-bottom: var(--s5); }
+/* The release's name, the title of both studios: it opens the menu of the releases. */
+.release-title { gap: 6px; min-width: 0; }
+.release-pick { display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; height: var(--h); padding: 0; background: none; border: 0; color: var(--text); cursor: pointer; text-align: left; }
+.release-pick svg { flex: none; color: var(--faint); transition: color .15s, transform .15s; }
+.release-pick:hover svg, .release-pick.open svg { color: var(--text); }
+.release-pick.open svg { transform: rotate(180deg); }
+.release-pick .display { line-height: var(--h); margin: 0; }
+.release-list { display: grid; gap: 1px; max-height: 50vh; overflow-y: auto; }
+.release-title .menu { min-width: 260px; }

@@ -269,7 +269,7 @@ export default function VideoStudio({
   onDrawHook,
   onProject,
   onSaveNow,
-  onBack,
+  releaseTitle,
   fonts,
   onFonts,
   presets,
@@ -288,7 +288,8 @@ export default function VideoStudio({
   onDrawHook: (poolId: string, exclude: string[]) => string | null;
   onProject: (fn: (p: Project) => Project) => void;
   onSaveNow: () => void;
-  onBack: () => void;
+  /** The release's name, and the menu to change it: the title of both studios. */
+  releaseTitle: ReactNode;
   /** Fonts loaded by the user, shared with the carousel. */
   fonts: string[];
   onFonts: (names: string[]) => void;
@@ -2075,7 +2076,7 @@ export default function VideoStudio({
             <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
             {/* The release holds the audio (shared by all its videos); this video holds its camera file and its framing. */}
             <div className="tree-head" title={t("The audio and the lyrics belong to the release: every video of it uses them.")}>
-              <span className="label">{t("Release")}</span><span className="tree-name">{project.name}</span>
+              <span className="label">{t("Release")}</span>
             </div>
             <MediaTile icon="music" label={t("Official audio")}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
@@ -2197,12 +2198,7 @@ export default function VideoStudio({
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">
       <div className="video-head studio-head">
-        <div className="row nowrap video-title">
-          <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-            <span className="label">{t("Video studio")}</span>
-            <h2 className="display truncate">{project.name}</h2>
-          </div>
-        </div>
+        <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
           <label className="field" style={{ margin: 0 }}>{t("Video")}
             <select className="input" style={{ width: 150 }} value={clip.id}

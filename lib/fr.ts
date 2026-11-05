@@ -1,5 +1,7 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Releases": "Releases",
+  "Change, rename or create a release": "Changer, renommer ou créer une release",
   "Carousel studio": "Studio carrousel",
   "First section": "Première section",
   "None yet": "Aucune pour l'instant",

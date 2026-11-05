@@ -860,22 +860,39 @@ export default function Studio({ userName }: { userName: string }) {
       </div>
     ));
 
+  // The release: its name is the title of both studios, and the menu to change it (the only place it shows).
+  const releaseTitle = (
+    <div className="stack release-title">
+      <span className="label">{t("Release")}</span>
+      <Menu left trigger={(open, toggle) => (
+        <button className={"release-pick" + (open ? " open" : "")} aria-haspopup="menu" aria-expanded={open} onClick={toggle} title={t("Change, rename or create a release")}>
+          <h2 className="display truncate">{project.name}</h2><Icon name="chevron" size={16} />
+        </button>
+      )}>
+        {(close) => (<>
+          <div className="label cap">{t("Releases")}</div>
+          <div className="release-list">
+            {ws.projects.map((p) => (
+              <button key={p.id} onClick={() => { close(); if (p.id !== project.id) upd((w) => ({ ...w, currentProjectId: p.id })); }}>
+                {p.id === project.id ? <Icon name="check" size={14} /> : <span style={{ width: 14, flex: "none" }} />}<span className="truncate">{p.name}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={() => { close(); setOverlay({ k: "newProject" }); }}><Icon name="plus" size={14} />{t("New release")}</button>
+          <div className="sep" />
+          <button onClick={() => { close(); setOverlay({ k: "rename" }); }}>{t("Rename")}</button>
+          <button onClick={() => { close(); duplicateProject(); }}>{t("Duplicate")}</button>
+          <div className="sep" />
+          <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setOverlay({ k: "confirm", title: t("Delete project"), label: t("Delete"), message: t("Are you sure you want to delete “{name}”? Its slide setup and project-only lists will be deleted too. This can't be undone.", { name: project.name }), run: deleteProject }); }}>{t("Delete")}</button>
+        </>)}
+      </Menu>
+    </div>
+  );
+
   return (
     <div className="app">
       <header className="top">
         <div className="brand"><Wordmark height={18} /> <small>{VERSION}</small></div>
-        <select className="input" style={{ width: 210 }} aria-label={t("Project")} value={project.id} onChange={(e) => upd((w) => ({ ...w, currentProjectId: e.target.value }))}>
-          {ws.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <button className="btn icon" aria-label={t("New project")} title={t("New project")} onClick={() => setOverlay({ k: "newProject" })}><Icon name="plus" /></button>
-        <Menu left trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Project menu")} onClick={toggle}><Icon name="more" /></button>}>
-          {(close) => (<>
-            <button onClick={() => { close(); setOverlay({ k: "rename" }); }}>{t("Rename")}</button>
-            <button onClick={() => { close(); duplicateProject(); }}>{t("Duplicate")}</button>
-            <div className="sep" />
-            <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setOverlay({ k: "confirm", title: t("Delete project"), label: t("Delete"), message: t("Are you sure you want to delete “{name}”? Its slide setup and project-only lists will be deleted too. This can't be undone.", { name: project.name }), run: deleteProject }); }}>{t("Delete")}</button>
-          </>)}
-        </Menu>
         <div className="studio-switch" role="group" aria-label={t("Studio")}>
           <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
             <Icon name="sparkle" size={14} />{t("Carousel")}
@@ -940,7 +957,7 @@ export default function Studio({ userName }: { userName: string }) {
             }}
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
             onSaveNow={() => void flushSave()}
-            onBack={() => switchStudio("carousel")}
+            releaseTitle={releaseTitle}
             fonts={fonts}
             onFonts={setFonts}
             presets={presets}
@@ -950,9 +967,6 @@ export default function Studio({ userName }: { userName: string }) {
         ) : (
         <>
         <aside className="col side l">
-          <div className="tree-head carousel-release" title={t("The lists marked “this project” belong to this release; the others are shared by all.")}>
-            <span className="label">{t("Release")}</span><span className="tree-name">{project.name}</span>
-          </div>
           <section className="group">
             <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
             {listRows("text")}
@@ -966,12 +980,7 @@ export default function Studio({ userName }: { userName: string }) {
         <main className="col center">
           {/* Same header as the video studio: the release on the left, its tools, the export on the right. */}
           <div className="video-head studio-head carousel-head">
-            <div className="row nowrap video-title">
-              <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-                <span className="label">{t("Carousel studio")}</span>
-                <h2 className="display truncate">{project.name}</h2>
-              </div>
-            </div>
+            <div className="row nowrap video-title">{releaseTitle}</div>
             <div className="row nowrap video-tools">
               <button className="btn primary" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
               <div className="field">{t("Slides")}
