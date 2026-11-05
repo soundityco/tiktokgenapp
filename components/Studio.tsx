@@ -19,6 +19,7 @@ import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
 import Inspector from "./Inspector";
 import Logo from "./Logo";
+import Wordmark from "./Wordmark";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
 import { withPreset } from "./TextControls";
 import SlidePreview from "./SlidePreview";
@@ -56,7 +57,7 @@ const stamp = () => {
   const d = new Date(), z = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}-${z(d.getMinutes())}`;
 };
-const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, "-").trim() || "TkTgen";
+const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, "-").trim() || "Rollout";
 const download = (blob: Blob, name: string) => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -463,7 +464,7 @@ export default function Studio({ userName }: { userName: string }) {
     setDropBusy(true);
     try {
       // In the Drive (the slide shows it on every device), else on this device only.
-      // The same picture already in the Drive: that file; else a new one in the TkTgen folder (or this device only).
+      // The same picture already in the Drive: that file; else a new one in the Rollout folder (or this device only).
       const id = c.reuse ?? (driveWrite ? await sendPictureToDrive(blob, `photo - ${name}`) : `local:${uid()}`);
       await keepPicture(id, blob);
       setGen(i, { picId: id, picName: name, picCredit: undefined });
@@ -798,11 +799,11 @@ export default function Studio({ userName }: { userName: string }) {
   }
 
   // ---- backup / restore ----
-  const backup = () => download(new Blob([JSON.stringify(ws)], { type: "application/json" }), `TkTgen backup ${stamp()}.json`);
+  const backup = () => download(new Blob([JSON.stringify(ws)], { type: "application/json" }), `Rollout backup ${stamp()}.json`);
   const restore = async (file: File) => {
     try {
       const data = JSON.parse(await file.text());
-      if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a TkTgen backup"));
+      if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a Rollout backup"));
       setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(normalizeWorkspace(data as Workspace)); say(t("Backup restored")); } });
     } catch (e: any) { say(e?.message ?? t("Could not read this file")); }
   };
@@ -863,7 +864,7 @@ export default function Studio({ userName }: { userName: string }) {
   return (
     <div className="app">
       <header className="top">
-        <div className="brand"><Logo /> TkTgen <small>{VERSION}</small></div>
+        <div className="brand"><Logo /> <Wordmark height={13} /> <small>{VERSION}</small></div>
         <select className="input" style={{ width: 210 }} aria-label={t("Project")} value={project.id} onChange={(e) => upd((w) => ({ ...w, currentProjectId: e.target.value }))}>
           {ws.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>

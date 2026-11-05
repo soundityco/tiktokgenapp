@@ -5,7 +5,7 @@ import { delMedia, getMedia, listMedia, putMedia } from "./idb";
 /**
  * Fonts loaded by the user (.ttf, .otf, .woff, .woff2), grouped by family: the bold, light, italic or
  * condensed files of one font are the styles of that family. The files are kept on this device (IndexedDB)
- * and in the user's Google Drive (TkTgen folder), so every browser and device gets them.
+ * and in the user's Google Drive (Rollout folder), so every browser and device gets them.
  */
 const PREFIX = "font:";
 const keyOf = (f: FaceInfo) => `${PREFIX}${f.family}|${f.weight}|${f.italic ? 1 : 0}|${f.stretch}`;

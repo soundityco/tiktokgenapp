@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/LegalPage";
 
-export const metadata: Metadata = { title: "Privacy Policy · TkTgen" };
+export const metadata: Metadata = { title: "Privacy Policy · Rollout" };
 const contact = process.env.CONTACT_EMAIL;
 
 export default function Privacy() {
   return (
     <LegalPage title="Privacy Policy" updated="November 2026">
-      <p>TkTgen is a small tool that helps music artists build TikTok photo carousels from their own pictures, hooks and lyrics, and short videos with their lyrics on the official audio. This page explains what data it uses.</p>
+      <p>Rollout is a small tool that helps music artists build TikTok photo carousels from their own pictures, hooks and lyrics, and short videos with their lyrics on the official audio. This page explains what data it uses.</p>
 
       <h2>What we access</h2>
       <ul>

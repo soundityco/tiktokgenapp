@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   let target: URL;
   try { target = new URL(new URL(req.url).searchParams.get("u") ?? ""); } catch { return Response.json({ error: "bad url" }, { status: 400 }); }
   if (target.protocol !== "https:" || !IMAGE_HOSTS.test(target.hostname)) return Response.json({ error: "host not allowed" }, { status: 400 });
-  const res = await fetch(target, { redirect: "follow", headers: { "User-Agent": "TkTgen/0.5" } }).catch(() => null);
+  const res = await fetch(target, { redirect: "follow", headers: { "User-Agent": "Rollout/0.5" } }).catch(() => null);
   if (!res?.ok) return Response.json({ error: "picture unavailable" }, { status: 502 });
   // After redirects, still one of the photo hosts.
   if (!IMAGE_HOSTS.test(new URL(res.url).hostname)) return Response.json({ error: "host not allowed" }, { status: 400 });

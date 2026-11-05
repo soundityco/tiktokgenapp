@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 
-/** Registers the service worker, so Chrome offers "Install TkTgen" (address bar icon, or menu ⋮ → Install). */
+/** Registers the service worker, so Chrome offers "Install Rollout" (address bar icon, or menu ⋮ → Install). */
 export default function InstallApp() {
   useEffect(() => {
     if (!("serviceWorker" in navigator) || location.hostname === "localhost") return;

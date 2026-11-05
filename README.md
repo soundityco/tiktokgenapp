@@ -1,4 +1,4 @@
-# TkTgen (web)
+# Rollout (web)
 
 Générateur de carrousels TikTok pour artistes : connexion Google, un projet par release, photos prises dans ton Google Drive, hooks (saisie manuelle ou OCR de screenshots), lyrics par sections, génération en un clic, export ZIP.
 

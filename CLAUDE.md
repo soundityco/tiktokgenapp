@@ -1,6 +1,6 @@
-# TkTgen : contexte du projet
+# Rollout (anciennement TkTgen) : contexte du projet
 
-Réponds en français. Andy (Angers) construit TkTgen avec un ami : une web app pour artistes musicaux qui crée des carrousels TikTok (hooks, paroles, photos Drive) et un studio vidéo (prise caméra synchronisée sur l'audio officiel, paroles incrustées).
+Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app pour artistes musicaux qui crée des carrousels TikTok (hooks, paroles, photos Drive) et un studio vidéo (prise caméra synchronisée sur l'audio officiel, paroles incrustées).
 
 ## Stack
 - Next.js 15 (App Router), TypeScript 5 (ne pas passer à 7), Auth.js (next-auth beta) avec login Google + `drive.readonly`.

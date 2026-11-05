@@ -28,7 +28,7 @@ export interface FoundImage {
 /** Hosts the file relay may fetch from (the pictures of these sources). */
 export const IMAGE_HOSTS = /(^|\.)(staticflickr\.com|flickr\.com|openverse\.org|pexels\.com|wikimedia\.org|nappy\.co|rawpixel\.com|stocksnap\.io|wordpress\.com|pinimg\.com)$/i;
 
-const UA = "TkTgen/0.5 (image search for music posts)";
+const UA = "Rollout/0.5 (image search for music posts)";
 
 /** A Flickr picture link at 1024 px (Openverse often gives the 500 px one; the same secret serves both). */
 const flickrLarge = (u: string) => u.replace(/^(https:\/\/live\.staticflickr\.com\/\d+\/\d+_[0-9a-f]+)(?:_[a-z])?\.jpg$/i, "$1_b.jpg");

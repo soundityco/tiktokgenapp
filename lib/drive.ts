@@ -133,7 +133,7 @@ const FOLDER_KEY = "tktgen-drive-folder";
 
 let folderAsk: Promise<string> | null = null;
 /**
- * The "TkTgen" folder at the root of the user's Drive, made the first time. One lookup at a time: several
+ * The "Rollout" folder at the root of the user's Drive, made the first time. One lookup at a time: several
  * uploads starting together (fonts, audio, LUT on a first visit) would otherwise each make their own folder.
  */
 function appFolder(): Promise<string> {
@@ -144,18 +144,39 @@ async function findOrMakeFolder(): Promise<string> {
   try {
     const known = localStorage.getItem(FOLDER_KEY);
     if (known) {
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${known}?fields=id,trashed`, { headers: { Authorization: `Bearer ${await getToken()}` } });
-      if (res.ok && !(await res.json()).trashed) return known;
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${known}?fields=id,trashed,name`, { headers: { Authorization: `Bearer ${await getToken()}` } });
+      const f = res.ok ? await res.json() : null;
+      if (f && !f.trashed) {
+        // The folder of the TkTgen days: it takes the app's new name.
+        if (f.name === "TkTgen") {
+          await fetch(`https://www.googleapis.com/drive/v3/files/${known}`, {
+            method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Rollout" }),
+          }).catch(() => { /* keeps its old name: still found by its id */ });
+        }
+        return known;
+      }
     }
   } catch { /* look it up again */ }
-  const q = "name = 'TkTgen' and mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false";
-  const found = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1" })}`)).json();
-  let id: string | undefined = found.files?.[0]?.id;
+  const folder = async (name: string) => {
+    const q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false`;
+    const found = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1" })}`)).json();
+    return found.files?.[0]?.id as string | undefined;
+  };
+  let id = await folder("Rollout");
+  if (!id) {
+    // Made when the app was called TkTgen: renamed, so its photos, fonts, LUTs and videos stay found.
+    id = await folder("TkTgen");
+    if (id) {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
+        method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Rollout" }),
+      }).catch(() => { /* keeps its old name: still found by its id */ });
+    }
+  }
   if (!id) {
     const res = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
       method: "POST",
       headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "TkTgen", mimeType: "application/vnd.google-apps.folder" }),
+      body: JSON.stringify({ name: "Rollout", mimeType: "application/vnd.google-apps.folder" }),
     });
     if (res.status === 401) signalAuth();
     if (!res.ok) throw new Error(`Google Drive error ${res.status}`);
@@ -166,7 +187,7 @@ async function findOrMakeFolder(): Promise<string> {
 }
 
 /**
- * Upload a file to the TkTgen folder of the user's Drive, in pieces (resumable upload): big camera files
+ * Upload a file to the Rollout folder of the user's Drive, in pieces (resumable upload): big camera files
  * go through, a network hiccup retries the piece. Returns the Drive file id.
  */
 export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal, mime?: string,
@@ -216,7 +237,7 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
   throw new Error("upload incomplete");
 }
 
-/** Files the app put in the TkTgen folder with this label (see uploadToDrive), with their labels. */
+/** Files the app put in the Rollout folder with this label (see uploadToDrive), with their labels. */
 export async function listAppFiles(kind: string): Promise<{ id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[]> {
   const q = `appProperties has { key='tktgen' and value='${kind}' } and trashed = false and '${await appFolder()}' in parents`;
   const out: { id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[] = [];
@@ -231,7 +252,7 @@ export async function listAppFiles(kind: string): Promise<{ id: string; name: st
   return out;
 }
 
-/** A file the app put in the TkTgen folder, by its name (newest first). */
+/** A file the app put in the Rollout folder, by its name (newest first). */
 export async function findInAppFolder(name: string): Promise<string | null> {
   const q = `name = '${name.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}' and trashed = false and '${await appFolder()}' in parents`;
   const data = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", orderBy: "modifiedTime desc", pageSize: "1" })}`)).json();
@@ -348,7 +369,7 @@ const SUMS_KEY = "tktgen-drive-md5";
 const readSums = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(SUMS_KEY) ?? "{}"); } catch { return {}; } };
 
 /**
- * A Drive photo with exactly these bytes: in the TkTgen folder, or among `ids` (the photos of the lists).
+ * A Drive photo with exactly these bytes: in the Rollout folder, or among `ids` (the photos of the lists).
  * The checksums of the list photos are asked once, then kept on this device. Null when none matches.
  */
 export async function findSamePicture(blob: Blob, ids: string[]): Promise<string | null> {
@@ -377,7 +398,7 @@ export async function findSamePicture(blob: Blob, ids: string[]): Promise<string
   return found;
 }
 
-/** Put a picture in the TkTgen folder of the user's Drive; returns its Drive id (a photo of any list). */
+/** Put a picture in the Rollout folder of the user's Drive; returns its Drive id (a photo of any list). */
 export async function sendPictureToDrive(blob: Blob, name: string): Promise<string> {
   return uploadToDrive(blob, name, () => {}, new AbortController().signal, blob.type || "image/jpeg", { tktgen: "photo" });
 }

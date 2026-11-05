@@ -741,7 +741,7 @@ export default function VideoStudio({
   // ---- Google Drive: the camera file, on request, to open the clip on another device ----
   useEffect(() => { void canWriteDrive().then(setDriveWrite).catch(() => setDriveWrite(false)); }, []);
   useEffect(() => () => driveAc.current?.abort(), []);
-  const driveName = (what: string) => `${project.name || "TkTgen"} - ${clip.name} - ${what}.mp4`.replace(/[\\/:*?"<>|]+/g, "-");
+  const driveName = (what: string) => `${project.name || "Rollout"} - ${clip.name} - ${what}.mp4`.replace(/[\\/:*?"<>|]+/g, "-");
   const setDrive = (patch: Partial<NonNullable<VideoSettings["drive"]>>) => setV({ drive: { ...(settingsRef.current.drive ?? {}), ...patch } });
   const sendToDrive = async (blob: Blob) => {
     if (driveJob) return;
@@ -791,7 +791,7 @@ export default function VideoStudio({
     const key = `${project.id}|${audioBlob.size}`;
     if (audioUp.current === key) return;
     audioUp.current = key;
-    const name = `${project.name || "TkTgen"} - ${t("official audio")} - ${project.audioName ?? "audio"}`.replace(/[\\/:*?"<>|]+/g, "-");
+    const name = `${project.name || "Rollout"} - ${t("official audio")} - ${project.audioName ?? "audio"}`.replace(/[\\/:*?"<>|]+/g, "-");
     void uploadToDrive(audioBlob, name, () => {}, new AbortController().signal, audioBlob.type || "application/octet-stream", { tktgen: "audio", project: project.id })
       .then((id) => {
         // Still the same file of the same release: remember where it is.
@@ -1695,7 +1695,7 @@ export default function VideoStudio({
     exportRef.current = ac;
     setErr(null); setNote(null); setExporting(true); setExpMode(null); setExp({ p: 0, step: "audio" });
     const [W, H] = OUT_SIZE(cfg.format);
-    const name = `${project.name || "TkTgen"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
+    const name = `${project.name || "Rollout"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
     let source: VideoSource | null = null;
     let stopPlayer = () => {};
     const el = document.createElement("video");
@@ -2470,7 +2470,7 @@ export default function VideoStudio({
                       ) : (
                         <div className="row">
                           <span className="muted xs grow">{d.originalId
-                            ? (videoBlob ? t("The camera file is on your Drive (TkTgen folder).") : t("The camera file is on your Drive, not on this device."))
+                            ? (videoBlob ? t("The camera file is on your Drive (Rollout folder).") : t("The camera file is on your Drive, not on this device."))
                             : t("Put the camera file on your Drive to open this video on another device.")}</span>
                           {driveJob ? <button className="btn sm quiet" onClick={() => driveAc.current?.abort()}>{t("Cancel")}</button>
                             : !videoBlob && d.originalId ? <button className="btn sm primary" onClick={() => void fetchOriginal()}>{t("Get it on this device")}</button>

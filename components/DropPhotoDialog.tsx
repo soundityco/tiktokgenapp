@@ -10,7 +10,7 @@ export type DropChoice = { list: string; newName?: string; /** The same picture 
 
 /** A picture dropped or pasted on a slide: which photo list of the Drive it also goes into, if any. */
 export default function DropPhotoDialog({ blob, slide, pools, canDrive, busy, onConfirm, onClose, findSame }: {
-  /** Looks for this exact picture in the Drive (lists and TkTgen folder). */
+  /** Looks for this exact picture in the Drive (lists and Rollout folder). */
   findSame: () => Promise<string | null>;
   blob: Blob;
   slide: number;
@@ -71,7 +71,7 @@ export default function DropPhotoDialog({ blob, slide, pools, canDrive, busy, on
                 <input className="input" autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} />
               </label>
             )}
-            <p className="muted xs">{t("The picture is saved in the TkTgen folder of your Drive: the slide shows it on every device, and a list can draw it again.")}</p>
+            <p className="muted xs">{t("The picture is saved in the Rollout folder of your Drive: the slide shows it on every device, and a list can draw it again.")}</p>
           </>
         ) : (
           <p className="muted xs">{t("Reconnect Google to keep it in your Drive: for now it stays on this device only.")}</p>
