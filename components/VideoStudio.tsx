@@ -2011,17 +2011,16 @@ export default function VideoStudio({
   return (
     <div className="video-page" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}>
       <div className="video-wrap">
+      {/* Same columns as the page: the title over the preview, the video controls over the timeline. */}
       <div className="video-head">
-        <button className="btn icon quiet" aria-label={t("Back")} title={t("Back")} onClick={close}><Icon name="back" /></button>
-        <div className="stack" style={{ gap: 2 }}>
-          <span className="label">{t("Video studio")}</span>
-          <h2 className="display">{project.name}</h2>
+        <div className="row nowrap video-title">
+          <button className="btn icon quiet" aria-label={t("Back")} title={t("Back")} onClick={close}><Icon name="back" /></button>
+          <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+            <span className="label">{t("Video studio")}</span>
+            <h2 className="display truncate">{project.name}</h2>
+          </div>
         </div>
-        <span className="grow" />
-        <div className="row nowrap" style={{ alignItems: "flex-end" }}>
-          {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
-          <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
-          <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
+        <div className="row nowrap video-tools">
           <label className="field" style={{ margin: 0 }}>{t("Video")}
             <select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
@@ -2037,6 +2036,10 @@ export default function VideoStudio({
                 onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
             </>)}
           </Menu>
+          {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
+          <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
+          <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
+          <span className="grow" />
           <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}>{status.text}</span>
           <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
             title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
