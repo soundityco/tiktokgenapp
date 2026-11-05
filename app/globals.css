@@ -546,3 +546,8 @@ details.sec > summary .sec-sub { margin-right: auto; padding-left: .4em; color: 
 :where(.stack, .col.side) > details.sec + details.sec { margin-top: calc(-1 * var(--gap, 0px)); }
 /* Safari marks a clicked panel title as keyboard focus: a quiet grey ring, not the blue one. */
 details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-offset: 2px; }
+/* The header of both studios: the same names of fields (small, plain) above their controls. */
+.studio-head .field { font-family: var(--sans); font-size: 12px; letter-spacing: normal; text-transform: none; color: var(--muted); margin: 0; }
+.studio-head .stepper span { text-transform: none; color: var(--text); }
+.carousel-head { margin-bottom: var(--s5); }
+.carousel-release { margin-bottom: var(--s5); }

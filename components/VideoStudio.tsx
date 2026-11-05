@@ -2197,7 +2197,7 @@ export default function VideoStudio({
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">
-      <div className="video-head">
+      <div className="video-head studio-head">
         <div className="row nowrap video-title">
           <button className="btn icon quiet" aria-label={t("Back")} title={t("Back")} onClick={close}><Icon name="back" /></button>
           <div className="stack" style={{ gap: 2, minWidth: 0 }}>

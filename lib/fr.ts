@@ -1,5 +1,9 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Carousel studio": "Studio carrousel",
+  "First section": "Première section",
+  "None yet": "Aucune pour l'instant",
+  "The lists marked “this project” belong to this release; the others are shared by all.": "Les listes marquées « ce projet » appartiennent à cette release ; les autres sont partagées par toutes.",
   "Release": "Release",
   "For its {n} videos": "Pour ses {n} vidéos",
   "The audio and the lyrics belong to the release: every video of it uses them.": "L'audio et les paroles appartiennent à la release : toutes ses vidéos les utilisent.",

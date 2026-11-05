@@ -950,6 +950,9 @@ export default function Studio({ userName }: { userName: string }) {
         ) : (
         <>
         <aside className="col side l">
+          <div className="tree-head carousel-release" title={t("The lists marked “this project” belong to this release; the others are shared by all.")}>
+            <span className="label">{t("Release")}</span><span className="tree-name">{project.name}</span>
+          </div>
           <section className="group">
             <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
             {listRows("text")}
@@ -961,40 +964,51 @@ export default function Studio({ userName }: { userName: string }) {
         </aside>
 
         <main className="col center">
-          <div className="toolbar">
-            <button className="btn primary" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
-            <button className="btn icon quiet" aria-label={t("Undo")} title={t("Undo")} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
-            <button className="btn icon quiet" aria-label={t("Redo")} title={t("Redo")} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
-            <div className="stepper">
-              <button className="btn quiet icon sm" aria-label={t("Delete slide")} title={t("Delete slide")} onClick={() => deleteSlide(sel)} disabled={nSlides <= 1}><Icon name="minus" size={14} /></button>
-              <span>{nSlides === 1 ? t("1 slide") : t("{n} slides", { n: nSlides })}</span>
-              <button className="btn quiet icon sm" aria-label={t("Add a slide after this one")} title={t("Add a slide after this one")} onClick={addSlide} disabled={nSlides >= MAX_SLIDES}><Icon name="plus" size={14} /></button>
+          {/* Same header as the video studio: the release on the left, its tools, the export on the right. */}
+          <div className="video-head studio-head carousel-head">
+            <div className="row nowrap video-title">
+              <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                <span className="label">{t("Carousel studio")}</span>
+                <h2 className="display truncate">{project.name}</h2>
+              </div>
             </div>
-            <div className="row" style={{ gap: "var(--s1)" }}>
-              <select className="input" style={{ width: 170 }} aria-label={t("Lyrics section")} value={project.lyricsSectionId ?? ""} onChange={(e) => updProject((p) => ({ ...p, lyricsSectionId: e.target.value || null }))}>
-                <option value="">{project.lyrics.length ? t("Lyrics: first section") : t("Lyrics: none yet")}</option>
-                {project.lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-              <button className="btn" onClick={() => setOverlay({ k: "lyrics" })}>{t("Edit lyrics")}</button>
-            </div>
-            <span className="grow" />
-            <Menu trigger={(_, toggle) => <button className="btn" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
-              {() => (
-                <div className="stack" style={{ padding: "var(--s2) var(--s3)", minWidth: 270 }}>
-                  <label className="check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
-                  <label className="check"><input type="checkbox" checked={!!ws.favorTop} onChange={(e) => upd((w) => ({ ...w, favorTop: e.target.checked }))} />{t("Favor my best hooks (by TikTok views)")}</label>
-                  <label className="field">{t("Export format")}
-                    <select className="input" value={ws.exportFormat} onChange={(e) => upd((w) => ({ ...w, exportFormat: e.target.value as "jpg" | "png" }))}>
-                      <option value="jpg">JPG</option><option value="png">PNG</option>
-                    </select>
-                  </label>
+            <div className="row nowrap video-tools">
+              <button className="btn primary" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+              <div className="field">{t("Slides")}
+                <div className="stepper">
+                  <button className="btn quiet icon sm" aria-label={t("Delete slide")} title={t("Delete slide")} onClick={() => deleteSlide(sel)} disabled={nSlides <= 1}><Icon name="minus" size={14} /></button>
+                  <span>{nSlides === 1 ? t("1 slide") : t("{n} slides", { n: nSlides })}</span>
+                  <button className="btn quiet icon sm" aria-label={t("Add a slide after this one")} title={t("Add a slide after this one")} onClick={addSlide} disabled={nSlides >= MAX_SLIDES}><Icon name="plus" size={14} /></button>
                 </div>
-              )}
-            </Menu>
-            <button className="btn primary" onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
-            {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn" onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" />{t("Share")}</button>}
-            {exportProgress && <span className="badge" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
-            {busy && <button className="btn" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
+              </div>
+              <label className="field">{t("Lyrics")}
+                <select className="input" style={{ width: 170 }} value={project.lyricsSectionId ?? ""} onChange={(e) => updProject((p) => ({ ...p, lyricsSectionId: e.target.value || null }))}>
+                  <option value="">{project.lyrics.length ? t("First section") : t("None yet")}</option>
+                  {project.lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </label>
+              <button className="btn" onClick={() => setOverlay({ k: "lyrics" })}>{t("Edit lyrics")}</button>
+              <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
+              <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
+              <span className="grow" />
+              {exportProgress && <span className="badge" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
+              {busy && <button className="btn" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
+              <Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
+                {() => (
+                  <div className="stack" style={{ padding: "var(--s2) var(--s3)", minWidth: 270 }}>
+                    <label className="check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
+                    <label className="check"><input type="checkbox" checked={!!ws.favorTop} onChange={(e) => upd((w) => ({ ...w, favorTop: e.target.checked }))} />{t("Favor my best hooks (by TikTok views)")}</label>
+                    <label className="field">{t("Export format")}
+                      <select className="input" value={ws.exportFormat} onChange={(e) => upd((w) => ({ ...w, exportFormat: e.target.value as "jpg" | "png" }))}>
+                        <option value="jpg">JPG</option><option value="png">PNG</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+              </Menu>
+              {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn icon" aria-label={t("Share")} title={t("Share")} onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" /></button>}
+              <button className="btn primary" onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
+            </div>
           </div>
           {warnings.length > 0 && (
             <details className="notice warn preflight">
