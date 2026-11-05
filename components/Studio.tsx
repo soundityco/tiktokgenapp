@@ -18,7 +18,6 @@ import DriveBrowser from "./DriveBrowser";
 import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
 import Inspector from "./Inspector";
-import Logo from "./Logo";
 import Wordmark from "./Wordmark";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
 import { withPreset } from "./TextControls";
@@ -864,7 +863,7 @@ export default function Studio({ userName }: { userName: string }) {
   return (
     <div className="app">
       <header className="top">
-        <div className="brand"><Logo /> <Wordmark height={13} /> <small>{VERSION}</small></div>
+        <div className="brand"><Wordmark height={13} /> <small>{VERSION}</small></div>
         <select className="input" style={{ width: 210 }} aria-label={t("Project")} value={project.id} onChange={(e) => upd((w) => ({ ...w, currentProjectId: e.target.value }))}>
           {ws.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
