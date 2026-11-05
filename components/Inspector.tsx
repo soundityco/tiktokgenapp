@@ -3,7 +3,7 @@ import { defaultPic, defaultStyle } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
 import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
-import { CaseOptions, FontPicker, LookExtras, StylePresets, TextColors } from "./TextControls";
+import { CaseOptions, FontPicker, LookExtras, presetOf, StylePresets, TextColors } from "./TextControls";
 import { Range, Section } from "./ui";
 
 interface Props {
@@ -109,8 +109,8 @@ export default function Inspector({
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
         </Section>
 
-        <Section id="slide-presets" title={t("Style presets")} open={false}>
-          <StylePresets presets={presets} onSave={onSavePreset} onApply={onApplyPreset} onDelete={onDeletePreset} />
+        <Section id="slide-presets" title={t("Style presets") + (presetOf(presets, st) ? ` · ${presetOf(presets, st)!.name}` : "")} open={false}>
+          <StylePresets presets={presets} current={st} onSave={onSavePreset} onApply={onApplyPreset} onDelete={onDeletePreset} />
         </Section>
 
         <Section id="slide-position" title={t("Position")} open={false}>

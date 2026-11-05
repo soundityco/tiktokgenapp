@@ -21,7 +21,7 @@ import { convertSegment, cropFor, grabFrame, type ConvertCrop, type ConvertStep 
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
-import { StylePresets, withPreset } from "./TextControls";
+import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import { ConfirmDialog, Menu, Modal, PromptDialog, Range, Section } from "./ui";
 
@@ -2638,8 +2638,8 @@ export default function VideoStudio({
                       onReset={() => setV({ hookStyle: undefined })}
                     />
                   </div>
-                  <Section id="hook-style-presets" title={t("Style presets")} open={false}>
-                    <StylePresets presets={presets} onSave={(name) => onSavePreset(name, hookStyle)}
+                  <Section id="hook-style-presets" title={t("Style presets") + (presetOf(presets, hookStyle) ? ` · ${presetOf(presets, hookStyle)!.name}` : "")} open={false}>
+                    <StylePresets presets={presets} current={hookStyle} onSave={(name) => onSavePreset(name, hookStyle)}
                       onApply={(p) => setV({ hookStyle: withPreset(hookStyle, p) })} onDelete={onDeletePreset} />
                   </Section>
                 </>
@@ -2671,8 +2671,8 @@ export default function VideoStudio({
                   onFonts={onFonts}
                   onReset={() => setV({ captionStyle: undefined })}
                 />
-              <Section id="lyrics-style-presets" title={t("Style presets")} open={false}>
-                <StylePresets presets={presets} onSave={(name) => onSavePreset(name, captionStyle)}
+              <Section id="lyrics-style-presets" title={t("Style presets") + (presetOf(presets, captionStyle) ? ` · ${presetOf(presets, captionStyle)!.name}` : "")} open={false}>
+                <StylePresets presets={presets} current={captionStyle} onSave={(name) => onSavePreset(name, captionStyle)}
                   onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
               </Section>
               </div>

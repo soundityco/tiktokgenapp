@@ -736,4 +736,5 @@ export const FR: Record<string, string> = {
   "Send ({size})": "Envoyer ({size})",
   "Not allowed yet.": "Pas encore autorisé.",
   "Drop a file anywhere to import it.": "Glisse un fichier n'importe où pour l'importer.",
+  "This is the style now": "C'est le style actuel",
 };

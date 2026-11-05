@@ -491,3 +491,5 @@ details.more > summary::after { content: "+"; font-family: var(--mono); color: v
 details.more[open] > summary::after { content: "−"; }
 .more-body { display: grid; gap: 4px; padding-top: 6px; }
 .more-body p { margin: 0; }
+.btn.preset.on { border-color: var(--accent-hi); color: var(--text); }
+.btn.preset.on svg { color: var(--accent-hi); flex: none; }

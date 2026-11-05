@@ -246,9 +246,19 @@ export function FontPicker({
 }
 
 /** Saved text styles (look + font), the same list in the carousel and the video studio. */
+/** Same look (font, colours, effects, sizes…), wherever the text is placed: a preset does not keep the position. */
+export function sameLook(a: TextStyle, b: TextStyle): boolean {
+  const norm = (st: TextStyle) => JSON.stringify(Object.entries(st).filter(([k, v]) => k !== "x" && k !== "y" && v !== undefined).sort(([x], [y]) => x.localeCompare(y)));
+  return norm(a) === norm(b);
+}
+/** The preset this style is exactly, if any. */
+export const presetOf = (presets: StylePreset[], st: TextStyle) => presets.find((p) => sameLook(p.style, st));
+
 export function StylePresets({
-  presets, onSave, onApply, onDelete,
+  presets, onSave, onApply, onDelete, current,
 }: {
+  /** The style being edited: its preset shows as chosen. */
+  current?: TextStyle;
   presets: StylePreset[];
   onSave: (name: string) => void;
   onApply: (p: StylePreset) => void;
@@ -270,9 +280,12 @@ export function StylePresets({
         <button className="btn sm" type="submit" disabled={!name.trim()}>{t("Save current style")}</button>
       </form>
       {!presets.length && <span className="muted xs">{t("No presets yet.")}</span>}
-      {presets.map((p) => (
+      {presets.map((p) => {
+        const on = !!current && sameLook(p.style, current);
+        return (
         <div className="row nowrap" key={p.id}>
-          <button className="btn sm grow" onClick={() => onApply(p)} title={t("Apply")}>
+          <button className={"btn sm grow preset" + (on ? " on" : "")} onClick={() => onApply(p)} title={on ? t("This is the style now") : t("Apply")} aria-pressed={on}>
+            {on && <Icon name="check" size={13} />}
             <span className="truncate">{p.name}</span>
             <span className="muted xs truncate">{p.style.customFont ?? p.style.googleFont ?? FONT_LABELS[p.style.font]}</span>
           </button>
@@ -280,7 +293,8 @@ export function StylePresets({
             <Icon name="trash" size={13} />
           </button>
         </div>
-      ))}
+        );
+      })}
       <p className="muted xs">{t("A preset keeps the look and the font, not the position of the text.")}</p>
     </div>
   );
