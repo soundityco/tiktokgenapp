@@ -2222,12 +2222,13 @@ export default function VideoStudio({
           {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
           <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
           <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
-          <span className="grow" />
+          <div className="row nowrap head-actions">
           <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}>{status.text}</span>
           <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
             title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
             <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
           </button>
+          </div>
         </div>
       </div>
       <div className={"video-grid" + (settings.format === "16:9" ? " wide" : "")}>

@@ -990,7 +990,7 @@ export default function Studio({ userName }: { userName: string }) {
               <button className="btn" onClick={() => setOverlay({ k: "lyrics" })}>{t("Edit lyrics")}</button>
               <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
               <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
-              <span className="grow" />
+              <div className="row nowrap head-actions">
               {exportProgress && <span className="badge" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
               <Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
@@ -1008,6 +1008,7 @@ export default function Studio({ userName }: { userName: string }) {
               </Menu>
               {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn icon" aria-label={t("Share")} title={t("Share")} onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" /></button>}
               <button className="btn primary" onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
+              </div>
             </div>
           </div>
           {warnings.length > 0 && (

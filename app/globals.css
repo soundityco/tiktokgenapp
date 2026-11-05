@@ -547,7 +547,14 @@ details.sec > summary .sec-sub { margin-right: auto; padding-left: .4em; color: 
 /* Safari marks a clicked panel title as keyboard focus: a quiet grey ring, not the blue one. */
 details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-offset: 2px; }
 /* The header of both studios: the same names of fields (small, plain) above their controls. */
-.studio-head .field { font-family: var(--sans); font-size: 12px; letter-spacing: normal; text-transform: none; color: var(--muted); margin: 0; }
+/* The names above the header's controls: the same small caps as the studio's name, on one line with it
+   (the name of the release below takes the height of a control). */
+.studio-head .field { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0; gap: 6px; }
+.studio-head .video-title > .stack { gap: 6px !important; }
+.studio-head .video-title .display { line-height: var(--h); margin: 0; }
+/* The tools wrap onto a second line when the board is narrow; the export group stays whole, at the right. */
+.studio-head .video-tools { flex-wrap: wrap; row-gap: var(--s3); }
+.studio-head .head-actions { margin-left: auto; align-items: flex-end; gap: var(--s3); flex: none; }
 .studio-head .stepper span { text-transform: none; color: var(--text); }
 .carousel-head { margin-bottom: var(--s5); }
 .carousel-release { margin-bottom: var(--s5); }
