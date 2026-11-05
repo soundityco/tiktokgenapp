@@ -2154,6 +2154,8 @@ export default function VideoStudio({
             {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
               <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
             )}
+            </div>
+          </div>
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
             <button className={"btn sm" + (settings.format !== "16:9" ? " on" : "")} aria-pressed={settings.format !== "16:9"}
@@ -2192,8 +2194,6 @@ export default function VideoStudio({
             ))}
           </div>
           </Section>
-            </div>
-          </div>
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">
