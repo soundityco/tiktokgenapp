@@ -510,3 +510,5 @@ details.more[open] > summary::after { content: "−"; }
 .hint:hover, .hint:focus-visible { color: var(--text); border-color: var(--muted); outline: none; }
 .paste-fold { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); gap: 8px; }
 .video-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.col-head { gap: 6px; align-items: center; min-height: 28px; }
+.video-shell .col-head .label { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }

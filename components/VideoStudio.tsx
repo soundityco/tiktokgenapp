@@ -2642,7 +2642,12 @@ export default function VideoStudio({
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")}>
           {tab === "hook" ? (
             <div className="stack">
-              <span className="label row" style={{ gap: 6 }}>{t("Hook style")} <Hint text={settings.hookStyle ? t("Own style for the hooks.") : t("Default hook style: white with a black outline, at the top, until you change something.")} /></span>
+              <div className="row col-head">
+                <span className="label">{t("Hook style")}</span>
+                <Hint text={settings.hookStyle ? t("Own style for the hooks.") : t("Default hook style: white with a black outline, at the top, until you change something.")} />
+                <span className="grow" />
+                <button className="btn sm quiet" onClick={() => setV({ hookStyle: undefined })} disabled={!settings.hookStyle}>{t("Reset")}</button>
+              </div>
               {hooks.length === 0 ? (
                 <div className="stack">
                   <p className="muted xs">{t("No hook on this video yet.")}</p>
@@ -2672,7 +2677,12 @@ export default function VideoStudio({
                         </div>
           ) : (
             <div className="stack">
-              <span className="label row" style={{ gap: 6 }}>{t("Lyrics style")} <Hint text={settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")} /></span>
+              <div className="row col-head">
+                <span className="label">{t("Lyrics style")}</span>
+                <Hint text={settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")} />
+                <span className="grow" />
+                <button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button>
+              </div>
 
               <div className="stack">
               <Section id="lyrics-style-display" title={t("Display")}>
@@ -2703,15 +2713,14 @@ export default function VideoStudio({
               </div>
                         </div>
           )}
-          <div id="video-color">
-            <Section id="video-color" title={t("Colour")} open={false}>
+          <div id="video-color" className="stack">
+            <div className="row col-head"><span className="label">{t("Colour")}</span></div>
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 clips={clips.length}
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
-                        </Section>
-          </div>
+                      </div>
         </aside>
       {clipDialog === "rename" && (
         <PromptDialog title={t("Rename the video")} label={t("Name")} initial={clipName(clip)} confirmLabel={t("Rename")}

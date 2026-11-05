@@ -29,7 +29,8 @@ export default function CaptionStyle({
   fonts: string[];
   onChange: (patch: Partial<TextStyle>) => void;
   onFonts: (names: string[]) => void;
-  onReset: () => void;
+  /** Reset of the whole style: shown by the panel (next to its title). */
+  onReset?: () => void;
 }) {
   const { t } = useT();
   // Folding panels, remembered per text (lyrics / hook): only the first is open the first time.
@@ -73,9 +74,6 @@ export default function CaptionStyle({
         <Range label={t("Vertical")} value={Math.round(style.y)} display={`${Math.round(style.y)}%`} min={0} max={100} onChange={(v) => onChange({ y: v })} onReset={() => onChange({ y: defaults.y })} />
         <div><button className="btn sm" onClick={() => onChange({ x: 50 })}>{t("Center horizontally")}</button></div>
       </Section>
-      <div className="row">
-        <button className="btn sm quiet" onClick={onReset}>{t("Reset text style")}</button>
-      </div>
     </div>
   );
 }
