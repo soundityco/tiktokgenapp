@@ -27,7 +27,9 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips, onApplyAll, onLutStored }: {
+export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips, onApplyAll, onLutStored, sdr }: {
+  /** The camera file is standard SDR: the grade is not needed. */
+  sdr?: boolean;
   grade: VideoGrade | undefined;
   onChange: (g: VideoGrade | undefined) => void;
   raw: boolean;
@@ -67,16 +69,34 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
       <div className="stack">
         <p className="muted xs">{t("Grade the camera footage here, live: the log is converted like a CST in DaVinci, then your sliders and your look LUT are applied. The export applies it on the 10-bit camera file.")}</p>
         <div className="row">
-          <button className="btn sm primary" onClick={() => onChange({ ...NEUTRAL_GRADE, ...(luts.length ? { lut: luts[luts.length - 1] } : {}) })}>{t("Grade this video")}</button>
+          <button className="btn sm primary" onClick={() => onChange(sdr
+            ? { ...NEUTRAL_GRADE, profile: "rec709" } // standard video: the simple settings only
+            : { ...NEUTRAL_GRADE, ...(luts.length ? { lut: luts[luts.length - 1] } : {}) })}>{t("Grade this video")}</button>
         </div>
       </div>
     );
   }
 
   const colour = g.profile !== "none";
+  // Standard footage: only the simple sliders, unless the camera profile and LUT were turned back on.
+  const simple = !!sdr && !g.sdrOverride;
   return (
     <>
+      {simple && (
+        <p className="notice xs">
+          {t("Standard SDR video detected (a phone, S-Cinetone, Rec.709): the camera profile and the look LUT are turned off, they do not apply to this kind of video. The simple settings below start at zero.")}{" "}
+          <button className="btn sm" onClick={() => set({ sdrOverride: true })}>{t("Turn back on")}</button>
+        </p>
+      )}
+      {sdr && !simple && (
+        <p className="notice xs">
+          {t("Camera profile and LUT turned back on for this standard SDR video.")}{" "}
+          <button className="btn sm quiet" onClick={() => { onRaw(false); onChange({ ...NEUTRAL_GRADE, profile: "rec709" }); }}>{t("Turn off again")}</button>
+        </p>
+      )}
       <Section id="color-profile" title={t("Profile and LUT")}>
+        {/* Standard video: the camera conversion and the LUT are off (greyed), the simple sliders below stay. */}
+        <fieldset className={"plain-set" + (simple ? " off" : "")} disabled={simple} title={simple ? t("Off for a standard SDR video") : undefined}>
         <label className="field">
           <span>{t("Camera profile")}</span>
           <select className="input" value={g.profile} onChange={(e) => set({ profile: e.target.value as VideoGrade["profile"] })}>
@@ -105,6 +125,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}
           </>
         )}
+      </fieldset>
       </Section>
 
       {colour && (

@@ -666,4 +666,9 @@ export const FR: Record<string, string> = {
   "Profile and LUT": "Profil et LUT",
   "Letter spacing": "Espacement des lettres",
   "No camera video yet": "Pas encore de vidéo caméra",
+  "Off for a standard SDR video": "Désactivé pour une vidéo SDR standard",
+  "Standard SDR video detected (a phone, S-Cinetone, Rec.709): the camera profile and the look LUT are turned off, they do not apply to this kind of video. The simple settings below start at zero.": "Vidéo SDR standard détectée (téléphone, S-Cinetone, Rec.709) : le profil caméra et la LUT sont désactivés, ils ne s'appliquent pas à ce type de vidéo. Les réglages simples ci-dessous partent de zéro.",
+  "Turn back on": "Réactiver",
+  "Camera profile and LUT turned back on for this standard SDR video.": "Profil caméra et LUT réactivés pour cette vidéo SDR standard.",
+  "Turn off again": "Désactiver à nouveau",
 };

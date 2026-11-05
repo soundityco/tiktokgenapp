@@ -159,8 +159,13 @@ const INPUT: Record<Exclude<CameraProfile, "none">, { decode: (v: number) => num
 
 /** Does this grade change the picture's colours (otherwise no LUT is applied at all)? */
 export function gradesColour(g: VideoGrade | undefined): g is VideoGrade {
-  return !!g && g.profile !== "none";
+  if (!g || g.profile === "none") return false;
+  // Standard footage with every slider at zero and no LUT: the picture as it is, nothing to compute.
+  return !(g.profile === "rec709" && !g.lut && g.exposure === 0 && g.contrast === 1 && g.temp === 0 && g.tint === 0 && g.sat === 1);
 }
+
+/** The grade turns log or HDR footage into SDR (the part worth doing on the 10-bit camera file). */
+export const convertsFootage = (g: VideoGrade | undefined) => !!g && g.profile !== "none" && g.profile !== "rec709";
 
 /**
  * The whole colour grade as one size³ LUT (RGB, red fastest), input = the camera's code values.

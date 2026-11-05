@@ -370,3 +370,5 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .seg { display: inline-flex; width: fit-content; justify-self: start; align-self: flex-start; border: 1px solid var(--line-2); border-radius: var(--r); padding: 2px; gap: 2px; margin-top: var(--s3); }
 .seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 3px; background: none; color: var(--muted); font-size: var(--fs-sm); cursor: pointer; }
 .seg button.on { background: var(--raised); color: var(--text); }
+.plain-set { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: var(--s3); }
+.plain-set.off { opacity: .4; }

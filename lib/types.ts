@@ -172,6 +172,8 @@ export interface VideoHook {
 
 /** Colour grade of a camera clip (see lib/grade.ts). Sliders are applied in linear light / DaVinci Intermediate. */
 export interface VideoGrade {
+  /** Standard SDR video: the camera profile and the LUT were turned back on by hand (off by default). */
+  sdrOverride?: boolean;
   /** How the camera recorded the colours: converted to DaVinci Wide Gamut / Intermediate first. */
   profile: "slog3-cine" | "slog3" | "rec709" | "applelog" | "hlg" | "pq" | "none";
   /** Look LUT made in DaVinci (input DWG / Intermediate), kept on this device (IndexedDB "lut:<id>"). */

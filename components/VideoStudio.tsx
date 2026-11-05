@@ -10,7 +10,7 @@ import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, ke
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
-import { buildGradeLut, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
+import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
 import { textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
@@ -302,12 +302,16 @@ export default function VideoStudio({
   const settings = useMemo<VideoSettings>(() => ({ ...DEFAULT_VIDEO, ...clip }), [clip]);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const clipIdRef = useRef(clip.id);
+  clipIdRef.current = clip.id;
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const videoUrlRef = useRef(videoUrl);
   videoUrlRef.current = videoUrl;
+  /** The clip the camera file in the player belongs to: right after a switch the old file is still loaded. */
+  const fileClip = useRef<string | null>(null);
   /** The browser opened the camera file (it can play it): until then the timeline shows it is loading. */
   const [playerReady, setPlayerReady] = useState(false);
   /** The user let the app create files in their Drive (null: not known yet). */
@@ -432,7 +436,7 @@ export default function VideoStudio({
   /** Default look of the hooks: white, black outline (20 %), as typed, centred near the top. Font of the slide. */
   const hookDefault: TextStyle = useMemo(() => ({
     ...slideStyle, look: "outline", size: 56, color: "#ffffff", accent: "#000000", stroke: 20, case: "asis", align: "center",
-    width: 80, lineHeight: 1.15, x: 50, y: 20,
+    width: 70, lineHeight: 1.15, x: 50, y: 20,
   }), [slideStyle]);
   const hookStyle: TextStyle = useMemo(() => settings.hookStyle ?? hookDefault, [settings.hookStyle, hookDefault]);
   const hookStyleRef = useRef(hookStyle);
@@ -529,7 +533,8 @@ export default function VideoStudio({
 
   /** The <video> as a picture at official time `time`; none outside the part of the track the camera recorded. */
   const pictureOf = (el: HTMLVideoElement | null, time: number): Picture | null => {
-    if (!videoUrlRef.current) return null; // this video has no camera file (yet): nothing to show
+    // This video has no camera file (yet), or the player still holds the previous video's: nothing to show.
+    if (!videoUrlRef.current || fileClip.current !== clipIdRef.current) return null;
     const off = settingsRef.current.offset;
     const inVideo = time >= off - 0.001 && (!Number.isFinite(el?.duration) || time <= off + (el?.duration ?? 0) + 0.001);
     // No picture from the player yet (Safari, before the first play): the frame read from the file.
@@ -602,7 +607,7 @@ export default function VideoStudio({
     const g = c?.getContext("2d");
     if (!c || !g) return;
     const el = videoRef.current;
-    const keep = !sourceRef.current && !!el && el.readyState >= 2;
+    const keep = !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
     const boxes = drawScene(g, c.width, c.height, pictureOf(el, time), time, { raw: rawRef.current, keep });
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
@@ -656,6 +661,7 @@ export default function VideoStudio({
       try {
         const t0 = performance.now();
         // Nothing of the previous video stays on screen.
+        fileClip.current = null;
         posterRef.current = null;
         stillRef.current?.bmp.close();
         stillRef.current = null;
@@ -699,7 +705,9 @@ export default function VideoStudio({
             })
             .catch(() => { if (!off && token === ioRef.current) setErr(t("Could not read this audio file.")); });
         }
-        if (b) setVideoBlob(b);
+        if (b) { fileClip.current = clip.id; setVideoBlob(b); }
+        // No camera file: a picture kept by mistake for this video (older versions) is dropped.
+        else { posterRef.current = null; void delMedia(`poster:${clip.id}`).catch(() => {}); }
       } catch { /* IndexedDB unavailable */ }
     })();
     return () => { off = true; };
@@ -800,6 +808,7 @@ export default function VideoStudio({
     try {
       const blob = await downloadDriveFileProgress(id, (p) => setDriveJob({ kind: "fetch", p }), ac.signal);
       await putMedia(`video:${clip.id}`, blob).catch(() => {});
+      fileClip.current = clip.id;
       setVideoBlob(blob);
     } catch (e) {
       if (!ac.signal.aborted) setDriveErr(t("The camera file could not be fetched from Google Drive."));
@@ -865,6 +874,7 @@ export default function VideoStudio({
       const same = cur.videoSize ? cur.videoSize === f.size
         : !!info.duration && !!cur.source?.duration && Math.abs(info.duration - cur.source.duration) < 0.05;
       if (same) {
+        fileClip.current = clip.id;
         setVideoBlob(f);
         if (!cur.videoSize) setV({ videoSize: f.size });
         void askPersistentStorage();
@@ -877,6 +887,7 @@ export default function VideoStudio({
     posterRef.current = null;
     stillRef.current = null;
     await delMedia(posterKey).catch(() => {});
+    fileClip.current = clip.id;
     setVideoBlob(f);
     setVideoDur(0);
     setV({ videoName: f.name, videoSize: f.size, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
@@ -895,15 +906,30 @@ export default function VideoStudio({
     const info = await probeVideo(f);
     const cur = settingsRef.current;
     const patch: Partial<VideoSettings> = { source: info };
-    const keep = cur.grade && !fresh;
-    if (!keep && info.profile) {
-      const last = lastLut();
-      patch.grade = { ...NEUTRAL_GRADE, ...(cur.grade ?? {}), profile: info.profile, lut: info.colour === "log" ? cur.grade?.lut ?? last : undefined };
-    } else if (fresh && cur.grade && info.colour === "sdr") {
-      patch.grade = { ...cur.grade, profile: "rec709" };
+    // A phone that says nothing about its colours films standard SDR.
+    const colour = info.colour === "unknown" && info.kind === "phone" ? "sdr" : info.colour;
+    if (cur.grade && !fresh) { setV(patch); return; } // an older video read again: its grade stays as set
+    if (colour === "log" && info.profile) {
+      // Log: the camera's conversion, the look LUT and the sliders of the previous video (same camera, most likely).
+      const prev = cur.grade?.profile !== "none" && cur.grade?.profile !== "hlg" && cur.grade?.profile !== "pq" ? cur.grade : undefined;
+      patch.grade = { ...NEUTRAL_GRADE, ...(prev ?? {}), profile: info.profile, lut: prev?.lut ?? lastLut() };
+    } else if (colour === "hdr" && info.profile) {
+      // HDR: brought down to SDR, no look LUT (made for log footage) and no log sliders.
+      patch.grade = { ...NEUTRAL_GRADE, profile: info.profile };
+    } else if (colour === "sdr") {
+      // Standard video: no log conversion, no LUT; the simple sliders are there, all at zero (the picture as it is).
+      patch.grade = { ...NEUTRAL_GRADE, profile: "rec709" };
     }
     setV(patch);
   };
+  // Standard SDR video: no log conversion, no LUT, nothing applied (sliders at zero) unless turned back on by hand.
+  // Also puts right a video graded by an older version (LUT, vignette and grain copied from a log video).
+  const sdrSource = settings.source?.colour === "sdr" || (settings.source?.kind === "phone" && settings.source.colour === "unknown");
+  useEffect(() => {
+    const g = settings.grade;
+    if (sdrSource && g && !g.sdrOverride && (g.lut || g.profile !== "rec709")) setV({ grade: { ...NEUTRAL_GRADE, profile: "rec709" } });
+  }, [sdrSource, settings.grade]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Videos imported before the detection existed (or before it read the duration): read them once.
   useEffect(() => {
     if (videoBlob && (!settings.source || settings.source.duration === undefined)) void describeVideo(videoBlob, false);
@@ -1024,7 +1050,8 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     const until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
     const from = head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
-    const el = videoRef.current;
+    // No camera file: only the sound plays, at once.
+    const el = videoUrl && fileClip.current === clip.id ? videoRef.current : null;
     if (el) {
       el.muted = true;
       await whenReady(el);
@@ -1679,7 +1706,8 @@ export default function VideoStudio({
         // Frames decoded from the file itself (works in a background tab); the hidden <video> only as a fallback.
         setExp({ p: 0, step: "read" });
         // A colour grade is applied by ffmpeg on the camera file itself (10-bit), not on the 8-bit frames of the browser.
-        const bake = gradesColour(cfg.grade) && (!cfg.grade.lut || !!look);
+        // Log / HDR footage: graded on the 10-bit camera file by ffmpeg. Standard footage with a few sliders: on the GPU.
+        const bake = gradesColour(cfg.grade) && (convertsFootage(cfg.grade) || !!cfg.grade.lut) && (!cfg.grade.lut || !!look);
         const direct = () => videoBlob ? VideoSource.open(videoBlob, from - cfg.offset, until - cfg.offset, (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal) : Promise.resolve(null);
         source = bake ? null : await direct();
         let graded = false;
@@ -2346,6 +2374,7 @@ export default function VideoStudio({
           {tab === "color" && (
             <div className="tab-body">
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
+                sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 clips={clips.length}
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
