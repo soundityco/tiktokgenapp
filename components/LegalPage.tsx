@@ -6,7 +6,7 @@ export default function LegalPage({ title, updated, children }: { title: string;
   return (
     <main className="prose">
       <Link href="/" className="row" style={{ textDecoration: "none", marginBottom: "var(--s4)" }}>
-        <Logo size={28} /><Wordmark height={14} />
+        <Logo size={28} /><Wordmark height={18} />
       </Link>
       <h1>{title}</h1>
       <p className="label">Last updated · {updated}</p>

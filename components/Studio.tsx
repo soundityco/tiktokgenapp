@@ -863,7 +863,7 @@ export default function Studio({ userName }: { userName: string }) {
   return (
     <div className="app">
       <header className="top">
-        <div className="brand"><Wordmark height={13} /> <small>{VERSION}</small></div>
+        <div className="brand"><Wordmark height={18} /> <small>{VERSION}</small></div>
         <select className="input" style={{ width: 210 }} aria-label={t("Project")} value={project.id} onChange={(e) => upd((w) => ({ ...w, currentProjectId: e.target.value }))}>
           {ws.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>

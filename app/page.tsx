@@ -15,7 +15,7 @@ export default async function Login() {
   return (
     <main className="login">
       <div className="login-main">
-        <div className="row" style={{ gap: 14 }}><Logo size={36} /><Wordmark height={20} /></div>
+        <div className="row" style={{ gap: 14 }}><Logo size={36} /><Wordmark height={26} /></div>
         <h1 className="display" style={{ fontSize: 56 }}>{t("Make your next")} <em>{t("post")}</em>.</h1>
         <p className="muted" style={{ fontSize: 15 }}>
           {t("Turn your photos, hooks and lyrics into TikTok carousels in one click. Sign in with Google to reach your releases and the photo folders in your Drive.")}
