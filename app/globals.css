@@ -50,7 +50,9 @@ a { color: inherit; }
 .btn.primary:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
 .btn.quiet { border-color: transparent; color: var(--muted); }
 .btn.quiet:hover:not(:disabled) { background: var(--raised); color: var(--text); border-color: transparent; }
-.btn.danger { color: var(--danger); }
+/* Destructive: a faint red ground, so it reads as a button even when quiet. */
+.btn.danger, .btn.quiet.danger { color: var(--danger); background: rgba(255,0,0,.1); border-color: transparent; }
+.btn.danger:hover:not(:disabled), .btn.quiet.danger:hover:not(:disabled) { background: rgba(255,0,0,.18); color: #ff8595; border-color: transparent; }
 .btn.sm { height: var(--h-sm); padding: 0 10px; font-size: var(--fs-sm); gap: 6px; }
 .btn.icon { width: var(--h); padding: 0; } .btn.icon.sm { width: var(--h-sm); }
 .btn:disabled { opacity: .35; cursor: not-allowed; }
