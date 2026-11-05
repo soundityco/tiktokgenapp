@@ -41,6 +41,10 @@ export default function Inspector({
       </div>
 
       <div>
+        <Section id="slide-presets" title={<>{t("Style presets")}{presetOf(presets, st) && <span className="sec-sub"> · {presetOf(presets, st)!.name}</span>}</>} open={false}>
+          <StylePresets presets={presets} current={st} onSave={onSavePreset} onApply={onApplyPreset} onDelete={onDeletePreset} />
+        </Section>
+
         <Section id="slide-format" title={t("Format & photo")}>
           <label className="field">{t("Format")}
             <select className="input" value={cfg.format} onChange={(e) => onCfg((c) => ({ ...c, format: e.target.value as FormatId }))}>
@@ -107,10 +111,6 @@ export default function Inspector({
             </label>
           )}
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
-        </Section>
-
-        <Section id="slide-presets" title={<>{t("Style presets")}{presetOf(presets, st) && <span className="sec-sub"> · {presetOf(presets, st)!.name}</span>}</>} open={false}>
-          <StylePresets presets={presets} current={st} onSave={onSavePreset} onApply={onApplyPreset} onDelete={onDeletePreset} />
         </Section>
 
         <Section id="slide-position" title={t("Position")} open={false}>

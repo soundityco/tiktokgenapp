@@ -195,8 +195,9 @@ export function Menu({ trigger, children, left, float }: {
 /**
  * A panel that folds. With `id`, whether it is open is remembered on this device (`open`: the first time).
  */
-export function Section({ title, children, open = true, id }: { title: ReactNode; children: ReactNode; open?: boolean; id?: string }) {
-  const key = id ? `tktgen-sec:${id}` : null;
+export function Section({ title, children, open = false, id }: { title: ReactNode; children: ReactNode; open?: boolean; id?: string }) {
+  // "sec2": the panels became closed by default; what was remembered before is dropped once.
+  const key = id ? `tktgen-sec2:${id}` : null;
   const [shown] = useState(() => {
     if (!key) return open;
     try { const v = localStorage.getItem(key); return v === null ? open : v === "1"; } catch { return open; }

@@ -38,7 +38,7 @@ export default function CaptionStyle({
   // A fragment, not a box: its panels are siblings of the ones around it (one separator, one spacing between all).
   return (
     <>
-      <Section id={sec("font")} title={t("Font")} open={firstOpen}>
+      <Section id={sec("font")} title={t("Font")}>
         <FontPicker style={style} fonts={fonts} onChange={onChange} onFonts={onFonts} onPreview={onPreview} />
       </Section>
       <Section id={sec("look")} title={t("Look")} open={false}>
