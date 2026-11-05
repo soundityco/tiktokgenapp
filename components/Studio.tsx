@@ -981,13 +981,13 @@ export default function Studio({ userName }: { userName: string }) {
                   <button className="btn quiet icon sm" aria-label={t("Add a slide after this one")} title={t("Add a slide after this one")} onClick={addSlide} disabled={nSlides >= MAX_SLIDES}><Icon name="plus" size={14} /></button>
                 </div>
               </div>
-              <label className="field">{t("Lyrics")}
-                <select className="input" style={{ width: 170 }} value={project.lyricsSectionId ?? ""} onChange={(e) => updProject((p) => ({ ...p, lyricsSectionId: e.target.value || null }))}>
+              <div className="field">
+                <span className="field-head">{t("Lyrics")}<button type="button" className="field-link" onClick={() => setOverlay({ k: "lyrics" })}>{t("Edit")}</button></span>
+                <select className="input" style={{ width: 160 }} aria-label={t("Lyrics section")} value={project.lyricsSectionId ?? ""} onChange={(e) => updProject((p) => ({ ...p, lyricsSectionId: e.target.value || null }))}>
                   <option value="">{project.lyrics.length ? t("First section") : t("None yet")}</option>
                   {project.lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
-              </label>
-              <button className="btn" onClick={() => setOverlay({ k: "lyrics" })}>{t("Edit lyrics")}</button>
+              </div>
               <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
               <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
               <div className="row nowrap head-actions">

@@ -553,7 +553,13 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .studio-head .video-title > .stack { gap: 6px !important; }
 .studio-head .video-title .display { line-height: var(--h); margin: 0; }
 /* The tools wrap onto a second line when the board is narrow; the export group stays whole, at the right. */
-.studio-head .video-tools { flex-wrap: wrap; row-gap: var(--s3); }
+/* The whole tool row first goes under the title when the board is narrow (basis ≈ its width on one line);
+   only if it still does not fit does it wrap itself. */
+.studio-head .video-tools { flex: 1 1 800px; flex-wrap: wrap; row-gap: var(--s3); }
+.studio-head .video-title { flex: 0 1 auto; }
+.field-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+.field-link { background: none; border: 0; padding: 0; font: inherit; color: var(--faint); cursor: pointer; }
+.field-link:hover { color: var(--text); }
 .studio-head .head-actions { margin-left: auto; align-items: flex-end; gap: var(--s3); flex: none; }
 .studio-head .stepper span { text-transform: none; color: var(--text); }
 .carousel-head { margin-bottom: var(--s5); }
