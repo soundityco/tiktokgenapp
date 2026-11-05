@@ -266,8 +266,14 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 /* ---------- Video studio ---------- */
 .main[data-studio="video"] { display: block; overflow: auto; padding-bottom: 0; }
 .video-page { min-height: 100%; padding: var(--s5); }
-.video-wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: var(--s4); }
-.video-head { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--s5); align-items: end; }
+.video-wrap { max-width: 1680px; margin: 0 auto; display: grid; gap: var(--s4); }
+.video-head { display: grid; grid-template-columns: 272px minmax(0, 1fr); gap: var(--s5); align-items: end; }
+/* Three columns, like the carousel: the files on the left, the editing in the middle, the look on the right. */
+.video-cols { display: grid; grid-template-columns: 272px minmax(0, 1fr) 300px; gap: var(--s5); align-items: start; }
+.video-col { display: grid; gap: var(--s4); align-content: start; position: sticky; top: var(--s4); max-height: calc(100dvh - 2 * var(--s4)); overflow-y: auto; padding-right: 4px; }
+.video-col .tab-body, .video-col .stack { min-width: 0; }
+.video-col.is-loading > * { opacity: .4; pointer-events: none; }
+@media (max-width: 1279px) { .video-cols { grid-template-columns: minmax(0, 1fr); } .video-col { position: static; max-height: none; overflow: visible; } }
 .video-title { gap: var(--s3); min-width: 0; align-items: center; }
 .video-tools { align-items: flex-end; min-width: 0; }
 .video-head .display { font-size: 28px; line-height: 1; }
