@@ -35,8 +35,9 @@ export default function CaptionStyle({
   const { t } = useT();
   // Folding panels, remembered per text (lyrics / hook): only the first is open the first time.
   const sec = (name: string) => `${sid}-${name}`;
+  // A fragment, not a box: its panels are siblings of the ones around it (one separator, one spacing between all).
   return (
-    <div className="stack">
+    <>
       <Section id={sec("font")} title={t("Font")} open={firstOpen}>
         <FontPicker style={style} fonts={fonts} onChange={onChange} onFonts={onFonts} onPreview={onPreview} />
       </Section>
@@ -74,6 +75,6 @@ export default function CaptionStyle({
         <Range label={t("Vertical")} value={Math.round(style.y)} display={`${Math.round(style.y)}%`} min={0} max={100} onChange={(v) => onChange({ y: v })} onReset={() => onChange({ y: defaults.y })} />
         <div><button className="btn sm" onClick={() => onChange({ x: 50 })}>{t("Center horizontally")}</button></div>
       </Section>
-    </div>
+    </>
   );
 }

@@ -544,3 +544,5 @@ details.sec > summary .sec-sub { color: var(--faint); text-transform: none; lett
 .stack { --gap: var(--s3); }
 .video-shell > .col.side { --gap: var(--s4); }
 :where(.stack, .col.side) > details.sec + details.sec { margin-top: calc(-1 * var(--gap, 0px)); }
+/* Safari marks a clicked panel title as keyboard focus: a quiet grey ring, not the blue one. */
+details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-offset: 2px; }

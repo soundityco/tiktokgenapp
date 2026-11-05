@@ -2651,8 +2651,6 @@ export default function VideoStudio({
                 </div>
               ) : (
                 <>
-
-                  <div className="stack">
                     <CaptionStyle
                       sid="hook-style"
                       style={hookStyle}
@@ -2663,7 +2661,6 @@ export default function VideoStudio({
                       onFonts={onFonts}
                       onReset={() => setV({ hookStyle: undefined })}
                     />
-                  </div>
                   <Section id="hook-style-presets" title={<>{t("Style presets")}{presetOf(presets, hookStyle) && <span className="sec-sub"> · {presetOf(presets, hookStyle)!.name}</span>}</>} open={false}>
                     <StylePresets presets={presets} current={hookStyle} onSave={(name) => onSavePreset(name, hookStyle)}
                       onApply={(p) => setV({ hookStyle: withPreset(hookStyle, p) })} onDelete={onDeletePreset} />
@@ -2680,7 +2677,6 @@ export default function VideoStudio({
                 <button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button>
               </div>
 
-              <div className="stack">
               <Section id="lyrics-style-display" title={t("Display")}>
                 <div className="row">
                   <button className={"btn sm" + (mode === "phrase" ? " on" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
@@ -2706,7 +2702,6 @@ export default function VideoStudio({
                 <StylePresets presets={presets} current={captionStyle} onSave={(name) => onSavePreset(name, captionStyle)}
                   onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
               </Section>
-              </div>
                         </div>
           )}
           <div id="video-color" className="stack">
