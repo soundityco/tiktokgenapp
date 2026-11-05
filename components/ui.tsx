@@ -212,12 +212,13 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
   const set = (v: number) => onChange(Math.round(Math.max(min, Math.min(max, v))));
   return (
     <div className="wheel" role="slider" tabIndex={0} aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}
-      style={{ backgroundPositionX: `${value * PX}px` }}
+      style={{ backgroundPositionX: `${-value * PX}px` }}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, v: value, last: value }; }}
       onPointerMove={(e) => {
         const d = drag.current;
         if (!d) return;
-        let v = Math.round(d.v + (e.clientX - d.x) / PX);
+        // Like a phone wheel: push the ticks to the left to go up, to the right to go down.
+        let v = Math.round(d.v - (e.clientX - d.x) / PX);
         // A small notch at 0: passing over it stops there for a moment.
         if ((d.last > 0 && v < 0) || (d.last < 0 && v > 0) || Math.abs(v) <= 1) { if (Math.abs(v) <= 4) v = 0; }
         d.last = v;
