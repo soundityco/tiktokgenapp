@@ -743,4 +743,5 @@ export const FR: Record<string, string> = {
   "Lyrics of the song": "Paroles du morceau",
   "Edit": "Modifier",
   "Fold": "Replier",
+  "On every video": "Sur toutes les vidéos",
 };

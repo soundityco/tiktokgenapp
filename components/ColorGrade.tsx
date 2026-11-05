@@ -159,7 +159,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
       </Section>
 
       <div className="row">
-        {clips > 1 && <button className="btn sm" onClick={onApplyAll}>{t("Use this grade on every video of the release")}</button>}
+        {clips > 1 && <button className="btn sm" onClick={onApplyAll} title={t("Use this grade on every video of the release")}>{t("On every video")}</button>}
         <button className="btn sm quiet danger" onClick={() => { onRaw(false); onChange(undefined); }}>{t("Remove the grade")}</button>
       </div>
     </>
