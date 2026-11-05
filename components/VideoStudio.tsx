@@ -1035,7 +1035,6 @@ export default function VideoStudio({
     await delMedia(`audio:${id}`).catch(() => {});
   };
 
-  const close = () => { syncRef.current?.abort(); stop(); onSaveNow(); onBack(); };
 
   const onDropFile = (f: File | undefined) => {
     if (!f) return;
@@ -2199,7 +2198,6 @@ export default function VideoStudio({
         <main className="col center video-center">
       <div className="video-head studio-head">
         <div className="row nowrap video-title">
-          <button className="btn icon quiet" aria-label={t("Back")} title={t("Back")} onClick={close}><Icon name="back" /></button>
           <div className="stack" style={{ gap: 2, minWidth: 0 }}>
             <span className="label">{t("Video studio")}</span>
             <h2 className="display truncate">{project.name}</h2>
