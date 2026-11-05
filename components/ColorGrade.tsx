@@ -119,7 +119,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
                 {t("Import a LUT (.cube)")}
                 <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f); e.target.value = ""; }} />
               </label>
-              <button className={"btn sm" + (raw ? " primary" : "")} aria-pressed={raw} onClick={() => onRaw(!raw)}
+              <button className={"btn sm" + (raw ? " on" : "")} aria-pressed={raw} onClick={() => onRaw(!raw)}
                 title={t("Show the picture as recorded, to compare")}>{raw ? t("Showing the log") : t("Before / after")}</button>
             </div>
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}

@@ -737,4 +737,10 @@ export const FR: Record<string, string> = {
   "Not allowed yet.": "Pas encore autorisé.",
   "Drop a file anywhere to import it.": "Glisse un fichier n'importe où pour l'importer.",
   "This is the style now": "C'est le style actuel",
+  "Length of the segment": "Durée du segment",
+  "Sync": "Synchroniser",
+  "Only on this computer.": "Seulement sur cet ordi.",
+  "Lyrics of the song": "Paroles du morceau",
+  "Edit": "Modifier",
+  "Fold": "Replier",
 };

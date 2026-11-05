@@ -23,7 +23,7 @@ import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle,
 import CaptionStyle from "./CaptionStyle";
 import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
-import { ConfirmDialog, Menu, Modal, PromptDialog, Range, Section } from "./ui";
+import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section } from "./ui";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -356,6 +356,8 @@ export default function VideoStudio({
    */
   const [writtenSrc, setWrittenSrc] = useState(project.songLyrics?.trim() || !project.lyrics.length ? "song" : "all");
   const [paste, setPaste] = useState(project.songLyrics ?? "");
+  /** The pasted text, unfolded (it folds into one line once the lyrics are placed). */
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
   const [driveBusy, setDriveBusy] = useState(false);
@@ -2076,7 +2078,7 @@ export default function VideoStudio({
                   )}
                 </div>
                 {audioBlob && !project.audioDriveId && (
-                  <p className="muted xs">{t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")}</p>
+                  <p className="muted xs row" style={{ gap: 6 }}>{t("Only on this computer.")} <Hint text={t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")} /></p>
                 )}
               </div>
               <div className="stack">
@@ -2160,9 +2162,9 @@ export default function VideoStudio({
                       </div>
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
-            <button className={"btn sm" + (settings.format !== "16:9" ? " primary" : "")} aria-pressed={settings.format !== "16:9"}
+            <button className={"btn sm" + (settings.format !== "16:9" ? " on" : "")} aria-pressed={settings.format !== "16:9"}
               onClick={() => setV({ format: "9:16" })}>9:16</button>
-            <button className={"btn sm" + (settings.format === "16:9" ? " primary" : "")} aria-pressed={settings.format === "16:9"}
+            <button className={"btn sm" + (settings.format === "16:9" ? " on" : "")} aria-pressed={settings.format === "16:9"}
               onClick={() => setV({ format: "16:9" })}>16:9</button>
             <select className="input sm grow" aria-label={t("Framing")}
               value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
@@ -2191,7 +2193,7 @@ export default function VideoStudio({
           <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>
             <span className="label">{t("Progressive zoom")}</span>
             {[undefined, 1.05, 1.1].map((v) => (
-              <button key={v ?? 0} className={"btn sm" + ((settings.push ?? undefined) === v ? " primary" : "")} aria-pressed={(settings.push ?? undefined) === v}
+              <button key={v ?? 0} className={"btn sm" + ((settings.push ?? undefined) === v ? " on" : "")} aria-pressed={(settings.push ?? undefined) === v}
                 onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
             ))}
           </div>
@@ -2258,9 +2260,9 @@ export default function VideoStudio({
           </div>
           <div className="row">
             <span className="label">{t("On the video")}</span>
-            <button className={"btn sm" + (settings.captions ? " primary" : "")} aria-pressed={settings.captions}
+            <button className={"btn sm" + (settings.captions ? " on" : "")} aria-pressed={settings.captions}
               onClick={() => setV({ captions: !settings.captions })}>{t("Lyrics")}</button>
-            <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " primary" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
+            <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
               onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}>{t("Hook")}</button>
           </div>
           {lookErr && grade?.lut && (
@@ -2282,9 +2284,11 @@ export default function VideoStudio({
             );
             return videoBlob && !videoDur ? <p className="muted xs">{t("Opening the camera video…")}</p> : null;
           })()}
-          <p className="muted xs">{videoBlob
-            ? t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")
-            : t("Nothing to preview yet.")} <span className="mono">{outW}×{outH}</span></p>
+          <p className="muted xs row" style={{ gap: 6 }}>
+            {!videoBlob && <span>{t("Nothing to preview yet.")}</span>}
+            <span className="mono">{outW}×{outH}</span>
+            {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}
+          </p>
 
         </div>
 
@@ -2312,14 +2316,20 @@ export default function VideoStudio({
                   </button>
                   <span className="mono xs">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>
                   <span className="sep" />
-                  {PRESETS.map((d) => (
-                    <button key={d} className={"btn sm" + (Math.abs(settings.crop.duration - d) < 0.01 ? " primary" : "")}
-                      onClick={() => setCropDuration(d)}>{d}s</button>
-                  ))}
+                  {/* Length of the segment: the usual ones, or the one set on the waveform. */}
+                  <select className="input sm seg-len" aria-label={t("Length of the segment")} title={t("Length of the segment")}
+                    value={PRESETS.find((d) => Math.abs(settings.crop.duration - d) < 0.01) ?? "custom"}
+                    onChange={(e) => { if (e.target.value !== "custom") setCropDuration(Number(e.target.value)); }}>
+                    {PRESETS.map((d) => <option key={d} value={d}>{d} s</option>)}
+                    {!PRESETS.some((d) => Math.abs(settings.crop.duration - d) < 0.01) && (
+                      <option value="custom">{settings.crop.duration.toFixed(1).replace(".", lang === "fr" ? "," : ".")} s</option>
+                    )}
+                  </select>
                   {videoBlob && videoDur > 0 && (
-                    <button className={"btn sm" + (linked ? " primary" : "")} aria-pressed={linked} onClick={toggleLink}
-                      title={linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment")}>
-                      <Icon name={linked ? "lock" : "unlock"} size={13} />{linked ? t("Audio and video linked") : t("Link audio and video")}
+                    <button className={"btn sm icon" + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
+                      aria-label={linked ? t("Audio and video linked") : t("Link audio and video")}
+                      title={(linked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}>
+                      <Icon name={linked ? "lock" : "unlock"} size={13} />
                     </button>
                   )}
                   <span className="grow" />
@@ -2328,20 +2338,25 @@ export default function VideoStudio({
                       <Icon name="refresh" size={14} />{t("Sync lyrics and video")}
                     </button>
                   ) : !syncBusy && !genBusy ? (
-                    <>
-                      {videoBlob && (
-                        <button className={"btn sm" + (settings.score === undefined ? " primary" : "")} onClick={() => void autoSync()}
-                          title={t("Find where the camera video sits in the official audio. The lyrics do not move.")}>
-                          <Icon name="refresh" size={14} />{t("Sync the video")}
-                        </button>
-                      )}
-                      {(hasLyrics || !videoBlob) && (
-                        <button className={"btn sm" + (!placed ? " primary" : "")} onClick={() => void syncLyrics()} disabled={!hasLyrics}
+                    // One button: the video and the lyrics are synced apart (changing the video never moves the lyrics).
+                    <Menu trigger={(_, toggle) => (
+                      <button className={"btn sm" + ((videoBlob && settings.score === undefined) || (hasLyrics && !placed) ? " primary" : "")} onClick={toggle}
+                        aria-haspopup="menu">
+                        <Icon name="refresh" size={14} />{t("Sync")} <Icon name="chevron" size={12} />
+                      </button>
+                    )}>
+                      {(closeMenu) => (<>
+                        {videoBlob && (
+                          <button onClick={() => { closeMenu(); void autoSync(); }} title={t("Find where the camera video sits in the official audio. The lyrics do not move.")}>
+                            <Icon name="film" size={14} />{t("Sync the video")}{settings.score === undefined && <span className="tab-dot" />}
+                          </button>
+                        )}
+                        <button disabled={!hasLyrics} onClick={() => { closeMenu(); void syncLyrics(); }}
                           title={!hasLyrics ? t("Import the video or paste the lyrics first.") : placed ? t("Place the lyrics again on the audio. Your retouches are kept.") : undefined}>
-                          <Icon name="refresh" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}
+                          <Icon name="type" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}{hasLyrics && !placed && <span className="tab-dot" />}
                         </button>
-                      )}
-                    </>
+                      </>)}
+                    </Menu>
                   ) : (
                     <>
                       <span className="badge">
@@ -2358,7 +2373,7 @@ export default function VideoStudio({
                   <div className="row">
                     <span className="muted xs">{t("Takes found in the video (pick the one to use):")}</span>
                     {settings.takes.map((k, i) => (
-                      <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " primary" : "")}
+                      <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " on" : "")}
                         aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}>
                         {t("Take {n}", { n: i + 1 })} <span className="mono xs">{fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)}</span>
                       </button>
@@ -2472,28 +2487,10 @@ export default function VideoStudio({
 
           {tab === "lyrics" && (
             <div className="tab-body">
-              <label className="field">{t("Paste the lyrics of the song")}
-                <textarea className="input" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)}
-                  placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
-              </label>
-              {pasted.parts.length > 0 && (
-                <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
-              )}
-              {project.lyrics.length > 0 && (
-                <label className="field">{t("Written lyrics")}
-                  <select className="input" value={writtenSrc} disabled={genBusy}
-                    onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
-                    <option value="song">{t("Lyrics pasted above")}</option>
-                    <option value="all">{t("Carousel lyrics (all sections)")}</option>
-                    {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
-                  </select>
-                </label>
-              )}
-              <p className="muted xs">{t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")}</p>
               {cues.length > 0 && (
                 <div className="stack" style={{ gap: 4 }}>
                   <div className="cue-row cue-legend muted xs">
-                    <span>{t("Starts")}</span><span className="grow">{t("Line")}</span><span>{t("Ends")}</span>
+                    <span>{t("Starts")}</span><span className="grow row" style={{ gap: 6 }}>{t("Line")} <Hint text={t("Fine-tune each line by 0.1 s. Your retouches are kept when you edit the lyrics or sync again.")} /></span><span>{t("Ends")}</span>
                   </div>
                   <div className="lyric-timing">
                     {cues.map((c, i) => (
@@ -2515,12 +2512,41 @@ export default function VideoStudio({
                     ))}
                   </div>
                   <div className="row">
-                    <span className="muted xs grow">{t("Fine-tune each line by 0.1 s. Your retouches are kept when you edit the lyrics or sync again.")}</span>
+                    <span className="grow" />
                     {hasManual(project.lyricWords) && !genBusy && (
                       <button className="btn sm quiet" onClick={() => resyncLyrics(writtenSrc, project, true)}>{t("Back to the automatic timing")}</button>
                     )}
                   </div>
                 </div>
+              )}
+              {/* The song's text: open while there is nothing placed yet, then folded into one line under the timed lines. */}
+              {cues.length > 0 && !pasteOpen ? (
+                <div className="row paste-fold">
+                  <span className="xs grow truncate">{t("Lyrics of the song")}{pasted.lines ? ` · ${t("{n} sung lines", { n: pasted.lines })}` : ""}</span>
+                  <Hint text={t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")} />
+                  <button className="btn sm quiet" onClick={() => setPasteOpen(true)}>{t("Edit")}</button>
+                </div>
+              ) : (
+                <>
+              <label className="field"><span className="row" style={{ gap: 6 }}>{t("Paste the lyrics of the song")} <Hint text={t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")} />
+                {cues.length > 0 && <button type="button" className="btn sm quiet" style={{ marginLeft: "auto" }} onClick={() => setPasteOpen(false)}>{t("Fold")}</button>}</span>
+                <textarea className="input" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)}
+                  placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
+              </label>
+              {pasted.parts.length > 0 && (
+                <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
+              )}
+              {project.lyrics.length > 0 && (
+                <label className="field">{t("Written lyrics")}
+                  <select className="input" value={writtenSrc} disabled={genBusy}
+                    onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
+                    <option value="song">{t("Lyrics pasted above")}</option>
+                    <option value="all">{t("Carousel lyrics (all sections)")}</option>
+                    {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
+                  </select>
+                </label>
+              )}
+                </>
               )}
               {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
               {project.lyrics.length > 0 && (
@@ -2548,10 +2574,9 @@ export default function VideoStudio({
 
           {tab === "hook" && (
             <div className="tab-body">
-              <p className="muted xs">{t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")}</p>
               <div className="row">
                 <label className="field grow">
-                  <span>{t("Hook list")}</span>
+                  <span className="row" style={{ gap: 6 }}>{t("Hook list")} <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} /></span>
                   <select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
                     onChange={(e) => setV({ hookPoolId: e.target.value || undefined })} disabled={!hookPools.length}>
                     <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
@@ -2617,7 +2642,7 @@ export default function VideoStudio({
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")}>
           {tab === "hook" ? (
             <div className="stack">
-              <span className="label">{t("Hook style")}</span>
+              <span className="label row" style={{ gap: 6 }}>{t("Hook style")} <Hint text={settings.hookStyle ? t("Own style for the hooks.") : t("Default hook style: white with a black outline, at the top, until you change something.")} /></span>
               {hooks.length === 0 ? (
                 <div className="stack">
                   <p className="muted xs">{t("No hook on this video yet.")}</p>
@@ -2625,7 +2650,7 @@ export default function VideoStudio({
                 </div>
               ) : (
                 <>
-                  <p className="muted xs">{settings.hookStyle ? t("Own style for the hooks.") : t("Default hook style: white with a black outline, at the top, until you change something.")}</p>
+
                   <div className="stack">
                     <CaptionStyle
                       sid="hook-style"
@@ -2647,13 +2672,13 @@ export default function VideoStudio({
                         </div>
           ) : (
             <div className="stack">
-              <span className="label">{t("Lyrics style")}</span>
-              <p className="muted xs">{settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")}</p>
+              <span className="label row" style={{ gap: 6 }}>{t("Lyrics style")} <Hint text={settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")} /></span>
+
               <div className="stack">
               <Section id="lyrics-style-display" title={t("Display")}>
                 <div className="row">
-                  <button className={"btn sm" + (mode === "phrase" ? " primary" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
-                  <button className={"btn sm" + (mode === "word" ? " primary" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
+                  <button className={"btn sm" + (mode === "phrase" ? " on" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
+                  <button className={"btn sm" + (mode === "word" ? " on" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
                 </div>
                 {mode === "phrase" && (
                   <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}

@@ -493,3 +493,21 @@ details.more[open] > summary::after { content: "−"; }
 .more-body p { margin: 0; }
 .btn.preset.on { border-color: var(--accent-hi); color: var(--text); }
 .btn.preset.on svg { color: var(--accent-hi); flex: none; }
+
+/* ---------- Video studio, lighter: red only for the actions, quieter names of the settings ---------- */
+.btn.on { background: var(--raised); border-color: #4a4a56; color: var(--text); font-weight: 500; }
+.btn.on:hover:not(:disabled) { border-color: #5c5c69; }
+/* Chosen weight / style of a font, in the video studio: chosen, not an action. */
+.video-shell .font-style .btn.primary, .video-shell .row .btn.sm.primary[aria-pressed] { background: var(--raised); border-color: #4a4a56; color: var(--text); font-weight: 500; }
+/* Names of the settings in plain small text; the small capitals stay for the section titles. */
+.video-shell .field { font-family: var(--sans); font-size: 12px; letter-spacing: normal; text-transform: none; color: var(--muted); }
+.video-shell .field .val { font-family: var(--mono); font-size: 11px; }
+.video-shell .row > .label { font-family: var(--sans); font-size: 12px; letter-spacing: normal; text-transform: none; font-weight: 400; color: var(--muted); }
+.video-shell .badge.video-status { font-family: var(--mono); }
+.video-shell .seg-len { width: auto; min-width: 72px; }
+/* ⓘ: explanations on hover instead of sentences always on screen. */
+.hint { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--line-2); color: var(--faint);
+  font: italic 600 10px/1 Georgia, serif; cursor: help; flex: none; text-transform: none; letter-spacing: 0; }
+.hint:hover, .hint:focus-visible { color: var(--text); border-color: var(--muted); outline: none; }
+.paste-fold { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); gap: 8px; }
+.video-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }

@@ -236,3 +236,8 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
     </div>
   );
 }
+
+/** A small ⓘ: the explanation shows on hover (or focus), instead of a sentence always on screen. */
+export function Hint({ text }: { text: string }) {
+  return <span className="hint" tabIndex={0} role="note" aria-label={text} title={text}>i</span>;
+}
