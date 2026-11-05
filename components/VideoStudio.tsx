@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
@@ -2070,105 +2070,82 @@ export default function VideoStudio({
     <div className="video-shell" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}>
         {/* Left: the files of the clip, and how the camera picture fits the post. */}
         <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")}>
-          <div className="stack">
-              <div className="stack">
-                <span className="label">{t("Official audio")}</span>
-                {audioPick}
-                <div className="row">
-                  {audioBlob ? <span className="badge ok truncate" title={project.audioName ?? settings.audioName ?? undefined}>{project.audioName ?? settings.audioName ?? t("Official audio")}</span> : <span className="muted xs">{t("No audio imported yet")}</span>}
-                  {audioBlob && project.audioDriveId && <span className="badge">{t("Saved in Drive")}</span>}
-                  {audioBlob && !confirmRemove && <button className="btn sm quiet danger" onClick={() => setConfirmRemove(true)}>{t("Remove audio")}</button>}
-                  {audioBlob && confirmRemove && (
-                    <>
-                      <span className="xs">{t("Remove it from every video of this release, with the lyrics timing?")}</span>
-                      <button className="btn sm danger" onClick={() => void removeAudio()}>{t("Remove")}</button>
-                      <button className="btn sm quiet" onClick={() => setConfirmRemove(false)}>{t("Cancel")}</button>
-                    </>
+          <div className="stack media-list">
+            {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
+            <input id="audio-file" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
+            <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
+            <MediaTile icon="music" label={t("Official audio")}
+              name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
+              meta={audioBlob && (<>
+                {audioBuf && <span className="mono">{fmtTime(audioBuf.duration)}</span>}
+                {project.audioDriveId ? <span>Drive</span>
+                  : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")} /></span>}
+              </>)}
+              menu={audioBlob && ((close) => (<>
+                <button onClick={() => { close(); setDriveOpen(true); }}>{t("Replace from Google Drive")}</button>
+                <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}>{t("Replace from this computer")}</button>
+                <div className="sep" />
+                <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setConfirmRemove(true); }}>{t("Remove audio")}</button>
+              </>))}>
+              {!audioBlob && audioPick}
+              {audioBlob && confirmRemove && (
+                <div className="stack" style={{ gap: 6 }}>
+                  <span className="xs">{t("Remove it from every video of this release, with the lyrics timing?")}</span>
+                  <div className="row">
+                    <button className="btn sm danger" onClick={() => void removeAudio()}>{t("Remove")}</button>
+                    <button className="btn sm quiet" onClick={() => setConfirmRemove(false)}>{t("Cancel")}</button>
+                  </div>
+                </div>
+              )}
+            </MediaTile>
+            {(() => {
+              const d = settings.drive ?? {};
+              const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
+              const src = videoBlob ? settings.source : undefined;
+              const note = src && [
+                [src.device ?? (src.kind === "camera" ? t("Camera") : src.kind === "phone" ? t("Phone") : null), src.curve, src.codec].filter(Boolean).join(" · "),
+                src.colour === "log" ? (src.profile
+                  ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
+                  : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab."))
+                  : src.colour === "hdr" ? t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab.")
+                  : src.colour === "unknown" ? t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab.")
+                  : t("Standard video, used as it is."),
+                src.convert ? t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality.") : "",
+              ].filter(Boolean).join("\n");
+              const missing = !videoBlob && !!settings.videoName;
+              return (
+                <MediaTile icon="film" label={t("Camera video")} name={settings.videoName ?? null} warn={missing}
+                  meta={settings.videoName && (missing
+                    ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
+                    : <>
+                      {videoDur > 0 && <span className="mono">{fmtTime(videoDur)}</span>}
+                      {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
+                      {d.originalId && <span>Drive</span>}
+                    </>)}
+                  menu={settings.videoName && ((close) => (<>
+                    <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}>{t("Replace from this computer")}</button>
+                    {videoBlob && !d.originalId && driveWrite && !driveJob && <button onClick={() => { close(); void sendToDrive(videoBlob); }}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>}
+                    {driveWrite === false && !d.originalId && <button onClick={() => { close(); void signIn("google", { redirectTo: "/studio" }); }}>{t("Reconnect Google to put it on my Drive")}</button>}
+                    {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}>{t("Stop the transfer")}</button>}
+                    {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}>{t("Remove video")}</button></>}
+                  </>))}>
+                  {!settings.videoName && (
+                    <div className="row"><button className="btn sm" onClick={() => document.getElementById("video-file")?.click()}>{t("From this computer")}</button></div>
                   )}
-                </div>
-                {audioBlob && !project.audioDriveId && (
-                  <p className="muted xs row" style={{ gap: 6 }}>{t("Only on this computer.")} <Hint text={t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")} /></p>
-                )}
-              </div>
-              <div className="stack">
-                <span className="label">{t("Playback video")}</span>
-                <div className="drop" title={settings.videoName ?? undefined} onClick={() => document.getElementById("video-file")?.click()}>
-                  {settings.videoName && !videoBlob
-                    ? t("Pick {name} again: this browser does not have it. The sync and the settings are kept.", { name: settings.videoName })
-                    : settings.videoName ?? t("Import the video recorded with the camera")}
-                </div>
-                <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
-                <div className="row">
-                  {videoBlob && <span className="badge ok truncate" title={settings.videoName ?? undefined}>{settings.videoName ?? "video"}</span>}
-                  {!videoBlob && <span className="muted xs">{t("No video imported yet")}</span>}
-                  {videoBlob && <button className="btn sm quiet danger" onClick={() => void removeVideo()}>{t("Remove video")}</button>}
-                  {videoDur > 0 && <span className="muted xs">{fmtTime(videoDur)}</span>}
-                </div>
-                {videoBlob && settings.source && (() => {
-                  const s = settings.source;
-                  const what = [
-                    s.device ?? (s.kind === "camera" ? t("Camera") : s.kind === "phone" ? t("Phone") : null),
-                    s.curve ?? (s.colour === "unknown" ? t("colours not specified") : null),
-                    s.codec,
-                  ].filter(Boolean).join(" · ");
-                  // One short line; the device, the codec and the long notes unfold.
-                  const short = s.colour === "log" ? (s.profile ? t("Converted from log, with your LUT.") : t("Log not converted yet: pick its profile."))
-                    : s.colour === "hdr" ? t("HDR brought down to SDR.")
-                    : s.colour === "sdr" ? t("Standard video, used as it is.")
-                    : t("Colours not specified.");
-                  const long = [
-                    s.colour === "log" && (s.profile
-                      ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
-                      : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab.")),
-                    s.colour === "hdr" && t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab."),
-                    s.colour === "unknown" && t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab."),
-                    s.convert && t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality."),
-                  ].filter(Boolean) as string[];
-                  return (
-                    <details className="more">
-                      <summary>
-                        <span className="badge">{s.colour === "log" ? "LOG" : s.colour === "hdr" ? "HDR" : s.colour === "sdr" ? "SDR" : "?"}</span>
-                        <span className="xs more-line">{short}</span>
-                      </summary>
-                      <div className="more-body muted xs">
-                        {what && <p>{what}</p>}
-                        {long.map((x, i) => <p key={i}>{x}</p>)}
-                      </div>
-                    </details>
-                  );
-                })()}
-                {(videoBlob || settings.drive?.originalId) && (() => {
-                  const d = settings.drive ?? {};
-                  const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
-                  return (
-                    <div className="stack">
-                      <span className="label">{t("Google Drive")}</span>
-                      {driveWrite === false && !d.originalId ? (
-                        <div className="row">
-                          <span className="muted xs grow" title={t("To open this video on another device, allow the app to save it in your Drive.")}>{t("Not allowed yet.")}</span>
-                          <button className="btn sm" onClick={() => void signIn("google", { redirectTo: "/studio" })}>{t("Reconnect Google")}</button>
-                        </div>
-                      ) : (
-                        <div className="row">
-                          <span className="muted xs grow" title={d.originalId ? undefined : t("Put the camera file on your Drive to open this video on another device.")}>{d.originalId
-                            ? (videoBlob ? t("On your Drive.") : t("On your Drive, not here."))
-                            : t("Not on your Drive.")}</span>
-                          {driveJob ? <button className="btn sm quiet" onClick={() => driveAc.current?.abort()}>{t("Cancel")}</button>
-                            : !videoBlob && d.originalId ? <button className="btn sm primary" onClick={() => void fetchOriginal()}>{t("Get it on this device")}</button>
-                            : videoBlob && !d.originalId ? <button className="btn sm" disabled={!driveWrite} onClick={() => void sendToDrive(videoBlob)}>{t("Send ({size})", { size: gb(videoBlob.size) })}</button>
-                            : null}
-                        </div>
-                      )}
-                      {driveErr && <p className="notice bad xs">{driveErr}</p>}
+                  {missing && (
+                    <div className="row">
+                      {d.originalId && <button className="btn sm primary" disabled={!!driveJob} onClick={() => void fetchOriginal()}>{t("Get it on this device")}</button>}
+                      <button className="btn sm" onClick={() => document.getElementById("video-file")?.click()}>{t("Pick it again")}</button>
                     </div>
-                  );
-                })()}
-                {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
-                  <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
-                )}
-              </div>
-              <p className="muted xs" title={t("Files stay on this device.")}>{t("Drop a file anywhere to import it.")}</p>
-                      </div>
+                  )}
+                </MediaTile>
+              );
+            })()}
+            {driveErr && <p className="notice bad xs">{driveErr}</p>}
+            {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
+              <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
+            )}
+          </div>
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
             <button className={"btn sm" + (settings.format !== "16:9" ? " on" : "")} aria-pressed={settings.format !== "16:9"}
@@ -2776,3 +2753,26 @@ export default function VideoStudio({
     </div>
   );
 }
+
+/** One file of the clip (the audio, the camera video): the same tile for both, empty or filled. */
+function MediaTile({ icon, label, name, meta, menu, warn, children }: {
+  icon: string; label: string; name: string | null; warn?: boolean;
+  meta?: ReactNode; menu?: false | null | "" | ((close: () => void) => ReactNode); children?: ReactNode;
+}) {
+  const { t } = useT();
+  return (
+    <div className={"media" + (name ? "" : " empty") + (warn ? " warn" : "")}>
+      <div className="media-head">
+        <span className="media-ic"><Icon name={icon} size={16} /></span>
+        <div className="media-txt">
+          <span className="label">{label}</span>
+          {name ? <span className="media-name" title={name}>{name}</span> : <span className="muted xs">{t("Drop it here, or:")}</span>}
+        </div>
+        {menu && <Menu trigger={(_, toggle) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={toggle}><Icon name="more" /></button>}>{menu}</Menu>}
+      </div>
+      {meta && <div className="media-meta">{meta}</div>}
+      {children}
+    </div>
+  );
+}
+

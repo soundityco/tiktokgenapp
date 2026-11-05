@@ -1,5 +1,14 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Camera video": "Vidéo caméra",
+  "This computer only": "Seulement sur cet ordinateur",
+  "Replace from Google Drive": "Remplacer depuis Google Drive",
+  "Replace from this computer": "Remplacer depuis cet ordinateur",
+  "Not in this browser: pick it again.": "Pas dans ce navigateur : choisis-la à nouveau.",
+  "Reconnect Google to put it on my Drive": "Reconnecter Google pour la mettre sur mon Drive",
+  "Stop the transfer": "Arrêter le transfert",
+  "Pick it again": "La choisir à nouveau",
+  "Drop it here, or:": "Glisse-le ici, ou :",
   "No match found in the official audio. Check it is the right track, or sync by ear.": "Aucune correspondance trouvée dans l'audio officiel. Vérifie que c'est le bon morceau, ou synchronise à l'oreille.",
   "The analysis failed. Sync it by ear.": "L'analyse a échoué. Synchronise à l'oreille.",
   "(copy)": "(copie)",
