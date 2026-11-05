@@ -211,7 +211,7 @@ export function FontPicker({
         <div className="row font-style" role="group" aria-label={t("Variant")}>
           <span className="label">{t("Variant")}</span>
           {group.variants.map((v) => (
-            <button key={v.family} className={"btn sm" + (style.customFont === v.family ? " primary" : "")} style={{ fontFamily: `"${v.family}"` }}
+            <button key={v.family} className={"btn sm" + (style.customFont === v.family ? " on" : "")} style={{ fontFamily: `"${v.family}"` }}
               onClick={() => { const r = regularOf(v.family); onChange(r ? faceStyle(r) : { customFont: v.family }); }}>{v.label || t("Standard")}</button>
           ))}
         </div>
@@ -220,15 +220,15 @@ export function FontPicker({
         title={styleOff ? t("This font has a single style.") : undefined}>
         <span className="label">{t("Style")}</span>
         {weights.map((w) => (
-          <button key={w} className={"btn sm" + (canWeight && (style.weight ?? 400) === w ? " primary" : "")} disabled={!canWeight}
+          <button key={w} className={"btn sm" + (canWeight && (style.weight ?? 400) === w ? " on" : "")} disabled={!canWeight}
             style={{ fontFamily: labelCss, fontWeight: w, fontStyle: style.italic ? "italic" : undefined }} title={weightName(w)}
             onClick={() => (gf ? void pickGoogle(gf, w) : onChange({ weight: w }))}>{weightName(w)}</button>
         ))}
-        <button className={"btn sm" + (style.italic ? " primary" : "")} aria-pressed={!!style.italic} disabled={!canItalic}
+        <button className={"btn sm" + (style.italic ? " on" : "")} aria-pressed={!!style.italic} disabled={!canItalic}
           style={{ fontFamily: labelCss, fontStyle: "italic" }} title={(gf || own.length) && !canItalic ? t("No italic for this font.") : undefined}
           onClick={() => (gf ? void pickGoogle(gf, style.weight ?? 400, !style.italic) : onChange({ italic: !style.italic || undefined }))}>{t("Italic")}</button>
         {ownWidths.length > 1 && ownWidths.map((w) => (
-          <button key={w} className={"btn sm" + ((style.stretch ?? "normal") === w ? " primary" : "")}
+          <button key={w} className={"btn sm" + ((style.stretch ?? "normal") === w ? " on" : "")}
             style={{ fontFamily: `"${canvasFamily(style.customFont ?? "", w)}"` }} onClick={() => onChange({ stretch: w === "normal" ? undefined : w })}>{t(STRETCH_LABEL[w] ?? w)}</button>
         ))}
       </div>

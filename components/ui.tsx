@@ -239,5 +239,6 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
 
 /** A small ⓘ: the explanation shows on hover (or focus), instead of a sentence always on screen. */
 export function Hint({ text }: { text: string }) {
-  return <span className="hint" tabIndex={0} role="note" aria-label={text} title={text}>i</span>;
+  // An <i>, not a <span>: layout rules written for the spans around it never reach it.
+  return <i className="hint" tabIndex={0} role="note" aria-label={text} title={text}>i</i>;
 }
