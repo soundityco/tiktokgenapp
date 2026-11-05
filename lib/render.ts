@@ -169,9 +169,9 @@ function paintText(ctx: CanvasRenderingContext2D, s: string, x: number, y: numbe
 function setFont(ctx: CanvasRenderingContext2D, st: TextStyle, size: number) {
   setTracking(ctx, st, size);
   if (st.customFont) {
-    // A family of loaded files: the browser picks the file of this weight, italic and width.
-    const stretch = st.stretch && st.stretch !== "normal" ? `${st.stretch} ` : "";
-    ctx.font = `${st.italic ? "italic " : ""}${stretch}${st.weight ?? 400} ${size}px "${st.customFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
+    // A family of loaded files: the browser picks the file of this weight and italic; each width is its own family.
+    const fam = st.stretch && st.stretch !== "normal" ? `${st.customFont} ~${st.stretch}` : st.customFont;
+    ctx.font = `${st.italic ? "italic " : ""}${st.weight ?? 400} ${size}px "${fam.replace(/"/g, "")}", ${FONTS.classic.family}`;
     return;
   }
   if (st.googleFont) {

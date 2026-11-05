@@ -501,7 +501,7 @@ export default function VideoStudio({
   gradePendingRef.current = !!colourKey && !lookErr && (lutRev === 0 || (!!lutId && !look));
   useEffect(() => {
     if (!colourKey || !grade || (lutId && !look && !lookErr)) return;
-    graderRef.current ??= Grader.create();
+    graderRef.current = Grader.shared();
     // A lighter LUT for the preview, so the sliders react at once; the export uses 65 points.
     graderRef.current?.setLut(buildGradeLut(grade, lutId ? look : null, 33), 33);
     setLutRev((n) => n + 1);

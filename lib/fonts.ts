@@ -21,10 +21,16 @@ const faces = new Map<string, FaceInfo[]>();
 export const facesOf = (family: string): FaceInfo[] => faces.get(family) ?? [];
 const has = (f: FaceInfo) => facesOf(f.family).some((x) => sameFace(x, f));
 
+/**
+ * Name the browser knows a face under. Condensed / expanded files get a family of their own: the canvas
+ * cannot ask for a width in every browser (Safari ignores the whole font then), a family name always works.
+ */
+export const canvasFamily = (family: string, stretch?: string) => (stretch && stretch !== "normal" ? `${family} ~${stretch}` : family);
+
 async function register(f: FaceInfo, blob: Blob) {
   if (has(f)) return;
-  const face = new FontFace(f.family, await blob.arrayBuffer(), {
-    weight: String(f.weight), style: f.italic ? "italic" : "normal", stretch: f.stretch === "normal" ? "normal" : f.stretch,
+  const face = new FontFace(canvasFamily(f.family, f.stretch), await blob.arrayBuffer(), {
+    weight: String(f.weight), style: f.italic ? "italic" : "normal",
   });
   await face.load();
   document.fonts.add(face);
@@ -89,7 +95,10 @@ export async function addFont(file: File): Promise<FaceInfo> {
 export async function removeFont(family: string): Promise<void> {
   for (const f of facesOf(family)) await delMedia(keyOf(f));
   faces.delete(family);
-  for (const face of [...document.fonts]) if (face.family.replace(/"/g, "") === family) document.fonts.delete(face);
+  for (const face of [...document.fonts]) {
+    const name = face.family.replace(/"/g, "");
+    if (name === family || name.startsWith(`${family} ~`)) document.fonts.delete(face);
+  }
 }
 
 /**

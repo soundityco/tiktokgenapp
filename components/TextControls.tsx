@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FONT_LABELS } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
-import { addFont, DuplicateFont, facesOf, removeFont } from "@/lib/fonts";
+import { addFont, canvasFamily, DuplicateFont, facesOf, removeFont } from "@/lib/fonts";
 import { type FaceInfo, groupFamilies, STRETCH_LABEL } from "@/lib/fontInfo";
 import { GOOGLE_FONTS, type GoogleFont, googleFont, hasItalic, loadGoogleFont, loadPreview, previewFamily } from "@/lib/googleFonts";
 import { bundledFont, parseHex } from "@/lib/render";
@@ -101,7 +101,10 @@ export function FontPicker({
     return (await loadGoogleFont(g.family, w)) ? { googleFont: g.family, weight: w, customFont: undefined } : null;
   });
   useEffect(() => { if (!open) endPreview(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+  // Leaving the panel (another tab) while a font is under the pointer: the post gets its own font back.
+  const previewRef = useRef(onPreview);
+  previewRef.current = onPreview;
+  useEffect(() => () => { clearTimeout(hoverTimer.current); if (hovered.current) previewRef.current?.(null); }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -226,7 +229,7 @@ export function FontPicker({
           onClick={() => (gf ? void pickGoogle(gf, style.weight ?? 400, !style.italic) : onChange({ italic: !style.italic || undefined }))}>{t("Italic")}</button>
         {ownWidths.length > 1 && ownWidths.map((w) => (
           <button key={w} className={"btn sm" + ((style.stretch ?? "normal") === w ? " primary" : "")}
-            style={{ fontFamily: labelCss, fontStretch: w }} onClick={() => onChange({ stretch: w === "normal" ? undefined : w })}>{t(STRETCH_LABEL[w] ?? w)}</button>
+            style={{ fontFamily: `"${canvasFamily(style.customFont ?? "", w)}"` }} onClick={() => onChange({ stretch: w === "normal" ? undefined : w })}>{t(STRETCH_LABEL[w] ?? w)}</button>
         ))}
       </div>
       {missing && <p className="notice warn xs">{t("This font is not loaded on this device: load the file again to see it.")}</p>}

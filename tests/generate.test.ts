@@ -191,3 +191,15 @@ describe("drawHook (video studio)", () => {
     expect(drawHook(ws, "nope", {})).toBeNull();
   });
 });
+
+describe("drawHook with favourite hooks", () => {
+  it("the hooks left out stay in the bag", () => {
+    const ws = { ...defaultWorkspace(), noRepeat: true, favorTop: true };
+    ws.textPools = [{ id: "h", name: "Hooks", scope: "shared", kind: "hooks", text: "un\ndeux\ntrois", views: { un: 10 } }];
+    const bags: Record<string, string[]> = { h: ["un", "deux", "trois"] };
+    const got = drawHook(ws, "h", bags, ["un"]);
+    expect(got === "deux" || got === "trois").toBe(true);
+    expect(bags.h).toContain("un"); // not drawn, still to come
+    expect(bags.h).not.toContain(got);
+  });
+});

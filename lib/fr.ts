@@ -671,4 +671,5 @@ export const FR: Record<string, string> = {
   "Turn back on": "Réactiver",
   "Camera profile and LUT turned back on for this standard SDR video.": "Profil caméra et LUT réactivés pour cette vidéo SDR standard.",
   "Turn off again": "Désactiver à nouveau",
+  "Your data is too big to be saved. Delete old releases or lists, then edit something to save again.": "Tes données sont trop lourdes pour être enregistrées. Supprime d'anciennes sorties ou listes, puis modifie quelque chose pour enregistrer à nouveau.",
 };

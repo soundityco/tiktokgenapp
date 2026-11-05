@@ -7,7 +7,8 @@
 const CORE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
 
 let core = null;
-const post = (msg, transfer) => self.postMessage(msg, transfer || []);
+let job = 0; // id of the job being run, echoed in every message so the page tells the answers apart
+const post = (msg, transfer) => self.postMessage({ ...msg, job }, transfer || []);
 
 async function load() {
   if (core) return core;
@@ -33,9 +34,12 @@ async function load() {
   return core;
 }
 
-self.onmessage = async (e) => {
-  const { type, file, files, args, duration, output = "out.mp4" } = e.data || {};
+let queue = Promise.resolve();
+self.onmessage = (e) => { queue = queue.then(() => run(e)); };
+async function run(e) {
+  const { type, file, files, args, duration, output = "out.mp4", id = 0 } = e.data || {};
   if (type !== "convert") return;
+  job = id;
   const log = [];
   try {
     const ff = await load();
@@ -66,4 +70,4 @@ self.onmessage = async (e) => {
   } catch (err) {
     post({ type: "error", message: String((err && err.message) || err), log: log.slice(-12) });
   }
-};
+}

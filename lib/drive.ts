@@ -131,8 +131,16 @@ export async function canWriteDrive(): Promise<boolean> {
 
 const FOLDER_KEY = "tktgen-drive-folder";
 
-/** The "TkTgen" folder at the root of the user's Drive, made the first time. */
-async function appFolder(): Promise<string> {
+let folderAsk: Promise<string> | null = null;
+/**
+ * The "TkTgen" folder at the root of the user's Drive, made the first time. One lookup at a time: several
+ * uploads starting together (fonts, audio, LUT on a first visit) would otherwise each make their own folder.
+ */
+function appFolder(): Promise<string> {
+  folderAsk ??= findOrMakeFolder().finally(() => { folderAsk = null; });
+  return folderAsk;
+}
+async function findOrMakeFolder(): Promise<string> {
   try {
     const known = localStorage.getItem(FOLDER_KEY);
     if (known) {

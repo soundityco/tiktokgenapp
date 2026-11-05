@@ -29,6 +29,8 @@ void main() {
   color = vec4(texture(lut, c * ((n - 1.0) / n) + 0.5 / n).rgb, 1.0);
 }`;
 
+let shared: Grader | null = null;
+
 export class Grader {
   readonly canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
@@ -83,6 +85,15 @@ export class Grader {
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   }
 
+  /** The page's grader, made once (a GPU context is a limited resource); a new one if the old one was lost. */
+  static shared(): Grader | null {
+    if (!shared || shared.lost) shared = Grader.create();
+    return shared;
+  }
+
+  /** The GPU dropped the context (driver reset, too many contexts): this grader can no longer draw. */
+  get lost() { return this.gl.isContextLost(); }
+
   /** None when the browser has no WebGL 2: the picture is then shown as recorded. */
   static create(): Grader | null {
     try {
@@ -104,7 +115,7 @@ export class Grader {
     this.size = size;
   }
 
-  get ready() { return this.size > 0; }
+  get ready() { return this.size > 0 && !this.lost; }
 
   /**
    * The region `region` (pixels of the whole w×h picture) of `pic`, graded, `outW`×`outH`.

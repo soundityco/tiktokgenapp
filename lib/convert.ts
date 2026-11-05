@@ -33,6 +33,15 @@ export function cropFor(pic: PicSettings, iw: number, ih: number, W: number, H: 
 }
 
 let worker: Worker | null = null;
+let jobs = 0;
+/** Stop the converter; the other jobs waiting on it fail at once instead of waiting forever. */
+function restart(w: Worker) {
+  w.terminate();
+  if (worker === w) worker = null;
+  w.dispatchEvent(new ErrorEvent("error", { message: "converter restarted" }));
+}
+/** Messages of the converter for one job only (the export and the frame reader share it). */
+const mine = (id: number, fn: (e: MessageEvent) => void) => (e: MessageEvent) => { if (e.data?.job === id) fn(e); };
 
 /**
  * Convert [from, to] (seconds of the camera video) to a light MP4. Its time 0 is `from`.
@@ -58,8 +67,9 @@ export function convertSegment(
       w.removeEventListener("error", onErr);
       signal.removeEventListener("abort", onAbort);
     };
-    const drop = () => { w.terminate(); if (worker === w) worker = null; }; // a fresh engine next time
-    const onMsg = (e: MessageEvent) => {
+    const drop = () => restart(w); // a fresh engine next time
+    const id = ++jobs;
+    const onMsg = mine(id, (e: MessageEvent) => {
       const m = e.data;
       if (m.type === "status") onProgress(0, m.step);
       else if (m.type === "progress") onProgress(m.p, m.step);
@@ -70,7 +80,7 @@ export function convertSegment(
         console.warn("[export] ffmpeg log:\n" + (m.log ?? []).join("\n"));
         reject(new Error(m.message));
       }
-    };
+    });
     const onErr = (e: ErrorEvent) => { cleanup(); drop(); reject(new Error(e.message || "converter could not start")); };
     const onAbort = () => { cleanup(); drop(); reject(new DOMException("aborted", "AbortError")); };
     w.addEventListener("message", onMsg);
@@ -90,6 +100,7 @@ export function convertSegment(
     ].join(",");
     w.postMessage({
       type: "convert",
+      id,
       file,
       files: lut ? [{ name: "/grade.cube", data: lut }] : [],
       duration: dur,
@@ -115,18 +126,19 @@ function runJob(file: Blob, args: string[], output: string, duration: number, si
     worker ??= new Worker("/ffmpeg/worker.js", { type: "module" });
     const w = worker;
     const cleanup = () => { w.removeEventListener("message", onMsg); w.removeEventListener("error", onErr); signal?.removeEventListener("abort", onAbort); };
-    const drop = () => { w.terminate(); if (worker === w) worker = null; };
-    const onMsg = (e: MessageEvent) => {
+    const drop = () => restart(w);
+    const id = ++jobs;
+    const onMsg = mine(id, (e: MessageEvent) => {
       const m = e.data;
       if (m.type === "done") { cleanup(); resolve(m.data); }
       else if (m.type === "error") { cleanup(); drop(); reject(new Error(m.message)); }
-    };
+    });
     const onErr = (e: ErrorEvent) => { cleanup(); drop(); reject(new Error(e.message || "converter could not start")); };
     const onAbort = () => { cleanup(); drop(); reject(new DOMException("aborted", "AbortError")); };
     w.addEventListener("message", onMsg);
     w.addEventListener("error", onErr);
     signal?.addEventListener("abort", onAbort, { once: true });
-    w.postMessage({ type: "convert", file, files: [], duration, args, output });
+    w.postMessage({ type: "convert", id, file, files: [], duration, args, output });
   });
 }
 

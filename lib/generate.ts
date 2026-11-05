@@ -96,7 +96,11 @@ export function drawHook(ws: Workspace, poolId: string, bags: Record<string, str
   const skip = new Set(exclude);
   if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length) {
     const rest = items.filter((i) => !skip.has(i));
-    return weightedPickBag(pool.id, rest.length ? rest : items, pool.views, bags, ws.noRepeat);
+    const before = bags[pool.id] ?? [];
+    const chosen = weightedPickBag(pool.id, rest.length ? rest : items, pool.views, bags, ws.noRepeat);
+    // The hooks left out (already on the video) stay in the bag: they were not drawn.
+    if (ws.noRepeat && bags[pool.id]) bags[pool.id] = [...bags[pool.id], ...before.filter((x) => skip.has(x) && !bags[pool.id].includes(x))];
+    return chosen;
   }
   return pick(pool.id, items, bags, ws.noRepeat, skip);
 }

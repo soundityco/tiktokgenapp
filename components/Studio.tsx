@@ -93,6 +93,7 @@ export default function Studio({ userName }: { userName: string }) {
   const loaded = useRef(false);
   const rev = useRef(0);
   const conflict = useRef(false);
+  const tooBig = useRef(false);
   const saveBusy = useRef(false);
   const saveAgain = useRef(false);
   /** Failed saves (server or network hiccup) are tried again by themselves: 2 s, 5 s, 15 s, then every 30 s. */
@@ -230,6 +231,9 @@ export default function Studio({ userName }: { userName: string }) {
       const j = await r.json().catch(() => ({}));
       if (r.ok) { rev.current = j.rev; retries.current = 0; setSaveState("saved"); return; }
       if (r.status === 409) { rev.current = j.rev; conflict.current = true; setSaveState("conflict"); return; }
+      // Too big to save: retrying would fail the same way, say it once.
+      if (r.status === 413) { setSaveState("error"); if (!tooBig.current) { tooBig.current = true; say(t("Your data is too big to be saved. Delete old releases or lists, then edit something to save again.")); } return; }
+      tooBig.current = false;
       setSaveState("error");
     } catch { setSaveState("error"); }
     // Not saved: try again a little later (a new edit also saves at once).
@@ -851,8 +855,10 @@ export default function Studio({ userName }: { userName: string }) {
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
             onDrawHook={(poolId, exclude) => {
-              const bags = { ...ws.bags };
-              const hook = drawHook(ws, poolId, bags, exclude);
+              // The latest workspace (not the one of this render): several hooks drawn in a row each take theirs out of the bag.
+              const cur = wsRef.current ?? ws;
+              const bags = { ...cur.bags };
+              const hook = drawHook(cur, poolId, bags, exclude);
               if (hook !== null) upd((w) => ({ ...w, bags: { ...w.bags, [poolId]: bags[poolId] ?? [] } }));
               return hook;
             }}

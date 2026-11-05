@@ -4,7 +4,8 @@ import { loadWorkspace, saveWorkspaceCas } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 const email = async () => (await auth())?.user?.email?.toLowerCase() ?? null;
-const MAX_BODY = 2_000_000;
+// Netlify functions take up to 6 MB per request; the timed lyrics of many releases need room.
+const MAX_BODY = 5_000_000;
 
 export async function GET() {
   const e = await email();
