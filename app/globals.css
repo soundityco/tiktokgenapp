@@ -406,3 +406,32 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .card:hover .adjust-open, .card.sel .adjust-open, .adjust-open:focus-visible, .adjust-open.set { opacity: 1; }
 .adjust-open.set::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-hi); }
 @media (hover: none) { .adjust-open { opacity: 1; } }
+
+/* Photo search. */
+.finder-search { position: relative; display: flex; align-items: center; }
+.finder-search svg { position: absolute; left: 10px; color: var(--muted); pointer-events: none; }
+.finder-search .input { padding-left: 32px; }
+.finder-moods { flex-wrap: wrap; gap: 6px; }
+/* A steady grid of vertical tiles (the shape of a slide): what is shown never moves, new photos come below. */
+.finder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); grid-auto-rows: max-content; align-content: start; /* rows keep the height of their tiles: the grid scrolls, it never squeezes them */ gap: 8px; max-height: min(62vh, 640px); overflow-y: auto; padding-right: 2px; transition: opacity .15s; }
+.finder-grid.stale { opacity: .45; }
+.finder-more { grid-column: 1 / -1; text-align: center; padding: var(--s2) 0; }
+.finder-skel { aspect-ratio: 9 / 16; background: linear-gradient(90deg, var(--raised) 0, #1c1c22 50%, var(--raised) 100%) 0 0 / 200% 100%; animation: skel 1.2s linear infinite; cursor: default; }
+.finder-spin { position: absolute; left: 10px; width: 13px; height: 13px; }
+.finder-item { position: relative; display: block; width: 100%; aspect-ratio: 9 / 16; margin: 0; padding: 0; border: 0; background: var(--raised); border-radius: 3px; overflow: hidden; cursor: pointer; }
+.finder-item img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .2s; }
+.finder-item img.in { opacity: 1; }
+.finder-item:hover { outline: 2px solid var(--accent-hi); }
+.finder-meta { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px; font-size: 10px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.75));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .12s; text-align: left; }
+.finder-item:hover .finder-meta, .finder-item:focus-visible .finder-meta { opacity: 1; }
+.pic-credit { margin: 0; }
+button.link { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; cursor: pointer; font: inherit; }
+/* A picture dragged over a slide. */
+.cv-wrap.drop-here { outline: 2px dashed var(--accent-hi); outline-offset: -2px; }
+.drop-hint { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: rgba(8,8,10,.55); color: #fff; font-size: var(--fs-sm); pointer-events: none; }
+/* A picture dragged over the carousel: every free slide shows it takes it; the one under the pointer stands out. */
+.slides.drag-in .card:not(.locked) .cv-wrap { outline: 1px dashed var(--line-2); outline-offset: -1px; }
+.slides.drag-in .card:not(.locked) .cv-wrap::after { content: attr(data-drop); position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 11px; color: rgba(255,255,255,.75); pointer-events: none; z-index: 2; }
+.slides.drag-in .card:not(.locked) .cv-wrap.drop-here { outline: 2px dashed var(--accent-hi); }
+.drop-preview { width: 100%; max-height: 46vh; object-fit: contain; background: #000; border-radius: var(--r); }

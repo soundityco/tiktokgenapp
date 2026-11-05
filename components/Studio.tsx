@@ -4,6 +4,8 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
+import { canWriteDrive, findSamePicture, keepPicture, sendPictureToDrive, webPicId } from "@/lib/drive";
+import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
@@ -413,6 +415,75 @@ export default function Studio({ userName }: { userName: string }) {
   }, [ws, project, fontsReady]);
 
   // ---- updaters ----
+  // ---- a picture dropped or pasted on a slide (from Pinterest, the desktop…) ----
+  const [dropPic, setDropPic] = useState<{ i: number; blob: Blob; name: string } | null>(null);
+  const [dropBusy, setDropBusy] = useState(false);
+  const [driveWrite, setDriveWrite] = useState(false);
+  /** A picture is being dragged over the page: the slides show they take it. */
+  const [boardDrag, setBoardDrag] = useState(false);
+  useEffect(() => {
+    if (dropPic) void canWriteDrive().then(setDriveWrite).catch(() => setDriveWrite(false));
+  }, [dropPic]);
+  useEffect(() => {
+    let depth = 0;
+    const outside = (e: DragEvent) => !!e.dataTransfer && (e.dataTransfer.types.includes("Files") || e.dataTransfer.types.includes("text/uri-list"));
+    const enter = (e: DragEvent) => { if (studio === "carousel" && outside(e)) { depth++; setBoardDrag(true); } };
+    const leave = (e: DragEvent) => { if (outside(e) && --depth <= 0) { depth = 0; setBoardDrag(false); } };
+    const done = (e?: Event) => {
+      // Dropped beside the slides: the browser would leave the app to open the picture.
+      if (e?.type === "drop" && studio === "carousel" && outside(e as DragEvent)) e.preventDefault();
+      depth = 0; setBoardDrag(false);
+    };
+    const over = (e: DragEvent) => { if (studio === "carousel" && outside(e)) e.preventDefault(); };
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", done);
+    window.addEventListener("dragend", done);
+    return () => { window.removeEventListener("dragover", over); window.removeEventListener("dragenter", enter); window.removeEventListener("dragleave", leave); window.removeEventListener("drop", done); window.removeEventListener("dragend", done); };
+  }, [studio]);
+  // Cmd+V of a copied picture: it goes in the selected slide.
+  useEffect(() => {
+    const paste = (e: ClipboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (studio !== "carousel" || /INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable || document.querySelector(".ov")) return;
+      const item = Array.from(e.clipboardData?.items ?? []).find((x) => x.type.startsWith("image/"));
+      const file = item?.getAsFile();
+      const cur = wsRef.current?.projects.find((p) => p.id === wsRef.current?.currentProjectId);
+      if (!file || !cur || cur.slides[cur.selectedSlide]?.locked) return;
+      e.preventDefault();
+      setDropPic({ i: cur.selectedSlide, blob: file, name: file.name && file.name !== "image.png" ? file.name : "pasted.png" });
+    };
+    window.addEventListener("paste", paste);
+    return () => window.removeEventListener("paste", paste);
+  }, [studio]);
+  const confirmDrop = async (c: DropChoice) => {
+    if (!dropPic) return;
+    const { i, blob, name } = dropPic;
+    setDropBusy(true);
+    try {
+      // In the Drive (the slide shows it on every device), else on this device only.
+      // The same picture already in the Drive: that file; else a new one in the TkTgen folder (or this device only).
+      const id = c.reuse ?? (driveWrite ? await sendPictureToDrive(blob, `photo - ${name}`) : `local:${uid()}`);
+      await keepPicture(id, blob);
+      setGen(i, { picId: id, picName: name, picCredit: undefined });
+      if (c.list) {
+        upd((w) => {
+          let pools = w.picPools, pid = c.list;
+          if (pid === "new") { pid = uid(); pools = [...pools, { id: pid, name: c.newName || "Pinterest", scope: "shared", pics: [] }]; }
+          return { ...w, picPools: pools.map((p) => (p.id === pid && !p.pics.some((x) => x.id === id) ? { ...p, pics: [...p.pics, { id, name }] } : p)) };
+        });
+      }
+      say(c.list ? t("Photo added to the slide and to the list") : t("Photo added to the slide"));
+      setDropPic(null);
+    } catch (e) {
+      console.warn("[photo] could not be kept", e);
+      say(t("The photo could not be saved. Check your connection and try again."));
+    } finally {
+      setDropBusy(false);
+    }
+  };
+
   const updProject = (fn: (p: Project) => Project) =>
     upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === w.currentProjectId ? fn(p) : p)) }));
   const updSlide = (i: number, fn: (s: SlideCfg) => SlideCfg) =>
@@ -477,7 +548,7 @@ export default function Studio({ userName }: { userName: string }) {
       const others = new Set((p.generated ?? []).filter((_, k) => k !== i).map((g) => g?.picId).filter(Boolean) as string[]);
       const pic = pickPic(p.slides[i].picPoolId, w, bags, others);
       const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
-      g[i] = { ...g[i], picId: pic?.id ?? null, picName: pic?.name };
+      g[i] = { ...g[i], picId: pic?.id ?? null, picName: pic?.name, picCredit: undefined }; // a photo of the list: no web credit
       const cfgs = p.slides.map((s, k) => (k === i ? reframe(s) : s));
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g, slides: cfgs } : x)) };
     });
@@ -938,7 +1009,7 @@ export default function Studio({ userName }: { userName: string }) {
               </ol>
             </div>
           )}
-          <div className="slides">
+          <div className={"slides" + (boardDrag ? " drag-in" : "")}>
             {project.slides.map((cfg, i) => (
               <SlideCard key={cfg.id} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
                 textPools={vText} picPools={vPics} zones={ws.zones} fontsReady={fontsReady}
@@ -946,6 +1017,9 @@ export default function Studio({ userName }: { userName: string }) {
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
                 onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt })}
                 onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
+                onWebPic={(img) => setGen(i, { picId: webPicId(img.full), picName: img.author || img.license,
+                  picCredit: { author: img.author, license: img.license, page: img.page, required: img.creditRequired } })}
+                onImage={(blob, name) => { setBoardDrag(false); setDropPic({ i, blob, name }); }}
                 onDuplicate={() => duplicateSlide(i)} onDelete={() => deleteSlide(i)}
                 onAdjustAll={(a) => { updProject((p) => ({ ...p, slides: p.slides.map((s) => (s.locked ? s : { ...s, pic: { ...s.pic, adjust: a ? { ...a } : undefined } })) })); say(t("Photo edits put on every slide")); }}
                 onMoveLeft={() => moveSlide(i, i - 1)} onMoveRight={() => moveSlide(i, i + 1)}
@@ -1029,6 +1103,11 @@ export default function Studio({ userName }: { userName: string }) {
           });
           say(t("{n} hooks added", { n: hooks.length }));
         }} />
+      )}
+      {dropPic && project && (
+        <DropPhotoDialog blob={dropPic.blob} slide={dropPic.i} pools={vPics} canDrive={driveWrite} busy={dropBusy}
+          findSame={() => findSamePicture(dropPic.blob, vPics.flatMap((p) => p.pics.map((x) => x.id)))}
+          onConfirm={(c) => void confirmDrop(c)} onClose={() => { if (!dropBusy) setDropPic(null); }} />
       )}
       {versionsOpen && (
         <VersionHistory onClose={() => setVersionsOpen(false)}

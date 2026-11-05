@@ -147,6 +147,8 @@ export interface GenSlide {
   text: string;
   picId: string | null;
   picName?: string;
+  /** Photo found on the web: who took it and its licence (CC BY: credit them in the post caption). */
+  picCredit?: { author: string; license: string; page: string; required: boolean };
 }
 
 /** Reusable text style, saved in the workspace and available in every project. */

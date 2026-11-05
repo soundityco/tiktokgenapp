@@ -217,12 +217,12 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
 }
 
 /** Files the app put in the TkTgen folder with this label (see uploadToDrive), with their labels. */
-export async function listAppFiles(kind: string): Promise<{ id: string; name: string; appProperties: Record<string, string> }[]> {
+export async function listAppFiles(kind: string): Promise<{ id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[]> {
   const q = `appProperties has { key='tktgen' and value='${kind}' } and trashed = false and '${await appFolder()}' in parents`;
-  const out: { id: string; name: string; appProperties: Record<string, string> }[] = [];
+  const out: { id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[] = [];
   let pageToken = "";
   do {
-    const params = new URLSearchParams({ q, fields: "nextPageToken, files(id,name,appProperties)", pageSize: "1000" });
+    const params = new URLSearchParams({ q, fields: "nextPageToken, files(id,name,appProperties,md5Checksum,size)", pageSize: "1000" });
     if (pageToken) params.set("pageToken", pageToken);
     const data = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
     out.push(...(data.files ?? []));
@@ -300,9 +300,15 @@ async function fromDisk(id: string): Promise<ImageBitmap | null> {
   try { touch(id); return await createImageBitmap(blob); } catch { return null; }
 }
 
+/** A photo found on the web (image search): its id holds its address. */
+export const webPicId = (url: string) => `web:${url}`;
+export const isWebPic = (id: string) => id.startsWith("web:");
+
 /** Download and decode a photo, then keep a copy on the device. */
 async function download(id: string): Promise<ImageBitmap> {
-  const res = await api(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`);
+  const res = isWebPic(id)
+    ? await fetch(`/api/images/file?u=${encodeURIComponent(id.slice(4))}`).then((r) => { if (!r.ok) throw new Error(`picture ${r.status}`); return r; })
+    : await api(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`);
   const bmp = await decodeImage(await res.blob());
   void encode(bmp)
     .then((b) => putMedia(DISK + id, b))
@@ -325,6 +331,56 @@ let active = 0;
 const queue: (() => void)[] = [];
 const slot = () => new Promise<void>((r) => (active < 4 ? (active++, r()) : queue.push(() => (active++, r()))));
 const release = () => { active--; queue.shift()?.(); };
+
+/** A picture given by the user (dropped, pasted): kept on this device under its id, as if it had been downloaded. */
+export async function keepPicture(id: string, blob: Blob): Promise<void> {
+  const bmp = await decodeImage(blob);
+  remember(id, Promise.resolve(bmp));
+  try {
+    await putMedia(DISK + id, await encode(bmp));
+    (await diskIds()).add(id);
+    touch(id);
+  } catch { /* storage full: shown for this visit only */ }
+}
+
+// ---- the same picture already in the Drive (checksum of its bytes, which Drive keeps for every file) ----
+const SUMS_KEY = "tktgen-drive-md5";
+const readSums = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(SUMS_KEY) ?? "{}"); } catch { return {}; } };
+
+/**
+ * A Drive photo with exactly these bytes: in the TkTgen folder, or among `ids` (the photos of the lists).
+ * The checksums of the list photos are asked once, then kept on this device. Null when none matches.
+ */
+export async function findSamePicture(blob: Blob, ids: string[]): Promise<string | null> {
+  const { md5 } = await import("./md5");
+  const sum = md5(new Uint8Array(await blob.arrayBuffer()));
+  try {
+    const mine = await listAppFiles("photo");
+    const hit = mine.find((f) => f.md5Checksum === sum);
+    if (hit) return hit.id;
+  } catch { /* no Drive folder yet: only the lists are looked at */ }
+  const sums = readSums();
+  const known = ids.find((id) => sums[id] === sum);
+  if (known) return known;
+  const missing = ids.filter((id) => !(id in sums) && !id.includes(":")).slice(0, 400);
+  let found: string | null = null;
+  for (let i = 0; i < missing.length && !found; i += 6) {
+    await Promise.all(missing.slice(i, i + 6).map(async (id) => {
+      try {
+        const m = await (await api(`https://www.googleapis.com/drive/v3/files/${id}?fields=md5Checksum&supportsAllDrives=true`)).json();
+        sums[id] = m.md5Checksum ?? "";
+        if (m.md5Checksum === sum) found = id;
+      } catch { sums[id] = ""; }
+    }));
+  }
+  try { localStorage.setItem(SUMS_KEY, JSON.stringify(sums)); } catch { /* storage full */ }
+  return found;
+}
+
+/** Put a picture in the TkTgen folder of the user's Drive; returns its Drive id (a photo of any list). */
+export async function sendPictureToDrive(blob: Blob, name: string): Promise<string> {
+  return uploadToDrive(blob, name, () => {}, new AbortController().signal, blob.type || "image/jpeg", { tktgen: "photo" });
+}
 
 export function loadDriveImage(id: string): Promise<Img> {
   let p = cache.get(id);
