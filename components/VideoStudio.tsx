@@ -306,6 +306,8 @@ export default function VideoStudio({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const videoUrlRef = useRef(videoUrl);
+  videoUrlRef.current = videoUrl;
   /** The browser opened the camera file (it can play it): until then the timeline shows it is loading. */
   const [playerReady, setPlayerReady] = useState(false);
   /** The user let the app create files in their Drive (null: not known yet). */
@@ -527,6 +529,7 @@ export default function VideoStudio({
 
   /** The <video> as a picture at official time `time`; none outside the part of the track the camera recorded. */
   const pictureOf = (el: HTMLVideoElement | null, time: number): Picture | null => {
+    if (!videoUrlRef.current) return null; // this video has no camera file (yet): nothing to show
     const off = settingsRef.current.offset;
     const inVideo = time >= off - 0.001 && (!Number.isFinite(el?.duration) || time <= off + (el?.duration ?? 0) + 0.001);
     // No picture from the player yet (Safari, before the first play): the frame read from the file.
@@ -652,7 +655,11 @@ export default function VideoStudio({
     void (async () => {
       try {
         const t0 = performance.now();
+        // Nothing of the previous video stays on screen.
         posterRef.current = null;
+        stillRef.current?.bmp.close();
+        stillRef.current = null;
+        stillWant.current = null;
         void getMedia(`poster:${clip.id}`).then(async (p) => {
           if (!p || off || token !== ioRef.current) return;
           try { posterRef.current = await createImageBitmap(p); drawAt(settingsRef.current.crop.start); } catch { /* not a picture */ }
@@ -1887,7 +1894,7 @@ export default function VideoStudio({
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
     !audioBlob ? { text: t("Audio missing"), tone: "warn" }
-    : !videoBlob ? { text: t("Video missing"), tone: "warn" }
+    : !videoBlob ? (settings.videoName ? { text: t("Video missing"), tone: "warn" } : { text: t("No camera video yet"), tone: "" })
     : syncBusy || genBusy ? { text: t("Syncing…"), tone: "" }
     : settings.score === undefined ? { text: t("Not synced yet"), tone: "warn" }
     : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };

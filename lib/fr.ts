@@ -665,4 +665,5 @@ export const FR: Record<string, string> = {
   "Layout": "Mise en page",
   "Profile and LUT": "Profil et LUT",
   "Letter spacing": "Espacement des lettres",
+  "No camera video yet": "Pas encore de vidéo caméra",
 };
