@@ -298,6 +298,14 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-grid .cv-wrap { max-width: 300px; }
 .video-grid .cv { cursor: grab; touch-action: none; }
 .video-grid .cv-wrap.landscape { max-width: 100%; }
+/* Horizontal post: a wider preview (between the vertical one and the full width), the timeline beside it;
+   when the board is too narrow for both, the preview goes above the timeline. */
+.video-center { container-type: inline-size; }
+.video-grid.wide { grid-template-columns: 480px minmax(0, 1fr); }
+@container (max-width: 900px) {
+  .video-grid.wide { grid-template-columns: minmax(0, 1fr); }
+  .video-grid.wide .cv-wrap.landscape { max-width: 640px; }
+}
 .export-bar { height: 6px; border-radius: 3px; }
 .post-pick { display: grid; gap: 2px; }
 .post-pick .item { gap: var(--s2); }

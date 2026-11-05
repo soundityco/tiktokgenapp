@@ -2234,7 +2234,7 @@ export default function VideoStudio({
           </button>
         </div>
       </div>
-      <div className="video-grid">
+      <div className={"video-grid" + (settings.format === "16:9" ? " wide" : "")}>
         <div className="stack video-stage">
           <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")} style={{ position: "relative" }}>
               <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
