@@ -69,22 +69,34 @@ async function inject(url: string, as?: { from: string; to: string }): Promise<b
  * Load a Google font at a weight, ready for the canvas. Resolves false when it cannot be loaded (offline,
  * family gone): the text then shows in the fallback font. Each family and weight is fetched once.
  */
-export function loadGoogleFont(family: string, weight = 400): Promise<boolean> {
-  const key = `${family}|${weight}`;
+export function loadGoogleFont(family: string, weight = 400, italic = false): Promise<boolean> {
+  const key = `${family}|${weight}|${italic ? "i" : ""}`;
   let p = loading.get(key);
   if (!p) {
     p = (async () => {
       try {
         // The weight asked for; the plain family when Google does not have that weight.
-        const ok = (await inject(css(`family=${fam(family)}:wght@${weight}`))) || (await inject(css(`family=${fam(family)}`)));
+        const ok = (await inject(css(`family=${fam(family)}:ital,wght@${italic ? 1 : 0},${weight}`))) || (await inject(css(`family=${fam(family)}`)));
         if (!ok) return false;
-        await document.fonts.load(`${weight} 40px "${family}"`);
-        return document.fonts.check(`${weight} 40px "${family}"`);
+        const spec = `${italic ? "italic " : ""}${weight} 40px "${family}"`;
+        await document.fonts.load(spec);
+        return document.fonts.check(spec);
       } catch {
         return false;
       }
     })();
     loading.set(key, p);
+  }
+  return p;
+}
+
+const italics = new Map<string, Promise<boolean>>();
+/** Does Google have a real italic of this family (asked once per family)? */
+export function hasItalic(family: string): Promise<boolean> {
+  let p = italics.get(family);
+  if (!p) {
+    p = fetch(css(`family=${fam(family)}:ital@1`)).then((r) => r.ok, () => false);
+    italics.set(family, p);
   }
   return p;
 }
@@ -101,15 +113,16 @@ export async function loadPreview(family: string): Promise<void> {
 }
 
 /** Every Google font used in the saved data (slides, video texts, presets), to load them at start. */
-export function googleFontsIn(data: unknown): { family: string; weight: number }[] {
-  const out = new Map<string, { family: string; weight: number }>();
+export function googleFontsIn(data: unknown): { family: string; weight: number; italic: boolean }[] {
+  const out = new Map<string, { family: string; weight: number; italic: boolean }>();
   const walk = (v: unknown) => {
     if (!v || typeof v !== "object") return;
     if (Array.isArray(v)) { v.forEach(walk); return; }
     const o = v as Record<string, unknown>;
     if (typeof o.googleFont === "string") {
       const weight = typeof o.weight === "number" ? o.weight : 400;
-      out.set(`${o.googleFont}|${weight}`, { family: o.googleFont, weight });
+      const italic = o.italic === true;
+      out.set(`${o.googleFont}|${weight}|${italic}`, { family: o.googleFont, weight, italic });
     }
     Object.values(o).forEach(walk);
   };

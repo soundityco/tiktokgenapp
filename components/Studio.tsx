@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
-import { loadSavedFonts } from "@/lib/fonts";
+import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
+import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
 import { drawHook, generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
@@ -79,6 +80,10 @@ export default function Studio({ userName }: { userName: string }) {
   const [preview, setPreview] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [fonts, setFonts] = useState<string[]>([]);
+  /** Fonts saved before their family and style were read from the files: the texts using them follow. */
+  const [renamedFonts, setRenamedFonts] = useState<Record<string, FaceInfo>>({});
+  /** Font under the pointer in the font list: shown on the selected slide until the pointer leaves. */
+  const [fontPreview, setFontPreview] = useState<Partial<SlideCfg["style"]> | null>(null);
   const [busy, setBusy] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
   const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
@@ -168,6 +173,13 @@ export default function Studio({ userName }: { userName: string }) {
 
   useEffect(() => { wsRef.current = ws; }, [ws]);
 
+  // Fonts renamed when their real family was read: the slides, video texts and presets using them follow.
+  useEffect(() => {
+    if (!ws || !Object.keys(renamedFonts).length) return;
+    upd((w) => renameFonts(w, renamedFonts));
+    setRenamedFonts({});
+  }, [ws, renamedFonts]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---- load / autosave ----
   useEffect(() => {
     const flag = new URLSearchParams(location.search).get("tiktok");
@@ -177,7 +189,11 @@ export default function Studio({ userName }: { userName: string }) {
       const msg: Record<string, string> = { connected: "TikTok connected", denied: "TikTok connection was cancelled", badstate: "TikTok connection failed (security check). Try again.", error: "TikTok connection failed. Try again.", notconfigured: "TikTok is not set up on this site yet" };
       setTimeout(() => say(t(msg[flag] ?? "TikTok")), 300);
     }
-    Promise.all([loadFonts(), loadSavedFonts().then(setFonts, () => {})]).then(() => setFontsReady(true));
+    Promise.all([loadFonts(), loadSavedFonts().then(({ families, renamed }) => { setFonts(families); setRenamedFonts(renamed); }, () => {})])
+      .then(() => setFontsReady(true))
+      // The fonts saved in the user's Drive from another browser or device come here too.
+      .then(() => syncFontsWithDrive())
+      .then((f) => { if (f) setFonts(f); });
     fetch("/api/workspace")
       .then(async (r) => {
         const j = await r.json();
@@ -191,7 +207,7 @@ export default function Studio({ userName }: { userName: string }) {
         setWs(next);
         // Google fonts used by the texts: loaded, then everything is drawn again with them.
         const gf = googleFontsIn(next);
-        if (gf.length) void Promise.all(gf.map((g) => loadGoogleFont(g.family, g.weight))).then(() => setFonts((f) => [...f]));
+        if (gf.length) void Promise.all(gf.map((g) => loadGoogleFont(g.family, g.weight, g.italic))).then(() => setFonts((f) => [...f]));
         past.current = []; future.current = []; lastHistory.current = 0;
         try {
           const raw = sessionStorage.getItem(HISTORY_KEY);
@@ -917,7 +933,7 @@ export default function Studio({ userName }: { userName: string }) {
           )}
           <div className="slides">
             {project.slides.map((cfg, i) => (
-              <SlideCard key={cfg.id} index={i} cfg={cfg} gen={project.generated?.[i]} selected={i === sel}
+              <SlideCard key={cfg.id} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
                 textPools={vText} picPools={vPics} zones={ws.zones} fontsReady={fontsReady}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
@@ -937,7 +953,7 @@ export default function Studio({ userName }: { userName: string }) {
         <aside className="col side r">
           <Inspector index={sel} cfg={project.slides[sel]} zones={ws.zones} onZones={(v) => upd((w) => ({ ...w, zones: v }))}
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
-            lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts}
+            lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts} onPreview={setFontPreview}
             onSavePreset={(name) => savePreset(name, project.slides[sel].style)} onApplyPreset={applyPreset} onDeletePreset={deletePreset} />
         </aside>
         </>

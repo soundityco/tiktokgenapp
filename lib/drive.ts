@@ -161,7 +161,9 @@ async function appFolder(): Promise<string> {
  * Upload a file to the TkTgen folder of the user's Drive, in pieces (resumable upload): big camera files
  * go through, a network hiccup retries the piece. Returns the Drive file id.
  */
-export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal, mime?: string): Promise<string> {
+export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal, mime?: string,
+  /** Private labels of the app on the file (what it is), to find it again from another browser. */
+  appProperties?: Record<string, string>): Promise<string> {
   const folder = await appFolder();
   const type = mime || blob.type || "video/mp4";
   const start = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
@@ -173,7 +175,7 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
       "X-Upload-Content-Type": type,
       "X-Upload-Content-Length": String(blob.size),
     },
-    body: JSON.stringify({ name, parents: [folder] }),
+    body: JSON.stringify({ name, parents: [folder], ...(appProperties ? { appProperties } : {}) }),
   });
   if (start.status === 401) signalAuth();
   const session = start.headers.get("Location");
@@ -204,6 +206,21 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
     onProgress(at / blob.size);
   }
   throw new Error("upload incomplete");
+}
+
+/** Files the app put in the TkTgen folder with this label (see uploadToDrive), with their labels. */
+export async function listAppFiles(kind: string): Promise<{ id: string; name: string; appProperties: Record<string, string> }[]> {
+  const q = `appProperties has { key='tktgen' and value='${kind}' } and trashed = false and '${await appFolder()}' in parents`;
+  const out: { id: string; name: string; appProperties: Record<string, string> }[] = [];
+  let pageToken = "";
+  do {
+    const params = new URLSearchParams({ q, fields: "nextPageToken, files(id,name,appProperties)", pageSize: "1000" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const data = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
+    out.push(...(data.files ?? []));
+    pageToken = data.nextPageToken ?? "";
+  } while (pageToken);
+  return out;
 }
 
 /** A file the app put in the TkTgen folder, by its name (newest first). */

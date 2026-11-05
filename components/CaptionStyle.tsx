@@ -2,7 +2,7 @@
 import { useT } from "@/lib/i18n";
 import { defaultStyle } from "@/lib/defaults";
 import type { TextStyle } from "@/lib/types";
-import { CaseOptions, FontPicker, LookExtras } from "./TextControls";
+import { CaseOptions, FontPicker, LookExtras, TextColors } from "./TextControls";
 import { Range } from "./ui";
 
 /** Text studio of the video captions: same controls as the carousel inspector, plus loaded fonts. */
@@ -12,8 +12,11 @@ export default function CaptionStyle({
   onChange,
   onFonts,
   onReset,
+  onPreview,
   defaults = defaultStyle(),
 }: {
+  /** Font under the pointer in the font list, shown on the video at once. */
+  onPreview?: (patch: Partial<TextStyle> | null) => void;
   style: TextStyle;
   /** Values a double-click on a slider goes back to. */
   defaults?: TextStyle;
@@ -25,7 +28,7 @@ export default function CaptionStyle({
   const { t } = useT();
   return (
     <div className="stack">
-      <FontPicker style={style} fonts={fonts} onChange={onChange} onFonts={onFonts} />
+      <FontPicker style={style} fonts={fonts} onChange={onChange} onFonts={onFonts} onPreview={onPreview} />
 
       <label className="field">{t("Style")}
         <select className="input" value={style.look} onChange={(e) => onChange({ look: e.target.value as TextStyle["look"] })}>
@@ -34,10 +37,7 @@ export default function CaptionStyle({
         </select>
       </label>
       <Range label={t("Size")} value={style.size} min={18} max={200} onChange={(v) => onChange({ size: v })} onReset={() => onChange({ size: defaults.size })} />
-      <div className="cols2">
-        <label className="field">{t("Text color")}<input type="color" value={style.color} onChange={(e) => onChange({ color: e.target.value })} /></label>
-        <label className="field">{style.look === "box" ? t("Box color") : t("Outline color")}<input type="color" value={style.accent} onChange={(e) => onChange({ accent: e.target.value })} /></label>
-      </div>
+      <TextColors style={style} onChange={onChange} />
       <LookExtras style={style} onChange={onChange} />
       <div className="cols2">
         <label className="field">{t("Case")}

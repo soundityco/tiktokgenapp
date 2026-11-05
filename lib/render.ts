@@ -14,6 +14,22 @@ const FONTS: Record<FontId, { family: string; weight: number; italic?: boolean }
   typewriter: { family: '"Courier New", Courier, monospace', weight: 700 },
 };
 
+/** A #rrggbb colour with an opacity (0-1). */
+export function withAlpha(hex: string, a: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m || a >= 1) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, a).toFixed(3)})`;
+}
+
+/** "#abc", "abc", "#AABBCC" → "#aabbcc"; null when it is not a hex colour. */
+export function parseHex(v: string): string | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+  if (!m) return null;
+  const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join("") : m[1];
+  return `#${h.toLowerCase()}`;
+}
+
 /** CSS font of a bundled font, to show its name in it (font picker). */
 export const bundledFont = (id: FontId) => FONTS[id];
 
@@ -127,11 +143,13 @@ function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: 
 
 function setFont(ctx: CanvasRenderingContext2D, st: TextStyle, size: number) {
   if (st.customFont) {
-    ctx.font = `400 ${size}px "${st.customFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
+    // A family of loaded files: the browser picks the file of this weight, italic and width.
+    const stretch = st.stretch && st.stretch !== "normal" ? `${st.stretch} ` : "";
+    ctx.font = `${st.italic ? "italic " : ""}${stretch}${st.weight ?? 400} ${size}px "${st.customFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
     return;
   }
   if (st.googleFont) {
-    ctx.font = `${st.weight ?? 400} ${size}px "${st.googleFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
+    ctx.font = `${st.italic ? "italic " : ""}${st.weight ?? 400} ${size}px "${st.googleFont.replace(/"/g, "")}", ${FONTS.classic.family}`;
     return;
   }
   const f = FONTS[st.font];
@@ -225,14 +243,16 @@ export function drawStyledText(
       ctx.strokeText(line, lx, ly);
     }
     if (st.look === "shadow") {
-      ctx.shadowColor = st.accent;
-      ctx.shadowBlur = L.size * 0.35;
-      ctx.shadowOffsetY = L.size * 0.05;
+      ctx.shadowColor = withAlpha(st.accent, (st.shadowOpacity ?? 100) / 100);
+      ctx.shadowBlur = L.size * (st.shadowBlur ?? 35) / 100;
+      ctx.shadowOffsetX = L.size * (st.shadowX ?? 0) / 100;
+      ctx.shadowOffsetY = L.size * (st.shadowY ?? 5) / 100;
     }
     ctx.fillStyle = st.color;
     ctx.fillText(line, lx, ly);
     ctx.shadowColor = "transparent";
     ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
     y += L.lh;
   });

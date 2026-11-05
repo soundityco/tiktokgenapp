@@ -18,11 +18,22 @@ export interface TextStyle {
   googleFont?: string;
   /** Weight of the Google font (default 400). */
   weight?: number;
+  /** Italic (Google font, or a loaded family that has an italic file). */
+  italic?: boolean;
+  /** Width of a loaded family that has condensed / expanded files (CSS font-stretch keyword). */
+  stretch?: string;
   look: "outline" | "box" | "shadow" | "plain";
   /** "sentence": lower case with a capital at the start of each line. */
   case: "asis" | "upper" | "lower" | "sentence";
   /** Outline thickness, % of the text size (default 20). Drawn outside the letters. */
   stroke?: number;
+  /** Shadow mode: blur, % of the text size (default 35). */
+  shadowBlur?: number;
+  /** Shadow mode: offset right (+) / left (−) and down (+) / up (−), % of the text size (default 0 and 5). */
+  shadowX?: number;
+  shadowY?: number;
+  /** Shadow mode: opacity 0-100 (default 100). */
+  shadowOpacity?: number;
   /** Box mode: padding left and right of the text, % of the text size (default 30). */
   padX?: number;
   /** Box mode: extra padding above and below the text, % of the text size (default 0). */

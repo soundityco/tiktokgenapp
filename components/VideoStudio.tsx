@@ -413,12 +413,14 @@ export default function VideoStudio({
     [project.lyricWords, mode, lineChars, settings.crop.start, settings.crop.duration]
   );
 
+  /** Font under the pointer in a font list (lyrics or hook style): shown on the video until the pointer leaves. */
+  const [fontPreview, setFontPreview] = useState<null | { which: "caption" | "hook"; patch: Partial<TextStyle> }>(null);
   const styleRef = useRef(captionStyle);
-  styleRef.current = captionStyle;
+  styleRef.current = fontPreview?.which === "caption" ? { ...captionStyle, ...fontPreview.patch } : captionStyle;
   // The hooks look like the lyrics until they get their own style, but at the top of the picture.
   const hookStyle: TextStyle = useMemo(() => settings.hookStyle ?? { ...captionStyle, y: 16 }, [settings.hookStyle, captionStyle]);
   const hookStyleRef = useRef(hookStyle);
-  hookStyleRef.current = hookStyle;
+  hookStyleRef.current = fontPreview?.which === "hook" ? { ...hookStyle, ...fontPreview.patch } : hookStyle;
   const activeRef = useRef<(time: number) => string | null>(() => null);
   activeRef.current = (time: number) => {
     // Lyrics generated from the audio win; hand-placed lines are the fallback.
@@ -749,6 +751,23 @@ export default function VideoStudio({
     })();
   }, [settings.grade?.lut, look, driveWrite]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The official audio imported from the computer goes to Drive by itself (once): any browser or device gets it back.
+  const audioUp = useRef<string | null>(null);
+  useEffect(() => {
+    if (!audioBlob || project.audioDriveId || !driveWrite) return;
+    const key = `${project.id}|${audioBlob.size}`;
+    if (audioUp.current === key) return;
+    audioUp.current = key;
+    const name = `${project.name || "TkTgen"} - ${t("official audio")} - ${project.audioName ?? "audio"}`.replace(/[\\/:*?"<>|]+/g, "-");
+    void uploadToDrive(audioBlob, name, () => {}, new AbortController().signal, audioBlob.type || "application/octet-stream", { tktgen: "audio", project: project.id })
+      .then((id) => {
+        // Still the same file of the same release: remember where it is.
+        onProject((p) => (p.id === project.id && p.audioSize === audioBlob.size && !p.audioDriveId ? { ...p, audioDriveId: id } : p));
+        onSaveNow();
+      })
+      .catch((e) => { console.warn("[drive] audio upload failed", e); audioUp.current = null; });
+  }, [audioBlob, project.audioDriveId, driveWrite, project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** The camera file from Drive, on a device that does not have it. */
   const fetchOriginal = async () => {
     const id = settings.drive?.originalId;
@@ -1019,7 +1038,7 @@ export default function VideoStudio({
 
   useEffect(() => {
     if (!playing) drawAt(head);
-  }, [drawAt, head, playing, settings, timed, cues, captionStyle, hookStyle, videoUrl, fonts, aids, snap, lutRev, rawView]);
+  }, [drawAt, head, playing, settings, timed, cues, captionStyle, hookStyle, videoUrl, fonts, aids, snap, lutRev, rawView, fontPreview]);
 
   // Paused: keep the picture on the frame that matches the playhead, so trimming and re-syncing are seen live.
   useEffect(() => {
@@ -2477,7 +2496,10 @@ export default function VideoStudio({
                     {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
                   </select>
                 </label>
-                {hooks.length > 1 && hookItems.length > 0 && <button className="btn sm" onClick={drawAll} title={t("A different hook from the list for each one")}>{t("Draw them all")}</button>}
+                {hookItems.length > 0 && (
+                  <button className="btn primary" title={t("A different hook from the list for each one")}
+                    onClick={() => { if (hooks.length) drawAll(); else addHook(drawFor([]) ?? ""); }}><Icon name="sparkle" />{t("Generate")}</button>
+                )}
               </div>
               {!hookPools.length && <p className="muted xs">{t("Make a hook list in the carousel (Import hooks): the video draws from the same lists.")}</p>}
               {hooks.map((h, i) => (
@@ -2491,7 +2513,7 @@ export default function VideoStudio({
                     onChange={(e) => editHook(h.id, { text: e.target.value })} />
                   {hookItems.length > 0 && (
                     <div className="row">
-                      <button className="btn sm" onClick={() => drawInto(h.id)} title={t("A hook from the list, not used lately (same draw as the carousel)")}>{t("Draw")}</button>
+                      <button className="btn sm quiet" onClick={() => drawInto(h.id)} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Another hook")}</button>
                       <select className="input sm grow" value="" aria-label={t("Pick from the list")}
                         onChange={(e) => { if (e.target.value) editHook(h.id, { text: e.target.value }); }}>
                         <option value="">{t("Pick from the list…")}</option>
@@ -2522,7 +2544,6 @@ export default function VideoStudio({
               ))}
               <div className="row">
                 <button className="btn sm" onClick={() => addHook()}><Icon name="plus" size={13} />{t("Add a hook")}</button>
-                {hookItems.length > 0 && <button className="btn sm" onClick={() => addHook(drawFor(hooks.map((h) => h.text)) ?? "")}>{t("Add a drawn hook")}</button>}
                 {hooks.length > 0 && <button className="btn sm quiet" onClick={() => setTab("hookstyle")}>{t("Its style")} →</button>}
               </div>
             </div>
@@ -2547,6 +2568,7 @@ export default function VideoStudio({
                       defaults={slideStyle}
                       fonts={fonts}
                       onChange={(patch) => setV({ hookStyle: { ...hookStyle, ...patch } })}
+                      onPreview={(patch) => setFontPreview(patch ? { which: "hook", patch } : null)}
                       onFonts={onFonts}
                       onReset={() => setV({ hookStyle: undefined })}
                     />
@@ -2579,6 +2601,7 @@ export default function VideoStudio({
                   defaults={slideStyle}
                   fonts={fonts}
                   onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
+                  onPreview={(patch) => setFontPreview(patch ? { which: "caption", patch } : null)}
                   onFonts={onFonts}
                   onReset={() => setV({ captionStyle: undefined })}
                 />

@@ -3,7 +3,7 @@ import { defaultPic, defaultStyle } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
 import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
-import { CaseOptions, FontPicker, LookExtras, StylePresets } from "./TextControls";
+import { CaseOptions, FontPicker, LookExtras, StylePresets, TextColors } from "./TextControls";
 import { Range, Section } from "./ui";
 
 interface Props {
@@ -20,11 +20,13 @@ interface Props {
   onDeletePreset: (id: string) => void;
   fonts: string[];
   onFonts: (names: string[]) => void;
+  /** Font under the pointer in the font list, shown on the slide at once. */
+  onPreview?: (patch: Partial<TextStyle> | null) => void;
 }
 
 export default function Inspector({
   index, cfg, zones, onZones, onCfg, onApplyAll,
-  lyrics, presets, onSavePreset, onApplyPreset, onDeletePreset, fonts, onFonts,
+  lyrics, presets, onSavePreset, onApplyPreset, onDeletePreset, fonts, onFonts, onPreview,
 }: Props) {
   const { t } = useT();
   const st = cfg.style, pic = cfg.pic;
@@ -67,17 +69,14 @@ export default function Inspector({
         </Section>
 
         <Section title={t("Text")}>
-          <FontPicker style={st} fonts={fonts} onChange={setS} onFonts={onFonts} />
+          <FontPicker style={st} fonts={fonts} onChange={setS} onFonts={onFonts} onPreview={onPreview} />
           <label className="field">{t("Style")}
             <select className="input" value={st.look} onChange={(e) => setS({ look: e.target.value as TextStyle["look"] })}>
               <option value="outline">{t("Outline")}</option><option value="box">{t("Box")}</option><option value="shadow">{t("Shadow")}</option><option value="plain">{t("Plain")}</option>
             </select>
           </label>
           <Range label={t("Size")} value={st.size} min={18} max={200} onChange={(v) => setS({ size: v })} onReset={() => setS({ size: defaultStyle().size })} />
-          <div className="cols2">
-            <label className="field">{t("Text color")}<input type="color" value={st.color} onChange={(e) => setS({ color: e.target.value })} /></label>
-            <label className="field">{st.look === "box" ? t("Box color") : t("Outline color")}<input type="color" value={st.accent} onChange={(e) => setS({ accent: e.target.value })} /></label>
-          </div>
+          <TextColors style={st} onChange={setS} />
           <LookExtras style={st} onChange={setS} />
           <div className="cols2">
             <label className="field">{t("Case")}
