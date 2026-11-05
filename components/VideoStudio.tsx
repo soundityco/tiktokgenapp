@@ -260,6 +260,10 @@ function whenReady(el: HTMLVideoElement, wait = 3000): Promise<void> {
  * lyrics once, then export a vertical clip with the official audio and the lyrics burned in.
  */
 export default function VideoStudio({
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   project,
   hookPools,
   onDrawHook,
@@ -272,6 +276,11 @@ export default function VideoStudio({
   onSavePreset,
   onDeletePreset,
 }: {
+  /** History of the workspace, shared with the carousel. */
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   project: Project;
   /** Hook lists of the release (the same as the carousel's). */
   hookPools: TextPool[];
@@ -2010,6 +2019,9 @@ export default function VideoStudio({
         </div>
         <span className="grow" />
         <div className="row nowrap" style={{ alignItems: "flex-end" }}>
+          {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
+          <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
+          <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
           <label className="field" style={{ margin: 0 }}>{t("Video")}
             <select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>

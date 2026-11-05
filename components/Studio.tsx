@@ -847,6 +847,7 @@ export default function Studio({ userName }: { userName: string }) {
       <div className="main" data-mobile-tab={mobileTab} data-studio={studio}>
         {studio === "video" ? (
           <VideoStudio
+            canUndo={!!history.past} canRedo={!!history.future} onUndo={undo} onRedo={redo}
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
             onDrawHook={(poolId, exclude) => {
