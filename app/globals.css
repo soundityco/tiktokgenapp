@@ -13,6 +13,7 @@
 :root {
   --bg: #08080a; --panel: #0c0c0f; --raised: #131317; --line: #1f1f25; --line-2: #2d2d36;
   --text: #f0eee8; --muted: #86858f; --faint: #5a5964;
+  /* The accent: change these three (text on the accent, then the accent and its bright tone). */
   --accent: #f0eee8; --accent-hi: #ffffff; --on-accent: #0b0b10; --blue: #5b8cff;
   --ok: #7ad9a1; --warn: #f0c35c; --danger: #ff6b80;
 
@@ -30,7 +31,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   -webkit-font-smoothing: antialiased; }
 h1, h2, h3, p { margin: 0; }
 button, input, select, textarea { font: inherit; color: inherit; }
-::selection { background: #f0eee8; color: #0b0b10; }
+::selection { background: var(--accent); color: var(--on-accent); }
 :focus-visible { outline: 1px solid var(--blue); outline-offset: 2px; }
 a { color: inherit; }
 
@@ -51,8 +52,8 @@ a { color: inherit; }
 .btn.quiet { border-color: transparent; color: var(--muted); }
 .btn.quiet:hover:not(:disabled) { background: var(--raised); color: var(--text); border-color: transparent; }
 /* Destructive: a faint red ground, so it reads as a button even when quiet. */
-.btn.danger, .btn.quiet.danger { color: var(--danger); background: rgba(255,0,0,.1); border-color: transparent; }
-.btn.danger:hover:not(:disabled), .btn.quiet.danger:hover:not(:disabled) { background: rgba(255,0,0,.18); color: #ff8595; border-color: transparent; }
+.btn.danger, .btn.quiet.danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: transparent; }
+.btn.danger:hover:not(:disabled), .btn.quiet.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 20%, transparent); color: color-mix(in srgb, var(--danger) 80%, #fff); border-color: transparent; }
 .btn.sm { height: var(--h-sm); padding: 0 10px; font-size: var(--fs-sm); gap: 6px; }
 .btn.icon { width: var(--h); padding: 0; } .btn.icon.sm { width: var(--h-sm); }
 .btn:disabled { opacity: .35; cursor: not-allowed; }
@@ -100,7 +101,7 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 
 /* ---------- Login ---------- */
 .login { min-height: 100dvh; display: grid; grid-template-rows: 1fr auto; padding: var(--s5);
-  background: radial-gradient(700px 420px at 15% 0%, rgba(240,238,232,.07), transparent 70%), radial-gradient(500px 300px at 100% 100%, rgba(91,140,255,.08), transparent 70%), var(--bg); }
+  background: radial-gradient(700px 420px at 15% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%), radial-gradient(500px 300px at 100% 100%, rgba(91,140,255,.08), transparent 70%), var(--bg); }
 .login-main { display: grid; place-content: center; gap: var(--s5); max-width: 460px; justify-self: center; }
 .login-main .display { font-size: 52px; }
 .login-foot { display: flex; gap: var(--s4); justify-content: center; font-family: var(--mono); font-size: var(--fs-xs); color: var(--faint); }
@@ -212,7 +213,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 
 .crop-prev { position: relative; max-width: 220px; margin: 0 auto; }
 .crop-prev img { width: 100%; display: block; border-radius: 2px; }
-.crop-prev .z { position: absolute; background: rgba(240,238,232,.35); pointer-events: none; }
+.crop-prev .z { position: absolute; background: color-mix(in srgb, var(--accent) 35%, transparent); pointer-events: none; }
 .res { display: grid; grid-template-columns: 56px 1fr; gap: var(--s3); align-items: start; padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
 .res img { width: 56px; height: 80px; object-fit: cover; border-radius: 2px; cursor: zoom-in; }
 .bar { height: 3px; background: var(--line); overflow: hidden; } .bar > div { height: 100%; background: var(--accent-hi); transition: width .2s; }

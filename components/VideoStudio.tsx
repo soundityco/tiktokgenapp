@@ -1412,8 +1412,14 @@ export default function VideoStudio({
         g.fillRect(m0, H - 4, Math.max(0, m1 - m0), 4);
       }
     }
-    g.fillStyle = "rgba(240,238,232,.09)"; // the segment: lighter ground
+    // The app's colours (globals.css): changing the accent there changes the waveform too.
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue("--accent").trim() || "#f0eee8";
+    const head0 = css.getPropertyValue("--accent-hi").trim() || "#ffffff";
+    g.fillStyle = accent; // the segment: a faint ground of the accent
+    g.globalAlpha = 0.09;
     g.fillRect(x0, 0, Math.max(0, x1 - x0), H);
+    g.globalAlpha = 1;
     const bw = W / peaks.length;
     g.fillStyle = "#6f6e78";
     peaks.forEach((v, i) => {
@@ -1427,11 +1433,13 @@ export default function VideoStudio({
       g.fillRect(0, 0, (range[0] / dur) * W, H);
       g.fillRect((range[1] / dur) * W, 0, W - (range[1] / dur) * W, H);
     }
-    // Edges of the segment in light grey, the playhead in pure white: never mistaken for each other.
-    g.fillStyle = "#9d9ca6";
+    // Edges of the segment: the accent, dimmed; the playhead: the bright accent. Never mistaken for each other.
+    g.fillStyle = accent;
+    g.globalAlpha = 0.6;
     g.fillRect(x0 - 1, 0, 3, H);
     g.fillRect(x1 - 2, 0, 3, H);
-    g.fillStyle = "#ffffff";
+    g.globalAlpha = 1;
+    g.fillStyle = head0;
     g.fillRect((head / dur) * W - 1, 0, 2, H);
     if (videoBlob && videoDur > 0) {
       const v0 = clamp(settings.offset / dur, 0, 1) * W;
