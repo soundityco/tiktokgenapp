@@ -464,6 +464,8 @@ export default function VideoStudio({
   const rawRef = useRef(rawView);
   rawRef.current = rawView;
   const graderRef = useRef<Grader | null>(null);
+  /** This clip's LUT: put back on the shared grader before each picture (the slides use it too). */
+  const videoLut = useRef<Float32Array | null>(null);
   const [lutRev, setLutRev] = useState(0);
   const [lutReload, setLutReload] = useState(0);
   const lutId = grade?.lut?.id;
@@ -503,7 +505,8 @@ export default function VideoStudio({
     if (!colourKey || !grade || (lutId && !look && !lookErr)) return;
     graderRef.current = Grader.shared();
     // A lighter LUT for the preview, so the sliders react at once; the export uses 65 points.
-    graderRef.current?.setLut(buildGradeLut(grade, lutId ? look : null, 33), 33);
+    videoLut.current = buildGradeLut(grade, lutId ? look : null, 33);
+    graderRef.current?.setLut(videoLut.current, 33);
     setLutRev((n) => n + 1);
   }, [colourKey, look, lookErr]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -565,7 +568,8 @@ export default function VideoStudio({
       const grader = graderRef.current;
       const wantGrade = !raw && !pic.graded && gradesColour(cfg.grade);
       if (wantGrade && !grader?.ready && gradePendingRef.current) { console.debug("[grade] waiting for the grade (LUT loading)"); pic = null; }
-      else if (wantGrade && grader?.ready) {
+      else if (wantGrade && grader?.ready && videoLut.current) {
+        grader.setLut(videoLut.current, 33);
         // Grade only what the post shows, at the size it is drawn.
         const region = visibleRegion(f, pic.w, pic.h, W, H);
         const s = (f.framing === "fill" ? Math.max(W / pic.w, H / pic.h) : Math.min(W / pic.w, H / pic.h)) * f.zoom;

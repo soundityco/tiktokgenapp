@@ -947,6 +947,7 @@ export default function Studio({ userName }: { userName: string }) {
                 onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt })}
                 onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
                 onDuplicate={() => duplicateSlide(i)} onDelete={() => deleteSlide(i)}
+                onAdjustAll={(a) => { updProject((p) => ({ ...p, slides: p.slides.map((s) => (s.locked ? s : { ...s, pic: { ...s.pic, adjust: a ? { ...a } : undefined } })) })); say(t("Photo edits put on every slide")); }}
                 onMoveLeft={() => moveSlide(i, i - 1)} onMoveRight={() => moveSlide(i, i + 1)}
                 onToggleLock={() => updSlide(i, (s) => ({ ...s, locked: !s.locked }))}
                 dragging={dragFrom === i} dragOver={dragOver === i && dragFrom !== i}

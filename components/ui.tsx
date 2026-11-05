@@ -1,5 +1,5 @@
 "use client";
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 
 const stack: symbol[] = [];
@@ -140,10 +140,32 @@ export function Menu({ trigger, children, left }: { trigger: (open: boolean, tog
     document.addEventListener("keydown", key);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key); };
   }, [open]);
+  // Opens on the side where it fits: inside the column it is in (the slides never spill over the side panels),
+  // and upwards near the bottom of the screen.
+  const menu = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<{ left: boolean; up: boolean } | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { setPlace(null); return; }
+    const m = menu.current;
+    if (!m) return;
+    const r = m.getBoundingClientRect();
+    const area = (ref.current?.closest(".col, .video-side, .video-stage, [data-menu-bounds]") as HTMLElement | null)?.getBoundingClientRect();
+    const lo = Math.max(8, area?.left ?? 0), hi = Math.min(window.innerWidth - 8, area?.right ?? window.innerWidth);
+    let l = !!left;
+    if (!l && r.left < lo) l = true; // spills out on the left: open to the right instead
+    else if (l && r.right > hi) l = false;
+    setPlace({ left: l, up: r.bottom > window.innerHeight - 8 && r.top - r.height > 60 });
+  }, [open, left]);
   return (
     <div className="menu-wrap" ref={ref}>
       {trigger(open, () => setOpen((o) => !o))}
-      {open && <div className={"menu" + (left ? " left" : "")} role="menu">{children(() => setOpen(false))}</div>}
+      {open && (
+        <div ref={menu} role="menu"
+          className={"menu" + ((place ? place.left : left) ? " left" : "") + (place?.up ? " up" : "")}
+          style={place ? undefined : { visibility: "hidden" }}>
+          {children(() => setOpen(false))}
+        </div>
+      )}
     </div>
   );
 }
@@ -177,5 +199,39 @@ export function Range(p: { label: string; value: number; display?: string; min: 
       <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={hint}
         style={{ "--fill": `${((p.value - p.min) / Math.max(1e-9, p.max - p.min)) * 100}%` } as React.CSSProperties} />
     </label>
+  );
+}
+
+/**
+ * Horizontal wheel, like the photo editors of phones: drag it left or right, the value under the centre mark
+ * changes. Stops at 0 on the way; double-click (or Home) puts it back to 0; arrows move by 1, Shift + arrows by 10.
+ */
+export function Wheel({ value, min, max, label, onChange }: { value: number; min: number; max: number; label: string; onChange: (v: number) => void }) {
+  const PX = 4; // pixels of drag per unit
+  const drag = useRef<{ x: number; v: number; last: number } | null>(null);
+  const set = (v: number) => onChange(Math.round(Math.max(min, Math.min(max, v))));
+  return (
+    <div className="wheel" role="slider" tabIndex={0} aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}
+      style={{ backgroundPositionX: `${value * PX}px` }}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, v: value, last: value }; }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        let v = Math.round(d.v + (e.clientX - d.x) / PX);
+        // A small notch at 0: passing over it stops there for a moment.
+        if ((d.last > 0 && v < 0) || (d.last < 0 && v > 0) || Math.abs(v) <= 1) { if (Math.abs(v) <= 4) v = 0; }
+        d.last = v;
+        set(v);
+      }}
+      onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}
+      onDoubleClick={() => set(0)}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 10 : 1;
+        if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); set(value + step); }
+        else if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); set(value - step); }
+        else if (e.key === "Home") { e.preventDefault(); set(0); }
+      }}>
+      <span className="wheel-mark" aria-hidden />
+    </div>
   );
 }

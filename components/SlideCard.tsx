@@ -6,7 +6,15 @@ import { Menu } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { textItems } from "@/lib/generate";
-import type { GenSlide, PicPool, SlideCfg, TextPool } from "@/lib/types";
+import type { GenSlide, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
+import { Wheel } from "./ui";
+
+/** The photo edits, in the order of the panel. Vignette and grain only add. */
+const ADJUST: { k: keyof PhotoAdjust; label: string; min: number }[] = [
+  { k: "exposure", label: "Exposure", min: -100 }, { k: "contrast", label: "Contrast", min: -100 },
+  { k: "saturation", label: "Saturation", min: -100 }, { k: "temperature", label: "Warmth", min: -100 },
+  { k: "vignette", label: "Vignette", min: 0 }, { k: "grain", label: "Grain", min: 0 },
+];
 
 interface Props {
   index: number;
@@ -31,6 +39,8 @@ interface Props {
   onMoveLeft: () => void;
   onMoveRight: () => void;
   onToggleLock: () => void;
+  /** Put these photo edits on every slide. */
+  onAdjustAll: (a: PhotoAdjust | undefined) => void;
   onDragStart?: () => void;
   onDragOver?: () => void;
   onDragEnd?: () => void;
@@ -50,6 +60,11 @@ export default function SlideCard(p: Props) {
   const drag = useRef<null | { kind: "text" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number }>(null);
   const [guides, setGuides] = useState({ v: false, h: false });
   const text = gen?.text ?? "";
+  // Photo edits panel, over the picture.
+  const [adjusting, setAdjusting] = useState(false);
+  const [tool, setTool] = useState<keyof PhotoAdjust>("exposure");
+  const adj = cfg.pic.adjust ?? {};
+  const hasAdjust = Object.values(adj).some((x) => x);
 
   useEffect(() => {
     if (!cv.current) return;
@@ -146,15 +161,47 @@ export default function SlideCard(p: Props) {
             <button disabled={!p.canMoveRight} onClick={(e) => { e.stopPropagation(); close(); p.onMoveRight(); }}><Icon name="arrowRight" size={14} />{t("Move right")}</button>
             <div className="sep" />
             <button onClick={(e) => { e.stopPropagation(); close(); p.onDuplicate(); }}><Icon name="copy" size={14} />{t("Duplicate slide")}</button>
+            <button disabled={!hasAdjust} onClick={(e) => { e.stopPropagation(); close(); p.onAdjustAll(cfg.pic.adjust); }}
+              title={t("Handy for photos of the same shoot")}><Icon name="sliders" size={14} />{t("Put these photo edits on every slide")}</button>
             <button onClick={(e) => { e.stopPropagation(); close(); p.onToggleLock(); }}><Icon name={p.locked ? "unlock" : "lock"} size={14} />{p.locked ? t("Unlock slide") : t("Lock slide")}</button>
             <div className="sep" />
             <button className="danger" style={{ color: "var(--danger)" }} onClick={(e) => { e.stopPropagation(); close(); p.onDelete(); }}><Icon name="trash" size={14} />{t("Delete slide")}</button>
           </>)}
         </Menu>
       </div>
-      <div className="cv-wrap">
+      <div className="cv-wrap has-adjust">
         <canvas ref={cv} className="cv" width={1080} height={1920}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
+        {!adjusting && img && !p.locked && (
+          <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); }}>
+            <Icon name="sliders" size={15} />
+          </button>
+        )}
+        {adjusting && (() => {
+          const cur = ADJUST.find((x) => x.k === tool) ?? ADJUST[0];
+          const v = adj[cur.k] ?? 0;
+          const setAdj = (n: number) => p.onCfg((c) => {
+            const next = { ...(c.pic.adjust ?? {}), [cur.k]: n || undefined };
+            return { ...c, pic: { ...c.pic, adjust: Object.values(next).some((x) => x) ? next : undefined } };
+          });
+          return (
+            <div className="adjust-panel" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+              <div className="adjust-tools" role="tablist" aria-label={t("Photo edits")}>
+                {ADJUST.map((x) => (
+                  <button key={x.k} role="tab" aria-selected={tool === x.k} className={(tool === x.k ? "on" : "") + (adj[x.k] ? " set" : "")}
+                    onClick={() => setTool(x.k)}>{t(x.label)}</button>
+                ))}
+              </div>
+              <div className="adjust-value">{v > 0 && cur.min < 0 ? "+" : ""}{v}</div>
+              <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
+              <div className="adjust-actions">
+                <button className="btn sm quiet" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
+                <button className="btn sm" onClick={() => setAdjusting(false)}>{t("Done")}</button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
       {err && <span className="notice bad">{err}</span>}
       <textarea className="input" rows={3} aria-label={t("Caption")} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />

@@ -672,4 +672,12 @@ export const FR: Record<string, string> = {
   "Camera profile and LUT turned back on for this standard SDR video.": "Profil caméra et LUT réactivés pour cette vidéo SDR standard.",
   "Turn off again": "Désactiver à nouveau",
   "Your data is too big to be saved. Delete old releases or lists, then edit something to save again.": "Tes données sont trop lourdes pour être enregistrées. Supprime d'anciennes sorties ou listes, puis modifie quelque chose pour enregistrer à nouveau.",
+  "Warmth": "Chaleur",
+  "Adjust the photo (exposure, contrast, saturation…)": "Ajuster la photo (exposition, contraste, saturation…)",
+  "Adjust the photo": "Ajuster la photo",
+  "Photo edits": "Retouches photo",
+  "Reset": "Réinitialiser",
+  "Photo edits put on every slide": "Retouches appliquées à toutes les slides",
+  "Handy for photos of the same shoot": "Pratique pour des photos d'un même shooting",
+  "Put these photo edits on every slide": "Appliquer ces retouches à toutes les slides",
 };

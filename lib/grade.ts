@@ -8,7 +8,7 @@
  * Vignette and grain depend on the position in the picture: they are drawn on the frame (see drawLook).
  */
 
-import type { VideoGrade } from "./types";
+import type { PhotoAdjust, VideoGrade } from "./types";
 
 export type CameraProfile = VideoGrade["profile"];
 
@@ -229,6 +229,22 @@ export function toCube(data: Float32Array, size: number): string {
   const lines = [`LUT_3D_SIZE ${size}`];
   for (let i = 0; i < data.length; i += 3) lines.push(`${data[i].toFixed(6)} ${data[i + 1].toFixed(6)} ${data[i + 2].toFixed(6)}`);
   return lines.join("\n") + "\n";
+}
+
+/**
+ * The photo edits of a slide (-100 to 100, like a phone photo editor) as a grade of standard footage:
+ * the same maths as the video sliders. None when nothing is changed.
+ */
+export function photoGrade(a: PhotoAdjust | undefined): VideoGrade | null {
+  if (!a) return null;
+  const v = (k: keyof PhotoAdjust) => Math.max(-100, Math.min(100, a[k] ?? 0));
+  const vignette = Math.max(0, v("vignette")), grain = Math.max(0, v("grain")); // these only add
+  if (!v("exposure") && !v("contrast") && !v("saturation") && !v("temperature") && !vignette && !grain) return null;
+  return {
+    ...NEUTRAL_GRADE, profile: "rec709",
+    exposure: v("exposure") / 50, contrast: 1 + v("contrast") / 200, sat: 1 + v("saturation") / 100, temp: v("temperature"),
+    vignette, vignetteSize: 50, grain, grainSize: 1.5,
+  };
 }
 
 /** Everything that changes the colours, to know when a converted copy must be made again. */

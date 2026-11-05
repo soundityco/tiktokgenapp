@@ -106,7 +106,12 @@ export class Grader {
     }
   }
 
+  /** The LUT on the GPU now (shared by the video studio and the slides: each puts its own back before drawing). */
+  private data: Float32Array | null = null;
+
   setLut(data: Float32Array, size: number) {
+    if (data === this.data && size === this.size) return;
+    this.data = data;
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_3D, this.lut);

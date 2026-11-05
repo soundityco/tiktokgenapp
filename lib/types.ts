@@ -57,6 +57,17 @@ export interface PicSettings {
   darken: number; // 0-80 %
   ox: number; // offset, fraction of canvas width
   oy: number; // offset, fraction of canvas height
+  /** Photo edits (carousel), each -100 to 100 (vignette and grain 0 to 100); none: the photo as it is. */
+  adjust?: PhotoAdjust;
+}
+
+export interface PhotoAdjust {
+  exposure?: number;
+  contrast?: number;
+  saturation?: number;
+  temperature?: number;
+  vignette?: number;
+  grain?: number;
 }
 
 /** A lyrics slide uses the project's section by default, or its own section when `sectionId` is set. */

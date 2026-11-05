@@ -1,4 +1,6 @@
 import { FORMATS, FontId, PicSettings, SlideCfg, TextStyle } from "./types";
+import { buildGradeLut, drawLook, gradeKey, gradesColour, photoGrade } from "./grade";
+import { Grader } from "./gradeGL";
 
 export type Img = ImageBitmap | HTMLImageElement;
 
@@ -137,8 +139,30 @@ export function drawFramed(
   }
 }
 
+const photoLuts = new Map<string, Float32Array>();
+
 function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: number, H: number) {
-  drawFramed(ctx, img, img.width, img.height, cfg.pic, W, H);
+  const g = photoGrade(cfg.pic.adjust);
+  const grader = g && gradesColour(g) ? Grader.shared() : null;
+  if (g && grader) {
+    // The photo edits on the GPU (same maths as the video sliders), on the part of the photo the slide shows.
+    const key = gradeKey(g);
+    let lut = photoLuts.get(key);
+    if (!lut) { lut = buildGradeLut(g, null, 33); photoLuts.set(key, lut); if (photoLuts.size > 40) photoLuts.delete(photoLuts.keys().next().value!); }
+    grader.setLut(lut, 33);
+    const pic = clampPic(cfg.pic, img.width, img.height, W, H);
+    const region = visibleRegion(pic, img.width, img.height, W, H);
+    const s = (pic.framing === "fill" ? Math.max(W / img.width, H / img.height) : Math.min(W / img.width, H / img.height)) * pic.zoom;
+    const graded = grader.grade({ src: img, w: img.width, h: img.height }, region, Math.min(4096, region.w * s), Math.min(4096, region.h * s));
+    drawFramed(ctx, graded.src, img.width, img.height, { ...cfg.pic, darken: 0 }, W, H, graded.part);
+  } else {
+    drawFramed(ctx, img, img.width, img.height, { ...cfg.pic, darken: 0 }, W, H);
+  }
+  if (g) drawLook(ctx, W, H, g, 0);
+  if (cfg.pic.darken > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.min(0.9, cfg.pic.darken / 100)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 }
 
 // ---- letter spacing: the canvas does it itself where it can, else the letters are placed one by one ----
