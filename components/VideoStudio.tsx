@@ -945,7 +945,11 @@ export default function VideoStudio({
           id,
           name,
           audioName: copied ? cur.audioName : undefined,
+          // The camera file is the new video's own: nothing of the previous one (its details, its Drive copy).
           videoName: undefined,
+          videoSize: undefined,
+          source: undefined,
+          drive: undefined,
           offset: 0,
           score: undefined,
           musicStart: undefined,
