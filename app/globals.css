@@ -160,7 +160,7 @@ canvas.cv { width: 100%; height: auto; display: block; touch-action: pan-y; curs
 /* Inspector */
 .insp-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s4); }
 .insp-title h2 { font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1; }
-details.sec { border-top: 1px solid var(--line); padding: var(--s3) 0; }
+details.sec { border-top: 1px solid var(--line); padding: var(--s3) 0; } /* same top and bottom */
 details.sec:first-of-type { border-top: 0; padding-top: 0; }
 details.sec > summary { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--text); font-weight: 500; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; padding: var(--s1) 0; }
 details.sec > summary::-webkit-details-marker { display: none; }
@@ -539,8 +539,8 @@ details.sec > summary .sec-sub { color: var(--faint); text-transform: none; lett
 .tree-branch { display: grid; gap: var(--s3); min-width: 0; padding-left: 26px; position: relative; }
 .tree-branch::before { content: ""; position: absolute; left: 14px; top: calc(-1 * var(--s3)); height: calc(var(--s3) + 9px); width: 8px;
   border-left: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); border-bottom-left-radius: 4px; }
-/* Folding panels: the same space above and below each title. In a stack the gap gives the space below,
-   so no padding there (it doubled it); the space above matches the gap. */
-:where(.stack, .col.side) > details.sec { padding: var(--s2) 0 0; }
-.video-shell > .col.side > details.sec { padding-top: var(--s3); }
-:where(.stack, .col.side) > details.sec:first-child { padding-top: 0; }
+/* Folding panels: only their own padding, the same above and below each title (and below an open body).
+   Between two panels the gap of the container is cancelled, so the two never add up. */
+.stack { --gap: var(--s3); }
+.video-shell > .col.side { --gap: var(--s4); }
+:where(.stack, .col.side) > details.sec + details.sec { margin-top: calc(-1 * var(--gap, 0px)); }
