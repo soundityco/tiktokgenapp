@@ -123,6 +123,8 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 
 .group { margin-bottom: var(--s5); }
 .group-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--s2); border-bottom: 1px solid var(--line); margin-bottom: var(--s1); }
+/* Its small button does not make the row taller: the title sits on the same line as the video studio's "Release". */
+.group-head .btn.icon.sm { margin-block: calc((var(--h-sm) - 16px) / -2); }
 .item { display: flex; align-items: center; gap: var(--s3); padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); background: none; cursor: pointer; width: 100%; text-align: left; }
 .item:hover .item-name { color: #fff; }
 .item .idx { font-family: var(--mono); font-size: var(--fs-xs); color: var(--faint); width: 18px; flex: none; }
@@ -263,10 +265,15 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .card.drop-target .cv-wrap { outline: 2px dashed var(--accent-hi); }
 
 /* ---------- Studio switch ---------- */
-.studio-switch { display: inline-flex; align-items: center; padding: 3px; gap: 2px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 999px; }
-.studio-switch button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.studio-switch { position: relative; display: inline-flex; align-items: center; padding: 3px; gap: 2px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 999px; }
+.studio-switch button { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  transition: color .3s cubic-bezier(.65,0,.35,1), background-color .2s; }
 .studio-switch button:hover:not(.on) { color: var(--text); background: var(--raised); }
-.studio-switch button.on { background: var(--accent); color: var(--on-accent); }
+.studio-switch button.on { color: var(--on-accent); }
+/* The pill slides under the chosen studio (position and width measured on it), with an ease in and out. */
+.studio-thumb { position: absolute; top: 3px; left: 0; height: 26px; border-radius: 999px; background: var(--accent); z-index: 0;
+  transition: transform .42s cubic-bezier(.65,0,.35,1), width .42s cubic-bezier(.65,0,.35,1); }
+@media (prefers-reduced-motion: reduce) { .studio-thumb, .studio-switch button { transition: none; } }
 
 /* ---------- Video studio ---------- */
 .video-head { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s5); align-items: flex-end; }

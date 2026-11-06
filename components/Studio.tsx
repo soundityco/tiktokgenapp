@@ -1,7 +1,7 @@
 "use client";
 import JSZip from "jszip";
 import { signIn, signOut } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
 import { canWriteDrive, findSamePicture, keepPicture, sendPictureToDrive, webPicId } from "@/lib/drive";
@@ -75,6 +75,14 @@ export default function Studio({ userName }: { userName: string }) {
   const [studio, setStudio] = useState<"carousel" | "video">("carousel");
   // Once opened, the video studio stays mounted (hidden on the carousel): coming back is instant, nothing is read again.
   const [videoSeen, setVideoSeen] = useState(false);
+  // Where the pill of the studio switch sits: measured on the chosen button (their widths follow the language).
+  const switchRef = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    const on = switchRef.current?.querySelector<HTMLElement>("button.on");
+    // The first time it is placed without moving; afterwards it slides.
+    if (on) setThumb((cur) => ({ transform: `translateX(${on.offsetLeft}px)`, width: on.offsetWidth, ...(cur ? {} : { transition: "none" }) }));
+  }, [studio, lang, ws]);
   useEffect(() => { if (studio === "video") setVideoSeen(true); }, [studio]);
   // The studio in use survives a reload (read after mount: the server render has no localStorage).
   useEffect(() => {
@@ -915,7 +923,9 @@ export default function Studio({ userName }: { userName: string }) {
     <div className="app">
       <header className="top">
         <div className="brand"><Wordmark height={18} /> <small>{VERSION}</small></div>
-        <div className="studio-switch" role="group" aria-label={t("Studio")}>
+        <div className="studio-switch" role="group" aria-label={t("Studio")} ref={switchRef}>
+          {/* The white pill under the chosen studio: it slides from one to the other. */}
+          <span className="studio-thumb" aria-hidden style={thumb ?? { opacity: 0 }} />
           <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
             <Icon name="image" size={14} />{t("Carousel")}
           </button>
