@@ -302,6 +302,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   .video-shell { grid-template-columns: minmax(0, 1fr); height: auto; }
   .video-shell > .col { overflow: visible; }
   .video-shell > .col.side { border: 0; border-top: 1px solid var(--line); }
+  /* One column: the release, the video and its preview first, then the files and the style. */
+  .video-shell > .col.center { order: -1; }
 }
 .video-title { gap: var(--s3); min-width: 0; align-items: center; }
 .video-tools { align-items: flex-end; min-width: 0; flex: 1; }

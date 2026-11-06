@@ -174,7 +174,8 @@ export function Menu({ trigger, children, left, float }: {
   // A floating menu stays where it was put: it closes when the page moves under it.
   useEffect(() => {
     if (!open || !float) return;
-    const shut = (e: Event) => { if (!menu.current?.contains(e.target as Node)) setOpen(false); };
+    // A resize comes from the window (not a node): it closes too.
+    const shut = (e: Event) => { if (!(e.target instanceof Node) || !menu.current?.contains(e.target)) setOpen(false); };
     window.addEventListener("scroll", shut, true);
     window.addEventListener("resize", shut);
     return () => { window.removeEventListener("scroll", shut, true); window.removeEventListener("resize", shut); };
@@ -346,7 +347,7 @@ export function Select({ value, onChange, children, className = "input", style, 
   useEffect(() => {
     if (!open) return;
     const out = (e: MouseEvent) => { if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false); };
-    const away = (e: Event) => { if (!list.current?.contains(e.target as Node)) setOpen(false); };
+    const away = (e: Event) => { if (!(e.target instanceof Node) || !list.current?.contains(e.target)) setOpen(false); };
     // Escape closes the list only (not the dialog it is in).
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); setOpen(false); btn.current?.focus(); } };
     document.addEventListener("mousedown", out);
