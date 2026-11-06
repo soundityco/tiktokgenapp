@@ -145,7 +145,7 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 .slides { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: var(--s5) var(--s4); align-items: start; }
 .card { display: grid; gap: var(--s3); min-width: 0; }
 /* A select takes the width of its longest option (a long text of the list): kept inside its card. */
-.card select, .card .sel, .card .input { width: 100%; min-width: 0; max-width: 100%; }
+.card select, .card .dd, .card .input { width: 100%; min-width: 0; max-width: 100%; }
 .card-head { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; min-width: 0; }
 .card-head .btn.sm { padding: 0 8px; }
 .card-head .btn.icon.sm { width: 26px; padding: 0; }
@@ -291,7 +291,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .video-shell > .col.side .badge.truncate { display: inline-block; vertical-align: middle; line-height: 22px; }
 .video-shell > .col.side .drop { display: block; text-align: center; }
-.video-shell > .col.side .input, .video-shell > .col.side select, .video-shell > .col.side .sel { max-width: 100%; min-width: 0; }
+.video-shell > .col.side .input, .video-shell > .col.side select, .video-shell > .col.side .dd { max-width: 100%; min-width: 0; }
 .video-shell > .col.side .muted.xs { overflow-wrap: anywhere; }
 /* The phone tabs of the carousel hide its side panels: not those of the video studio. */
 .main[data-studio="video"] .video-shell > .col.side { display: grid; }
@@ -415,7 +415,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .seg button.on { background: var(--raised); color: var(--text); }
 .plain-set { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: var(--s3); }
 .plain-set.off { opacity: .4; }
-.hook-item select, .hook-item .sel { min-width: 0; max-width: 100%; }
+.hook-item select, .hook-item .dd { min-width: 0; max-width: 100%; }
 
 /* Photo edit wheel: ticks every 8 px, a longer one every 40 px, they slide under a fixed centre mark. */
 .wheel { position: relative; height: 34px; cursor: ew-resize; touch-action: none; user-select: none; outline: none;
@@ -691,22 +691,22 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .theme-group { display: grid; gap: 4px; }
 .theme-group h4 { margin: 0 0 4px; }
 .theme-item { gap: var(--s2); padding: 4px 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); }
-.theme-item .sel { width: 190px; flex: none; }
+.theme-item .dd { width: 190px; flex: none; }
 
 /* ---------- Select: the app's own drop-down (components/ui.tsx), not the browser's ---------- */
-.sel { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; min-width: 0; color: var(--text); font-family: var(--sans); letter-spacing: normal; text-transform: none; }
-.sel:disabled { opacity: .5; cursor: not-allowed; }
-.sel-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sel-chev { flex: none; color: var(--muted); transition: transform .18s; }
-.sel.open { border-color: var(--muted); }
-.sel.open .sel-chev { transform: rotate(180deg); }
-.sel-list { position: fixed; z-index: 120; display: grid; gap: 1px; padding: 4px; overflow-y: auto; max-width: min(440px, calc(100vw - 16px));
+.dd { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; min-width: 0; color: var(--text); font-family: var(--sans); letter-spacing: normal; text-transform: none; }
+.dd:disabled { opacity: .5; cursor: not-allowed; }
+.dd-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-chev { flex: none; color: var(--muted); transition: transform .18s; }
+.dd.open { border-color: var(--muted); }
+.dd.open .dd-chev { transform: rotate(180deg); }
+.dd-list { position: fixed; z-index: 120; display: grid; gap: 1px; padding: 4px; overflow-y: auto; max-width: min(440px, calc(100vw - 16px));
   background: var(--raised); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
-.sel-opt { display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: center; gap: 6px; padding: 7px 12px 7px 8px; border-radius: var(--r);
+.dd-opt { display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: center; gap: 6px; padding: 7px 12px 7px 8px; border-radius: var(--r);
   font-size: var(--fs-sm); color: var(--text); cursor: pointer; }
-.sel-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sel-opt.active { background: #1d1d23; }
-.sel-opt.on { font-weight: 600; }
-.sel-check { font-size: 12px; color: var(--text); }
-.sel-opt.off { opacity: .4; cursor: default; }
-.sel-group { padding: 8px 10px 4px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.dd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-opt.active { background: #1d1d23; }
+.dd-opt.on { font-weight: 600; }
+.dd-check { font-size: 12px; color: var(--text); }
+.dd-opt.off { opacity: .4; cursor: default; }
+.dd-group { padding: 8px 10px 4px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }

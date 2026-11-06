@@ -380,26 +380,26 @@ export function Select({ value, onChange, children, className = "input", style, 
   let lastGroup: string | undefined;
   return (
     <>
-      <button ref={btn} type="button" id={id} className={className + " sel" + (open ? " open" : "")} style={style} disabled={disabled} title={title ?? shown?.text}
+      <button ref={btn} type="button" id={id} className={className + " dd" + (open ? " open" : "")} style={style} disabled={disabled} title={title ?? shown?.text}
         aria-haspopup="listbox" aria-expanded={open} aria-label={aria["aria-label"]}
         onClick={(e) => { onClick?.(e); if (open) setOpen(false); else show(); }} onKeyDown={onKey}>
-        <span className="sel-value">{shown?.label ?? ""}</span>
-        <svg className="sel-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        <span className="dd-value">{shown?.label ?? ""}</span>
+        <svg className="dd-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
       </button>
       {open && createPortal(
-        <div ref={list} className="sel-list" role="listbox" aria-label={aria["aria-label"]} style={pos ?? { visibility: "hidden", top: 0, left: 0 }}
+        <div ref={list} className="dd-list" role="listbox" aria-label={aria["aria-label"]} style={pos ?? { visibility: "hidden", top: 0, left: 0 }}
           onMouseDown={(e) => e.preventDefault() /* the button keeps the focus */}>
           {opts.map((o, i) => {
-            const head = o.group !== lastGroup && o.group ? <div className="sel-group" key={"g" + i}>{o.group}</div> : null;
+            const head = o.group !== lastGroup && o.group ? <div className="dd-group" key={"g" + i}>{o.group}</div> : null;
             lastGroup = o.group;
             return (
               <Fragment key={i}>
                 {head}
                 <div data-i={i} role="option" aria-selected={i === selected} aria-disabled={o.disabled || undefined}
-                  className={"sel-opt" + (i === active ? " active" : "") + (i === selected ? " on" : "") + (o.disabled ? " off" : "")}
+                  className={"dd-opt" + (i === active ? " active" : "") + (i === selected ? " on" : "") + (o.disabled ? " off" : "")}
                   onMouseEnter={() => !o.disabled && setActive(i)} onClick={() => choose(i)}>
-                  <span className="sel-check" aria-hidden="true">{i === selected ? "✓" : ""}</span>
-                  <span className="sel-text">{o.label}</span>
+                  <span className="dd-check" aria-hidden="true">{i === selected ? "✓" : ""}</span>
+                  <span className="dd-text">{o.label}</span>
                 </div>
               </Fragment>
             );
