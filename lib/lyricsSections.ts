@@ -58,7 +58,7 @@ export function sectionsOf(project: Project, src: Extract<TextSource, { kind: "l
 export function slideLyrics(project: Project, src: Extract<TextSource, { kind: "lyrics" }>): string {
   const body = sectionsOf(project, src).map((s) => s.text.replace(/\r\n/g, "\n").replace(/\s+$/g, "")).filter(Boolean).join("\n\n");
   const head = src.header?.trim();
-  return head && body ? `${head}\n${body}` : head || body;
+  return head && body ? `${head}\n\n${body}` : head || body; // an empty line between the header and the lyrics
 }
 
 /** The lyrics slides of every carousel follow their sections (a section edited, ticked, renamed…). Locked slides stay. */

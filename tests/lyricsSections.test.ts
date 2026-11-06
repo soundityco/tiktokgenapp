@@ -20,7 +20,7 @@ describe("cutting a song into sections", () => {
 
 describe("a lyrics slide", () => {
   it("shows its ticked sections in the song's order, under its header", () => {
-    expect(slideLyrics(proj(), { kind: "lyrics", sectionIds: ["c", "v"], header: "Paroles" })).toBe("Paroles\na\nb\n\nla la\nla");
+    expect(slideLyrics(proj(), { kind: "lyrics", sectionIds: ["c", "v"], header: "Paroles" })).toBe("Paroles\n\na\nb\n\nla la\nla");
   });
   it("older slides: their section, or the release's default one", () => {
     expect(slideLyrics(proj(), { kind: "lyrics", sectionId: "v" })).toBe("a\nb");

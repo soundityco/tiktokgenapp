@@ -314,9 +314,8 @@ export default function SlideCard(p: Props) {
         );
         return (
           <div className="lyric-src">
-            <label className="field">{t("Sections")}
-              <Menu float trigger={(_, toggle) => (
-                <button type="button" className="input lyric-src-pick" onClick={toggle} title={names.join(", ")}>
+            <Menu float trigger={(_, toggle) => (
+                <button type="button" className="input lyric-src-pick" onClick={toggle} title={names.join(", ")} aria-label={t("Sections")}>
                   <span className="truncate">{names.length ? names.join(" · ") : t("None ticked")}</span><Icon name="chevron" size={14} />
                 </button>
               )}>
@@ -331,7 +330,6 @@ export default function SlideCard(p: Props) {
                   <button onClick={p.onEditLyrics}>{t("Edit the lyrics…")}</button>
                 </>)}
               </Menu>
-            </label>
             <div className="row nowrap lyric-src-head">
               <label className="check xs">
                 <input type="checkbox" checked={src.header !== undefined}
