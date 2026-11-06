@@ -620,3 +620,10 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
   .shine { -webkit-text-fill-color: currentColor; background: none; }
   .shine-box::after { opacity: 0; }
 }
+/* The main buttons (white): on hover, the light of the loading screen passes over them once. */
+.btn.primary { position: relative; overflow: hidden; isolation: isolate; }
+.btn.primary::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; z-index: 1;
+  background: linear-gradient(110deg, transparent 38%, rgba(255,255,255,.0) 42%, rgba(11,11,16,.07) 46%, rgba(11,11,16,.16) 50%, rgba(11,11,16,.07) 54%, transparent 62%) 100% 0 / 300% 100% no-repeat; }
+.btn.primary:hover:not(:disabled)::after { animation: shine-once .9s cubic-bezier(.45,0,.25,1); }
+@keyframes shine-once { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@media (prefers-reduced-motion: reduce) { .btn.primary:hover:not(:disabled)::after { animation: none; } }

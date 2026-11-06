@@ -914,7 +914,7 @@ export default function Studio({ userName }: { userName: string }) {
         <div className="brand"><Wordmark height={18} /> <small>{VERSION}</small></div>
         <div className="studio-switch" role="group" aria-label={t("Studio")}>
           <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
-            <Icon name="sparkle" size={14} />{t("Carousel")}
+            <Icon name="image" size={14} />{t("Carousel")}
           </button>
           <button className={studio === "video" ? "on" : ""} aria-pressed={studio === "video"} onClick={() => switchStudio("video")}>
             <Icon name="film" size={14} />{t("Video")}
