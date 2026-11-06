@@ -19,8 +19,24 @@ const ensure = () =>
     created_at timestamptz NOT NULL DEFAULT now()
   )`);
 
+let readyChunks: Promise<unknown> | null = null;
+const ensureChunks = () =>
+  (readyChunks ??= ensure().then(() => sql!`CREATE TABLE IF NOT EXISTS share_chunks (
+    code text NOT NULL,
+    f int NOT NULL,
+    n int NOT NULL,
+    data bytea NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (code, f, n)
+  )`));
+
 export const SHARE_MINUTES = 10;
-export interface ShareMeta { kind: "video" | "images"; title: string; caption?: string; files: { name: string; size: number; type: string }[]; drive?: { name: string; id: string }[] }
+export interface ShareMeta {
+  kind: "video" | "images"; title: string; caption?: string; files: { name: string; size: number; type: string }[];
+  drive?: { name: string; id: string }[];
+  /** The files go through the bridge (share_chunks) rather than straight from browser to browser. */
+  relay?: boolean;
+}
 export interface ShareRow { offer: string; answer: string | null; meta: ShareMeta }
 
 const mem = ((globalThis as any).__shares ??= new Map<string, ShareRow & { email: string; at: number }>()) as Map<string, ShareRow & { email: string; at: number }>;
@@ -30,10 +46,13 @@ export async function createShare(email: string, offer: string, meta: ShareMeta)
   const code = randomBytes(12).toString("base64url"); // unguessable: the QR code is the only way to it
   if (sql) {
     await ensure();
+    await ensureChunks();
     await sql`DELETE FROM share_sessions WHERE created_at < now() - make_interval(mins => ${SHARE_MINUTES})`;
+    await sql`DELETE FROM share_chunks WHERE created_at < now() - make_interval(mins => ${SHARE_MINUTES})`;
     await sql`INSERT INTO share_sessions (code, email, offer, meta) VALUES (${code}, ${email}, ${offer}, ${JSON.stringify(meta)}::jsonb)`;
   } else {
     for (const [k, v] of mem) if (!fresh(v.at)) mem.delete(k);
+    for (const [k, v] of memChunks) if (!fresh(v.at)) memChunks.delete(k);
     mem.set(code, { email, offer, answer: null, meta, at: Date.now() });
   }
   return code;
@@ -73,4 +92,44 @@ export async function setShareDrive(code: string, email: string, drive: { name: 
   if (!r || r.email !== email) return false;
   r.meta = { ...r.meta, drive };
   return true;
+}
+
+// The bridge: the files of a share, in slices, for a few minutes (deleted once the phone has them).
+const memChunks = ((globalThis as any).__shareChunks ??= new Map<string, { data: Buffer; at: number }>()) as Map<string, { data: Buffer; at: number }>;
+const key = (code: string, f: number, n: number) => `${code}/${f}/${n}`;
+
+/** Who opened a share (its owner), and what it holds; null once expired. */
+export async function shareInfo(code: string): Promise<{ email: string; meta: ShareMeta } | null> {
+  if (sql) {
+    await ensure();
+    const rows = await sql`SELECT email, meta FROM share_sessions WHERE code = ${code} AND created_at > now() - make_interval(mins => ${SHARE_MINUTES})`;
+    return (rows[0] as { email: string; meta: ShareMeta } | undefined) ?? null;
+  }
+  const r = mem.get(code);
+  return r && fresh(r.at) ? { email: r.email, meta: r.meta } : null;
+}
+
+export async function putChunk(code: string, f: number, n: number, data: Buffer) {
+  if (sql) {
+    await ensureChunks();
+    await sql`INSERT INTO share_chunks (code, f, n, data) VALUES (${code}, ${f}, ${n}, decode(${data.toString("base64")}, 'base64'))
+      ON CONFLICT (code, f, n) DO UPDATE SET data = EXCLUDED.data`;
+    return;
+  }
+  memChunks.set(key(code, f, n), { data, at: Date.now() });
+}
+
+export async function getChunk(code: string, f: number, n: number): Promise<Buffer | null> {
+  if (sql) {
+    await ensureChunks();
+    const rows = await sql`SELECT encode(data, 'base64') AS b FROM share_chunks WHERE code = ${code} AND f = ${f} AND n = ${n}`;
+    const b = (rows[0] as { b: string } | undefined)?.b;
+    return b === undefined ? null : Buffer.from(b, "base64");
+  }
+  return memChunks.get(key(code, f, n))?.data ?? null;
+}
+
+export async function dropChunks(code: string) {
+  if (sql) { await ensureChunks(); await sql`DELETE FROM share_chunks WHERE code = ${code}`; return; }
+  for (const k of memChunks.keys()) if (k.startsWith(`${code}/`)) memChunks.delete(k);
 }

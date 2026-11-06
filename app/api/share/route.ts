@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { RELAY_MAX } from "@/lib/shareLimits";
 import { answerShare, createShare, getShare, setShareDrive, type ShareMeta } from "@/lib/shareStore";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +21,9 @@ export async function POST(req: Request) {
     kind: body.meta.kind === "video" ? "video" : "images",
     title: String(body.meta.title ?? "").slice(0, 200),
     caption: body.meta.caption ? String(body.meta.caption).slice(0, 4000) : undefined,
-    files: body.meta.files.slice(0, 40).map((f) => ({ name: String(f.name).slice(0, 200), size: Number(f.size) || 0, type: String(f.type).slice(0, 80) })),
+    files: body.meta.files.slice(0, 40).map((f) => ({ name: String(f.name).slice(0, 200), size: Math.max(0, Number(f.size) || 0), type: String(f.type).slice(0, 80) })),
   };
+  if (body.meta.relay === true && meta.files.reduce((n, f) => n + f.size, 0) <= RELAY_MAX) meta.relay = true;
   try { return Response.json({ code: await createShare(e, body.offer, meta) }); }
   catch (err) { console.error("share create failed", err); return Response.json({ error: "server_error" }, { status: 500 }); }
 }

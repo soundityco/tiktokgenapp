@@ -77,14 +77,28 @@ export default function ShareDialog({ title, caption, kind, build, onClose }: {
         ) : state.step === "waiting" || state.step === "connecting" ? (
           <>
             <div className="share-qr">{qr ? <img src={qr} alt={t("QR code to scan with the phone")} /> : <div className="share-qr-skel shine-box" />}</div>
-            <p className={state.step === "connecting" ? "shine" : undefined}>{state.step === "connecting" ? t("Phone found, connecting…") : t("Scan it with your phone's camera, on the same Wi-Fi.")}</p>
-            <p className="muted xs">{t("The files go straight to the phone over your network, nothing is uploaded. The link works 10 minutes, for one phone.")} {mb && `· ${files.current.length} ${t("files")} · ${mb}`}</p>
+            {state.step === "waiting" && state.relay ? (
+              <>
+                <p>{t("Scan it with your phone's camera.")}</p>
+                {state.relay.pct < 1
+                  ? <><p className="muted xs shine">{t("Getting the files ready… {n}%", { n: Math.round(state.relay.pct * 100) })}</p><div className="bar export-bar shine-bar"><div style={{ width: `${state.relay.pct * 100}%` }} /></div></>
+                  : <p className="muted xs"><Icon name="check" size={12} /> {t("Files ready, waiting for the phone.")}</p>}
+                <p className="muted xs">{t("The files stay a few minutes on Rollout's side, deleted as soon as the phone has them. The link works 10 minutes, for one phone.")} {mb && `· ${files.current.length} ${t("files")} · ${mb}`}</p>
+              </>
+            ) : (
+              <>
+                <p className={state.step === "connecting" ? "shine" : undefined}>{state.step === "connecting" ? t("Phone found, connecting…") : t("Scan it with your phone's camera, on the same Wi-Fi.")}</p>
+                <p className="muted xs">{t("The files go straight to the phone over your network, nothing is uploaded. The link works 10 minutes, for one phone.")} {mb && `· ${files.current.length} ${t("files")} · ${mb}`}</p>
+              </>
+            )}
           </>
         ) : state.step === "sending" ? (
           <>
             <p className="shine">{t("Sending to the phone… {n}%", { n: Math.round(state.pct * 100) })}</p>
             <div className="bar export-bar shine-bar"><div style={{ width: `${state.pct * 100}%` }} /></div>
           </>
+        ) : state.step === "expired" ? (
+          <p className="notice warn xs">{t("The link has expired. Close this window and open it again.")}</p>
         ) : state.step === "done" ? (
           <p><Icon name="check" size={14} /> {t("On the phone: save it there, and copy the caption.")}</p>
         ) : (

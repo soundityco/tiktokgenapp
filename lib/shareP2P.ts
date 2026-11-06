@@ -4,6 +4,7 @@
  * through our server (/api/share), never the files.
  */
 import type { ShareMeta } from "./shareStore";
+import { RELAY_CHUNK, RELAY_MAX } from "./shareLimits";
 
 const ICE: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
 const CHUNK = 64 * 1024;
@@ -21,15 +22,67 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type SendState =
   | { step: "opening" }
-  | { step: "waiting"; url: string; code: string }
+  | { step: "waiting"; url: string; code: string; relay?: { pct: number } }
   | { step: "connecting"; url: string; code: string }
   | { step: "sending"; pct: number }
   | { step: "done" }
-  | { step: "failed"; code?: string; url?: string };
+  | { step: "failed"; code?: string; url?: string }
+  | { step: "expired" };
+
+const sliceCount = (size: number) => Math.max(1, Math.ceil(size / RELAY_CHUNK));
+/** A few slices at once (a server function per slice). */
+async function pool(count: number, width: number, job: (k: number) => Promise<void>) {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(width, count) }, async () => { while (next < count) await job(next++); }));
+}
+
+/**
+ * The bridge (the usual way): the files go up to our side in slices while the QR code shows, the phone takes
+ * them as they come, then they are deleted (10 minutes at most). Works whatever the networks.
+ */
+async function sendRelay(files: { name: string; blob: Blob }[], meta: Omit<ShareMeta, "files">, onState: (s: SendState) => void, signal: AbortSignal) {
+  const r = await fetch("/api/share", {
+    method: "POST", signal, headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ offer: "", meta: { ...meta, relay: true, files: files.map((f) => ({ name: f.name, size: f.blob.size, type: f.blob.type })) } }),
+  });
+  if (!r.ok) throw new Error(`share ${r.status}`);
+  const { code } = (await r.json()) as { code: string };
+  const url = `${location.origin}/share/${code}`;
+  const total = files.reduce((n, f) => n + f.blob.size, 0) || 1;
+  let up = 0;
+  onState({ step: "waiting", url, code, relay: { pct: 0 } });
+  const slices = files.flatMap((f, i) => Array.from({ length: sliceCount(f.blob.size) }, (_, n) => ({ i, n, blob: f.blob.slice(n * RELAY_CHUNK, (n + 1) * RELAY_CHUNK) })));
+  // In order (the phone reads them in order), three at a time.
+  let received = false;
+  const watch = (async () => {
+    while (!signal.aborted && !received) {
+      await sleep(1500);
+      const g = await fetch(`/api/share?code=${code}`, { signal, cache: "no-store" }).catch(() => null);
+      if (g?.status === 404) { if (!received) onState({ step: "expired" }); return; }
+      const s = g?.ok ? await g.json() : null;
+      if (s?.answer === "got") received = true;
+    }
+  })().catch(() => {});
+  await pool(slices.length, 3, async (k) => {
+    const s = slices[k];
+    for (let tries = 0; ; tries++) {
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      const p = await fetch(`/api/share/chunk?code=${code}&f=${s.i}&n=${s.n}`, { method: "PUT", signal, body: s.blob }).catch((e) => { if (signal.aborted) throw e; return null; });
+      if (p?.ok) break;
+      if (tries >= 3) throw new Error(`bridge ${p?.status ?? "network"}`);
+      await sleep(800 * (tries + 1));
+    }
+    up += s.blob.size;
+    onState({ step: "waiting", url, code, relay: { pct: up / total } });
+  });
+  await watch;
+  if (received) onState({ step: "done" });
+}
 
 /** The computer's side: opens the share, waits for the phone, sends the files. */
 export async function sendFiles(files: { name: string; blob: Blob }[], meta: Omit<ShareMeta, "files">, onState: (s: SendState) => void, signal: AbortSignal) {
   onState({ step: "opening" });
+  if (files.reduce((n, f) => n + f.blob.size, 0) <= RELAY_MAX) return sendRelay(files, meta, onState, signal);
   const pc = new RTCPeerConnection({ iceServers: ICE });
   signal.addEventListener("abort", () => pc.close(), { once: true });
   const dc = pc.createDataChannel("files", { ordered: true });
@@ -120,6 +173,39 @@ async function fromDrive(code: string, meta: ShareMeta, onState: (s: ReceiveStat
   } catch { onState({ step: "drive", meta }); }
 }
 
+/** The phone's side of the bridge: the slices as they come up, then "got" for the computer and the bridge emptied. */
+async function fromRelay(code: string, meta: ShareMeta, onState: (s: ReceiveState) => void, taken: boolean) {
+  if (taken) { onState({ step: "expired" }); return; }
+  const total = meta.files.reduce((n, f) => n + f.size, 0) || 1;
+  let got = 0;
+  onState({ step: "receiving", meta, pct: 0 });
+  const take = async (f: number, n: number): Promise<Blob> => {
+    for (let tries = 0; ; tries++) {
+      const r = await fetch(`/api/share/chunk?code=${code}&f=${f}&n=${n}`, { cache: "no-store" }).catch(() => null);
+      if (r?.ok) return r.blob();
+      if (r?.status === 410 || r?.status === 400 || tries > 400) throw new Error("expired");
+      await sleep(r?.status === 404 ? 700 : 1500); // 404: not up yet
+    }
+  };
+  try {
+    const out: File[] = [];
+    for (let f = 0; f < meta.files.length; f++) {
+      const { name, size, type } = meta.files[f];
+      const parts: Blob[] = new Array(sliceCount(size));
+      await pool(parts.length, 3, async (n) => {
+        parts[n] = await take(f, n);
+        got += parts[n].size;
+        onState({ step: "receiving", meta, pct: got / total });
+      });
+      out.push(new File(parts, name, { type }));
+    }
+    onState({ step: "done", meta, files: out });
+    // The computer shows "done"; the files leave the bridge.
+    await fetch("/api/share", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, answer: "got" }) }).catch(() => {});
+    await fetch(`/api/share/chunk?code=${code}`, { method: "DELETE" }).catch(() => {});
+  } catch { onState({ step: "expired" }); }
+}
+
 /** The phone's side: answers the computer and receives the files (or, plan B, the Drive links). */
 export async function receiveFiles(code: string, onState: (s: ReceiveState) => void) {
   onState({ step: "opening" });
@@ -127,6 +213,7 @@ export async function receiveFiles(code: string, onState: (s: ReceiveState) => v
   if (!g.ok) { onState({ step: "expired" }); return; }
   const share = (await g.json()) as { offer: string; answer: string | null; meta: ShareMeta };
   const meta = share.meta;
+  if (meta.relay) { await fromRelay(code, meta, onState, share.answer === "got"); return; }
   if (meta.drive?.length) { await fromDrive(code, meta, onState); return; }
   onState({ step: "connecting", meta });
 
