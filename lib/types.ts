@@ -76,7 +76,7 @@ export interface PhotoAdjust {
  */
 export type TextSource =
   | { kind: "none" }
-  | { kind: "pool"; poolId: string }
+  | { kind: "pool"; poolId: string; /** Only the texts of this theme of the list (see lib/themes). */ theme?: string }
   | { kind: "lyrics"; sectionId?: string; sectionIds?: string[]; header?: string };
 
 export interface SlideCfg {
@@ -98,6 +98,8 @@ export interface TextPool {
   /** hooks: one text per line; block: the whole text on one slide; captions: post captions (with their hashtags), separated by an empty line. */
   kind: "hooks" | "block" | "captions";
   text: string;
+  /** Theme of a text set by hand (hookKey of the text -> theme id, "group:<word>", a name typed, or "" other). The others are found by lib/themes. */
+  themes?: Record<string, string>;
   /** hook (normalised) -> views. Reserved for the TikTok import (phase 2). */
   views?: Record<string, number>;
 }

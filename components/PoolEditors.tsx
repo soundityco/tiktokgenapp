@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { hookKey, joinCaptions, splitCaptions, textItems } from "@/lib/generate";
+import { hookKey, joinCaptions, poolThemes, splitCaptions, textItems } from "@/lib/generate";
+import { THEMES, themeGroups, themeLabel, WORD_GROUP } from "@/lib/themes";
 import { loadDriveImage } from "@/lib/drive";
 import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
@@ -80,11 +81,54 @@ function CaptionsEditor({ text, onText }: { text: string; onText: (text: string)
   );
 }
 
+/** A hooks list by theme: each group (found locally, or set by hand) with its texts; a text's theme can be changed. */
+function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void }) {
+  const { t } = useT();
+  const items = textItems(pool);
+  const themes = poolThemes(pool);
+  const groups = themeGroups(themes);
+  // Every theme one can move a text to: the lexicon's, the groups and names already in the list.
+  const known = [...new Set([...THEMES.map((x) => x.id), ...themes.filter(Boolean)])];
+  const setTheme = (text: string, id: string) => {
+    if (id === "__new") {
+      const name = window.prompt(t("Name of the new theme"))?.trim();
+      if (!name) return;
+      id = name;
+    }
+    onChange((x) => ({ ...x, themes: { ...(x.themes ?? {}), [hookKey(text)]: id } }));
+  };
+  const handSet = (text: string) => pool.themes?.[hookKey(text)] !== undefined;
+  return (
+    <div className="theme-groups">
+      {groups.map((g) => (
+        <section key={g.id || "other"} className="theme-group">
+          <h4 className="label">{themeLabel(g.id, t)} <span className="muted">· {g.items.length}</span></h4>
+          {g.items.map((i) => (
+            <div key={i} className="row nowrap theme-item">
+              <span className="grow truncate" title={items[i]}>{items[i].replace(/\|/g, " ")}</span>
+              {handSet(items[i]) && (
+                <button className="btn sm quiet" title={t("Back to the theme found automatically")}
+                  onClick={() => onChange((x) => { const th = { ...(x.themes ?? {}) }; delete th[hookKey(items[i])]; return { ...x, themes: th }; })}>{t("Auto")}</button>
+              )}
+              <select className="input sm" value={themes[i]} aria-label={t("Theme")} onChange={(e) => setTheme(items[i], e.target.value)}>
+                {known.map((id) => <option key={id} value={id}>{themeLabel(id, t)}</option>)}
+                <option value="">{t("Other")}</option>
+                <option value="__new">{t("New theme…")}</option>
+              </select>
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; onImport: () => void; onRefreshViews?: () => void; viewsBusy?: boolean }) {
   const { t } = useT();
   const { pool } = p;
   const file = useRef<HTMLInputElement>(null);
   const [imports, setImports] = useState(0); // a .txt added: the captions boxes are read again
+  const [view, setView] = useState<"text" | "themes">("text");
   const n = textItems(pool).length;
   const perf = pool.kind === "hooks" && pool.views
     ? textItems(pool)
@@ -107,7 +151,16 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
           <option value="captions">{t("Post captions (with hashtags)")}</option>
         </select>
       </label>
-      {pool.kind === "captions" ? (
+      {pool.kind === "hooks" && n > 1 && (
+        <div className="row seg-tabs" role="tablist">
+          <button role="tab" aria-selected={view === "text"} className={"btn sm" + (view === "text" ? " on" : "")} onClick={() => setView("text")}>{t("Texts")}</button>
+          <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By theme")}</button>
+          <span className="muted xs">{t("Themes found on this device, without any online AI. Change one by hand if needed.")}</span>
+        </div>
+      )}
+      {pool.kind === "hooks" && view === "themes" && n > 1 ? (
+        <ThemesView pool={pool} onChange={p.onChange} />
+      ) : pool.kind === "captions" ? (
         <CaptionsEditor key={`${pool.id}:${imports}`} text={pool.text} onText={(text) => p.onChange((x) => ({ ...x, text }))} />
       ) : (
         <textarea className="input" rows={12} aria-label={t("Texts")} value={pool.text} onChange={(e) => p.onChange((x) => ({ ...x, text: e.target.value }))}

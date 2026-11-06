@@ -1,4 +1,5 @@
 import { slideLyrics } from "./lyricsSections";
+import { themesOf } from "./themes";
 import { GenSlide, LyricSection, PicPool, Project, TextPool, Workspace } from "./types";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g, " ").trim();
@@ -175,11 +176,15 @@ export function pickText(project: Project, ws: Workspace, slideIdx: number, bags
   if (src.kind === "pool") {
     const pool = ws.textPools.find((p) => p.id === src.poolId);
     if (!pool) return "";
-    const items = textItems(pool);
+    // One theme of the list only (its own shuffle bag); a theme left empty: the whole list.
+    const all = textItems(pool);
+    const inTheme = src.theme !== undefined ? themedItems(pool, src.theme) : all;
+    const items = inTheme.length ? inTheme : all;
+    const bag = src.theme !== undefined && inTheme.length ? `${pool.id}#${src.theme}` : pool.id;
     if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length && items.length) {
-      return weightedPickBag(pool.id, items, pool.views, bags, ws.noRepeat) ?? "";
+      return weightedPickBag(bag, items, pool.views, bags, ws.noRepeat) ?? "";
     }
-    return pick(pool.id, items, bags, ws.noRepeat) ?? "";
+    return pick(bag, items, bags, ws.noRepeat) ?? "";
   }
   return "";
 }
@@ -223,3 +228,11 @@ export function generateAll(
 
 export const poolsVisible = <T extends { scope: string; projectId?: string }>(pools: T[], projectId: string) =>
   pools.filter((p) => p.scope === "shared" || p.projectId === projectId);
+
+/** The theme of every text of a list (set by hand first, else found locally). */
+export const poolThemes = (pool: TextPool): string[] => themesOf(textItems(pool), hookKey, pool.themes);
+/** The texts of a list that speak of one theme. */
+export function themedItems(pool: TextPool, theme: string): string[] {
+  const items = textItems(pool), th = poolThemes(pool);
+  return items.filter((_, i) => th[i] === theme);
+}

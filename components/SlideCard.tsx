@@ -5,7 +5,8 @@ import Icon from "./Icon";
 import { Menu } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
-import { textItems } from "@/lib/generate";
+import { poolThemes, textItems } from "@/lib/generate";
+import { themeGroups, themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { Wheel } from "./ui";
 import ImageFinder from "./ImageFinder";
@@ -170,7 +171,12 @@ export default function SlideCard(p: Props) {
 
   // The texts of the list this slide draws from, to pick one by hand.
   const listPool = cfg.textSource.kind === "pool" ? p.textPools.find((x) => cfg.textSource.kind === "pool" && x.id === cfg.textSource.poolId) : undefined;
-  const listItems = listPool ? textItems(listPool) : [];
+  // A hooks list sorted by theme: the slide may draw from one theme only.
+  const allItems = listPool ? textItems(listPool) : [];
+  const itemThemes = listPool?.kind === "hooks" ? poolThemes(listPool) : [];
+  const groups = themeGroups(itemThemes);
+  const theme = cfg.textSource.kind === "pool" ? cfg.textSource.theme : undefined;
+  const listItems = theme !== undefined && itemThemes.includes(theme) ? allItems.filter((_, i) => itemThemes[i] === theme) : allItems;
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
   return (
@@ -293,6 +299,13 @@ export default function SlideCard(p: Props) {
           </select>
         </label>
       </div>
+      {cfg.textSource.kind === "pool" && groups.length > 1 && !p.locked && (
+        <select className="input sm slide-pick" aria-label={t("Theme")} value={theme ?? "__all"}
+          onChange={(e) => { const v = e.target.value; p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: v === "__all" ? undefined : v } } : c)); }}>
+          <option value="__all">{t("All themes ({n})", { n: allItems.length })}</option>
+          {groups.map((g) => <option key={g.id || "other"} value={g.id}>{themeLabel(g.id, t)} · {g.items.length}</option>)}
+        </select>
+      )}
       {/* Under the sources, like the sections of a lyrics slide: the same place on every slide. */}
       {listItems.length > 1 && !p.locked && (
         // The text on the slide, drawn or picked, shows as chosen in the list (a text retouched by hand: none).

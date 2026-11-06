@@ -685,3 +685,10 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 /* The release's lyrics, right of its name in both studios. */
 .studio-head .video-title { gap: var(--s5); align-items: flex-end; }
 .release-lyrics { flex: none; }
+/* A hooks list by theme. */
+.seg-tabs { gap: var(--s2); align-items: center; }
+.theme-groups { display: grid; gap: var(--s4); max-height: 56vh; overflow-y: auto; padding-right: 2px; }
+.theme-group { display: grid; gap: 4px; }
+.theme-group h4 { margin: 0 0 4px; }
+.theme-item { gap: var(--s2); padding: 4px 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); }
+.theme-item select { width: 190px; flex: none; }
