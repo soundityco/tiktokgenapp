@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, splitSong } from "@/lib/lyricsSections";
+import { linkLyrics, mergeSong, songOf, sungOf, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, splitSong } from "@/lib/lyricsSections";
 import type { Project, Workspace } from "@/lib/types";
 
 const label = (n: number) => `Part ${n}`;
@@ -116,5 +116,27 @@ describe("on opening", () => {
     expect(refreshAllLyrics(ws).projects[0].generated?.[0].text).toBe("Paroles\n\na\nb");
     const same = { projects: [refreshAllLyrics(ws).projects[0]] } as unknown as Workspace;
     expect(refreshAllLyrics(same)).toBe(same);
+  });
+});
+
+describe("one text for the carousel and the video", () => {
+  const secs = [{ id: "a", name: "Couplet", text: "un\ndeux" }, { id: "b", name: "Partie 2", text: "trois" }, { id: "c", name: "Refrain", text: "" }];
+  it("the song of the sections sings the same lines (each under its name, empty sections left out)", () => {
+    expect(songOf(secs)).toBe("[Couplet]\nun\ndeux\n\n[Partie 2]\ntrois");
+    expect(sungOf(secs)).toBe("un\ndeux\ntrois");
+  });
+  it("a release whose pasted song sings the same words is linked without placing anything again", () => {
+    const p = proj({ lyrics: secs, songLyrics: "Couplet\nun\ndeux\n\ntrois", lyricWords: [{ w: "un", s: 1, e: 2, manual: true }] as any });
+    const q = linkLyrics(p);
+    expect(q.lyricsLinked).toBe(true);
+    expect(q.lyricWords).toBe(p.lyricWords);
+    expect(q.lyricsPlacedFrom).toBe("un\ndeux\ntrois");
+  });
+  it("different words: not linked, the video studio asks", () => {
+    expect(linkLyrics(proj({ lyrics: secs, songLyrics: "autre chose" })).lyricsLinked).toBeUndefined();
+  });
+  it("the song edited in the video goes back into the sections, keeping their ids", () => {
+    const next = mergeSong(secs.slice(0, 2), "[Couplet]\nun\ndeux bis\n\n[Partie 2]\ntrois", label);
+    expect(next.map((x) => [x.id, x.name, x.text])).toEqual([["a", "Couplet", "un\ndeux bis"], ["b", "Partie 2", "trois"]]);
   });
 });

@@ -1,5 +1,13 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Careful: these lyrics are also synced on the video. Deleting the section takes its lines off the video (the other lines and your retouches stay).": "Attention : ces paroles sont aussi synchronisées sur la vidéo. Supprimer la section retire ses lignes de la vidéo (les autres lignes et tes retouches restent).",
+  "The lyrics pasted here are not the same as the release's (the carousel's sections). Keep one text for both:": "Les paroles collées ici ne sont pas les mêmes que celles de la release (les sections du carrousel). Garde un seul texte pour les deux :",
+  "The video takes the sections' text. Its lines are placed again; the words you retimed by hand keep their timing.": "La vidéo prend le texte des sections. Ses lignes sont recalées ; les mots que tu as recalés à la main gardent leur timing.",
+  "Use the release's lyrics": "Prendre les paroles de la release",
+  "The sections become the text pasted here. The video's timing does not move.": "Les sections deviennent le texte collé ici. Le timing de la vidéo ne bouge pas.",
+  "Use these for the release": "Utiliser celles-ci pour la release",
+  "Lyrics of the release": "Paroles de la release",
+  "The same text as the carousel's sections: editing it here changes them too. The video places the changed lines again; your retouches stay.": "Le même texte que les sections du carrousel : le modifier ici les modifie aussi. La vidéo recale les lignes changées ; tes retouches restent.",
   "This release has no lyrics yet. Add them: the slides and the videos use them.": "Cette release n'a pas encore de paroles. Ajoute-les : les slides et les vidéos s'en servent.",
   "The lyrics are not drawn: tick the sections under the slide": "Les paroles ne sont pas tirées au hasard : coche les sections sous la slide",
   "None ticked": "Aucune cochée",

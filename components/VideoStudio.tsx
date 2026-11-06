@@ -24,6 +24,7 @@ import CaptionStyle from "./CaptionStyle";
 import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
+import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section } from "./ui";
 
 const RATE = 25;
@@ -371,7 +372,8 @@ export default function VideoStudio({
    * Written lyrics the heard words are placed on: "song" (the lyrics pasted in the video studio),
    * "all" (every section of the carousel lyrics), a section id, or "none".
    */
-  const [writtenSrc, setWrittenSrc] = useState(project.songLyrics?.trim() || !project.lyrics.length ? "song" : "all");
+  const [writtenSrc, setWrittenSrc] = useState(project.lyricsLinked || project.songLyrics?.trim() || !project.lyrics.length ? "song" : "all");
+  const pasteRef = useRef<HTMLTextAreaElement>(null);
   const [paste, setPaste] = useState(project.songLyrics ?? "");
   /** The pasted text, unfolded (it folds into one line once the lyrics are placed). */
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -1522,8 +1524,10 @@ export default function VideoStudio({
 
   // ---- lyrics from the official audio ----
   const writtenOf = (src: string, p: Project) =>
-    parseLyrics(src === "none" ? "" : src === "song" ? p.songLyrics ?? ""
+    // Linked: the song is the release's sections (the same text as the carousel's).
+    src === "song" && p.lyricsLinked ? sungOf(p.lyrics) : parseLyrics(src === "none" ? "" : src === "song" ? p.songLyrics ?? ""
       : src === "all" ? p.lyrics.map((l) => l.text).join("\n") : p.lyrics.find((l) => l.id === src)?.text ?? "").text;
+  const lyricsLinked = !!project.lyricsLinked;
 
   /**
    * Put the written lyrics on the heard words: the text shown is exactly the written one, the speech
@@ -1559,7 +1563,7 @@ export default function VideoStudio({
     if (!heard?.length) { void generateLyrics(); return; }
     const cfg = settingsRef.current;
     const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
-    onProject((x) => ({ ...x, lyricWords: fresh ? r.words : keepManual(x.lyricWords ?? [], r.words) }));
+    onProject((x) => ({ ...x, lyricWords: fresh ? r.words : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p) }));
     setGenInfo(r.info);
     if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
@@ -1570,6 +1574,14 @@ export default function VideoStudio({
   useEffect(() => {
     if (paste === (project.songLyrics ?? "")) return;
     const id = setTimeout(() => {
+      // Linked: the song edited here goes back into the release's sections (the carousel's slides follow);
+      // the lyrics are placed again by the effect below.
+      if (lyricsLinked) {
+        if (paste.trim() && sungOf(project.lyrics) !== parseLyrics(paste).text) {
+          onProject((p) => refreshLyricSlides({ ...p, songLyrics: paste, lyrics: mergeSong(p.lyrics, paste, (n) => t("Part {n}", { n }), t("Chorus")) }));
+        }
+        return;
+      }
       onProject((p) => ({ ...p, songLyrics: paste }));
       if (writtenSrc === "song" && project.heardWords?.length && !genBusy) resyncLyrics("song", { ...project, songLyrics: paste });
       else onSaveNow();
@@ -1577,6 +1589,20 @@ export default function VideoStudio({
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paste]);
+
+  // Linked: the sections changed elsewhere (the carousel): the text here follows, unless it is being typed in.
+  useEffect(() => {
+    if (!lyricsLinked || document.activeElement === pasteRef.current) return;
+    if (parseLyrics(paste).text !== sungOf(project.lyrics)) setPaste(songOf(project.lyrics));
+  }, [project.lyrics, lyricsLinked]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and the video's lyrics are placed again on the words already heard: only the changed lines move,
+  // the lines retimed by hand keep their timing. Nothing to do when the sung words are the same.
+  useEffect(() => {
+    if (!lyricsLinked || genBusy || !project.heardWords?.length) return;
+    if (sungOf(project.lyrics) === (project.lyricsPlacedFrom ?? "")) return;
+    const id = setTimeout(() => resyncLyrics("song", project), 400);
+    return () => clearTimeout(id);
+  }, [project.lyrics, project.lyricsPlacedFrom, lyricsLinked, genBusy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Lyrics there are to place: the pasted ones (even not saved yet) or the chosen carousel ones. */
   const hasLyrics = !!(writtenSrc === "song" ? parseLyrics(paste).text.trim() : writtenOf(writtenSrc, project).trim());
@@ -1651,7 +1677,7 @@ export default function VideoStudio({
       } else {
         const { words, info } = placeWords(heard, src, proj, segFrom, segTo);
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
-        onProject((p) => ({ ...p, heardWords: heard, lyricWords: keepManual(p.lyricWords ?? [], words) }));
+        onProject((p) => ({ ...p, heardWords: heard, lyricWords: keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
         setGenInfo(info);
         outcome = { title: t("Lyrics ready"), body: info };
@@ -2618,15 +2644,27 @@ export default function VideoStudio({
                 </div>
               ) : (
                 <>
-              <label className="field"><span className="row" style={{ gap: 6 }}>{t("Paste the lyrics of the song")} <Hint text={t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")} />
+              {!lyricsLinked && project.lyrics.length > 0 && !!project.songLyrics?.trim() && (
+                <div className="notice warn xs stack" style={{ gap: 6 }}>
+                  <span>{t("The lyrics pasted here are not the same as the release's (the carousel's sections). Keep one text for both:")}</span>
+                  <div className="row">
+                    <button className="btn sm" onClick={() => { setWrittenSrc("song"); onProject((p) => ({ ...p, lyricsLinked: true, songLyrics: songOf(p.lyrics) })); setPaste(songOf(project.lyrics)); }}
+                      title={t("The video takes the sections' text. Its lines are placed again; the words you retimed by hand keep their timing.")}>{t("Use the release's lyrics")}</button>
+                    <button className="btn sm" onClick={() => { setWrittenSrc("song"); onProject((p) => { const lyrics = mergeSong(p.lyrics, p.songLyrics ?? "", (n) => t("Part {n}", { n }), t("Chorus")); return refreshLyricSlides({ ...p, lyrics, lyricsLinked: true, lyricsPlacedFrom: p.lyricWords?.length ? sungOf(lyrics) : p.lyricsPlacedFrom }); }); }}
+                      title={t("The sections become the text pasted here. The video's timing does not move.")}>{t("Use these for the release")}</button>
+                  </div>
+                </div>
+              )}
+              <label className="field"><span className="row" style={{ gap: 6 }}>{lyricsLinked ? t("Lyrics of the release") : t("Paste the lyrics of the song")} <Hint text={lyricsLinked ? t("The same text as the carousel's sections: editing it here changes them too. The video places the changed lines again; your retouches stay.") : t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")} />
                 {cues.length > 0 && <button type="button" className="btn sm quiet" style={{ marginLeft: "auto" }} onClick={() => setPasteOpen(false)}>{t("Fold")}</button>}</span>
-                <textarea className="input" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)}
+                <textarea ref={pasteRef} className="input" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)}
+                  onBlur={() => { if (lyricsLinked && parseLyrics(paste).text === sungOf(project.lyrics)) setPaste(songOf(project.lyrics)); }}
                   placeholder={t("Paste the whole song as found online: titles like [Chorus], Couplet 1 or Refrain x2 are recognised and removed.")} />
               </label>
               {pasted.parts.length > 0 && (
                 <p className="muted xs">{t("Parts found: {list}", { list: pasted.parts.join(" · ") })} · {t("{n} sung lines", { n: pasted.lines })}</p>
               )}
-              {project.lyrics.length > 0 && (
+              {project.lyrics.length > 0 && !lyricsLinked && (
                 <label className="field">{t("Written lyrics")}
                   <select className="input" value={writtenSrc} disabled={genBusy}
                     onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>

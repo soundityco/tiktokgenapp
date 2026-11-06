@@ -15,7 +15,7 @@ import { useT } from "@/lib/i18n";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
 import PostCaption from "./PostCaption";
 import LyricsEditor from "./LyricsEditor";
-import { migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics } from "@/lib/lyricsSections";
+import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
@@ -221,7 +221,7 @@ export default function Studio({ userName }: { userName: string }) {
         // Saved data this version cannot read must never be replaced by an empty workspace (the next
         // autosave would overwrite it): stop with an error instead.
         if (j.data && (j.data.v !== 1 || !Array.isArray(j.data.projects))) throw new Error("Your saved data could not be read by this version of the app. Nothing was changed.");
-        const next = refreshAllLyrics(migrateLyrics(normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace()), (n) => t("Part {n}", { n }), t("Chorus")));
+        const next = linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace()), (n) => t("Part {n}", { n }), t("Chorus"))));
         wsRef.current = next;
         setWs(next);
         // Google fonts used by the texts: loaded, then everything is drawn again with them.
@@ -534,7 +534,8 @@ export default function Studio({ userName }: { userName: string }) {
   /** The release's lyrics changed (sections edited, moved, cut, merged): every lyrics slide follows. */
   const setLyrics = (lyrics: Project["lyrics"], link?: { from: string; to: string; keep: boolean }) =>
     updProject((p) => {
-      let q: Project = { ...p, lyrics };
+      // Linked to the video: its text follows (the video places the changed lines again, retouches kept).
+      let q: Project = { ...p, lyrics, ...(p.lyricsLinked ? { songLyrics: songOf(lyrics) } : {}) };
       if (link) q = relinkSections(q, link.from, link.to, link.keep);
       return refreshLyricSlides(q);
     });
@@ -896,7 +897,7 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       const data = JSON.parse(await file.text());
       if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a Rollout backup"));
-      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(refreshAllLyrics(migrateLyrics(normalizeWorkspace(data as Workspace), (n) => t("Part {n}", { n }), t("Chorus")))); say(t("Backup restored")); } });
+      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(data as Workspace), (n) => t("Part {n}", { n }), t("Chorus"))))); say(t("Backup restored")); } });
     } catch (e: any) { say(e?.message ?? t("Could not read this file")); }
   };
 
@@ -1300,7 +1301,7 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {versionsOpen && (
         <VersionHistory onClose={() => setVersionsOpen(false)}
-          onRestore={(data) => { apply(refreshAllLyrics(migrateLyrics(normalizeWorkspace(data), (n) => t("Part {n}", { n }), t("Chorus")))); say(t("Version restored: undo to go back")); }} />
+          onRestore={(data) => { apply(linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(data), (n) => t("Part {n}", { n }), t("Chorus"))))); say(t("Version restored: undo to go back")); }} />
       )}
       {preview && studio === "carousel" && (
         <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}
@@ -1312,7 +1313,7 @@ export default function Studio({ userName }: { userName: string }) {
       {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => ({ ...p, name: n }))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} />}
       {overlay?.k === "lyrics" && (
-        <LyricsEditor name={project.name} lyrics={project.lyrics} song={project.songLyrics} onChange={setLyrics} onClose={() => setOverlay(null)} />
+        <LyricsEditor name={project.name} lyrics={project.lyrics} song={project.lyricsLinked ? undefined : project.songLyrics} synced={!!project.lyricsLinked && !!project.lyricWords?.length} onChange={setLyrics} onClose={() => setOverlay(null)} />
       )}
       <Toast msg={toast} />
     </div>

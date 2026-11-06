@@ -1,6 +1,7 @@
 import type { LyricSection, Project, SlideCfg, TextPool, TextSource, Workspace } from "./types";
 import { uid } from "./defaults";
 import { mapAllSlides } from "./carousels";
+import { parseLyrics } from "./lyricsAlign";
 
 /**
  * The lyrics of a release live in one place: its sections (verse, chorus…). A slide whose text comes from
@@ -157,3 +158,54 @@ export function refreshAllLyrics(ws: Workspace): Workspace {
   });
   return changed ? { ...ws, projects } : ws;
 }
+
+// ---------- one text for the carousel and the video ----------
+
+/** The release's sections as the whole song the video places on the audio, each under its name in brackets. */
+export function songOf(lyrics: LyricSection[]): string {
+  return lyrics
+    .filter((l) => l.text.trim())
+    .map((l) => `[${l.name.replace(/[[\]]/g, "").trim() || "…"}]\n` + l.text.replace(/\s+$/g, ""))
+    .join("\n\n");
+}
+/** What is sung, line by line (titles out, "x2" repeated): what the video's timing is made of. */
+export const sungOf = (lyrics: LyricSection[]) => parseLyrics(songOf(lyrics)).text;
+const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * The whole song edited in the video studio, back into the sections: a section keeps its id (and so the slides
+ * ticking it) when it keeps its name, or its place when the song has as many parts as before.
+ */
+export function mergeSong(lyrics: LyricSection[], song: string, label: (n: number) => string, chorus?: string): LyricSection[] {
+  const parts = splitSong(song, label, chorus);
+  const used = new Set<string>();
+  const pick = (s: { name: string }, i: number) => {
+    let l = lyrics.find((x) => !used.has(x.id) && x.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+    let byPlace = false;
+    if (!l && parts.length === lyrics.length && !used.has(lyrics[i].id)) { l = lyrics[i]; byPlace = true; }
+    if (l) used.add(l.id);
+    return { l, byPlace };
+  };
+  return parts.map((s, i) => {
+    const { l, byPlace } = pick(s, i);
+    if (!l) return { id: uid(), name: s.name, text: s.text };
+    return { ...l, name: byPlace ? l.name : s.name, text: s.text, times: l.text === s.text ? l.times : undefined };
+  });
+}
+
+/**
+ * Once per release: the video studio's own pasted text and the sections become one. When they sing the same
+ * words (the sections were cut from it, or written the same), they are linked at once and nothing is placed
+ * again: the timing and every retouch stay. When they differ, nothing is decided here: the video studio asks.
+ */
+export function linkLyrics(p: Project): Project {
+  if (p.lyricsLinked) return p;
+  const pasted = p.songLyrics?.trim() ? parseLyrics(p.songLyrics).text : "";
+  const sections = sungOf(p.lyrics);
+  if (pasted && flat(pasted) !== flat(sections)) return p;
+  return { ...p, lyricsLinked: true, songLyrics: songOf(p.lyrics), lyricsPlacedFrom: p.lyricWords?.length ? sections : p.lyricsPlacedFrom };
+}
+export const linkAllLyrics = (ws: Workspace): Workspace => {
+  const projects = ws.projects.map(linkLyrics);
+  return projects.some((p, i) => p !== ws.projects[i]) ? { ...ws, projects } : ws;
+};

@@ -14,13 +14,15 @@ export type LyricsChange = (lyrics: LyricSection[], link?: { from: string; to: s
  * The lyrics of the release, in one place: the whole song pasted once and cut into sections, then the sections
  * as cards (renamed, edited, moved by drag and drop, cut in two at the cursor, merged with the next one).
  */
-export default function LyricsEditor({ name, lyrics, song, onChange, onClose }: {
+export default function LyricsEditor({ name, lyrics, song, synced, onChange, onClose }: {
   name: string;
   lyrics: LyricSection[];
   /** The whole song pasted in the video studio: offered to start from. */
   song?: string;
   onChange: LyricsChange;
   onClose: () => void;
+  /** The video's lyrics are placed from these sections: deleting one is asked first. */
+  synced?: boolean;
 }) {
   const { t } = useT();
   const label = (n: number) => t("Part {n}", { n });
@@ -29,6 +31,7 @@ export default function LyricsEditor({ name, lyrics, song, onChange, onClose }: 
   const [drag, setDrag] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const areas = useRef(new Map<string, HTMLTextAreaElement>());
+  const [askDelete, setAskDelete] = useState<string | null>(null);
 
   const set = (id: string, patch: Partial<LyricSection>) => onChange(lyrics.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const cutSong = () => {
@@ -101,8 +104,15 @@ export default function LyricsEditor({ name, lyrics, song, onChange, onClose }: 
                 <input className="input grow" value={l.name} aria-label={t("Section name")} onChange={(e) => set(l.id, { name: e.target.value })} />
                 <button className="btn quiet icon sm" style={{ transform: "rotate(180deg)" }} title={t("Move up")} aria-label={t("Move up")} disabled={i === 0} onClick={() => move(i, i - 1)}><Icon name="chevron" size={14} /></button>
                 <button className="btn quiet icon sm danger" aria-label={t("Delete section")} title={t("Delete section")}
-                  onClick={() => onChange(lyrics.filter((x) => x.id !== l.id))}><Icon name="trash" size={14} /></button>
+                  onClick={() => (synced && l.text.trim() ? setAskDelete(l.id) : onChange(lyrics.filter((x) => x.id !== l.id)))}><Icon name="trash" size={14} /></button>
               </div>
+              {askDelete === l.id && (
+                <div className="notice warn xs row">
+                  <span className="grow">{t("Careful: these lyrics are also synced on the video. Deleting the section takes its lines off the video (the other lines and your retouches stay).")}</span>
+                  <button className="btn sm danger" onClick={() => { setAskDelete(null); onChange(lyrics.filter((x) => x.id !== l.id)); }}>{t("Delete")}</button>
+                  <button className="btn sm quiet" onClick={() => setAskDelete(null)}>{t("Cancel")}</button>
+                </div>
+              )}
               <textarea className="input" rows={Math.min(10, Math.max(3, l.text.split("\n").length + 1))} aria-label={t("Lyrics")} value={l.text}
                 ref={(el) => { if (el) areas.current.set(l.id, el); else areas.current.delete(l.id); }}
                 onChange={(e) => set(l.id, { text: e.target.value })} />

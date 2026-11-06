@@ -135,7 +135,8 @@ export function partHeader(line: string): { key: string; label: string; times: n
   const bracketed = /^[[(].*[\])]$/.test(raw);
   const inner = plain(raw.replace(/^[[(]\s*|\s*[\])]$/g, ""));
   const m = PART_RE.exec(inner);
-  if (!m) return null;
+  // Any other title in square brackets ("[Partie 2]", "[Hook block]") is a title too: never sung.
+  if (!m) return /^\[.*\]$/.test(raw) && inner ? { key: inner.replace(/\s+/g, ""), label: raw.slice(1, -1).trim(), times: 1 } : null;
   const rest = m[2];
   // Without brackets only a bare title counts ("Refrain", "Couplet 1 :", "Hook x2"), not a sung line starting with "hook".
   if (!bracketed && !/^[\s\d:.#()x×–—-]*$/.test(rest) && !/:\s*$/.test(rest) && !/^\s*\d*\s*[:–—-]/.test(rest)) return null;
