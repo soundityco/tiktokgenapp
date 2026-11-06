@@ -1,5 +1,12 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Downloading the local model (once)… {n}%": "Téléchargement du modèle local (une seule fois)… {n} %",
+  "Reading the texts… {n}%": "Lecture des textes… {n} %",
+  "Sorted by the local model, on this device.": "Rangé par le modèle local, sur cet appareil.",
+  "Sorted by keywords. The local model understands the meaning better: it runs on this device, free, nothing is sent.": "Rangé par mots-clés. Le modèle local comprend mieux le sens : il tourne sur cet appareil, gratuit, rien n'est envoyé.",
+  "Sort again": "Ranger à nouveau",
+  "Sort with the local model": "Ranger avec le modèle local",
+  "The local model could not run: {why}": "Le modèle local n'a pas pu tourner : {why}",
   "Name of the new theme": "Nom du nouveau thème",
   "Back to the theme found automatically": "Revenir au thème trouvé automatiquement",
   "Auto": "Auto",

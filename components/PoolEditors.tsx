@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { hookKey, joinCaptions, poolThemes, splitCaptions, textItems } from "@/lib/generate";
-import { THEMES, themeGroups, themeLabel, WORD_GROUP } from "@/lib/themes";
+import { THEMES, themeGroups, themeLabel } from "@/lib/themes";
+import { classifyThemes } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
 import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
@@ -98,8 +99,37 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
     onChange((x) => ({ ...x, themes: { ...(x.themes ?? {}), [hookKey(text)]: id } }));
   };
   const handSet = (text: string) => pool.themes?.[hookKey(text)] !== undefined;
+
+  // The local model: the whole list the first time, then only the texts added since.
+  const [ai, setAi] = useState<null | { step: "model" | "think"; pct: number }>(null);
+  const [aiErr, setAiErr] = useState<string | null>(null);
+  const missing = items.filter((x) => !(hookKey(x) in (pool.aiThemes ?? {})));
+  const runAi = async (texts: string[]) => {
+    if (!texts.length || ai) return;
+    setAiErr(null); setAi({ step: "model", pct: 0 });
+    try {
+      const found = await classifyThemes(texts, setAi);
+      onChange((x) => ({ ...x, aiThemes: { ...(x.aiThemes ?? {}), ...Object.fromEntries(texts.map((tx, i) => [hookKey(tx), found[i]])) } }));
+    } catch (e) {
+      setAiErr(e instanceof Error ? e.message : String(e));
+    } finally { setAi(null); }
+  };
+  // Already sorted by the model once: new texts are sorted as soon as the view opens.
+  useEffect(() => { if (pool.aiThemes && missing.length) void runAi(missing); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const sorted = !!pool.aiThemes && !missing.length;
+
   return (
     <div className="theme-groups">
+      <div className="row ai-row">
+        {ai ? (
+          <span className="xs shine grow">{ai.step === "model" ? t("Downloading the local model (once)… {n}%", { n: Math.round(ai.pct * 100) }) : t("Reading the texts… {n}%", { n: Math.round(ai.pct * 100) })}</span>
+        ) : (
+          <span className="muted xs grow">{sorted ? t("Sorted by the local model, on this device.") : t("Sorted by keywords. The local model understands the meaning better: it runs on this device, free, nothing is sent.")}</span>
+        )}
+        {!ai && <button className={"btn sm" + (sorted ? " quiet" : "")} onClick={() => void runAi(sorted ? items : missing.length ? missing : items)}>
+          <Icon name="sparkle" size={13} />{sorted ? t("Sort again") : t("Sort with the local model")}</button>}
+      </div>
+      {aiErr && <p className="notice bad xs">{t("The local model could not run: {why}", { why: aiErr })}</p>}
       {groups.map((g) => (
         <section key={g.id || "other"} className="theme-group">
           <h4 className="label">{themeLabel(g.id, t)} <span className="muted">· {g.items.length}</span></h4>
@@ -155,7 +185,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <div className="row seg-tabs" role="tablist">
           <button role="tab" aria-selected={view === "text"} className={"btn sm" + (view === "text" ? " on" : "")} onClick={() => setView("text")}>{t("Texts")}</button>
           <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By theme")}</button>
-          <span className="muted xs">{t("Themes found on this device, without any online AI. Change one by hand if needed.")}</span>
+
         </div>
       )}
       {pool.kind === "hooks" && view === "themes" && n > 1 ? (

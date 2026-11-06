@@ -230,7 +230,7 @@ export const poolsVisible = <T extends { scope: string; projectId?: string }>(po
   pools.filter((p) => p.scope === "shared" || p.projectId === projectId);
 
 /** The theme of every text of a list (set by hand first, else found locally). */
-export const poolThemes = (pool: TextPool): string[] => themesOf(textItems(pool), hookKey, pool.themes);
+export const poolThemes = (pool: TextPool): string[] => themesOf(textItems(pool), hookKey, pool.themes, pool.aiThemes);
 /** The texts of a list that speak of one theme. */
 export function themedItems(pool: TextPool, theme: string): string[] {
   const items = textItems(pool), th = poolThemes(pool);

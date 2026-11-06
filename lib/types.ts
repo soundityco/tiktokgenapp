@@ -100,6 +100,8 @@ export interface TextPool {
   text: string;
   /** Theme of a text set by hand (hookKey of the text -> theme id, "group:<word>", a name typed, or "" other). The others are found by lib/themes. */
   themes?: Record<string, string>;
+  /** Themes found by the local model (public/themes/worker.js), by hookKey; "" = no theme. Hand-set ones win. */
+  aiThemes?: Record<string, string>;
   /** hook (normalised) -> views. Reserved for the TikTok import (phase 2). */
   views?: Record<string, number>;
 }

@@ -30,3 +30,16 @@ describe("themes found locally", () => {
     expect(out).toEqual(["Mes annonces", WORD_GROUP + "pluie", WORD_GROUP + "pluie", ""]);
   });
 });
+
+describe("the local model's themes", () => {
+  it("win over the lexicon, lose to a theme set by hand; \"\" means no theme (then word groups)", () => {
+    const texts = ["Sort demain soir", "Ce son est dingue", "Rien à voir", "Pluie fine", "Encore la pluie"];
+    const out = themesOf(texts, (t) => t, { "Ce son est dingue": "Mes favoris" }, { "Sort demain soir": "pride", "Ce son est dingue": "pride", "Rien à voir": "", "Pluie fine": "", "Encore la pluie": "" });
+    expect(out).toEqual(["pride", "Mes favoris", "", WORD_GROUP + "pluie", WORD_GROUP + "pluie"]);
+  });
+  it("every theme has examples for the model, plus the off-topic ones", async () => {
+    const { THEMES, THEME_EXAMPLES } = await import("@/lib/themes");
+    for (const th of THEMES) expect(THEME_EXAMPLES[th.id]?.length ?? 0).toBeGreaterThan(3);
+    expect(THEME_EXAMPLES.none.length).toBeGreaterThan(3);
+  });
+});

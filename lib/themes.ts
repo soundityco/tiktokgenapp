@@ -15,8 +15,10 @@ const R = (src: string, w: number): [RegExp, number] => [new RegExp(src, "u"), w
 /** The themes, most specific first (on a tie, the first one wins). Labels are English (translated on screen). */
 export const THEMES: ThemeDef[] = [
   { id: "soon", label: "Coming soon", rules: [
-    R("\\b(sort|sortira|arrive|debarque|tombe|drop(pe)?)\\b.{0,25}\\b(minuit|demain|vendredi|ce soir|bientot|dans \\d+|le \\d+|cette semaine|lundi|mardi|mercredi|jeudi|samedi|dimanche)", 5),
+    R("\\b(sort|sortira|arrive|debarque|tombe|drop(pe)?|dispo|disponible|en ligne)\\b.{0,25}\\b(minuit|demain|vendredi|ce soir|bientot|dans \\d+|le \\d+|cette semaine|lundi|mardi|mercredi|jeudi|samedi|dimanche|\\d{1,2}h)", 6),
+    R("\\b(ce soir|demain|vendredi|minuit) ?(a )?\\d{1,2} ?h\\d{0,2}\\b|\\b\\d{1,2}h\\d{0,2}\\b.{0,15}(soyez la|rdv|rendez-vous)|\\b(soyez la|rdv|rendez-vous)\\b", 3.5),
     R("\\b(bientot|tres vite|coming soon|soon|dans \\d+ (jours?|heures?|h)|j-\\d+|d-\\d+|countdown|compte a rebours)\\b", 4),
+    R("\\bplus que \\d+ ?(h|heures?|jours?|j|dodos?)\\b", 5),
     R("\\b(a minuit|demain|ce vendredi|vendredi|ce soir)\\b", 2.5),
     R("\\b(pre-?save|presave|teaser|extrait|snippet|en avant-premiere|avant[- ]premiere)\\b", 3.5),
     R("\\b(out (on|this|tomorrow|friday|at midnight)|drops? (on|tomorrow|friday|at)|dropping|releasing)\\b", 4.5),
@@ -32,7 +34,7 @@ export const THEMES: ThemeDef[] = [
     R("\\b(coeur|pleur\\w*|larmes?|souffr\\w*|rupture|seul(e)?|solitude|manque[sr]?|triste\\w*|tristesse|douleur|blessure|deuil|perdu|angoisse\\w*|peur|depression|guerir|gueri|cicatrices?|chagrin)\\b", 3),
     R("\\b(aime[rs]?|amour|je t'aime|mon ex|ton ex|l'ex|histoire d'amour|relation|quitte[rs]?|oublier|souvenirs?|nostalgi\\w*)\\b", 2.5),
     R("\\b(heart|cry(ing)?|tears|broke|breakup|lonely|alone|miss (you|her|him)|hurt|pain|heal(ing)?|grief|lost|love|ex)\\b", 2.5),
-    R("\\b(m'a (fait|change|sauve)|grandir|j'ai compris|merci d'avoir|ce que j'ai vecu|vecu|pour toi qui)\\b", 2),
+    R("\\b(m'a (fait|change|sauve)|grandir|j'ai compris|merci d'avoir|ce que j'ai vecu|vecu|pour toi qui|pour ceux qui|pour celles qui|tourner la page|m'en remettre|s'en remettre)\\b", 3),
   ] },
   { id: "story", label: "The story behind it", rules: [
     R("\\b(ce son|cette chanson|ce morceau|ce titre|this song|this track)\\b.{0,25}\\b(parle|raconte|est ne|vient|ecrit|about|is about|tells)\\b", 5),
@@ -60,7 +62,7 @@ export const THEMES: ThemeDef[] = [
     R("\\b(dis[- ]moi|dites[- ]moi|commente\\w*|en commentaire|tag(ue)? (quelqu'un|ton|ta|un)|partage\\w*|abonne\\w*|duo|duet|stitch|comment|tag someone|tell me|which one|lequel|laquelle|tu preferes)\\b", 3.5),
   ] },
   { id: "reco", label: "For who / when to listen", rules: [
-    R("\\b(a ecouter|son a (mettre|ecouter)|pour (ta|tes|les|ceux|celles|toi qui)|si tu aimes|si t'aimes|playlist|a mettre (en|dans)|for (your|those|anyone)|if you like|songs? for|to listen (to )?when)\\b", 3.5),
+    R("\\b(a ecouter|son a (mettre|ecouter)|pour (ta|tes) (playlist|soiree|route|voiture)|pour les (soirees|nuits|matins)|si tu aimes|si t'aimes|playlist|a mettre (en|dans)|for (your|those|anyone)|if you like|songs? for|to listen (to )?when)\\b", 3.5),
     R("\\b(en voiture|sous la douche|la nuit|a 3h|au lever|en soiree|road ?trip|late night|in the car)\\b", 2),
   ] },
 ];
@@ -123,8 +125,9 @@ export const WORD_GROUP = "group:";
  * The theme of every text of a list: set by hand (`manual`, by text key) first, else found in the lexicon,
  * else its word group, else "" (other).
  */
-export function themesOf(texts: string[], keyOf: (t: string) => string, manual: Record<string, string> = {}): string[] {
-  const out = texts.map((t) => manual[keyOf(t)] ?? themeOfText(t) ?? "");
+export function themesOf(texts: string[], keyOf: (t: string) => string, manual: Record<string, string> = {}, ai: Record<string, string> = {}): string[] {
+  // By hand first, then the local model's (when it ran on the list; "" = it speaks of no theme), then the lexicon.
+  const out = texts.map((t) => { const k = keyOf(t); return manual[k] ?? (k in ai ? ai[k] : themeOfText(t) ?? ""); });
   const rest = out.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
   for (const g of groupByWords(rest.map((i) => texts[i]))) for (const k of g.items) out[rest[k]] = WORD_GROUP + g.name;
   return out;
@@ -144,3 +147,25 @@ export function themeGroups(themes: string[]): { id: string; items: number[] }[]
   themes.forEach((id, i) => m.set(id, [...(m.get(id) ?? []), i]));
   return [...m.entries()].map(([id, items]) => ({ id, items })).sort((a, b) => (a.id === "") === (b.id === "") ? b.items.length - a.items.length : a.id === "" ? 1 : -1);
 }
+
+// ---------- the local model (public/themes/worker.js) ----------
+
+/** How much a lexicon point weighs next to the model's score (tuned on promo hooks, see tests). */
+export const LEX_WEIGHT = 0.3;
+/**
+ * Examples of each theme for the sentence model (French and English): a text goes to the theme whose examples
+ * are closest in meaning. "none": everyday sentences, so a text about nothing of the kind is left out.
+ */
+export const THEME_EXAMPLES: Record<string, string[]> = {
+  soon: ["Le son sort bientôt", "Mon nouveau titre arrive vendredi à minuit", "Plus que 3 jours avant la sortie", "Pre-save le lien en bio, ça sort demain", "Teaser du prochain son", "New song dropping this friday", "Coming soon"],
+  "out-now": ["Le son est enfin disponible", "Mon nouveau single est sorti, va l'écouter", "Dispo partout maintenant", "Lien en bio pour l'écouter", "Out now on all platforms", "My new song is out", "Ça y est, il est sorti", "C'est le jour J, il est là"],
+  emotional: ["J'ai pleuré en l'écrivant", "Ce son parle de ma rupture", "Pour ceux qui ont le cœur brisé", "Je pensais pas m'en remettre", "Tu me manques encore", "This song broke me", "Heartbreak"],
+  story: ["Ce son raconte une histoire vraie", "Je l'ai écrit après une période difficile", "L'histoire derrière ce morceau", "Ce titre parle de mon père", "The story behind this song"],
+  behind: ["En studio en train d'enregistrer", "Comment j'ai fait l'instru", "Les coulisses du clip", "Première prise au micro", "Making of du son", "Studio session", "Version piano voix", "Version acoustique inédite", "La démo du son", "Version live en exclu"],
+  pov: ["POV : tu réécoutes ses messages à 3h du matin", "Quand tu tombes sur ce son par hasard", "Toi quand le refrain arrive", "POV you just got dumped"],
+  humour: ["Le son le plus humble de l'année (non)", "En toute modestie c'est un chef d'œuvre", "Personne : moi qui chante sous la douche", "Mdr j'ai écrit ça en 5 minutes"],
+  pride: ["Ton nouveau son préféré", "Le meilleur son que j'ai jamais fait", "Ce son va tout casser", "Un banger, rien à dire", "Your new favourite song", "Ce refrain est criminel", "Ce son est dingue", "Le passage le plus fort que j'ai écrit"],
+  engage: ["Dis-moi en commentaire ce que tu en penses", "Couplet ou refrain, tu préfères quoi ?", "Tag quelqu'un qui doit écouter ça", "Fais un duo avec moi", "Which part is your favourite?"],
+  reco: ["Le son à écouter en voiture la nuit", "À mettre dans ta playlist d'été", "Pour ceux qui aiment le rap mélancolique", "Song for late night drives"],
+  none: ["Je vais faire les courses", "Il pleut ce matin", "Le match de foot hier soir", "J'ai mangé une pizza", "Good morning everyone", "La météo de demain", "Mon chien est mignon", "Salut ça va", "Lyon"],
+};
