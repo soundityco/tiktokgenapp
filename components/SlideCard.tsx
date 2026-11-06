@@ -295,9 +295,10 @@ export default function SlideCard(p: Props) {
       </div>
       {/* Under the sources, like the sections of a lyrics slide: the same place on every slide. */}
       {listItems.length > 1 && !p.locked && (
-        <select className="input sm slide-pick" value="" aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
+        // The text on the slide, drawn or picked, shows as chosen in the list (a text retouched by hand: none).
+        <select className="input sm slide-pick" value={listItems.includes(text) ? text : ""} aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
           onChange={(e) => { if (e.target.value) p.onText(e.target.value); }}>
-          <option value="">{t("Pick from the list…")}</option>
+          <option value="" disabled={listItems.includes(text)}>{text.trim() && !listItems.includes(text) ? t("Text retouched · pick from the list…") : t("Pick from the list…")}</option>
           {listItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ").slice(0, 120)}</option>)}
         </select>
       )}

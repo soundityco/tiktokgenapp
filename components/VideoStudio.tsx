@@ -2716,9 +2716,10 @@ export default function VideoStudio({
                   {hookItems.length > 0 && (
                     <div className="row">
                       <button className="btn sm quiet" onClick={() => drawInto(h.id)} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Another hook")}</button>
-                      <select className="input sm grow" value="" aria-label={t("Pick from the list")}
+                      {/* The hook's text, drawn or picked, shows as chosen in the list. */}
+                      <select className="input sm grow" value={hookItems.includes(h.text) ? h.text : ""} aria-label={t("Pick from the list")}
                         onChange={(e) => { if (e.target.value) editHook(h.id, fromList(e.target.value)); }}>
-                        <option value="">{t("Pick from the list…")}</option>
+                        <option value="" disabled={hookItems.includes(h.text)}>{h.text.trim() && !hookItems.includes(h.text) ? t("Text retouched · pick from the list…") : t("Pick from the list…")}</option>
                         {hookItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ")}</option>)}
                       </select>
                     </div>

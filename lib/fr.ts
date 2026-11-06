@@ -1,5 +1,6 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Text retouched · pick from the list…": "Texte retouché · choisir dans la liste…",
   "Lyrics spread on the segment: adjust each line with − / +.": "Paroles réparties sur le segment : ajuste chaque ligne avec − / +.",
   "Spread it on the segment": "La répartir sur le segment",
   "If the audio could not place the lyrics: the lines of this section are spread over the segment, on the attacks of the sound. Then adjust each one with − / +.": "Si l'audio n'a pas pu placer les paroles : les lignes de cette section sont réparties sur le segment, sur les attaques du son. Ajuste ensuite chacune avec − / +.",
