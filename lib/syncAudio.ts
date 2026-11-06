@@ -348,7 +348,6 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
 
   // ---- cluster the votes: offsets that agree within 0.15 s support each other.
   //      Unambiguous chunks (big margin) count much more than ambiguous ones.
-  const clipSec = clip.frames / FPS;
   votes.sort((p, q) => p.off - q.off);
   interface Cluster { off: number; weight: number; votes: Vote[] }
   const clusters: Cluster[] = [];

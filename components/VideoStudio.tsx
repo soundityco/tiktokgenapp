@@ -397,7 +397,13 @@ export default function VideoStudio({
   };
   /** One official audio per release, shared by all its videos. */
   const projectAudioKey = `audio:project:${project.id}`;
-  useEffect(() => { setPaste(project.songLyrics ?? ""); setConfirmRemove(false); }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Another release (the studio stays mounted behind the carousel): its own lyrics, its own source of lyrics,
+  // and an export of all the videos of the previous one stops.
+  useEffect(() => {
+    setPaste(project.songLyrics ?? "");
+    setConfirmRemove(false);
+    setWrittenSrc(project.lyricsLinked || project.songLyrics?.trim() || !project.lyrics.length ? "song" : "all");
+  }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const pasted = useMemo(() => {
     const r = parseLyrics(paste);
     return { parts: r.parts, lines: r.text ? r.text.split("\n").length : 0 };
@@ -1930,6 +1936,12 @@ export default function VideoStudio({
       if (r !== "cancelled") next(r);
     });
   }, [batch, clip.id, loadedClip, videoBlob, audioBlob, audioBuf, videoUrl, videoDur, playerReady, look, lookErr]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Another release opened during the batch: it stops (its videos are not this release's).
+  const batchProject = useRef(project.id);
+  useEffect(() => {
+    if (batch && batchProject.current !== project.id) { exportRef.current?.abort(); setExp(null); setBatch(null); }
+    batchProject.current = project.id;
+  }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Finished: one notification, and the video that was open comes back.
   const batchDone = !!batch && batch.i >= batch.ids.length;
   useEffect(() => {

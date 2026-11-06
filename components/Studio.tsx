@@ -10,7 +10,7 @@ import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, merge
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
-import { drawHook, generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
+import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
 import PostCaption from "./PostCaption";
@@ -29,7 +29,7 @@ import SlidePreview from "./SlidePreview";
 import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
-import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
+import { ConfirmDialog, Menu, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 const VERSION = "v0.5";
 const HISTORY_KEY = "tktgen-undo";
@@ -711,7 +711,8 @@ export default function Studio({ userName }: { userName: string }) {
       run: () => {
         setEditor(null);
         upd((w) => {
-          const bags = { ...w.bags }; delete bags[id];
+          // Its shuffle bags go too (the whole list's and each theme's).
+          const bags = Object.fromEntries(Object.entries(w.bags).filter(([k]) => k !== id && !k.startsWith(id + "#")));
           return {
             ...w, bags,
             textPools: w.textPools.filter((p) => p.id !== id),
@@ -844,6 +845,7 @@ export default function Studio({ userName }: { userName: string }) {
       const zip = new JSZip();
       const root = all ? zip.folder(`${release} ${stamp()}`)! : null;
       let made = 0, single = "";
+      const usedNames = new Set<string>();
       for (const p of ready) {
         const files = await buildFiles(p, (done) => setExportProgress({ done: before + done, total }), failures);
         before += p.slides.length;
@@ -854,7 +856,11 @@ export default function Studio({ userName }: { userName: string }) {
         const many = carouselsOf(project).length > 1;
         const name = all ? safe(carouselName(c)) : `${safe(project.name + (many ? ` - ${carouselName(c)}` : ""))} ${stamp()}`;
         if (!all) single = name;
-        const dir = (root ?? zip).folder(name)!;
+        // Two carousels of the same name get two folders (never one over the other).
+        let folderName = name;
+        for (let k = 2; usedNames.has(folderName.toLowerCase()); k++) folderName = `${name} (${k})`;
+        usedNames.add(folderName.toLowerCase());
+        const dir = (root ?? zip).folder(folderName)!;
         files.forEach((f) => dir.file(f.name, f.blob));
         // The pictures and the text of the post (ready to paste in TikTok), nothing else.
         if (p.caption?.trim()) dir.file("caption.txt", p.caption.trim() + "\n");

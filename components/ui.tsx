@@ -185,7 +185,8 @@ export function Menu({ trigger, children, left, float }: {
       {open && (
         <div ref={menu} role="menu"
           className={"menu" + ((place ? place.left : left) ? " left" : "") + (place?.up ? " up" : "")}
-          style={place ? (fixed ?? undefined) : { visibility: "hidden", ...(float ? { position: "fixed", top: 0, left: 0 } : null) }}>
+          // Measured first, hidden: a floating one at its own width (".menu" sets right: 0, which would stretch it).
+          style={place ? (fixed ?? undefined) : { visibility: "hidden", ...(float ? { position: "fixed", top: 0, left: 0, right: "auto", bottom: "auto" } : null) }}>
           {children(() => setOpen(false))}
         </div>
       )}
