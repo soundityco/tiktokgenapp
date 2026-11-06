@@ -7,26 +7,43 @@ import { mapAllSlides } from "./carousels";
  * the lyrics shows the sections ticked for it, in the song's order, under an optional header.
  */
 
-/** A line naming a section: "[Chorus]", "[Refrain x2]", "(Couplet 1)", "Refrain :". */
-const TAG = /^\s*(?:\[([^\]\n]{1,40})\]|\(([^)\n]{1,40})\)|((?:refrain|chorus|couplet|verse|pont|bridge|intro|outro|hook|pre-?chorus|pré-?refrain|interlude)[^:\n]{0,20}):)\s*$/i;
+/** Names of song parts, French and English, as people write them on lyrics. */
+const PART = "(?:pr[ée][- ]?refrain|pre[- ]?chorus|post[- ]?refrain|post[- ]?chorus|refrain|chorus|couplet|verse|pont|bridge|intro|outro|hook|interlude|break|drop|final|refrain final|ad[- ]?libs?)";
+/**
+ * A line naming a section: "[Chorus]", "(Couplet 1)", "Refrain :", or just "Couplet", "Pré-refrain 2", "Refrain x2",
+ * "Pont", "Outro" alone on its line. A line of ad-libs in brackets, "(yeah)", is not one.
+ */
+const TAG = new RegExp(
+  "^\\s*(?:\\[([^\\]\\n]{1,40})\\]|\\((" + PART + "[^)\\n]{0,30})\\)|(" + PART + "(?:\\s*[-–]?\\s*(?:\\d{1,2}|[ivx]{1,4}|bis|final))?(?:\\s*\\(?\\s*[x×]\\s*\\d\\s*\\)?)?)\\s*:?)\\s*$",
+  "i",
+);
+const key = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
-/** Cuts a whole song into sections: on its tags when it has some, else on its empty lines. */
-export function splitSong(text: string, label: (n: number) => string): { name: string; text: string }[] {
+/**
+ * Cuts a whole song into sections, named:
+ * - on its part names when it has some (bracketed, or "Couplet", "Refrain 2", "Pont"… alone on a line);
+ * - else on its empty lines, a block that comes back word for word being the chorus.
+ */
+export function splitSong(text: string, label: (n: number) => string, chorus = "Chorus"): { name: string; text: string }[] {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const out: { name: string; text: string[] }[] = [];
   const tagged = lines.some((l) => TAG.test(l));
   let cur: { name: string; text: string[] } | null = null;
   for (const line of lines) {
     const m = TAG.exec(line);
-    if (tagged && m) { cur = { name: (m[1] ?? m[2] ?? m[3]).trim(), text: [] }; out.push(cur); continue; }
+    if (tagged && m) { cur = { name: (m[1] ?? m[2] ?? m[3]).trim().replace(/\s+/g, " "), text: [] }; out.push(cur); continue; }
     if (!tagged && !line.trim()) { cur = null; continue; }
     if (!cur) { if (!line.trim()) continue; cur = { name: "", text: [] }; out.push(cur); }
     cur.text.push(line);
   }
-  return out
+  const parts = out
     .map((s) => ({ name: s.name, text: s.text.join("\n").replace(/^\s*\n|\s+$/g, "") }))
-    .filter((s) => s.text.trim())
-    .map((s, i) => ({ name: s.name || label(i + 1), text: s.text }));
+    .filter((s) => s.text.trim());
+  // No names: the blocks sung twice or more are the chorus, the others are numbered.
+  const seen = new Map<string, number>();
+  for (const s of parts) if (!s.name) seen.set(key(s.text), (seen.get(key(s.text)) ?? 0) + 1);
+  let n = 0;
+  return parts.map((s) => ({ name: s.name || ((seen.get(key(s.text)) ?? 0) > 1 ? chorus : label(++n)), text: s.text }));
 }
 
 /** The sections a lyrics slide shows (older slides: their one section, or the release's default one). */
@@ -73,13 +90,13 @@ export function refreshLyricSlides(p: Project): Project {
  * - a slide on a "lyrics block" list gets that text as a section of its release, and shows it.
  * The block lists themselves are kept (nothing is lost); they are just not offered any more.
  */
-export function migrateLyrics(ws: Workspace, label: (n: number) => string = (n) => `Part ${n}`): Workspace {
+export function migrateLyrics(ws: Workspace, label: (n: number) => string = (n) => `Part ${n}`, chorus = "Chorus"): Workspace {
   const blocks = new Map<string, TextPool>(ws.textPools.filter((x) => x.kind === "block").map((x) => [x.id, x]));
   let touched = false;
   const projects = ws.projects.map((p0) => {
     let p = p0;
     if (!p.lyrics.length && p.songLyrics?.trim()) {
-      const parts = splitSong(p.songLyrics, label);
+      const parts = splitSong(p.songLyrics, label, chorus);
       if (parts.length) { p = { ...p, lyrics: parts.map((s) => ({ id: uid(), name: s.name, text: s.text })) }; touched = true; }
     }
     const lyrics = [...p.lyrics];

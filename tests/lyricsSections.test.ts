@@ -52,3 +52,48 @@ describe("older workspaces", () => {
     expect(migrateLyrics(migrateLyrics(ws, label), label).projects[0].lyrics).toHaveLength(3);
   });
 });
+
+describe("part names written alone on their line", () => {
+  const song = `Couplet
+J’ai arrêté d’être triste
+J’ai chassé mes angoisses
+
+Pré-refrain
+Des années à subir
+
+Refrain
+J’ai compris ce que je ne voulais plus dans ma vie
+Jusqu’ici
+
+Couplet 2
+Tu me disais d'être plus
+
+Pré-refrain 2
+Des années à souffrir
+
+
+Refrain 2
+J’ai compris
+(yeah)
+
+Pont
+Oh non vraiment là c’est fini
+
+Refrain 3
+Maintenant que tu sais
+
+Outro
+Regarde nous en vie`;
+  it("are found, in French and English, with their numbers", () => {
+    const parts = splitSong(song, label);
+    expect(parts.map((p) => p.name)).toEqual(["Couplet", "Pré-refrain", "Refrain", "Couplet 2", "Pré-refrain 2", "Refrain 2", "Pont", "Refrain 3", "Outro"]);
+    expect(parts[0].text).toBe("J’ai arrêté d’être triste\nJ’ai chassé mes angoisses");
+    expect(parts[5].text).toBe("J’ai compris\n(yeah)");
+  });
+  it("other ways people write them", () => {
+    expect(splitSong("[Verse 1: Artist]\na\nPre-Chorus:\nb\nCHORUS x2\nc\n(Bridge)\nd", label).map((p) => p.name)).toEqual(["Verse 1: Artist", "Pre-Chorus", "CHORUS x2", "Bridge"]);
+  });
+  it("no names: the block sung again is the chorus", () => {
+    expect(splitSong("one\ntwo\n\nla la\nla\n\nthree\n\nla la\nla", label, "Refrain").map((p) => p.name)).toEqual(["Part 1", "Refrain", "Part 2", "Refrain"]);
+  });
+});

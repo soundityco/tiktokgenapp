@@ -221,7 +221,7 @@ export default function Studio({ userName }: { userName: string }) {
         // Saved data this version cannot read must never be replaced by an empty workspace (the next
         // autosave would overwrite it): stop with an error instead.
         if (j.data && (j.data.v !== 1 || !Array.isArray(j.data.projects))) throw new Error("Your saved data could not be read by this version of the app. Nothing was changed.");
-        const next = migrateLyrics(normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace()), (n) => t("Part {n}", { n }));
+        const next = migrateLyrics(normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace()), (n) => t("Part {n}", { n }), t("Chorus"));
         wsRef.current = next;
         setWs(next);
         // Google fonts used by the texts: loaded, then everything is drawn again with them.
@@ -888,7 +888,7 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       const data = JSON.parse(await file.text());
       if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a Rollout backup"));
-      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(migrateLyrics(normalizeWorkspace(data as Workspace), (n) => t("Part {n}", { n }))); say(t("Backup restored")); } });
+      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(migrateLyrics(normalizeWorkspace(data as Workspace), (n) => t("Part {n}", { n }), t("Chorus"))); say(t("Backup restored")); } });
     } catch (e: any) { say(e?.message ?? t("Could not read this file")); }
   };
 
@@ -1288,7 +1288,7 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {versionsOpen && (
         <VersionHistory onClose={() => setVersionsOpen(false)}
-          onRestore={(data) => { apply(migrateLyrics(normalizeWorkspace(data), (n) => t("Part {n}", { n }))); say(t("Version restored: undo to go back")); }} />
+          onRestore={(data) => { apply(migrateLyrics(normalizeWorkspace(data), (n) => t("Part {n}", { n }), t("Chorus"))); say(t("Version restored: undo to go back")); }} />
       )}
       {preview && studio === "carousel" && (
         <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}

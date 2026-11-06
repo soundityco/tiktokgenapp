@@ -32,7 +32,7 @@ export default function LyricsEditor({ name, lyrics, song, onChange, onClose }: 
 
   const set = (id: string, patch: Partial<LyricSection>) => onChange(lyrics.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const cutSong = () => {
-    const parts = splitSong(paste, label);
+    const parts = splitSong(paste, label, t("Chorus"));
     if (!parts.length) return;
     // Sections of the same name keep their id: the slides that show them keep showing them.
     const used = new Set<string>();
