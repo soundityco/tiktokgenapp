@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, openCarousel, renameCarousel, mapAllSlides } from "@/lib/carousels";
-import { textItems } from "@/lib/generate";
+import { joinCaptions, splitCaptions, textItems } from "@/lib/generate";
 import type { Project } from "@/lib/types";
 
 const slide = (id: string) => ({ id, locked: true, textSource: { kind: "none" }, picPoolId: "pics", format: "9:16", pic: {}, style: {} }) as any;
@@ -62,8 +62,12 @@ describe("carousels of a release", () => {
 });
 
 describe("captions lists", () => {
-  it("one caption per paragraph, lines and hashtags kept", () => {
-    const pool = { id: "c", name: "Caps", scope: "shared", kind: "captions", text: "Out now 🔥\n#newmusic #rap\n\n\nLink in bio\n#music\n" } as any;
-    expect(textItems(pool)).toEqual(["Out now 🔥\n#newmusic #rap", "Link in bio\n#music"]);
+  it("captions are separated by a --- line, empty lines inside them kept", () => {
+    const pool = { id: "c", name: "Caps", scope: "shared", kind: "captions", text: "Out now 🔥\n\n#newmusic #rap\n---\nLink in bio\n\n\n#music\n" } as any;
+    expect(textItems(pool)).toEqual(["Out now 🔥\n\n#newmusic #rap", "Link in bio\n\n\n#music"]);
+    expect(splitCaptions(joinCaptions(textItems(pool)))).toEqual(textItems(pool));
+  });
+  it("a text with no --- line (a .txt imported) is cut on empty lines", () => {
+    expect(splitCaptions("One\n#a\n\nTwo\n#b")).toEqual(["One\n#a", "Two\n#b"]);
   });
 });

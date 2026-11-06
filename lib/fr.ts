@@ -1,5 +1,9 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Caption {n}": "Légende {n}",
+  "The caption, then its hashtags (on their own line if you like).": "La légende, puis ses hashtags (sur leur propre ligne si tu veux).",
+  "Delete this caption": "Supprimer cette légende",
+  "Add a caption": "Ajouter une légende",
   "Post captions (with hashtags)": "Légendes de post (avec hashtags)",
   "One caption per paragraph, its hashtags included. Leave an empty line between two captions.": "Une légende par paragraphe, hashtags compris. Laisse une ligne vide entre deux légendes.",
   "{n} captions": "{n} légendes",

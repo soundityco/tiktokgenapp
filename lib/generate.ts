@@ -3,9 +3,20 @@ import { GenSlide, LyricSection, PicPool, Project, TextPool, Workspace } from ".
 export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g, " ").trim();
 
 /** Items of a text pool. Hooks: one per line, deduplicated. Block: the whole text is one item. */
+/**
+ * Captions are kept as they are written (line breaks and empty lines included, the hashtags often on their own
+ * line), separated by a line made of "---". A text with no such line (a .txt imported) is cut on empty lines.
+ */
+export const CAPTION_SEP = "\n---\n";
+export function splitCaptions(text: string): string[] {
+  const t = text.replace(/\r\n/g, "\n");
+  const parts = /^[ \t]*-{3,}[ \t]*$/m.test(t) ? t.split(/^[ \t]*-{3,}[ \t]*$/m) : t.split(/\n[ \t]*\n/);
+  return parts.map((x) => x.replace(/^\s*\n|\s+$/g, "").trim()).filter(Boolean);
+}
+export const joinCaptions = (items: string[]) => items.join(CAPTION_SEP);
+
 export function textItems(pool: TextPool): string[] {
-  // Captions: one per paragraph (they can hold several lines, the hashtags on the last).
-  if (pool.kind === "captions") return pool.text.replace(/\r\n/g, "\n").split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean);
+  if (pool.kind === "captions") return splitCaptions(pool.text);
   if (pool.kind === "block") return pool.text.trim() ? [pool.text.replace(/\r\n/g, "\n").replace(/\s+$/g, "")] : [];
   const seen = new Set<string>();
   const out: string[] = [];

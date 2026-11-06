@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { hookKey, textItems } from "@/lib/generate";
+import { hookKey, joinCaptions, splitCaptions, textItems } from "@/lib/generate";
 import { loadDriveImage } from "@/lib/drive";
 import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
@@ -54,10 +54,37 @@ function Thumb({ id, name }: { id: string; name: string }) {
 
 interface Common { onClose: () => void; onDelete: () => void }
 
+/**
+ * A captions list: one box per caption, written as it will be posted (line breaks, empty lines, hashtags on
+ * their own line). Saved as one text, the captions separated by a "---" line.
+ */
+function CaptionsEditor({ text, onText }: { text: string; onText: (text: string) => void }) {
+  const { t } = useT();
+  // Edited here (an empty box being written stays); the list's text follows each change.
+  const [items, setItems] = useState(() => { const x = splitCaptions(text); return x.length ? x : [""]; });
+  const set = (next: string[]) => { setItems(next); onText(joinCaptions(next.filter((x) => x.trim()))); };
+  return (
+    <div className="caption-list">
+      {items.map((c, i) => (
+        <div className="caption-item" key={i}>
+          <span className="idx">{String(i + 1).padStart(2, "0")}</span>
+          <textarea className="input" rows={Math.min(8, Math.max(3, c.split("\n").length + 1))} value={c} aria-label={t("Caption {n}", { n: i + 1 })}
+            placeholder={t("The caption, then its hashtags (on their own line if you like).")}
+            onChange={(e) => set(items.map((x, k) => (k === i ? e.target.value : x)))} />
+          <button className="btn quiet icon sm" aria-label={t("Delete this caption")} title={t("Delete this caption")}
+            onClick={() => set(items.length > 1 ? items.filter((_, k) => k !== i) : [""])}><Icon name="trash" size={14} /></button>
+        </div>
+      ))}
+      <div><button className="btn sm" onClick={() => setItems([...items, ""])}><Icon name="plus" size={14} />{t("Add a caption")}</button></div>
+    </div>
+  );
+}
+
 export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; onImport: () => void; onRefreshViews?: () => void; viewsBusy?: boolean }) {
   const { t } = useT();
   const { pool } = p;
   const file = useRef<HTMLInputElement>(null);
+  const [imports, setImports] = useState(0); // a .txt added: the captions boxes are read again
   const n = textItems(pool).length;
   const perf = pool.kind === "hooks" && pool.views
     ? textItems(pool)
@@ -79,10 +106,13 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
           <option value="captions">{t("Post captions (with hashtags)")}</option>
         </select>
       </label>
-      <textarea className="input" rows={12} aria-label={t("Texts")} value={pool.text} onChange={(e) => p.onChange((x) => ({ ...x, text: e.target.value }))}
-        placeholder={pool.kind === "hooks" ? t("One text per line. Use | to force a line break on the slide.")
-          : pool.kind === "captions" ? t("One caption per paragraph, its hashtags included. Leave an empty line between two captions.")
-          : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
+      {pool.kind === "captions" ? (
+        <CaptionsEditor key={`${pool.id}:${imports}`} text={pool.text} onText={(text) => p.onChange((x) => ({ ...x, text }))} />
+      ) : (
+        <textarea className="input" rows={12} aria-label={t("Texts")} value={pool.text} onChange={(e) => p.onChange((x) => ({ ...x, text: e.target.value }))}
+          placeholder={pool.kind === "hooks" ? t("One text per line. Use | to force a line break on the slide.")
+            : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
+      )}
       {perf.length > 0 && (
         <details className="sec">
           <summary>{t("Best hooks by views")}</summary>
@@ -100,7 +130,8 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <span className="muted grow">{pool.kind === "hooks" ? t("{n} texts", { n }) : pool.kind === "captions" ? t("{n} captions", { n }) : n ? t("1 block") : t("Empty")}</span>
         <input ref={file} type="file" accept=".txt,text/plain" hidden onChange={async (e) => {
           const f = e.target.files?.[0];
-          if (f) { const txt = await f.text(); p.onChange((x) => ({ ...x, text: x.text.trim() ? x.text.replace(/\s+$/, "") + (x.kind === "captions" ? "\n\n" : "\n") + txt : txt })); }
+          if (f) { const txt = await f.text(); p.onChange((x) => ({ ...x, text: x.kind === "captions" ? joinCaptions([...splitCaptions(x.text), ...splitCaptions(txt)])
+            : x.text.trim() ? x.text.replace(/\s+$/, "") + "\n" + txt : txt })); setImports((k) => k + 1); }
           e.target.value = "";
         }} />
         <button className="btn sm" onClick={() => file.current?.click()}>{t("Import .txt")}</button>
