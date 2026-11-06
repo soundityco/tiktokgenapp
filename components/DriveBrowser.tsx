@@ -73,7 +73,7 @@ export default function DriveBrowser({ onAdd, onPick, onClose }: {
       </div>
       {err && <p className="notice bad">{err}</p>}
       <div className="stack" style={{ maxHeight: "48dvh", overflow: "auto", gap: 4 }}>
-        {loading && <p className="muted">{t("Loading…")}</p>}
+        {loading && <p className="muted shine">{t("Loading…")}</p>}
         {!loading && !items.length && <p className="muted">{query ? t("No results.") : audio ? t("No folders or audio files here.") : t("No folders or photos here.")}</p>}
         {items.filter(isFolder).map((f) => (
           <button key={f.id} className="item" onClick={() => {
@@ -118,7 +118,7 @@ export default function DriveBrowser({ onAdd, onPick, onClose }: {
         <button className="btn" disabled={!sel.size || adding} onClick={() => { onAdd?.(images.filter((i) => sel.has(i.id)).map(toRef), toAll); onClose(); }}>
           {t("Add selected ({n})", { n: sel.size })}
         </button>
-        <button className="btn primary" disabled={!images.length || adding} onClick={addAll}>
+        <button className={"btn primary" + (adding ? " shine-box" : "")} disabled={!images.length || adding} onClick={addAll}>
           {adding ? t("Adding…") : query ? t("Add all {n} photos", { n: images.length }) : t("Add all {n} photos here", { n: images.length })}
         </button>
       </div>

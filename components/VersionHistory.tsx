@@ -45,7 +45,7 @@ export default function VersionHistory({ onRestore, onClose }: { onRestore: (dat
     <Modal title={t("Version history")} onClose={onClose}>
       <p className="muted xs">{t("A copy of your data is kept at most every 10 minutes while you work (the last 30). Restoring one replaces your current data; you can undo it right after.")}</p>
       {err && <p className="notice bad xs">{err}</p>}
-      {!versions && !err && <p className="muted">{t("Loading…")}</p>}
+      {!versions && !err && <p className="muted shine">{t("Loading…")}</p>}
       {versions && !versions.length && <p className="muted">{t("No version kept yet: they appear as you work.")}</p>}
       <div className="stack" style={{ maxHeight: "50dvh", overflow: "auto", gap: 4 }}>
         {versions?.map((v) => (

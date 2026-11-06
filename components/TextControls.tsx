@@ -174,7 +174,7 @@ export function FontPicker({
         <span>{t("Font")}</span>
         <button className="input font-current" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}>
           <span style={{ fontFamily: labelCss }} className="truncate">{label}</span>
-          <span className="muted xs">{busy ? t("Loading…") : "▾"}</span>
+          <span className={"muted xs" + (busy ? " shine" : "")}>{busy ? t("Loading…") : "▾"}</span>
         </button>
         {open && (
           <div className="font-menu" role="listbox" aria-label={t("Font")}>

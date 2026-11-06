@@ -2056,7 +2056,7 @@ export default function VideoStudio({
 
   const audioPick = (
     <div className="row">
-      <button className="btn sm primary" onClick={() => setDriveOpen(true)} disabled={driveBusy}>
+      <button className={"btn sm primary" + (driveBusy ? " shine-box" : "")} onClick={() => setDriveOpen(true)} disabled={driveBusy}>
         <Icon name="folder" size={14} />{driveBusy ? t("Downloading…") : t("From Google Drive")}
       </button>
       <label className="btn sm">
@@ -2078,10 +2078,10 @@ export default function VideoStudio({
             <div className="tree-head" title={t("The audio and the lyrics belong to the release: every video of it uses them.")}>
               <span className="label">{t("Release")}</span>
             </div>
-            <MediaTile icon="music" label={t("Official audio")}
+            <MediaTile icon="music" label={t("Official audio")} loading={(!!audioBlob && !audioBuf) || driveBusy}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
               meta={audioBlob && (<>
-                {audioBuf && <span className="mono">{fmtTime(audioBuf.duration)}</span>}
+                {audioBuf ? <span className="mono">{fmtTime(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
                 {clips.length > 1 && <span>{t("For its {n} videos", { n: clips.length })}</span>}
                 {project.audioDriveId ? <span>Drive</span>
                   : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")} /></span>}
@@ -2123,11 +2123,11 @@ export default function VideoStudio({
               ].filter(Boolean).join("\n");
               const missing = !videoBlob && !!settings.videoName;
               return (
-                <MediaTile icon="film" label={t("Camera video")} name={settings.videoName ?? null} warn={missing}
+                <MediaTile icon="film" label={t("Camera video")} name={settings.videoName ?? null} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
-                      {videoDur > 0 && <span className="mono">{fmtTime(videoDur)}</span>}
+                      {videoDur > 0 ? <span className="mono">{fmtTime(videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
                       {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
                       {d.originalId && <span>Drive</span>}
                     </>)}
@@ -2219,8 +2219,8 @@ export default function VideoStudio({
           <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
           <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
           <div className="row nowrap head-actions">
-          <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}>{status.text}</span>
-          <button className="btn primary" onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
+          <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+          <button className={"btn primary" + (exporting ? " shine-box" : "")} onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
             title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
             <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
           </button>
@@ -2229,7 +2229,7 @@ export default function VideoStudio({
       </div>
       <div className={"video-grid" + (settings.format === "16:9" ? " wide" : "")}>
         <div className="stack video-stage">
-          <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "")} style={{ position: "relative" }}>
+          <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "") + (videoUrl && !playerReady ? " shine-box" : "")} style={{ position: "relative" }}>
               <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
                 onError={() => setPlayerReady(true)}
                 onCanPlay={() => setPlayerReady(true)}
@@ -2269,11 +2269,11 @@ export default function VideoStudio({
               : null;
             if (job) return (
               <div className="job" title={t("Keep this tab open until it is done. The export always uses the original file.")}>
-                <div className="row"><span className="xs">{job.text}</span><span className="xs mono muted">{Math.round(job.p * 100)} %</span></div>
-                <div className="job-bar"><i style={{ width: `${Math.max(2, job.p * 100)}%` }} /></div>
+                <div className="row"><span className="xs shine">{job.text}</span><span className="xs mono muted">{Math.round(job.p * 100)} %</span></div>
+                <div className="job-bar"><i className="shine-bar" style={{ width: `${Math.max(2, job.p * 100)}%` }} /></div>
               </div>
             );
-            return videoBlob && !videoDur ? <p className="muted xs">{t("Opening the camera video…")}</p> : null;
+            return videoBlob && !videoDur ? <p className="muted xs shine">{t("Opening the camera video…")}</p> : null;
           })()}
           <p className="muted xs row" style={{ gap: 6 }}>
             {!videoBlob && <span>{t("Nothing to preview yet.")}</span>}
@@ -2288,8 +2288,8 @@ export default function VideoStudio({
             {!audioBuf ? (
               audioBlob ? (
                 <div className="studio-loading" aria-busy="true">
-                  <span className="muted xs">{t("Reading the audio…")}</span>
-                  <div className="skel-wave" />
+                  <span className="muted xs shine">{t("Reading the audio…")}</span>
+                  <div className="skel-wave shine-box" />
                 </div>
               ) : (
                 <div className="timeline-empty">
@@ -2350,12 +2350,12 @@ export default function VideoStudio({
                     </Menu>
                   ) : (
                     <>
-                      <span className="badge">
+                      <span className="badge"><span className="shine">
                         {syncBusy ? t("Syncing the video… {n}%", { n: Math.round(syncPct * 100) })
                           : genStep === "model" && genPct > 0 && genPct < 1 ? t("Downloading the speech model… {n}%", { n: Math.round(genPct * 100) })
                           : genStep === "listen" || genDone > 0 ? t("Placing the lyrics… {n}%", { n: Math.round(genDone * 100) })
                           : t("Loading the speech engine…")}
-                      </span>
+                      </span></span>
                       {genBusy && <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>}
                     </>
                   )}
@@ -2398,7 +2398,7 @@ export default function VideoStudio({
                       {c.text.replace(/\n/g, " ")}
                     </button>
                   ))}
-                  {!cues.length && <span className="muted xs lyric-track-empty">{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                 </div>
                 {genBusy && (
@@ -2721,7 +2721,7 @@ export default function VideoStudio({
       {exp && (
         <Modal title={exp.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
           <div className="stack">
-            <p>
+            <p className={exp.done ? undefined : "shine"}>
               {exp.done ? t("{name} is in your downloads.", { name: exp.file ?? "" })
                 : exp.step === "engine" ? t("Downloading the video converter (once)… {n}%", { n: Math.round(exp.p * 100) })
                 : exp.step === "convert" ? t("Converting the camera format… {n}%", { n: Math.round(exp.p * 100) })
@@ -2731,7 +2731,7 @@ export default function VideoStudio({
                 : exp.step === "record" ? t("Recording in real time (this browser cannot encode MP4 by itself)… {n}%", { n: Math.round(exp.p * 100) })
                 : t("Finishing the MP4…")}
             </p>
-            <div className="bar export-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(exp.p * 100)}>
+            <div className={"bar export-bar" + (exp.done ? "" : " shine-bar")} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(exp.p * 100)}>
               <div style={{ width: `${exp.p * 100}%` }} />
             </div>
             <p className="muted xs">{outW}×{outH} · H.264 + AAC · {EXPORT_FPS} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
@@ -2755,13 +2755,15 @@ export default function VideoStudio({
 }
 
 /** One file of the clip (the audio, the camera video): the same tile for both, empty or filled. */
-function MediaTile({ icon, label, name, meta, menu, warn, children }: {
+function MediaTile({ icon, label, name, meta, menu, warn, loading, children }: {
   icon: string; label: string; name: string | null; warn?: boolean;
+  /** Still opening (or on its way to / from the Drive): the tile shines. */
+  loading?: boolean;
   meta?: ReactNode; menu?: false | null | "" | ((close: () => void) => ReactNode); children?: ReactNode;
 }) {
   const { t } = useT();
   return (
-    <div className={"media" + (name ? "" : " empty") + (warn ? " warn" : "")}>
+    <div className={"media" + (name ? "" : " empty") + (warn ? " warn" : "") + (loading ? " shine-box" : "")} aria-busy={loading || undefined}>
       <div className="media-head">
         <span className="media-ic"><Icon name={icon} size={16} /></span>
         <div className="media-txt">

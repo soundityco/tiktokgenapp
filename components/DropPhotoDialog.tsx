@@ -51,7 +51,7 @@ export default function DropPhotoDialog({ blob, slide, pools, canDrive, busy, on
     <Modal title={t("Photo for slide {n}", { n: slide + 1 })} onClose={onClose}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); confirm(); }}>
         <img src={url} alt="" className="drop-preview" />
-        {same === undefined && <p className="muted xs"><span className="spin-dot" style={{ width: 10, height: 10, marginRight: 6 }} />{t("Checking whether you already have it…")}</p>}
+        {same === undefined && <p className="muted xs shine">{t("Checking whether you already have it…")}</p>}
         {same && (
           <p className="notice xs">{inPool
             ? t("You already have it, in the list “{name}”: it is picked from there, nothing is sent again.", { name: inPool.name })
@@ -78,7 +78,7 @@ export default function DropPhotoDialog({ blob, slide, pools, canDrive, busy, on
         )}
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <button type="button" className="btn quiet" onClick={onClose}>{t("Cancel")}</button>
-          <button type="submit" className="btn primary" disabled={!ok || busy || same === undefined}>
+          <button type="submit" className={"btn primary" + (busy ? " shine-box" : "")} disabled={!ok || busy || same === undefined}>
             {busy ? t("Saving…") : same ? t("Use the one I have") : t("Use this photo")}
           </button>
         </div>

@@ -922,7 +922,7 @@ export default function Studio({ userName }: { userName: string }) {
         </div>
         <span className="grow" />
         <span role="status" aria-live="polite" className={"badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
-          {saveState === "saved" ? t("Saved") : saveState === "saving" ? t("Saving…") : saveState === "conflict" ? t("Not saved") : t("Not saved")}
+          {saveState === "saved" ? t("Saved") : saveState === "saving" ? <span className="shine">{t("Saving…")}</span> : saveState === "conflict" ? t("Not saved") : t("Not saved")}
         </span>
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
@@ -1035,7 +1035,7 @@ export default function Studio({ userName }: { userName: string }) {
                 )}
               </Menu>
               {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn icon" aria-label={t("Share")} title={t("Share")} onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" /></button>}
-              <button className="btn primary" onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
+              <button className={"btn primary" + (busy ? " shine-box" : "")} onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
               </div>
             </div>
           </div>

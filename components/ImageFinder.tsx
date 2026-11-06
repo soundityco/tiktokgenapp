@@ -116,7 +116,7 @@ export default function ImageFinder({ onPick, onClose }: { onPick: (img: FoundIm
         {source === "pexels" && <p className="muted xs">{t("Photos provided by Pexels")} · pexels.com</p>}
         {err && <p className="notice warn xs">{err}</p>}
         <div className={"finder-grid" + (busy && loading === 1 && items.length ? " stale" : "")} ref={grid} onScroll={onScroll} aria-busy={busy}>
-          {first && Array.from({ length: 12 }, (_, k) => <span key={k} className="finder-item finder-skel" aria-hidden />)}
+          {first && Array.from({ length: 12 }, (_, k) => <span key={k} className="finder-item finder-skel shine-box" aria-hidden />)}
           {items.map((img) => (
             <button key={img.id} className="finder-item" onClick={() => onPick(img)}
               title={`${img.author || t("Unknown author")} · ${img.license}${img.w ? ` · ${img.w}×${img.h}` : ""}`}>
@@ -124,7 +124,7 @@ export default function ImageFinder({ onPick, onClose }: { onPick: (img: FoundIm
               <span className="finder-meta">{img.author || "—"} · {img.license}{img.w && img.w < 1080 && img.h < 1920 ? ` · ${t("small")}` : ""}</span>
             </button>
           ))}
-          {busy && loading > 1 && <p className="muted xs finder-more">{t("Loading more…")}</p>}
+          {busy && loading > 1 && <p className="muted xs finder-more shine">{t("Loading more…")}</p>}
         </div>
         {!busy && query && !items.length && !err && <p className="muted xs">{t("No photo for these words. Try others, or fewer.")}</p>}
         {more && !busy && items.length > 0 && <p className="muted xs">{t("Scroll the photos for more.")}</p>}

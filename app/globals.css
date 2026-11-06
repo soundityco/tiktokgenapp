@@ -350,9 +350,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .job-bar { height: 3px; background: var(--line-2); border-radius: 2px; overflow: hidden; }
 .job-bar i { display: block; height: 100%; background: var(--accent); transition: width .4s ease; }
 .skel-wave { height: 90px; border: 1px solid var(--line-2); border-radius: var(--r); background:
-  linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--text) 6%, transparent) 50%, transparent 100%) 0 0 / 40% 100% no-repeat,
-  repeating-linear-gradient(90deg, var(--line-2) 0 2px, transparent 2px 6px) center / 100% 30% no-repeat, var(--bg);
-  animation: skel 1.4s ease-in-out infinite; }
+  repeating-linear-gradient(90deg, var(--line-2) 0 2px, transparent 2px 6px) center / 100% 30% no-repeat, var(--bg); }
 @keyframes skel { from { background-position: -40% 0, center; } to { background-position: 140% 0, center; } }
 @media (prefers-reduced-motion: reduce) { .skel-wave { animation: none; } }
 
@@ -449,7 +447,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .finder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); grid-auto-rows: max-content; align-content: start; /* rows keep the height of their tiles: the grid scrolls, it never squeezes them */ gap: 8px; max-height: min(62vh, 640px); overflow-y: auto; padding-right: 2px; transition: opacity .15s; }
 .finder-grid.stale { opacity: .45; }
 .finder-more { grid-column: 1 / -1; text-align: center; padding: var(--s2) 0; }
-.finder-skel { aspect-ratio: 9 / 16; background: linear-gradient(90deg, var(--raised) 0, #1c1c22 50%, var(--raised) 100%) 0 0 / 200% 100%; animation: skel 1.2s linear infinite; cursor: default; }
+.finder-skel { aspect-ratio: 9 / 16; background: var(--raised); cursor: default; }
 .finder-spin { position: absolute; left: 10px; width: 13px; height: 13px; }
 .finder-item { position: relative; display: block; width: 100%; aspect-ratio: 9 / 16; margin: 0; padding: 0; border: 0; background: var(--raised); border-radius: 3px; overflow: hidden; cursor: pointer; }
 .finder-item img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .2s; }
@@ -592,3 +590,31 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .release-pick .display { line-height: var(--h); margin: 0; }
 .release-list { display: grid; gap: 1px; max-height: 50vh; overflow-y: auto; }
 .release-title .menu { min-width: 260px; }
+
+/* ---------- Shine: everything that is loading gets the light of the loading screen ----------
+   The same slanted band (leaning right, like "/") sweeping left to right, then a pause.
+   .shine: a text being loaded (it lights up as the band passes).
+   .shine-box: a placeholder, a tile or a busy button (a light band runs over it).
+   .shine-bar: a progress bar (its filled part glimmers). */
+@keyframes shine-sweep { 0% { background-position: 100% 0; } 65%, 100% { background-position: 0% 0; } }
+.shine {
+  background: linear-gradient(110deg, currentColor 36%, #fff 50%, currentColor 64%) 0 0 / 300% 100% no-repeat;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: shine-sweep 2.4s cubic-bezier(.45,0,.25,1) infinite;
+}
+.shine-box { position: relative; overflow: hidden; isolation: isolate; }
+.shine-box::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(110deg, transparent 38%, rgba(255,255,255,.06) 44%, rgba(255,255,255,.2) 50%, rgba(255,255,255,.06) 56%, transparent 62%) 0 0 / 300% 100% no-repeat;
+  animation: shine-sweep 2.4s cubic-bezier(.45,0,.25,1) infinite;
+}
+/* On a white button the light is a soft shadow passing. */
+.btn.primary.shine-box::after { background-image: linear-gradient(110deg, transparent 38%, rgba(11,11,16,.06) 44%, rgba(11,11,16,.2) 50%, rgba(11,11,16,.06) 56%, transparent 62%); }
+.shine-bar { position: relative; overflow: hidden; }
+.job-bar i.shine-bar::after, .bar.shine-bar > div::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 38%, rgba(11,11,16,.35) 50%, transparent 62%) 0 0 / 300% 100% no-repeat; animation: shine-sweep 1.8s linear infinite; }
+.bar.shine-bar > div { position: relative; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .shine, .shine-box::after, .job-bar i.shine-bar::after, .bar.shine-bar > div::after { animation: none; }
+  .shine { -webkit-text-fill-color: currentColor; background: none; }
+  .shine-box::after { opacity: 0; }
+}

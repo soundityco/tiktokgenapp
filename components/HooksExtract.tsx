@@ -179,7 +179,7 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
 
       {source === "tiktok" && (
         <div style={{ display: "grid", gap: 10 }}>
-          {!tt && <p className="muted" style={{ margin: 0 }}>{t("Checking your TikTok connection…")}</p>}
+          {!tt && <p className="muted shine" style={{ margin: 0 }}>{t("Checking your TikTok connection…")}</p>}
           {tt && !tt.configured && (
             <p className="notice warn">
               {t("TikTok is not set up on this site yet: add TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET (see the README).")}
@@ -197,7 +197,7 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
                 <span className="badge ok">{tt.name ? t("Connected as {name}", { name: tt.name }) : t("Connected")}</span>
                 <button className="btn sm" onClick={async () => { await fetch("/api/tiktok/disconnect", { method: "POST" }); setTt({ ...tt, connected: false, name: null }); setPosts(null); }}>{t("Disconnect")}</button>
                 <span className="grow" />
-                <button className="btn" onClick={loadPosts} disabled={loadingPosts || running}>{loadingPosts ? t("Loading…") : posts ? t("Reload my posts") : t("Load my posts")}</button>
+                <button className={"btn" + (loadingPosts ? " shine-box" : "")} onClick={loadPosts} disabled={loadingPosts || running}>{loadingPosts ? t("Loading…") : posts ? t("Reload my posts") : t("Load my posts")}</button>
               </div>
               {posts && (
                 <>
