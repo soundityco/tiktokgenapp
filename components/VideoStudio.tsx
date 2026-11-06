@@ -340,6 +340,11 @@ export default function VideoStudio({
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncPct, setSyncPct] = useState(0);
   const [exporting, setExporting] = useState(false);
+  /** The clip whose files were read from the device (its camera file found or not): a batch export waits for it. */
+  const [loadedClip, setLoadedClip] = useState<string | null>(null);
+  /** Exporting every video of the release, one after the other (see the batch runner below). */
+  const [batch, setBatch] = useState<null | { ids: string[]; i: number; res: Record<string, "done" | "failed" | "skipped">; back: string }>(null);
+  const batchBusy = useRef(false);
   /** Export window: progress 0-1 and current step ("record" = realtime fallback). */
   const [exp, setExpRaw] = useState<null | { p: number; step: ExportStep | ConvertStep | "record"; done?: boolean; file?: string }>(null);
   /** Progress updates only when the whole percentage or the step changes: no re-render per frame. */
@@ -672,6 +677,7 @@ export default function VideoStudio({
     setPeaks([]);
     setVideoBlob(null);
     setVideoDur(0);
+    setLoadedClip(null);
     setErr(null);
     setNote(null);
     setHead(settingsRef.current.crop.start);
@@ -726,7 +732,8 @@ export default function VideoStudio({
         if (b) { fileClip.current = clip.id; setVideoBlob(b); }
         // No camera file: a picture kept by mistake for this video (older versions) is dropped.
         else { posterRef.current = null; void delMedia(`poster:${clip.id}`).catch(() => {}); }
-      } catch { /* IndexedDB unavailable */ }
+        setLoadedClip(clip.id);
+      } catch { if (!off) setLoadedClip(clip.id); /* IndexedDB unavailable */ }
     })();
     return () => { off = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1726,13 +1733,13 @@ export default function VideoStudio({
    * Export the segment as an MP4 (H.264 + AAC, 1080×1920 or 1920×1080). The frames are drawn and
    * encoded one by one on a hidden copy of the video: nothing plays on screen, a window shows the progress.
    */
-  const exportVideo = async () => {
-    if (!audioBuf || !videoUrl) return;
+  const exportVideo = async (inBatch = false): Promise<"done" | "failed" | "cancelled"> => {
+    if (!audioBuf || !videoUrl) return "failed";
     stop();
     const cfg = settingsRef.current;
     const from = cfg.crop.start;
     const until = Math.min(audioBuf.duration, from + cfg.crop.duration);
-    if (until - from < 0.5) { setErr(t("Video export failed")); return; }
+    if (until - from < 0.5) { setErr(t("Video export failed")); return "failed"; }
     void askNotifyPermission();
     const ac = new AbortController();
     exportRef.current = ac;
@@ -1849,10 +1856,11 @@ export default function VideoStudio({
       const file = `${name} clip.${ext}`;
       saveBlob(blob, file);
       setExp({ p: 1, step: "finish", done: true, file });
-      notify(t("Video exported"), t("{name} is in your downloads.", { name: file }));
+      if (!inBatch) notify(t("Video exported"), t("{name} is in your downloads.", { name: file }));
+      return "done";
     } catch (e) {
       const cancelled = ac.signal.aborted || (e instanceof DOMException && e.name === "AbortError");
-      setExp(null);
+      if (!inBatch || cancelled) setExp(null);
       if (e instanceof FrozenVideo) {
         const msg = t("The camera video stopped giving pictures at {s}: this browser cannot read its format frame by frame ({why}). Export it as H.264 or HEVC, 8-bit 4:2:0 (from DaVinci, or use the camera's proxy file), then import that file.", { s: fmtTime(e.at), why: VideoSource.lastReason || "?" });
         setErr(msg);
@@ -1860,8 +1868,9 @@ export default function VideoStudio({
       } else if (!cancelled) {
         console.error("video export failed", e);
         setErr(t("Video export failed"));
-        notify(t("Video export failed"), t("The export stopped before the end. Try again."));
+        if (!inBatch) notify(t("Video export failed"), t("The export stopped before the end. Try again."));
       }
+      return cancelled ? "cancelled" : "failed";
     } finally {
       source?.close();
       stopPlayer();
@@ -1876,7 +1885,46 @@ export default function VideoStudio({
   const closeExport = () => {
     exportRef.current?.abort();
     setExp(null);
+    setBatch(null);
   };
+
+  /**
+   * Every video of the release, one after the other: each is opened (its camera file, its grade), exported
+   * when ready, then the next. A video whose camera file is not on this device is left out. At the end, the
+   * video that was open comes back.
+   */
+  const exportAll = () => {
+    const ids = clips.map((c) => c.id);
+    if (!ids.length) return;
+    void askNotifyPermission();
+    setErr(null);
+    setBatch({ ids, i: 0, res: {}, back: clip.id });
+  };
+  useEffect(() => {
+    if (!batch || batchBusy.current) return;
+    if (batch.i >= batch.ids.length) return; // finished: the window shows the results
+    const id = batch.ids[batch.i];
+    const next = (r: "done" | "failed" | "skipped") => setBatch((b) => (b ? { ...b, res: { ...b.res, [id]: r }, i: b.i + 1 } : b));
+    if (clip.id !== id) { onProject((p) => ({ ...p, videoId: id })); return; }
+    if (loadedClip !== id) return; // its files are being read
+    if (!videoBlob) { next("skipped"); return; }
+    if (!audioBlob) { next("failed"); return; }
+    const lutReady = !settings.grade?.lut || !!look || !!lookErr;
+    if (!audioBuf || !videoUrl || !videoDur || !playerReady || !lutReady) return; // still opening
+    batchBusy.current = true;
+    void exportVideo(true).then((r) => {
+      batchBusy.current = false;
+      if (r !== "cancelled") next(r);
+    });
+  }, [batch, clip.id, loadedClip, videoBlob, audioBlob, audioBuf, videoUrl, videoDur, playerReady, look, lookErr]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Finished: one notification, and the video that was open comes back.
+  const batchDone = !!batch && batch.i >= batch.ids.length;
+  useEffect(() => {
+    if (!batch || !batchDone) return;
+    const n = Object.values(batch.res).filter((r) => r === "done").length;
+    notify(t("Videos exported"), t("{n} of {m} videos are in your downloads.", { n, m: batch.ids.length }));
+    if (clip.id !== batch.back && clips.some((c) => c.id === batch.back)) onProject((p) => ({ ...p, videoId: batch.back }));
+  }, [batchDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- framing on the preview: drag the video or the lyrics, wheel to zoom / resize, double-click to reset ----
   const frame = settings.frame ?? DEFAULT_VIDEO.frame;
@@ -2260,10 +2308,21 @@ export default function VideoStudio({
           <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
           <div className="row nowrap head-actions">
           <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+          {clips.length > 1 && !exporting && !batch ? (
+            <Menu trigger={(_, toggle) => (
+              <button className="btn primary" onClick={toggle} disabled={!audioBuf}><Icon name="download" />{t("Export")}<Icon name="chevron" size={14} /></button>
+            )}>
+              {(closeMenu) => (<>
+                <button disabled={!videoBlob} onClick={() => { closeMenu(); void exportVideo(); }}>{t("This video (MP4)")}</button>
+                <button onClick={() => { closeMenu(); exportAll(); }}>{t("All the videos ({n})", { n: clips.length })}</button>
+              </>)}
+            </Menu>
+          ) : (
           <button className={"btn primary" + (exporting ? " shine-box" : "")} onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
             title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
             <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
           </button>
+          )}
           </div>
         </div>
       </div>
@@ -2758,9 +2817,29 @@ export default function VideoStudio({
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
       )}
       {driveOpen && <DriveBrowser onPick={(f) => void pickFromDrive(f)} onClose={() => setDriveOpen(false)} />}
-      {exp && (
-        <Modal title={exp.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
+      {(exp || batch) && (
+        <Modal title={batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
           <div className="stack">
+            {batch && (
+              <ul className="batch-list">
+                {batch.ids.map((id, k) => {
+                  const c = clips.find((x) => x.id === id);
+                  const r = batch.res[id];
+                  const now = k === batch.i && !batchDone;
+                  return (
+                    <li key={id} className={now ? "now" : undefined}>
+                      <span className="truncate">{c ? clipName(c) : "?"}</span>
+                      {r === "done" ? <span className="ok"><Icon name="check" size={14} />{t("Finished")}</span>
+                        : r === "failed" ? <span className="bad">{t("Failed")}</span>
+                        : r === "skipped" ? <span className="warn" title={t("Its camera file is not on this device: open it once to import it again.")}>{t("Not on this device")}</span>
+                        : now ? <span className="shine">{exp && !exp.done && exporting ? t("In progress {n}%", { n: Math.round(exp.p * 100) }) : t("Opening…")}</span>
+                        : <span className="muted">{t("Waiting")}</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {exp && (!batch || (!batchDone && exporting)) && (<>
             <p className={exp.done ? undefined : "shine"}>
               {exp.done ? t("{name} is in your downloads.", { name: exp.file ?? "" })
                 : exp.step === "engine" ? t("Downloading the video converter (once)… {n}%", { n: Math.round(exp.p * 100) })
@@ -2782,9 +2861,11 @@ export default function VideoStudio({
             {!exp.done && expMode?.direct !== false && (notifyBlocked()
               ? <p className="notice warn xs">{t("Notifications are blocked for this site: allow them in the browser to be told when the video is ready. The tab title will show it anyway.")}</p>
               : <p className="muted xs">{t("You can switch tabs: you will be notified when the video is ready.")}</p>)}
+            </>)}
+            {batch && err && <p className="notice bad xs">{err}</p>}
           </div>
           <div className="modal-foot">
-            {exp.done
+            {(batch ? batchDone : exp?.done)
               ? <button className="btn primary" onClick={closeExport}>{t("Close")}</button>
               : <button className="btn quiet" onClick={closeExport}>{t("Cancel")}</button>}
           </div>

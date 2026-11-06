@@ -792,28 +792,46 @@ export default function Studio({ userName }: { userName: string }) {
     }
     return out;
   }
-  async function downloadAll() {
-    if (!project?.generated) return say(t("Generate a carousel first"));
-    const p = project;
+  /**
+   * Downloads the open carousel, or every carousel of the release (`all`): one zip, one folder per carousel
+   * holding its pictures, its caption.txt (the post's text) and slide-texts.txt.
+   */
+  async function downloadAll(all = false) {
+    if (!project) return;
+    const list = all ? carouselsOf(project).map((c) => openCarousel(project, c.id)) : [project];
+    const ready = list.filter((p) => p.generated);
+    if (!ready.length) return say(t("Generate a carousel first"));
     cancelExport.current = false;
     setBusy(true);
-    setExportProgress({ done: 0, total: p.slides.length });
+    const total = ready.reduce((n, p) => n + p.slides.length, 0);
+    let before = 0;
+    setExportProgress({ done: 0, total });
     const failures: string[] = [];
     try {
-      const files = await buildFiles(p, (done, total) => setExportProgress({ done, total }), failures);
-      if (cancelExport.current) { say(t("Export cancelled")); return; }
-      if (!files.length) throw new Error(t("Export failed"));
-      const cName = carouselsOf(p).length > 1 ? ` - ${carouselName(carouselsOf(p).find((c) => c.id === currentCarouselId(p))!)}` : "";
-      const folder = `${safe(p.name + cName)} ${stamp()}`;
+      const release = safe(project.name);
       const zip = new JSZip();
-      const dir = zip.folder(folder)!;
-      files.forEach((f) => dir.file(f.name, f.blob));
-      const texts = p.slides.map((_, i) => `Slide ${i + 1}\n${p.generated?.[i]?.text ?? ""}`).join("\n\n");
-      dir.file("slide-texts.txt", texts);
-      // The text of the post, ready to paste in TikTok.
-      if (p.caption?.trim()) dir.file("caption.txt", p.caption.trim() + "\n");
-      download(await zip.generateAsync({ type: "blob" }), `${folder}.zip`);
-      if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: files.length, m: p.slides.length, f: failures.length }));
+      const root = all ? zip.folder(`${release} ${stamp()}`)! : null;
+      let made = 0, single = "";
+      for (const p of ready) {
+        const files = await buildFiles(p, (done) => setExportProgress({ done: before + done, total }), failures);
+        before += p.slides.length;
+        if (cancelExport.current) { say(t("Export cancelled")); return; }
+        if (!files.length) continue;
+        made += files.length;
+        const c = carouselsOf(p).find((x) => x.id === currentCarouselId(p))!;
+        const many = carouselsOf(project).length > 1;
+        const name = all ? safe(carouselName(c)) : `${safe(project.name + (many ? ` - ${carouselName(c)}` : ""))} ${stamp()}`;
+        if (!all) single = name;
+        const dir = (root ?? zip).folder(name)!;
+        files.forEach((f) => dir.file(f.name, f.blob));
+        dir.file("slide-texts.txt", p.slides.map((_, i) => `Slide ${i + 1}\n${p.generated?.[i]?.text ?? ""}`).join("\n\n"));
+        // The text of the post, ready to paste in TikTok.
+        if (p.caption?.trim()) dir.file("caption.txt", p.caption.trim() + "\n");
+      }
+      if (!made) throw new Error(t("Export failed"));
+      download(await zip.generateAsync({ type: "blob" }), `${all ? `${release} ${stamp()}` : single}.zip`);
+      if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: made, m: total, f: failures.length }));
+      else if (all && ready.length < list.length) say(t("{n} carousels not generated yet were left out", { n: list.length - ready.length }));
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
     finally { setBusy(false); setExportProgress(null); }
   }
@@ -1108,7 +1126,18 @@ export default function Studio({ userName }: { userName: string }) {
                 )}
               </Menu>
               {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn icon" aria-label={t("Share")} title={t("Share")} onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" /></button>}
-              <button className={"btn primary" + (busy ? " shine-box" : "")} onClick={downloadAll} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
+              {carouselsOf(project).length > 1 && !busy ? (
+                <Menu trigger={(_, toggle) => (
+                  <button className="btn primary" onClick={toggle}><Icon name="download" />{t("Download")}<Icon name="chevron" size={14} /></button>
+                )}>
+                  {(closeMenu) => (<>
+                    <button disabled={!project.generated} onClick={() => { closeMenu(); void downloadAll(); }}>{t("This carousel")}</button>
+                    <button onClick={() => { closeMenu(); void downloadAll(true); }}>{t("All the carousels ({n})", { n: carouselsOf(project).length })}</button>
+                  </>)}
+                </Menu>
+              ) : (
+                <button className={"btn primary" + (busy ? " shine-box" : "")} onClick={() => void downloadAll()} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
+              )}
               </div>
             </div>
           </div>
