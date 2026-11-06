@@ -822,9 +822,28 @@ export default function Studio({ userName }: { userName: string }) {
 
   if (loadErr) return <div className="login"><div className="login-card"><h2 className="title">{t("Could not load your data")}</h2><p className="muted">{loadErr}</p><button className="btn primary" onClick={() => location.reload()}>{t("Try again")}</button></div></div>;
   if (!ws || !project) return (
-    <div className="boot" aria-busy="true">
-      <img src="/icon.svg" alt="" width={56} height={56} />
-      <p className="muted">{t("Loading…")}</p>
+    <div className="boot" aria-busy="true" role="status" aria-label={t("Loading…")}>
+      {/* The same logo and text twice: a dim one, and a glowing copy shown only under a slanted band sweeping left to right. */}
+      <div className="boot-mark" aria-hidden>
+        {["base", "shine"].map((k) => (
+          <div key={k} className={"boot-layer " + k}>
+            {/* The app icon drawn here (not an image), so the R itself can glow. */}
+            <svg viewBox="0 0 673.68 673.68" width={56} height={56}>
+              <rect width="673.68" height="673.68" rx="150" fill="#000" />
+              <path fill="currentColor" filter={k === "shine" ? "url(#boot-glow)" : undefined} d="M174.68,170.64h198.2c65.43,0,122.81,18.02,122.81,80.61,0,46.47-31.77,71.13-74.92,77.76v15.65c44.1,2.85,34.61,43.62,24.66,104.32h53.58v54.05h-137.98l46.94-132.29h-168.33v131.34h-64.96V170.64ZM239.64,320.01l131.82.95c32.24.47,59.74-16.6,59.74-48.84s-27.5-48.84-58.8-48.84h-132.77v96.73Z" />
+              {k === "shine" && (
+                <defs>
+                  <filter id="boot-glow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="14" result="b" />
+                    <feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                </defs>
+              )}
+            </svg>
+            <p>{t("Loading…")}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 

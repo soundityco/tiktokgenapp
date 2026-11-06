@@ -470,9 +470,28 @@ button.link { background: none; border: 0; padding: 0; color: var(--text); text-
 .drop-preview { width: 100%; max-height: 46vh; object-fit: contain; background: #000; border-radius: var(--r); }
 /* Loading of the studio: logo and message in the middle of the screen. */
 .boot { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: var(--s3); background: var(--bg); }
-.boot img { animation: boot 1.6s ease-in-out infinite; }
-@keyframes boot { 50% { opacity: .55; transform: scale(.96); } }
-@media (prefers-reduced-motion: reduce) { .boot img { animation: none; } }
+/* A slanted light (leaning right, like "/") sweeps the logo and the text from left to right, then a pause. */
+.boot-mark { display: grid; }
+.boot-layer { grid-area: 1 / 1; display: grid; justify-items: center; gap: var(--s3); padding: 16px 28px; }
+.boot-layer p { margin: 0; font-size: var(--fs-sm); }
+.boot-layer.base p { color: var(--muted); }
+.boot-layer.base svg { color: #8d8c96; }
+.boot-layer.shine p { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,.75), 0 0 22px rgba(255,255,255,.35); }
+.boot-layer.shine svg { color: #fff; overflow: visible; }
+.boot-layer.shine rect { fill: transparent; }
+.boot-layer.shine {
+  --band: linear-gradient(110deg, transparent 36%, rgba(0,0,0,.4) 44%, #000 50%, rgba(0,0,0,.4) 56%, transparent 64%);
+  -webkit-mask-image: var(--band); mask-image: var(--band);
+  -webkit-mask-size: 300% 100%; mask-size: 300% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  animation: boot-wipe 2.4s cubic-bezier(.45,0,.25,1) infinite;
+}
+@keyframes boot-wipe {
+  0% { -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+  65%, 100% { -webkit-mask-position: 0% 0; mask-position: 0% 0; }
+}
+/* Without motion: no sweep, the logo glows softly. */
+@media (prefers-reduced-motion: reduce) { .boot-layer.shine { animation: none; -webkit-mask-image: none; mask-image: none; opacity: .35; } }
 /* Installed app with the title bar hidden (window controls overlay): the top bar can drag the window. */
 @media (display-mode: window-controls-overlay) { .top { -webkit-app-region: drag; app-region: drag; padding-left: max(var(--s4), env(titlebar-area-x, 0px)); }
   .top button, .top select, .top a, .top input, .top label { -webkit-app-region: no-drag; app-region: no-drag; } }
