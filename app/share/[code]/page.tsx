@@ -28,7 +28,26 @@ export default function SharePage() {
   const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
   const canShare = files.length > 0 && typeof navigator !== "undefined" && !!navigator.canShare?.({ files });
-  const save = () => void navigator.share({ files }).catch(() => {});
+  // iPhone: the share sheet has "Save image / video" (downloads go to Files, not Photos). Android: a download
+  // lands in the gallery, while its share sheet often has no "save" at all.
+  const ios = typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+  const [saveErr, setSaveErr] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const download = async () => {
+    for (let i = 0; i < files.length; i++) {
+      const a = document.createElement("a");
+      a.href = urls[i]; a.download = files[i].name;
+      document.body.appendChild(a); a.click(); a.remove();
+      await new Promise((r) => setTimeout(r, 400)); // one at a time, or the browser drops some
+    }
+    setSaved(true);
+  };
+  const share = async () => {
+    setSaveErr(false);
+    try { await navigator.share({ files }); setSaved(true); }
+    catch (e) { if (!(e instanceof DOMException && e.name === "AbortError")) setSaveErr(true); }
+  };
+  const save = () => void (ios && canShare ? share() : download());
   const copy = async () => { if (!meta?.caption) return; try { await navigator.clipboard.writeText(meta.caption); setCopied(true); } catch { /* not allowed */ } };
   const mb = meta ? Math.max(1, Math.round(meta.files.reduce((n, f) => n + f.size, 0) / 1e6)) : 0;
 
@@ -45,7 +64,13 @@ export default function SharePage() {
             <h1 className="display">{meta?.title}</h1>
             <p className="muted xs">{meta?.kind === "video" ? t("Video") : t("{n} pictures", { n: meta?.files.length ?? 0 })} · {mb} Mo</p>
             {s.step === "connecting" && <p className="shine">{t("Connecting to the computer…")}</p>}
-            {s.step === "waiting-drive" && <p className="notice warn xs">{t("No direct link with the computer (another network?). On the computer, choose “Send through my Drive”: the download will show here.")}</p>}
+            {s.step === "waiting-drive" && <p className="shine">{t("No direct link with the computer: it sends the files through its Drive, they will show here…")}</p>}
+            {s.step === "drive-loading" && (
+              <>
+                <p className="shine">{t("Receiving… {n}%", { n: Math.round(s.pct * 100) })}</p>
+                <div className="bar export-bar shine-bar"><div style={{ width: `${s.pct * 100}%` }} /></div>
+              </>
+            )}
             {s.step === "receiving" && (
               <>
                 <p className="shine">{t("Receiving… {n}%", { n: Math.round(s.pct * 100) })}</p>
@@ -57,9 +82,11 @@ export default function SharePage() {
               <>
                 {meta?.kind === "video" && urls[0] && <video className="share-preview" src={urls[0]} controls playsInline muted />}
                 {meta?.kind === "images" && <div className="share-thumbs">{urls.map((u, i) => <img key={i} src={u} alt="" />)}</div>}
-                {canShare
-                  ? <button className="btn primary big" onClick={save}><Icon name="download" />{meta?.kind === "video" ? t("Save the video") : t("Save the pictures")}</button>
-                  : <div className="stack">{files.map((f, i) => <a key={i} className="btn" href={urls[i]} download={f.name}><Icon name="download" />{f.name}</a>)}</div>}
+                <button className="btn primary big" onClick={save}><Icon name={saved ? "check" : "download"} />{meta?.kind === "video" ? t("Save the video") : t("Save the pictures")}</button>
+                {saved && !ios && <p className="muted xs">{t("In your downloads and your gallery.")}</p>}
+                {saveErr && <p className="notice warn xs">{t("The phone refused: press and hold a picture above, then “Save”.")}</p>}
+                {canShare && !ios && <button className="btn" onClick={() => void share()}><Icon name="share" />{t("Share…")}</button>}
+                {ios && <p className="muted xs">{t("Or press and hold a picture, then “Save to Photos”.")}</p>}
               </>
             )}
             {s.step === "drive" && meta?.drive && (

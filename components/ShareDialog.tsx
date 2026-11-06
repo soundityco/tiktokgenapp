@@ -55,6 +55,13 @@ export default function ShareDialog({ title, caption, kind, build, onClose }: {
     catch (e) { setState({ step: "error", why: e instanceof Error ? e.message : String(e) }); }
     finally { setDrivePct(null); }
   };
+  // No direct link: the files go through the Drive by themselves (the phone is waiting for them).
+  const triedDrive = useRef(false);
+  useEffect(() => {
+    if (state.step !== "failed" || !code || triedDrive.current) return;
+    triedDrive.current = true;
+    void viaDrive();
+  }, [state.step, code]); // eslint-disable-line react-hooks/exhaustive-deps
   const size = files.current.reduce((n, f) => n + f.blob.size, 0);
   const mb = size ? `${Math.max(1, Math.round(size / 1e6))} Mo` : "";
   const canNative = typeof navigator !== "undefined" && files.current.length > 0
@@ -82,11 +89,10 @@ export default function ShareDialog({ title, caption, kind, build, onClose }: {
           <p><Icon name="check" size={14} /> {t("On the phone: save it there, and copy the caption.")}</p>
         ) : (
           <>
-            <p className="notice warn xs">{t("The computer and the phone could not reach each other directly (another network, or a Wi-Fi that keeps devices apart).")}</p>
-            {driveDone ? <p><Icon name="check" size={14} /> {t("Sent through your Drive: the phone shows the download now.")}</p>
-              : drivePct !== null ? <p className="shine">{t("Sending to your Drive… {n}%", { n: Math.round(drivePct * 100) })}</p>
+            <p className="muted xs">{t("No direct link between the computer and the phone (a Wi-Fi that keeps devices apart, or another network): the files go through your Drive instead.")}</p>
+            {driveDone ? <p><Icon name="check" size={14} /> {t("Sent through your Drive: the phone shows the files now.")}</p>
+              : drivePct !== null ? <><p className="shine">{t("Sending to your Drive… {n}%", { n: Math.round(drivePct * 100) })}</p><div className="bar export-bar shine-bar"><div style={{ width: `${drivePct * 100}%` }} /></div></>
               : code ? <div><button className="btn primary" onClick={() => void viaDrive()}>{t("Send through my Drive instead")}</button></div> : null}
-            {qr && !driveDone && <div className="share-qr small"><img src={qr} alt="" /></div>}
           </>
         )}
         {url && state.step !== "done" && <p className="muted xs share-url">{url}</p>}

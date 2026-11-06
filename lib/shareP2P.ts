@@ -8,7 +8,9 @@ import type { ShareMeta } from "./shareStore";
 const ICE: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
 const CHUNK = 64 * 1024;
 /** Without a direct link after this long, the share falls back to the Drive. */
-export const CONNECT_MS = 25_000;
+export const CONNECT_MS = 15_000;
+/** Files up to this size come to the phone through our server when they went through the Drive (see /api/share/file). */
+const PROXY_MAX = 4_000_000;
 
 const gather = (pc: RTCPeerConnection) => new Promise<void>((resolve) => {
   if (pc.iceGatheringState === "complete") return resolve();
@@ -95,8 +97,28 @@ export type ReceiveState =
   | { step: "receiving"; meta: ShareMeta; pct: number }
   | { step: "done"; meta: ShareMeta; files: File[] }
   | { step: "drive"; meta: ShareMeta }
+  | { step: "drive-loading"; meta: ShareMeta; pct: number }
   | { step: "waiting-drive"; meta: ShareMeta }
   | { step: "expired" };
+
+/** Plan B on the phone: the files sent through the Drive, fetched through our server when they are small (the
+ *  phone then saves them like a direct transfer), else the Drive links. */
+async function fromDrive(code: string, meta: ShareMeta, onState: (s: ReceiveState) => void) {
+  const drive = meta.drive ?? [];
+  const sizes = drive.map((d, i) => (meta.files.find((f) => f.name === d.name) ?? meta.files[i])?.size ?? Infinity);
+  if (!drive.length || sizes.some((n) => n > PROXY_MAX)) { onState({ step: "drive", meta }); return; }
+  const out: File[] = [];
+  try {
+    for (let i = 0; i < drive.length; i++) {
+      onState({ step: "drive-loading", meta, pct: i / drive.length });
+      const r = await fetch(`/api/share/file?code=${code}&i=${i}`, { cache: "no-store" });
+      if (!r.ok) throw new Error(String(r.status));
+      const b = await r.blob();
+      out.push(new File([b], drive[i].name, { type: b.type }));
+    }
+    onState({ step: "done", meta, files: out });
+  } catch { onState({ step: "drive", meta }); }
+}
 
 /** The phone's side: answers the computer and receives the files (or, plan B, the Drive links). */
 export async function receiveFiles(code: string, onState: (s: ReceiveState) => void) {
@@ -105,11 +127,12 @@ export async function receiveFiles(code: string, onState: (s: ReceiveState) => v
   if (!g.ok) { onState({ step: "expired" }); return; }
   const share = (await g.json()) as { offer: string; answer: string | null; meta: ShareMeta };
   const meta = share.meta;
-  if (meta.drive?.length) { onState({ step: "drive", meta }); return; }
+  if (meta.drive?.length) { await fromDrive(code, meta, onState); return; }
   onState({ step: "connecting", meta });
 
   const pc = new RTCPeerConnection({ iceServers: ICE });
   let got = false;
+  let flowing = false;
   pc.addEventListener("datachannel", (ev) => {
     const dc = ev.channel;
     dc.binaryType = "arraybuffer";
@@ -126,6 +149,7 @@ export async function receiveFiles(code: string, onState: (s: ReceiveState) => v
         else if (m.type === "done") { got = true; dc.send("got"); onState({ step: "done", meta, files: out }); setTimeout(() => pc.close(), 1500); }
         return;
       }
+      flowing = true;
       parts.push(e.data as ArrayBuffer);
       received += (e.data as ArrayBuffer).byteLength;
       onState({ step: "receiving", meta, pct: received / total });
@@ -138,14 +162,15 @@ export async function receiveFiles(code: string, onState: (s: ReceiveState) => v
   const a = await fetch("/api/share", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, answer: JSON.stringify(pc.localDescription) }) });
   if (!a.ok) { onState({ step: "expired" }); return; }
 
-  // No direct link: the computer may send the files through its Drive instead; the links show up here.
-  await sleep(CONNECT_MS);
-  if (got || pc.connectionState === "connected") return;
-  onState({ step: "waiting-drive", meta });
-  for (let k = 0; k < 150 && !got; k++) {
+  // No direct link: the computer sends the files through its Drive by itself; they show up here.
+  const since = Date.now();
+  let told = false;
+  for (let k = 0; k < 300 && !got && !flowing; k++) {
     await sleep(2000);
+    if (got || flowing) return;
+    if (!told && Date.now() - since > CONNECT_MS && pc.connectionState !== "connected") { told = true; onState({ step: "waiting-drive", meta }); }
     const s = await fetch(`/api/share?code=${code}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    if (s?.meta?.drive?.length) { pc.close(); onState({ step: "drive", meta: s.meta }); return; }
+    if (s?.meta?.drive?.length && !flowing && !got) { pc.close(); await fromDrive(code, s.meta, onState); return; }
   }
 }
 
