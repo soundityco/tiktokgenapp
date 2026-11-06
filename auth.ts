@@ -52,7 +52,9 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_FAKE_LOGIN === "1")
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
-  session: { strategy: "jwt" },
+  // Signed in for a year, renewed on each visit (at most once a day): only a year without opening the app signs out.
+  // The Google access itself lasts as long as its refresh token (see the Google Cloud publishing status).
+  session: { strategy: "jwt", maxAge: 365 * 24 * 60 * 60, updateAge: 24 * 60 * 60 },
   pages: { signIn: "/" },
   trustHost: true,
   callbacks: {
