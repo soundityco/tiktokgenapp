@@ -84,11 +84,11 @@ export function PromptDialog(p: { title: string; label: string; initial?: string
   );
 }
 
-export function NewPoolDialog(p: { kind: "text" | "photos"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "block") => void; onClose: () => void }) {
+export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" | "block" | "captions"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "block" | "captions") => void; onClose: () => void }) {
   const { t } = useT();
   const [name, setName] = useState("");
   const [scope, setScope] = useState<"shared" | "project">("shared");
-  const [kind, setKind] = useState<"hooks" | "block">("hooks");
+  const [kind, setKind] = useState<"hooks" | "block" | "captions">(p.textKind ?? "hooks");
   const go = () => { if (name.trim()) { p.onCreate(name.trim(), scope, kind); p.onClose(); } };
   return (
     <Modal title={p.kind === "text" ? t("New text list") : t("New photo list")} onClose={p.onClose}>
@@ -97,9 +97,10 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; onCreate: (name: str
       </label>
       {p.kind === "text" && (
         <label className="field">{t("Type")}
-          <select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "block")}>
+          <select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "block" | "captions")}>
             <option value="hooks">{t("One text per line")}</option>
             <option value="block">{t("Lyrics block")}</option>
+            <option value="captions">{t("Post captions (with hashtags)")}</option>
           </select>
         </label>
       )}

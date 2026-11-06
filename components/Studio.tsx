@@ -12,6 +12,8 @@ import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
 import { drawHook, generateAll, hookKey, lyricsText, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
+import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
+import PostCaption from "./PostCaption";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
@@ -47,7 +49,8 @@ type Overlay =
   | { k: "drive"; poolId: string }
   | { k: "import"; poolId: string | null; source?: "tiktok" }
   | { k: "lyrics" }
-  | { k: "newPool"; kind: "text" | "photos" }
+  | { k: "newPool"; kind: "text" | "photos"; textKind?: TextPool["kind"] }
+  | { k: "renameCarousel" }
   | { k: "newProject" }
   | { k: "rename" }
   | { k: "confirm"; title: string; message: string; label: string; run: () => void };
@@ -360,6 +363,21 @@ export default function Studio({ userName }: { userName: string }) {
   // ---- derived ----
   const project: Project | null = ws ? ws.projects.find((p) => p.id === ws.currentProjectId) ?? ws.projects[0] : null;
   const vText = useMemo(() => (ws && project ? poolsVisible(ws.textPools, project.id) : []), [ws, project]);
+  /** Lists a slide can take its text from (not the captions lists, which are for the post). */
+  const slideTexts = useMemo(() => vText.filter((p) => p.kind !== "captions"), [vText]);
+  const captionPools = useMemo(() => vText.filter((p) => p.kind === "captions"), [vText]);
+  const carouselName = (c: { name: string }) => { const m = /^Carousel (\d+)$/.exec(c.name); return m ? t("Carousel {n}", { n: m[1] }) : c.name; };
+  /** Another caption from the list of the open carousel (or of a video, with `apply`). */
+  const drawCaptionFrom = (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => {
+    const cur = wsRef.current ?? ws;
+    if (!cur || !poolId) return;
+    const bags = { ...cur.bags };
+    const text = drawHook(cur, poolId, bags, current ? [current] : []);
+    if (text === null) { say(t("This captions list is empty")); return; }
+    upd((w) => ({ ...w, bags: { ...w.bags, [poolId]: bags[poolId] ?? [] } }));
+    apply(text);
+  };
+  const drawCaption = () => drawCaptionFrom(project?.captionPoolId, project?.caption, (caption) => updProject((p) => ({ ...p, caption })));
   const vPics = useMemo(() => (ws && project ? poolsVisible(ws.picPools, project.id) : []), [ws, project]);
 
   // Photos the next Generate can draw (still in the shuffle bag first) are downloaded ahead of time.
@@ -521,7 +539,9 @@ export default function Studio({ userName }: { userName: string }) {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
       const { slides, bags } = generateAll(w, p, (i) => (p.slides[i].locked ? p.generated?.[i] : undefined));
       const cfgs = p.slides.map((s) => (s.locked ? s : reframe(s)));
-      return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: slides, slides: cfgs } : x)) };
+      // The post's caption: drawn again from its list, if it has one (another one than the current).
+      const caption = p.captionPoolId ? drawHook(w, p.captionPoolId, bags, p.caption ? [p.caption] : []) ?? p.caption : p.caption;
+      return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: slides, slides: cfgs, caption } : x)) };
     });
   }, [say, t, upd]);
 
@@ -633,9 +653,20 @@ export default function Studio({ userName }: { userName: string }) {
   };
 
   // ---- lists (pools) ----
-  const createPool = (name: string, scope: "shared" | "project", kind: "hooks" | "block") => {
+  const createPool = (name: string, scope: "shared" | "project", kind: TextPool["kind"]) => {
     const projectId = scope === "project" ? project!.id : undefined;
-    if (overlay?.k === "newPool" && overlay.kind === "text") upd((w) => ({ ...w, textPools: [...w.textPools, { id: uid(), name, scope, projectId, kind, text: "" }] }));
+    if (overlay?.k === "newPool" && overlay.kind === "text") {
+      const id = uid();
+      // A captions list made from a post's caption box: that post draws from it right away.
+      const forPost = overlay.textKind === "captions" && kind === "captions";
+      upd((w) => ({
+        ...w, textPools: [...w.textPools, { id, name, scope, projectId, kind, text: "" }],
+        projects: !forPost ? w.projects : w.projects.map((p) => (p.id !== w.currentProjectId ? p
+          : studio === "video" ? { ...p, videos: p.videos.map((v) => (v.id === (p.videoId ?? p.videos[0]?.id) ? { ...v, captionPoolId: id } : v)) }
+          : { ...p, captionPoolId: id })),
+      }));
+      if (forPost) setEditor({ k: "text", id }); // straight to writing its captions
+    }
     else upd((w) => ({ ...w, picPools: [...w.picPools, { id: uid(), name, scope, projectId, pics: [] }] }));
   };
   const askDeletePool = (kind: "text" | "photos", id: string) => {
@@ -655,14 +686,16 @@ export default function Studio({ userName }: { userName: string }) {
             ...w, bags,
             textPools: w.textPools.filter((p) => p.id !== id),
             picPools: w.picPools.filter((p) => p.id !== id),
-            projects: w.projects.map((p) => ({
-              ...p,
-              slides: p.slides.map((s) => ({
+            projects: w.projects.map((p) => {
+              const q = mapAllSlides(p, (s) => ({
                 ...s,
                 textSource: s.textSource.kind === "pool" && s.textSource.poolId === id ? { kind: "none" as const } : s.textSource,
                 picPoolId: s.picPoolId === id ? null : s.picPoolId,
-              })),
-            })),
+              }));
+              // A captions list gone: the captions already written stay, nothing is drawn from it any more.
+              const off = <T extends { captionPoolId?: string }>(x: T): T => (x.captionPoolId === id ? { ...x, captionPoolId: undefined } : x);
+              return { ...off(q), carousels: q.carousels?.map(off), videos: q.videos.map(off) };
+            }),
           };
         });
       },
@@ -770,12 +803,15 @@ export default function Studio({ userName }: { userName: string }) {
       const files = await buildFiles(p, (done, total) => setExportProgress({ done, total }), failures);
       if (cancelExport.current) { say(t("Export cancelled")); return; }
       if (!files.length) throw new Error(t("Export failed"));
-      const folder = `${safe(p.name)} ${stamp()}`;
+      const cName = carouselsOf(p).length > 1 ? ` - ${carouselName(carouselsOf(p).find((c) => c.id === currentCarouselId(p))!)}` : "";
+      const folder = `${safe(p.name + cName)} ${stamp()}`;
       const zip = new JSZip();
       const dir = zip.folder(folder)!;
       files.forEach((f) => dir.file(f.name, f.blob));
-      const captions = p.slides.map((_, i) => `Slide ${i + 1}\n${p.generated?.[i]?.text ?? ""}`).join("\n\n");
-      dir.file("captions.txt", captions);
+      const texts = p.slides.map((_, i) => `Slide ${i + 1}\n${p.generated?.[i]?.text ?? ""}`).join("\n\n");
+      dir.file("slide-texts.txt", texts);
+      // The text of the post, ready to paste in TikTok.
+      if (p.caption?.trim()) dir.file("caption.txt", p.caption.trim() + "\n");
       download(await zip.generateAsync({ type: "blob" }), `${folder}.zip`);
       if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: files.length, m: p.slides.length, f: failures.length }));
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
@@ -881,7 +917,7 @@ export default function Studio({ userName }: { userName: string }) {
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="truncate item-name">{p.name}</div>
           <div className="muted xs">
-            {"pics" in p ? t("{n} photos", { n: p.pics.length }) : p.kind === "block" ? t("Lyrics block") : t("{n} texts", { n: textItems(p).length })}
+            {"pics" in p ? t("{n} photos", { n: p.pics.length }) : p.kind === "block" ? t("Lyrics block") : p.kind === "captions" ? t("{n} captions", { n: textItems(p).length }) : t("{n} texts", { n: textItems(p).length })}
             {" · "}{p.scope === "shared" ? t("all projects") : t("this project")}
           </div>
         </div>
@@ -992,6 +1028,9 @@ export default function Studio({ userName }: { userName: string }) {
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
+            captionPools={captionPools}
+            onDrawCaption={drawCaptionFrom}
+            onNewCaptionList={() => setOverlay({ k: "newPool", kind: "text", textKind: "captions" })}
             fonts={fonts}
             onFonts={setFonts}
             presets={presets}
@@ -1018,6 +1057,23 @@ export default function Studio({ userName }: { userName: string }) {
           <div className="video-head studio-head carousel-head">
             <div className="row nowrap video-title">{releaseTitle}</div>
             <div className="row nowrap video-tools">
+              {/* Several carousels per release, like the videos: one to keep, another to try. */}
+              <label className="field">{t("Carousel")}
+                <select className="input" style={{ width: 150 }} value={currentCarouselId(project)}
+                  onChange={(e) => { const id = e.target.value; updProject((p) => openCarousel(p, id)); }}>
+                  {carouselsOf(project).map((c) => <option key={c.id} value={c.id}>{carouselName(c)}</option>)}
+                </select>
+              </label>
+              <button className="btn icon" aria-label={t("New carousel")} title={t("New carousel: the same slides set-up, to generate again")} onClick={() => { updProject((p) => addCarousel(p)); say(t("New carousel")); }}><Icon name="plus" /></button>
+              <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Carousel menu")} onClick={toggle}><Icon name="more" /></button>}>
+                {(closeMenu) => (<>
+                  <button onClick={() => { closeMenu(); setOverlay({ k: "renameCarousel" }); }}>{t("Rename")}</button>
+                  <button onClick={() => { closeMenu(); updProject((p) => duplicateCarousel(p, t("(copy)"))); }}>{t("Duplicate")}</button>
+                  <div className="sep" />
+                  <button className="danger" style={{ color: "var(--danger)" }} disabled={carouselsOf(project).length < 2}
+                    onClick={() => { closeMenu(); setOverlay({ k: "confirm", title: t("Delete carousel"), label: t("Delete"), message: t("Delete “{name}”? Its slides and drawn texts and photos go with it. This can't be undone.", { name: carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!) }), run: () => updProject((p) => deleteCarousel(p)) }); }}>{t("Delete this carousel")}</button>
+                </>)}
+              </Menu>
               <button className="btn primary" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
               <div className="field">{t("Slides")}
                 <div className="stepper">
@@ -1077,7 +1133,7 @@ export default function Studio({ userName }: { userName: string }) {
           <div className={"slides" + (boardDrag ? " drag-in" : "")}>
             {project.slides.map((cfg, i) => (
               <SlideCard key={cfg.id} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={vText} picPools={vPics} zones={ws.zones} fontsReady={fontsReady}
+                textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
                 onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt })}
@@ -1095,6 +1151,14 @@ export default function Studio({ userName }: { userName: string }) {
                 onDrop={() => { if (dragFrom !== null && dragFrom !== i) moveSlide(dragFrom, i); setDragFrom(null); setDragOver(null); }} />
             ))}
           </div>
+          <section className="post-box">
+            <h3 className="label">{t("Caption and hashtags")}</h3>
+            <PostCaption auto value={project.caption ?? ""} poolId={project.captionPoolId} pools={captionPools}
+              onChange={(caption) => updProject((p) => ({ ...p, caption }))}
+              onPool={(captionPoolId) => updProject((p) => ({ ...p, captionPoolId }))}
+              onDraw={drawCaption}
+              onNewList={() => setOverlay({ k: "newPool", kind: "text", textKind: "captions" })} />
+          </section>
         </main>
 
         <aside className="col side r">
@@ -1182,8 +1246,9 @@ export default function Studio({ userName }: { userName: string }) {
         <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}
           onNav={(i) => updProject((p) => ({ ...p, selectedSlide: i }))} onClose={() => setPreview(false)} />
       )}
-      {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} onCreate={createPool} onClose={() => setOverlay(null)} />}
+      {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} textKind={overlay.textKind} onCreate={createPool} onClose={() => setOverlay(null)} />}
       {overlay?.k === "newProject" && <PromptDialog title={t("New project")} label={t("Release name")} confirmLabel={t("Create")} onSubmit={createProject} onClose={() => setOverlay(null)} />}
+      {overlay?.k === "renameCarousel" && <PromptDialog title={t("Rename carousel")} label={t("Name")} initial={carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!)} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => renameCarousel(p, n))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => ({ ...p, name: n }))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} />}
       {overlay?.k === "lyrics" && (

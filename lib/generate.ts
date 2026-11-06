@@ -4,6 +4,8 @@ export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\u00c0-\u024
 
 /** Items of a text pool. Hooks: one per line, deduplicated. Block: the whole text is one item. */
 export function textItems(pool: TextPool): string[] {
+  // Captions: one per paragraph (they can hold several lines, the hashtags on the last).
+  if (pool.kind === "captions") return pool.text.replace(/\r\n/g, "\n").split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean);
   if (pool.kind === "block") return pool.text.trim() ? [pool.text.replace(/\r\n/g, "\n").replace(/\s+$/g, "")] : [];
   const seen = new Set<string>();
   const out: string[] = [];

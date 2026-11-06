@@ -73,13 +73,16 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <ScopeSelect value={pool.scope} onChange={(v) => p.onChange((x) => ({ ...x, scope: v }))} />
       </div>
       <label className="field">{t("Type")}
-        <select className="input" value={pool.kind} onChange={(e) => p.onChange((x) => ({ ...x, kind: e.target.value as "hooks" | "block" }))}>
+        <select className="input" value={pool.kind} onChange={(e) => p.onChange((x) => ({ ...x, kind: e.target.value as TextPool["kind"] }))}>
           <option value="hooks">{t("One text per line")}</option>
           <option value="block">{t("Lyrics block")}</option>
+          <option value="captions">{t("Post captions (with hashtags)")}</option>
         </select>
       </label>
       <textarea className="input" rows={12} aria-label={t("Texts")} value={pool.text} onChange={(e) => p.onChange((x) => ({ ...x, text: e.target.value }))}
-        placeholder={pool.kind === "hooks" ? t("One text per line. Use | to force a line break on the slide.") : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
+        placeholder={pool.kind === "hooks" ? t("One text per line. Use | to force a line break on the slide.")
+          : pool.kind === "captions" ? t("One caption per paragraph, its hashtags included. Leave an empty line between two captions.")
+          : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
       {perf.length > 0 && (
         <details className="sec">
           <summary>{t("Best hooks by views")}</summary>
@@ -94,10 +97,10 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         </details>
       )}
       <div className="row">
-        <span className="muted grow">{pool.kind === "hooks" ? t("{n} texts", { n }) : n ? t("1 block") : t("Empty")}</span>
+        <span className="muted grow">{pool.kind === "hooks" ? t("{n} texts", { n }) : pool.kind === "captions" ? t("{n} captions", { n }) : n ? t("1 block") : t("Empty")}</span>
         <input ref={file} type="file" accept=".txt,text/plain" hidden onChange={async (e) => {
           const f = e.target.files?.[0];
-          if (f) { const txt = await f.text(); p.onChange((x) => ({ ...x, text: x.text.trim() ? x.text.replace(/\s+$/, "") + "\n" + txt : txt })); }
+          if (f) { const txt = await f.text(); p.onChange((x) => ({ ...x, text: x.text.trim() ? x.text.replace(/\s+$/, "") + (x.kind === "captions" ? "\n\n" : "\n") + txt : txt })); }
           e.target.value = "";
         }} />
         <button className="btn sm" onClick={() => file.current?.click()}>{t("Import .txt")}</button>

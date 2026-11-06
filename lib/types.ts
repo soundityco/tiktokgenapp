@@ -92,7 +92,8 @@ export interface TextPool {
   name: string;
   scope: "shared" | "project";
   projectId?: string;
-  kind: "hooks" | "block";
+  /** hooks: one text per line; block: the whole text on one slide; captions: post captions (with their hashtags), separated by an empty line. */
+  kind: "hooks" | "block" | "captions";
   text: string;
   /** hook (normalised) -> views. Reserved for the TikTok import (phase 2). */
   views?: Record<string, number>;
@@ -232,6 +233,9 @@ export interface VideoSourceInfo {
 }
 
 export interface VideoSettings {
+  /** Text of the TikTok post (caption and hashtags), and the captions list it is drawn from. */
+  caption?: string;
+  captionPoolId?: string;
   audioName?: string;
   videoName?: string;
   /** Size in bytes of the camera file: picking the same file again (another browser) keeps the sync. */
@@ -281,6 +285,19 @@ export interface VideoSettings {
 }
 
 /** One clip made for a release: its own official-audio segment, camera take and sync. */
+/** One carousel of a release (a release can have several; see lib/carousels.ts). */
+export interface CarouselSetup {
+  id: string;
+  name: string;
+  slides: SlideCfg[];
+  generated: GenSlide[] | null;
+  selectedSlide: number;
+  /** Text of the TikTok post: caption and hashtags. */
+  caption?: string;
+  /** Captions list it is drawn from at each generation. */
+  captionPoolId?: string;
+}
+
 export interface VideoSetup extends VideoSettings {
   id: string;
   name: string;
@@ -306,6 +323,13 @@ export interface Project {
   audioDriveId?: string;
   generated: GenSlide[] | null;
   selectedSlide: number;
+  /** Caption and hashtags of the open carousel's post, and the captions list it is drawn from. */
+  caption?: string;
+  captionPoolId?: string;
+  /** Every carousel of the release (the open one is in the fields above). */
+  carousels?: CarouselSetup[];
+  /** Carousel currently open. */
+  carouselId?: string;
   /** @deprecated Single video setup of older workspaces; migrated to `videos` on load. */
   video?: VideoSettings;
   /** One entry per clip made for this release (a release can have several camera takes). */

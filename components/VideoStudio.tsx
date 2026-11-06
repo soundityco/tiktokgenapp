@@ -23,6 +23,7 @@ import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle,
 import CaptionStyle from "./CaptionStyle";
 import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
+import PostCaption from "./PostCaption";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section } from "./ui";
 
 const RATE = 25;
@@ -271,6 +272,9 @@ export default function VideoStudio({
   onSaveNow,
   releaseTitle,
   active = true,
+  captionPools,
+  onDrawCaption,
+  onNewCaptionList,
   fonts,
   onFonts,
   presets,
@@ -293,6 +297,10 @@ export default function VideoStudio({
   releaseTitle: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
   active?: boolean;
+  /** The captions lists of the release, and drawing one of their captions for this video's post. */
+  captionPools: TextPool[];
+  onDrawCaption: (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => void;
+  onNewCaptionList: () => void;
   /** Fonts loaded by the user, shared with the carousel. */
   fonts: string[];
   onFonts: (names: string[]) => void;
@@ -2218,6 +2226,13 @@ export default function VideoStudio({
                 onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
             ))}
           </div>
+          </Section>
+          <Section id="video-caption" title={<>{t("Caption and hashtags")}{settings.caption?.trim() && <span className="sec-sub"> · {t("{n} characters", { n: settings.caption.length })}</span>}</>}>
+            <PostCaption value={settings.caption ?? ""} poolId={settings.captionPoolId} pools={captionPools}
+              onChange={(caption) => setV({ caption })}
+              onPool={(captionPoolId) => setV({ captionPoolId })}
+              onDraw={() => onDrawCaption(settings.captionPoolId, settings.caption, (caption) => setV({ caption }))}
+              onNewList={onNewCaptionList} />
           </Section>
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}

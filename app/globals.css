@@ -638,3 +638,7 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .main > .col, .main .video-shell { animation: studio-in .38s cubic-bezier(.33,0,.2,1) both; }
 @keyframes studio-in { from { opacity: .35; filter: saturate(0); } to { opacity: 1; filter: none; } }
 @media (prefers-reduced-motion: reduce) { .main > .col, .main .video-shell { animation: none; } }
+/* The text of the post (caption and hashtags), under the slides of a carousel and in the video's left column. */
+.post-box { display: grid; gap: var(--s2); margin-top: var(--s5); max-width: 720px; }
+.post-caption textarea { resize: vertical; min-height: 92px; line-height: 1.45; }
+.post-caption .row .btn { flex: none; }
