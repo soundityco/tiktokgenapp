@@ -635,7 +635,8 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 @keyframes shine-once { from { background-position: 100% 0; } to { background-position: 0% 0; } }
 @media (prefers-reduced-motion: reduce) { .btn.primary:hover:not(:disabled)::after { animation: none; } }
 /* Switching studio: the one that appears comes in from a short greyed state (like loading, but already ready). */
-.main > .col, .main .video-shell { animation: studio-in .38s cubic-bezier(.33,0,.2,1) both; }
+/* "backwards", not "both": a filter kept after the end would make the board the frame of the floating menus. */
+.main > .col, .main .video-shell { animation: studio-in .38s cubic-bezier(.33,0,.2,1) backwards; }
 @keyframes studio-in { from { opacity: .35; filter: saturate(0); } to { opacity: 1; filter: none; } }
 @media (prefers-reduced-motion: reduce) { .main > .col, .main .video-shell { animation: none; } }
 /* The text of the post (caption and hashtags), under the slides of a carousel and in the video's left column. */
