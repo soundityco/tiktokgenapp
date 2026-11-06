@@ -973,8 +973,9 @@ export default function Studio({ userName }: { userName: string }) {
       </div>
     ));
 
-  // The release: its name is the title of both studios, and the menu to change it (the only place it shows).
-  const releaseTitle = (
+  // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
+  // its lyrics right next to it, at the same place in both studios.
+  const releaseTitle = (<>
     <div className="stack release-title">
       <span className="label">{t("Release")}</span>
       <Menu left trigger={(open, toggle) => (
@@ -1000,7 +1001,14 @@ export default function Studio({ userName }: { userName: string }) {
         </>)}
       </Menu>
     </div>
-  );
+    {/* The lyrics of the release, written once: the carousel's slides tick their sections, the video sings them all. */}
+    <div className="field release-lyrics">{t("Lyrics")}
+      <button className={"btn" + (project.lyrics.length ? "" : " needs")} onClick={() => setOverlay({ k: "lyrics" })}
+        title={project.lyrics.length ? t("The lyrics of the release, cut into sections") : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}>
+        <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
+      </button>
+    </div>
+  </>);
 
   return (
     <div className="app">
@@ -1129,14 +1137,6 @@ export default function Studio({ userName }: { userName: string }) {
                   <span>{nSlides === 1 ? t("1 slide") : t("{n} slides", { n: nSlides })}</span>
                   <button className="btn quiet icon sm" aria-label={t("Add a slide after this one")} title={t("Add a slide after this one")} onClick={addSlide} disabled={nSlides >= MAX_SLIDES}><Icon name="plus" size={14} /></button>
                 </div>
-              </div>
-              {/* The lyrics of the release, written once: each lyrics slide ticks the sections it shows. */}
-              <div className="field">{t("Lyrics")}
-                {/* No lyrics yet: shown even when no slide uses them (the release needs them, the video too). */}
-                <button className={"btn" + (project.lyrics.length ? "" : " needs")} onClick={() => setOverlay({ k: "lyrics" })}
-                  title={project.lyrics.length ? t("The lyrics of the release, cut into sections") : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}>
-                  <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
-                </button>
               </div>
               <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
               <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>

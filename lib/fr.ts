@@ -1,5 +1,8 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Lyrics spread on the segment: adjust each line with − / +.": "Paroles réparties sur le segment : ajuste chaque ligne avec − / +.",
+  "Spread it on the segment": "La répartir sur le segment",
+  "If the audio could not place the lyrics: the lines of this section are spread over the segment, on the attacks of the sound. Then adjust each one with − / +.": "Si l'audio n'a pas pu placer les paroles : les lignes de cette section sont réparties sur le segment, sur les attaques du son. Ajuste ensuite chacune avec − / +.",
   "The same lyrics as the carousel's. When you change them, the video places the changed lines again; your retouches stay.": "Les mêmes paroles que dans le carrousel. Quand tu les modifies, la vidéo recale les lignes changées ; tes retouches restent.",
   "Careful: these lyrics are also synced on the video. Deleting the section takes its lines off the video (the other lines and your retouches stay).": "Attention : ces paroles sont aussi synchronisées sur la vidéo. Supprimer la section retire ses lignes de la vidéo (les autres lignes et tes retouches restent).",
   "The lyrics pasted here are not the same as the release's (the carousel's sections). Keep one text for both:": "Les paroles collées ici ne sont pas les mêmes que celles de la release (les sections du carrousel). Garde un seul texte pour les deux :",

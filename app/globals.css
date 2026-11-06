@@ -682,3 +682,6 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 /* Something the release still needs (its lyrics): an orange outline and dot. */
 .btn.needs { border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); }
 .btn.needs:hover:not(:disabled) { border-color: var(--warn); }
+/* The release's lyrics, right of its name in both studios. */
+.studio-head .video-title { gap: var(--s5); align-items: flex-end; }
+.release-lyrics { flex: none; }

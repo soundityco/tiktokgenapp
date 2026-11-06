@@ -427,17 +427,6 @@ export default function VideoStudio({
   }, [onProject, clip.id]);
 
   const section = project.lyrics.find((s) => s.id === sectionId) ?? project.lyrics[0];
-  const lines = useMemo(
-    () => (section ? section.text.split(/\r?\n/).map((text, i) => ({ text, i })).filter((l) => l.text.trim()) : []),
-    [section]
-  );
-  const timed = useMemo(() => {
-    if (!section) return [] as { text: string; at: number }[];
-    return lines
-      .map((l) => ({ text: l.text.trim(), at: section.times?.[l.i] }))
-      .filter((l): l is { text: string; at: number } => typeof l.at === "number")
-      .sort((a, b) => a.at - b.at);
-  }, [section, lines]);
 
   // Default look of the lyrics; only the font follows the selected carousel slide. The text studio overrides it per clip.
   const slideStyle: TextStyle = useMemo(
@@ -467,14 +456,7 @@ export default function VideoStudio({
   hookStyleRef.current = fontPreview?.which === "hook" ? { ...hookStyle, ...fontPreview.patch } : hookStyle;
   const activeRef = useRef<(time: number) => string | null>(() => null);
   activeRef.current = (time: number) => {
-    // Lyrics generated from the audio win; hand-placed lines are the fallback.
-    if (cues.length) return activeCue(cues, time)?.text ?? null;
-    let found: string | null = null;
-    for (const l of timed) {
-      if (l.at <= time + 0.02) found = l.text;
-      else break;
-    }
-    return found;
+    return cues.length ? activeCue(cues, time)?.text ?? null : null;
   };
 
   const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
@@ -1121,7 +1103,7 @@ export default function VideoStudio({
 
   useEffect(() => {
     if (!playing) drawAt(head);
-  }, [drawAt, head, playing, settings, timed, cues, captionStyle, hookStyle, videoUrl, fonts, aids, snap, lutRev, rawView, fontPreview]);
+  }, [drawAt, head, playing, settings, cues, captionStyle, hookStyle, videoUrl, fonts, aids, snap, lutRev, rawView, fontPreview]);
 
   // Paused: keep the picture on the frame that matches the playhead, so trimming and re-syncing are seen live.
   useEffect(() => {
@@ -1496,33 +1478,31 @@ export default function VideoStudio({
   }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur, waveBox]);
 
   // ---- lyrics timing ----
-  const saveTimes = (id: string, times: (number | null)[]) =>
-    onProject((p) => ({ ...p, lyrics: p.lyrics.map((s) => (s.id === id ? { ...s, times } : s)) }));
 
-  const setLine = (i: number, value: number | null) => {
+  /**
+   * Plan B: a section's lines spread over the segment (on the attacks of the official audio when there is one),
+   * as placed words: the same list as the synced lyrics, fine-tuned with − / +.
+   */
+  const spreadLyrics = () => {
     if (!section) return;
-    const count = section.text.split(/\r?\n/).length;
-    const times = Array.from({ length: count }, (_, k) => section.times?.[k] ?? null);
-    times[i] = value;
-    saveTimes(section.id, times);
-  };
-
-  const autoPlace = () => {
-    if (!section) return;
-    const raw = section.text.split(/\r?\n/);
-    const filled = raw.map((l, i) => ({ l: l.trim(), i })).filter((x) => x.l);
-    if (!filled.length) return;
+    const sung = parseLyrics(section.text).text.split("\n").map((x) => x.trim()).filter(Boolean);
+    if (!sung.length) return;
     const cfg = settingsRef.current;
-    const from = cfg.crop.start;
-    const to = cfg.crop.start + cfg.crop.duration;
-    // Lines follow the attacks of the official audio instead of an arbitrary split.
-    const placed = audioBuf
-      ? autoLineTimes(filled.map((x) => x.l), envelopeOf(audioBuf.getChannelData(0), audioBuf.sampleRate, RATE), RATE, from, to)
-      : filled.map((_, k) => from + 0.4 + ((to - from - 0.8) * k) / filled.length);
-    const times: (number | null)[] = new Array(raw.length).fill(null);
-    filled.forEach((x, k) => { times[x.i] = round2(placed[k]); });
-    saveTimes(section.id, times);
-    setNote(t("Lyrics placed on the segment"));
+    const from = cfg.crop.start, to = cfg.crop.start + cfg.crop.duration;
+    const starts = audioBuf
+      ? autoLineTimes(sung, envelopeOf(audioBuf.getChannelData(0), audioBuf.sampleRate, RATE), RATE, from, to)
+      : sung.map((_, k) => from + 0.4 + ((to - from - 0.8) * k) / sung.length);
+    const words: LyricWord[] = [];
+    sung.forEach((line, k) => {
+      const a = starts[k], b = k + 1 < sung.length ? starts[k + 1] : Math.min(to, a + 4);
+      const ws = line.split(/\s+/).filter(Boolean);
+      const d = Math.max(0.05, (b - a - 0.1) / ws.length);
+      ws.forEach((w, j) => words.push({ w, s: round2(a + j * d), e: round2(a + (j + 1) * d), line: 10000 + k }));
+    });
+    onProject((p) => ({ ...p, lyricWords: [...(p.lyricWords ?? []).filter((x) => x.e <= from || x.s >= to), ...words].sort((x, y) => x.s - y.s) }));
+    if (!cfg.captions) setV({ captions: true });
+    setNote(t("Lyrics spread on the segment: adjust each line with − / +."));
+    onSaveNow();
   };
 
   // ---- lyrics from the official audio ----
@@ -2333,13 +2313,6 @@ export default function VideoStudio({
                 onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
             </>)}
           </Menu>
-          {/* The same Lyrics button as the carousel's: one text for the release. */}
-          <div className="field">{t("Lyrics")}
-            <button className={"btn" + (project.lyrics.length ? "" : " needs")} onClick={onEditLyrics}
-              title={project.lyrics.length ? t("The lyrics of the release, cut into sections") : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}>
-              <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
-            </button>
-          </div>
           {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
           <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
           <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
@@ -2700,25 +2673,16 @@ export default function VideoStudio({
                 </>
               )}
               {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
-              {project.lyrics.length > 0 && (
-                <Section title={t("Place lines by hand")} open={false}>
-                  <div className="row">
-                    <button className="btn sm" onClick={autoPlace} disabled={!lines.length}>{t("Auto place")}</button>
-                    <span className="muted xs">{cues.length ? t("Used only when no lyrics were generated from the audio.") : t("Pick a section to place its lines.")}</span>
-                  </div>
-                  <div className="lyric-timing">
-                    {lines.map((l) => (
-                      <div className="row nowrap" key={l.i}>
-                        <span className="grow truncate xs">{l.text}</span>
-                        <input className="input" style={{ width: 82 }} type="number" step={0.1} placeholder="–"
-                          aria-label={t("Line {n}", { n: l.i + 1 })}
-                          value={section?.times?.[l.i] ?? ""}
-                          onChange={(e) => setLine(l.i, e.target.value === "" ? null : round2(Number(e.target.value)))} />
-                        <button className="btn sm" onClick={() => setLine(l.i, round2(head))}>{t("Set here")}</button>
-                      </div>
-                    ))}
-                  </div>
-                </Section>
+              {/* Plan B, when the audio could not place the lyrics (speech model unavailable, a very noisy live):
+                  a section spread over the segment, then fine-tuned with − / + like the synced lines. */}
+              {!cues.length && !genBusy && project.lyrics.length > 0 && (
+                <div className="row spread-row">
+                  <select className="input sm grow" aria-label={t("Section")} value={section?.id ?? ""} onChange={(e) => setSectionId(e.target.value)}>
+                    {project.lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                  <button className="btn sm" onClick={spreadLyrics} disabled={!section?.text.trim()}>{t("Spread it on the segment")}</button>
+                  <Hint text={t("If the audio could not place the lyrics: the lines of this section are spread over the segment, on the attacks of the sound. Then adjust each one with − / +.")} />
+                </div>
               )}
             </div>
           )}
