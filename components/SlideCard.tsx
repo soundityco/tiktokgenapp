@@ -50,6 +50,8 @@ interface Props {
   onText: (t: string) => void;
   onRerollPic: () => void;
   onRerollText: () => void;
+  /** A lyrics slide retouched by hand: back to the release's lyrics. */
+  onLyricsBack: () => void;
   onSave: () => void;
   locked: boolean;
   canMoveLeft: boolean;
@@ -260,6 +262,12 @@ export default function SlideCard(p: Props) {
         </p>
       )}
       <textarea className="input" rows={3} aria-label={t("Caption")} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
+      {cfg.textSource.kind === "lyrics" && p.gen?.edited && !p.locked && (
+        <p className="muted xs row" style={{ gap: 6 }}>
+          {t("Retouched on this slide: the lyrics of the release are not changed.")}
+          <button type="button" className="field-link" onClick={p.onLyricsBack}>{t("Back to the lyrics")}</button>
+        </p>
+      )}
       {listItems.length > 1 && !p.locked && (
         <select className="input sm" value="" aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
           onChange={(e) => { if (e.target.value) p.onText(e.target.value); }}>

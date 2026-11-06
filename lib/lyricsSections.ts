@@ -68,7 +68,7 @@ export function refreshLyricSlides(p: Project): Project {
     let changed = false;
     const g = generated.map((x, i) => {
       const s = slides[i];
-      if (!s || s.locked || s.textSource.kind !== "lyrics") return x;
+      if (!s || s.locked || x.edited || s.textSource.kind !== "lyrics") return x;
       const text = slideLyrics(p, s.textSource);
       if (x.text === text) return x;
       changed = true;

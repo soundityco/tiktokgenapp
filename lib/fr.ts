@@ -1,5 +1,7 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "Retouched on this slide: the lyrics of the release are not changed.": "Retouché sur cette slide : les paroles de la release ne changent pas.",
+  "Back to the lyrics": "Revenir aux paroles",
   "Sections on this slide": "Sections sur cette slide",
   "No lyrics yet: add them with the Lyrics button above the slides.": "Pas encore de paroles : ajoute-les avec le bouton Paroles au-dessus des slides.",
   "A header above the lyrics": "Un en-tête au-dessus des paroles",

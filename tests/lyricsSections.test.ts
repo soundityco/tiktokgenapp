@@ -31,6 +31,10 @@ describe("a lyrics slide", () => {
     const q = refreshLyricSlides({ ...p, lyrics: [{ id: "v", name: "Verse", text: "new" }] });
     expect(q.generated?.map((g) => g.text)).toEqual(["new", "kept"]);
   });
+  it("a slide retouched by hand keeps its text when the lyrics change", () => {
+    const p = proj({ slides: [slide({ kind: "lyrics", sectionIds: ["v"] })], generated: [{ text: "a\n\nb (my layout)", picId: null, edited: true }] });
+    expect(refreshLyricSlides({ ...p, lyrics: [{ id: "v", name: "Verse", text: "changed" }] }).generated?.[0].text).toBe("a\n\nb (my layout)");
+  });
   it("a section cut in two: the slide shows both parts; merged: the one it went into", () => {
     const p = proj({ slides: [slide({ kind: "lyrics", sectionIds: ["v"] })] });
     expect((relinkSections(p, "v", "v2", true).slides[0].textSource as any).sectionIds).toEqual(["v", "v2"]);

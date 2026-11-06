@@ -524,7 +524,10 @@ export default function Studio({ userName }: { userName: string }) {
     const moved = !!before && !!after && JSON.stringify(before.textSource) !== JSON.stringify(after.textSource);
     updProject((p) => {
       const q = { ...p, slides: p.slides.map((s, k) => (k === i ? fn(s) : s)) };
-      return moved ? refreshLyricSlides(q) : q;
+      if (!moved) return q;
+      // A new source: its text is taken again from it, the retouches made on the slide are dropped.
+      const generated = q.generated?.map((g, k) => (k === i && g.edited ? { ...g, edited: false } : g)) ?? null;
+      return refreshLyricSlides({ ...q, generated });
     });
     if (moved && after?.textSource.kind === "pool") rerollText(i);
   };
@@ -609,7 +612,7 @@ export default function Studio({ userName }: { userName: string }) {
       const bags = { ...w.bags };
       const text = pickText(p, w, i, bags);
       const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
-      g[i] = { ...g[i], text };
+      g[i] = { ...g[i], text, edited: false };
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g } : x)) };
     });
   };
@@ -1184,7 +1187,8 @@ export default function Studio({ userName }: { userName: string }) {
                 textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
-                onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt })}
+                onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt, edited: true })}
+                onLyricsBack={() => setGen(i, { text: cfg.textSource.kind === "lyrics" ? slideLyrics(project, cfg.textSource) : "", edited: false })}
                 onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
                 onWebPic={(img) => setGen(i, { picId: webPicId(img.full), picName: img.author || img.license,
                   picCredit: { author: img.author, license: img.license, page: img.page, required: img.creditRequired } })}
