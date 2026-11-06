@@ -1078,6 +1078,7 @@ export default function Studio({ userName }: { userName: string }) {
             captionPools={captionPools}
             onDrawCaption={drawCaptionFrom}
             onNewCaptionList={() => setOverlay({ k: "newPool", kind: "text", textKind: "captions" })}
+            onEditLyrics={() => setOverlay({ k: "lyrics" })}
             fonts={fonts}
             onFonts={setFonts}
             presets={presets}

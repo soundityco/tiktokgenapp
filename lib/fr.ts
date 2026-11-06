@@ -1,5 +1,6 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "The same lyrics as the carousel's. When you change them, the video places the changed lines again; your retouches stay.": "Les mêmes paroles que dans le carrousel. Quand tu les modifies, la vidéo recale les lignes changées ; tes retouches restent.",
   "Careful: these lyrics are also synced on the video. Deleting the section takes its lines off the video (the other lines and your retouches stay).": "Attention : ces paroles sont aussi synchronisées sur la vidéo. Supprimer la section retire ses lignes de la vidéo (les autres lignes et tes retouches restent).",
   "The lyrics pasted here are not the same as the release's (the carousel's sections). Keep one text for both:": "Les paroles collées ici ne sont pas les mêmes que celles de la release (les sections du carrousel). Garde un seul texte pour les deux :",
   "The video takes the sections' text. Its lines are placed again; the words you retimed by hand keep their timing.": "La vidéo prend le texte des sections. Ses lignes sont recalées ; les mots que tu as recalés à la main gardent leur timing.",

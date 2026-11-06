@@ -276,6 +276,7 @@ export default function VideoStudio({
   captionPools,
   onDrawCaption,
   onNewCaptionList,
+  onEditLyrics,
   fonts,
   onFonts,
   presets,
@@ -302,6 +303,8 @@ export default function VideoStudio({
   captionPools: TextPool[];
   onDrawCaption: (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => void;
   onNewCaptionList: () => void;
+  /** Opens the release's lyrics (the same editor as the carousel's). */
+  onEditLyrics: () => void;
   /** Fonts loaded by the user, shared with the carousel. */
   fonts: string[];
   onFonts: (names: string[]) => void;
@@ -1528,6 +1531,7 @@ export default function VideoStudio({
     src === "song" && p.lyricsLinked ? sungOf(p.lyrics) : parseLyrics(src === "none" ? "" : src === "song" ? p.songLyrics ?? ""
       : src === "all" ? p.lyrics.map((l) => l.text).join("\n") : p.lyrics.find((l) => l.id === src)?.text ?? "").text;
   const lyricsLinked = !!project.lyricsLinked;
+  const sungLines = useMemo(() => { const s = sungOf(project.lyrics); return s ? s.split("\n").length : 0; }, [project.lyrics]);
 
   /**
    * Put the written lyrics on the heard words: the text shown is exactly the written one, the speech
@@ -1605,7 +1609,7 @@ export default function VideoStudio({
   }, [project.lyrics, project.lyricsPlacedFrom, lyricsLinked, genBusy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Lyrics there are to place: the pasted ones (even not saved yet) or the chosen carousel ones. */
-  const hasLyrics = !!(writtenSrc === "song" ? parseLyrics(paste).text.trim() : writtenOf(writtenSrc, project).trim());
+  const hasLyrics = !!(lyricsLinked ? sungOf(project.lyrics).trim() : writtenSrc === "song" ? parseLyrics(paste).text.trim() : writtenOf(writtenSrc, project).trim());
 
   /**
    * The one sync button: the video on the official audio (when there is one), then the written
@@ -1621,7 +1625,7 @@ export default function VideoStudio({
   /** The written lyrics on the official audio only. They do not depend on the video: changing it never moves them. */
   const syncLyrics = async () => {
     let next = project;
-    if (writtenSrc === "song" && paste.trim() !== (project.songLyrics ?? "").trim()) {
+    if (writtenSrc === "song" && !lyricsLinked && paste.trim() !== (project.songLyrics ?? "").trim()) {
       const text = paste.trim();
       next = { ...project, songLyrics: text, heardWords: project.heardWords };
       onProject((p) => ({ ...p, songLyrics: text }));
@@ -2329,6 +2333,13 @@ export default function VideoStudio({
                 onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
             </>)}
           </Menu>
+          {/* The same Lyrics button as the carousel's: one text for the release. */}
+          <div className="field">{t("Lyrics")}
+            <button className={"btn" + (project.lyrics.length ? "" : " needs")} onClick={onEditLyrics}
+              title={project.lyrics.length ? t("The lyrics of the release, cut into sections") : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}>
+              <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
+            </button>
+          </div>
           {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
           <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
           <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
@@ -2635,8 +2646,20 @@ export default function VideoStudio({
                   </div>
                 </div>
               )}
-              {/* The song's text: open while there is nothing placed yet, then folded into one line under the timed lines. */}
-              {cues.length > 0 && !pasteOpen ? (
+              {/* Linked: the release's lyrics, edited in the same editor as the carousel's (sections as cards). */}
+              {lyricsLinked && (
+                <div className={"row paste-fold" + (project.lyrics.length ? "" : " needs-lyrics")}>
+                  <span className="xs grow truncate">
+                    {project.lyrics.length
+                      ? `${t("Lyrics of the release")} · ${t("{n} sections", { n: project.lyrics.length })} · ${t("{n} sung lines", { n: sungLines })}`
+                      : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}
+                  </span>
+                  <Hint text={t("The same lyrics as the carousel's. When you change them, the video places the changed lines again; your retouches stay.")} />
+                  <button className={"btn sm" + (project.lyrics.length ? " quiet" : "")} onClick={onEditLyrics}>{project.lyrics.length ? t("Edit") : t("Add the lyrics")}</button>
+                </div>
+              )}
+              {/* Not linked yet (older releases): the song's own text, open while nothing is placed, then folded. */}
+              {lyricsLinked ? null : cues.length > 0 && !pasteOpen ? (
                 <div className="row paste-fold">
                   <span className="xs grow truncate">{t("Lyrics of the song")}{pasted.lines ? ` · ${t("{n} sung lines", { n: pasted.lines })}` : ""}</span>
                   <Hint text={t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")} />
