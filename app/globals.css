@@ -677,3 +677,4 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .lyric-src-head { gap: var(--s2); min-height: var(--h-sm); }
 .menu .menu-check { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--r); cursor: pointer; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs-sm); color: var(--text); }
 .menu .menu-check:hover { background: #1d1d23; }
+.card .slide-pick { margin-top: var(--s2); }

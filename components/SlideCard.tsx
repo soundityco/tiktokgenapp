@@ -271,13 +271,6 @@ export default function SlideCard(p: Props) {
           <button type="button" className="field-link" onClick={p.onLyricsBack}>{t("Back to the lyrics")}</button>
         </p>
       )}
-      {listItems.length > 1 && !p.locked && (
-        <select className="input sm" value="" aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
-          onChange={(e) => { if (e.target.value) p.onText(e.target.value); }}>
-          <option value="">{t("Pick from the list…")}</option>
-          {listItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ").slice(0, 120)}</option>)}
-        </select>
-      )}
       <div className="cols2 fields">
         <label className="field">{t("Text from")}
           <select className="input" value={textVal} onChange={(e) => {
@@ -299,6 +292,14 @@ export default function SlideCard(p: Props) {
           </select>
         </label>
       </div>
+      {/* Under the sources, like the sections of a lyrics slide: the same place on every slide. */}
+      {listItems.length > 1 && !p.locked && (
+        <select className="input sm slide-pick" value="" aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
+          onChange={(e) => { if (e.target.value) p.onText(e.target.value); }}>
+          <option value="">{t("Pick from the list…")}</option>
+          {listItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ").slice(0, 120)}</option>)}
+        </select>
+      )}
       {cfg.textSource.kind === "lyrics" && (() => {
         const src = cfg.textSource;
         // Ticked: its own sections, or (older slides) the one it showed, or the first one.
