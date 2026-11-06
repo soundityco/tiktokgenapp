@@ -714,3 +714,19 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .dd-group { padding: 8px 10px 4px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
 .ai-row { gap: var(--s2); align-items: center; padding-bottom: var(--s2); border-bottom: 1px solid var(--line); }
 .post-box.in-tab { margin-top: 0; }
+/* ---------- Send to my phone: the QR code on the computer, the page on the phone ---------- */
+.share-send { text-align: center; justify-items: center; }
+.share-qr { width: 240px; height: 240px; border-radius: var(--r-lg); overflow: hidden; background: #f0eee8; }
+.share-qr img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.share-qr.small { width: 140px; height: 140px; opacity: .5; }
+.share-qr-skel { width: 100%; height: 100%; background: var(--raised); }
+.share-url { word-break: break-all; font-family: var(--mono); }
+.share-page { min-height: 100dvh; display: grid; place-items: start center; padding: var(--s5) var(--s4) var(--s6); background: var(--bg); }
+.share-card { width: min(100%, 460px); gap: var(--s4); }
+.share-card .display { font-size: 30px; line-height: 1.05; margin: 0; }
+.share-preview { width: 100%; max-height: 60vh; border-radius: var(--r); background: #000; }
+.share-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.share-thumbs img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: var(--r); }
+.btn.big { height: 48px; font-size: 16px; width: 100%; }
+.share-caption { padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+.share-caption p { margin: 0; white-space: pre-wrap; font-size: var(--fs-sm); }

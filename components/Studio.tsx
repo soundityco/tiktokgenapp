@@ -14,6 +14,7 @@ import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textIt
 import { useT } from "@/lib/i18n";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
 import PostCaption from "./PostCaption";
+import ShareDialog from "./ShareDialog";
 import LyricsEditor from "./LyricsEditor";
 import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
@@ -103,6 +104,8 @@ export default function Studio({ userName }: { userName: string }) {
   /** Font under the pointer in the font list: shown on the selected slide until the pointer leaves. */
   const [fontPreview, setFontPreview] = useState<Partial<SlideCfg["style"]> | null>(null);
   const [busy, setBusy] = useState(false);
+  /** "Send to my phone" (QR code) for the open carousel. */
+  const [shareOpen, setShareOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
   const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
   const [driveAuth, setDriveAuth] = useState(false);
@@ -872,24 +875,6 @@ export default function Studio({ userName }: { userName: string }) {
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
     finally { setBusy(false); setExportProgress(null); }
   }
-  async function shareAll() {
-    if (!project?.generated) return say(t("Generate a carousel first"));
-    const p = project;
-    cancelExport.current = false;
-    setBusy(true);
-    setExportProgress({ done: 0, total: p.slides.length });
-    const failures: string[] = [];
-    try {
-      const files = await buildFiles(p, (done, total) => setExportProgress({ done, total }), failures);
-      if (cancelExport.current) { say(t("Export cancelled")); return; }
-      if (!files.length) throw new Error(t("Export failed"));
-      const shareFiles = files.map((f) => new File([f.blob], f.name, { type: f.blob.type }));
-      if (navigator.canShare?.({ files: shareFiles })) await navigator.share({ files: shareFiles });
-      else say(t("Sharing files is not supported on this device"));
-      if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: files.length, m: p.slides.length, f: failures.length }));
-    } catch (e: any) { if (e?.name !== "AbortError") say(e?.message ?? t("Share failed")); }
-    finally { setBusy(false); setExportProgress(null); }
-  }
   async function saveOne(i: number) {
     try {
       const p = project!, g = p.generated?.[i];
@@ -1165,7 +1150,7 @@ export default function Studio({ userName }: { userName: string }) {
                   </div>
                 )}
               </Menu>
-              {typeof navigator !== "undefined" && "canShare" in navigator && <button className="btn icon" aria-label={t("Share")} title={t("Share")} onClick={shareAll} disabled={busy || !project.generated}><Icon name="share" /></button>}
+              <button className="btn icon" aria-label={t("Send to my phone")} title={t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
               {carouselsOf(project).length > 1 && !busy ? (
                 <Menu trigger={(_, toggle) => (
                   <button className="btn primary" onClick={toggle}><Icon name="download" />{t("Download")}<Icon name="chevron" size={14} /></button>
@@ -1319,6 +1304,11 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} textKind={overlay.textKind} onCreate={createPool} onClose={() => setOverlay(null)} />}
       {overlay?.k === "newProject" && <PromptDialog title={t("New project")} label={t("Release name")} confirmLabel={t("Create")} onSubmit={createProject} onClose={() => setOverlay(null)} />}
+      {shareOpen && (
+        <ShareDialog kind="images" caption={project.caption} onClose={() => setShareOpen(false)}
+          title={carouselsOf(project).length > 1 ? `${project.name} · ${carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!)}` : project.name}
+          build={async () => { cancelExport.current = false; return buildFiles(project); }} />
+      )}
       {overlay?.k === "renameCarousel" && <PromptDialog title={t("Rename carousel")} label={t("Name")} initial={carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!)} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => renameCarousel(p, n))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => ({ ...p, name: n }))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} />}

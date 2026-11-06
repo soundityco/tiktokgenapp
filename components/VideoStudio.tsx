@@ -24,6 +24,7 @@ import CaptionStyle from "./CaptionStyle";
 import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
+import ShareDialog from "./ShareDialog";
 import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select } from "./ui";
@@ -350,6 +351,9 @@ export default function VideoStudio({
   /** Exporting every video of the release, one after the other (see the batch runner below). */
   const [batch, setBatch] = useState<null | { ids: string[]; i: number; res: Record<string, "done" | "failed" | "skipped">; back: string }>(null);
   const batchBusy = useRef(false);
+  /** The videos just exported (with their caption): "Send to my phone" sends them without exporting again. */
+  const lastFiles = useRef<{ name: string; blob: Blob; caption?: string }[]>([]);
+  const [shareOpen, setShareOpen] = useState(false);
   /** Export window: progress 0-1 and current step ("record" = realtime fallback). */
   const [exp, setExpRaw] = useState<null | { p: number; step: ExportStep | ConvertStep | "record"; done?: boolean; file?: string }>(null);
   /** Progress updates only when the whole percentage or the step changes: no re-render per frame. */
@@ -1872,6 +1876,7 @@ export default function VideoStudio({
       if (!blob) ({ blob, ext } = await recordRealtime(el, W, H, from, until, ac.signal));
       const file = `${name} clip.${ext}`;
       saveBlob(blob, file);
+      lastFiles.current = [...(inBatch ? lastFiles.current : []), { name: file, blob, caption: cfg.caption?.trim() || undefined }];
       // The text of the post next to it, ready to paste in TikTok (when the video has one).
       if (cfg.caption?.trim()) saveBlob(new Blob([cfg.caption.trim() + "\n"], { type: "text/plain" }), `${name} caption.txt`);
       setExp({ p: 1, step: "finish", done: true, file });
@@ -1917,6 +1922,7 @@ export default function VideoStudio({
     if (!ids.length) return;
     void askNotifyPermission();
     setErr(null);
+    lastFiles.current = [];
     setBatch({ ids, i: 0, res: {}, back: clip.id });
   };
   useEffect(() => {
@@ -2880,6 +2886,14 @@ export default function VideoStudio({
           message={t("“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.", { name: clipName(clip) })}
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
       )}
+      {shareOpen && (
+        <ShareDialog kind="video" onClose={() => setShareOpen(false)}
+          title={lastFiles.current.length > 1 ? `${project.name} · ${t("{n} videos", { n: lastFiles.current.length })}` : `${project.name} · ${clipName(clip)}`}
+          // One caption: the video's; several videos: each one's, under its name.
+          caption={lastFiles.current.length === 1 ? lastFiles.current[0].caption
+            : lastFiles.current.filter((f) => f.caption).map((f) => `${f.name.replace(/ clip\.\w+$/, "")}\n${f.caption}`).join("\n\n———\n\n") || undefined}
+          build={async () => lastFiles.current.map((f) => ({ name: f.name, blob: f.blob }))} />
+      )}
       {driveOpen && <DriveBrowser onPick={(f) => void pickFromDrive(f)} onClose={() => setDriveOpen(false)} />}
       {(exp || batch) && (
         <Modal title={batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
@@ -2929,6 +2943,9 @@ export default function VideoStudio({
             {batch && err && <p className="notice bad xs">{err}</p>}
           </div>
           <div className="modal-foot">
+            {(batch ? batchDone : exp?.done) && lastFiles.current.length > 0 && (
+              <button className="btn left" onClick={() => setShareOpen(true)}><Icon name="share" size={14} />{t("Send to my phone")}</button>
+            )}
             {(batch ? batchDone : exp?.done)
               ? <button className="btn primary" onClick={closeExport}>{t("Close")}</button>
               : <button className="btn quiet" onClick={closeExport}>{t("Cancel")}</button>}
