@@ -1130,8 +1130,10 @@ export default function Studio({ userName }: { userName: string }) {
               </div>
               {/* The lyrics of the release, written once: each lyrics slide ticks the sections it shows. */}
               <div className="field">{t("Lyrics")}
-                <button className="btn" onClick={() => setOverlay({ k: "lyrics" })} title={t("The lyrics of the release, cut into sections")}>
-                  <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : t("Add the lyrics")}
+                {/* No lyrics yet: shown even when no slide uses them (the release needs them, the video too). */}
+                <button className={"btn" + (project.lyrics.length ? "" : " needs")} onClick={() => setOverlay({ k: "lyrics" })}
+                  title={project.lyrics.length ? t("The lyrics of the release, cut into sections") : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}>
+                  <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
                 </button>
               </div>
               <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>

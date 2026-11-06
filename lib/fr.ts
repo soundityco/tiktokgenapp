@@ -1,5 +1,6 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "This release has no lyrics yet. Add them: the slides and the videos use them.": "Cette release n'a pas encore de paroles. Ajoute-les : les slides et les vidéos s'en servent.",
   "The lyrics are not drawn: tick the sections under the slide": "Les paroles ne sont pas tirées au hasard : coche les sections sous la slide",
   "None ticked": "Aucune cochée",
   "Edit the lyrics…": "Modifier les paroles…",
