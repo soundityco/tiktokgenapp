@@ -2023,7 +2023,7 @@ export default function VideoStudio({
   // ---- layout ----
   /** Files still opening: the panels wait (greyed) so nothing is edited half-loaded. */
   const studioLoading = !!audioBlob && (!audioBuf || (!!videoUrl && !playerReady));
-  const [tab, setTab] = useState<"lyrics" | "hook">("lyrics");
+  const [tab, setTab] = useState<"lyrics" | "hook" | "caption">("lyrics");
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
     !audioBlob ? { text: t("Audio missing"), tone: "warn" }
@@ -2294,13 +2294,6 @@ export default function VideoStudio({
                 onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
             ))}
           </div>
-          </Section>
-          <Section id="video-caption" title={<>{t("Caption and hashtags")}{settings.caption?.trim() && <span className="sec-sub"> · {t("{n} characters", { n: settings.caption.length })}</span>}</>}>
-            <PostCaption value={settings.caption ?? ""} poolId={settings.captionPoolId} pools={captionPools}
-              onChange={(caption) => setV({ caption })}
-              onPool={(captionPoolId) => setV({ captionPoolId })}
-              onDraw={() => onDrawCaption(settings.captionPoolId, settings.caption, (caption) => setV({ caption }))}
-              onNewList={onNewCaptionList} />
           </Section>
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
@@ -2589,10 +2582,11 @@ export default function VideoStudio({
             {!audioBuf && note && <p className="notice xs">{note}</p>}
           </div>
 
-          {/* The content of the lyrics or of the hook; its style shows in the right column. */}
+          {/* The content of the lyrics, of the hook (their style in the right column), or the post's caption. */}
           <div className="tabs" role="tablist">
-            <button role="tab" aria-selected={tab !== "hook"} className={"tab" + (tab !== "hook" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
+            <button role="tab" aria-selected={tab === "lyrics"} className={"tab" + (tab === "lyrics" ? " on" : "")} onClick={() => setTab("lyrics")}>{t("Lyrics")}</button>
             <button role="tab" aria-selected={tab === "hook"} className={"tab" + (tab === "hook" ? " on" : "")} onClick={() => setTab("hook")}>{t("Hook")}</button>
+            <button role="tab" aria-selected={tab === "caption"} className={"tab" + (tab === "caption" ? " on" : "")} onClick={() => setTab("caption")}>{t("Caption")}</button>
           </div>
 
           {tab === "lyrics" && (
@@ -2766,6 +2760,20 @@ export default function VideoStudio({
               <div className="row">
                 <button className="btn sm" onClick={() => addHook()}><Icon name="plus" size={13} />{t("Add a hook")}</button>
               </div>
+            </div>
+          )}
+
+          {/* The text of the post, built like the carousel's (under its slides). */}
+          {tab === "caption" && (
+            <div className="tab-body">
+              <section className="post-box in-tab">
+                <h3 className="label">{t("Caption and hashtags")}</h3>
+                <PostCaption value={settings.caption ?? ""} poolId={settings.captionPoolId} pools={captionPools}
+                  onChange={(caption) => setV({ caption })}
+                  onPool={(captionPoolId) => setV({ captionPoolId })}
+                  onDraw={() => onDrawCaption(settings.captionPoolId, settings.caption, (caption) => setV({ caption }))}
+                  onNewList={onNewCaptionList} />
+              </section>
             </div>
           )}
 
