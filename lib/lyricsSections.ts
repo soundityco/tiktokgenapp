@@ -94,8 +94,13 @@ export function migrateLyrics(ws: Workspace, label: (n: number) => string = (n) 
   const blocks = new Map<string, TextPool>(ws.textPools.filter((x) => x.kind === "block").map((x) => [x.id, x]));
   let touched = false;
   const projects = ws.projects.map((p0) => {
-    let p = p0;
-    if (!p.lyrics.length && p.songLyrics?.trim()) {
+    // Once only: sections deleted afterwards must not come back from the song pasted in the video studio.
+    if (p0.lyricsV2) return p0;
+    touched = true;
+    let p: Project = { ...p0, lyricsV2: true };
+    // Releases opened with the first version of this (slides already ticking sections) are not cut again either.
+    const seenBefore = [p.slides, ...(p.carousels ?? []).map((c) => c.slides)].some((sl) => sl.some((x) => x.textSource.kind === "lyrics" && !!x.textSource.sectionIds));
+    if (!p.lyrics.length && p.songLyrics?.trim() && !seenBefore) {
       const parts = splitSong(p.songLyrics, label, chorus);
       if (parts.length) { p = { ...p, lyrics: parts.map((s) => ({ id: uid(), name: s.name, text: s.text })) }; touched = true; }
     }

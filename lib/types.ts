@@ -329,6 +329,8 @@ export interface Project {
   /** Caption and hashtags of the open carousel's post, and the captions list it is drawn from. */
   caption?: string;
   captionPoolId?: string;
+  /** The lyrics were brought to their one place (lib/lyricsSections migrateLyrics): done once, never again. */
+  lyricsV2?: boolean;
   /** Every carousel of the release (the open one is in the fields above). */
   carousels?: CarouselSetup[];
   /** Carousel currently open. */

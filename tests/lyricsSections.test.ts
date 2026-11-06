@@ -51,6 +51,13 @@ describe("older workspaces", () => {
     expect(p.slides[1].textSource).toEqual({ kind: "lyrics", sectionIds: [p.lyrics[2].id] });
     expect(migrateLyrics(migrateLyrics(ws, label), label).projects[0].lyrics).toHaveLength(3);
   });
+  it("runs once: sections deleted later do not come back from the video studio's song", () => {
+    const ws = { v: 1, currentProjectId: "p", textPools: [], picPools: [], projects: [proj({ lyrics: [], songLyrics: "[Refrain]\nla" })] } as unknown as Workspace;
+    const once = migrateLyrics(ws, label);
+    expect(once.projects[0].lyrics).toHaveLength(1);
+    const cleared = { ...once, projects: [{ ...once.projects[0], lyrics: [] }] };
+    expect(migrateLyrics(cleared, label).projects[0].lyrics).toHaveLength(0);
+  });
 });
 
 describe("part names written alone on their line", () => {
