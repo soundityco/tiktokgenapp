@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useT } from "@/lib/i18n";
 import type { PicPool } from "@/lib/types";
-import { Modal } from "./ui";
+import { Modal, Select } from "./ui";
 
 const LAST = "tktgen-drop-list";
 /** "" = in no list; "new" = a new list. */
@@ -60,11 +60,11 @@ export default function DropPhotoDialog({ blob, slide, pools, canDrive, busy, on
         {canDrive ? (
           <>
             <label className="field">{t("Also add it to a photo list of your Drive?")}
-              <select className="input" value={list} onChange={(e) => setList(e.target.value)}>
+              <Select className="input" value={list} onChange={(e) => setList(e.target.value)}>
                 <option value="">{t("No, only this slide")}</option>
                 {pools.map((p) => <option key={p.id} value={p.id}>{p.name} · {t("{n} photos", { n: p.pics.length })}</option>)}
                 <option value="new">{t("New list…")}</option>
-              </select>
+              </Select>
             </label>
             {list === "new" && (
               <label className="field">{t("Name of the new list")}

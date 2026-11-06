@@ -7,7 +7,7 @@ import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
 import Icon from "./Icon";
-import { Modal, ScopeSelect } from "./ui";
+import { Modal, ScopeSelect, Select } from "./ui";
 
 function Thumb({ id, name }: { id: string; name: string }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -110,11 +110,11 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
                 <button className="btn sm quiet" title={t("Back to the theme found automatically")}
                   onClick={() => onChange((x) => { const th = { ...(x.themes ?? {}) }; delete th[hookKey(items[i])]; return { ...x, themes: th }; })}>{t("Auto")}</button>
               )}
-              <select className="input sm" value={themes[i]} aria-label={t("Theme")} onChange={(e) => setTheme(items[i], e.target.value)}>
+              <Select className="input sm" value={themes[i]} aria-label={t("Theme")} onChange={(e) => setTheme(items[i], e.target.value)}>
                 {known.map((id) => <option key={id} value={id}>{themeLabel(id, t)}</option>)}
                 <option value="">{t("Other")}</option>
                 <option value="__new">{t("New theme…")}</option>
-              </select>
+              </Select>
             </div>
           ))}
         </section>
@@ -144,12 +144,12 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <ScopeSelect value={pool.scope} onChange={(v) => p.onChange((x) => ({ ...x, scope: v }))} />
       </div>
       <label className="field">{t("Type")}
-        <select className="input" value={pool.kind} onChange={(e) => p.onChange((x) => ({ ...x, kind: e.target.value as TextPool["kind"] }))}>
+        <Select className="input" value={pool.kind} onChange={(e) => p.onChange((x) => ({ ...x, kind: e.target.value as TextPool["kind"] }))}>
           <option value="hooks">{t("One text per line")}</option>
           {/* Lyrics now live in the release (Lyrics button): an older block list keeps its type, no new one. */}
           {pool.kind === "block" && <option value="block">{t("Lyrics block")}</option>}
           <option value="captions">{t("Post captions (with hashtags)")}</option>
-        </select>
+        </Select>
       </label>
       {pool.kind === "hooks" && n > 1 && (
         <div className="row seg-tabs" role="tablist">

@@ -25,7 +25,7 @@ import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section } from "./ui";
+import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select } from "./ui";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -2253,7 +2253,7 @@ export default function VideoStudio({
               onClick={() => setV({ format: "9:16" })}>9:16</button>
             <button className={"btn sm" + (settings.format === "16:9" ? " on" : "")} aria-pressed={settings.format === "16:9"}
               onClick={() => setV({ format: "16:9" })}>16:9</button>
-            <select className="input sm grow" aria-label={t("Framing")}
+            <Select className="input sm grow" aria-label={t("Framing")}
               value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
               onChange={(e) => {
                 const v = e.target.value;
@@ -2262,7 +2262,7 @@ export default function VideoStudio({
               <option value="fill">{t("Fill (crop)")}</option>
               <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
               <option value="fit-black">{t("Fit whole, black bars")}</option>
-            </select>
+            </Select>
           </div>
           <div className="row">
             <label className="check xs">
@@ -2299,10 +2299,10 @@ export default function VideoStudio({
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
           <label className="field" style={{ margin: 0 }}>{t("Video")}
-            <select className="input" style={{ width: 150 }} value={clip.id}
+            <Select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
               {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
-            </select>
+            </Select>
           </label>
           <button className="btn icon" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
           <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
@@ -2417,14 +2417,14 @@ export default function VideoStudio({
                   <span className="mono xs">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>
                   <span className="sep" />
                   {/* Length of the segment: the usual ones, or the one set on the waveform. */}
-                  <select className="input sm seg-len" aria-label={t("Length of the segment")} title={t("Length of the segment")}
+                  <Select className="input sm seg-len" aria-label={t("Length of the segment")} title={t("Length of the segment")}
                     value={PRESETS.find((d) => Math.abs(settings.crop.duration - d) < 0.01) ?? "custom"}
                     onChange={(e) => { if (e.target.value !== "custom") setCropDuration(Number(e.target.value)); }}>
                     {PRESETS.map((d) => <option key={d} value={d}>{d} s</option>)}
                     {!PRESETS.some((d) => Math.abs(settings.crop.duration - d) < 0.01) && (
                       <option value="custom">{settings.crop.duration.toFixed(1).replace(".", lang === "fr" ? "," : ".")} s</option>
                     )}
-                  </select>
+                  </Select>
                   {videoBlob && videoDur > 0 && (
                     <button className={"btn sm icon" + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
                       aria-label={linked ? t("Audio and video linked") : t("Link audio and video")}
@@ -2553,20 +2553,20 @@ export default function VideoStudio({
                     )}
                     <div className="cols2">
                       <label className="field">{t("Language")}
-                        <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)} disabled={genBusy}>
+                        <Select className="input" value={language} onChange={(e) => setLanguage(e.target.value)} disabled={genBusy}>
                           <option value="auto">{t("Detect")}</option>
                           <option value="french">Français</option><option value="english">English</option>
                           <option value="spanish">Español</option><option value="portuguese">Português</option>
                           <option value="italian">Italiano</option><option value="german">Deutsch</option>
                           <option value="dutch">Nederlands</option><option value="arabic">العربية</option>
-                        </select>
+                        </Select>
                       </label>
                       <label className="field">{t("Accuracy")}
-                        <select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
+                        <Select className="input" value={model} onChange={(e) => setModel(e.target.value as AsrModel)} disabled={genBusy}>
                           <option value="tiny">{t("Fast")}</option>
                           <option value="base">{t("Balanced")}</option>
                           <option value="small">{t("Precise (slower)")}</option>
-                        </select>
+                        </Select>
                       </label>
                     </div>
                     <p className="muted xs">{t("The speech model ({name}) is downloaded once, then kept by the browser. Your audio never leaves this device.", { name: ASR_MODELS[model].split("/")[1].replace("_timestamped", "") })}</p>
@@ -2662,12 +2662,12 @@ export default function VideoStudio({
               )}
               {project.lyrics.length > 0 && !lyricsLinked && (
                 <label className="field">{t("Written lyrics")}
-                  <select className="input" value={writtenSrc} disabled={genBusy}
+                  <Select className="input" value={writtenSrc} disabled={genBusy}
                     onChange={(e) => { setWrittenSrc(e.target.value); if (project.heardWords?.length) resyncLyrics(e.target.value); }}>
                     <option value="song">{t("Lyrics pasted above")}</option>
                     <option value="all">{t("Carousel lyrics (all sections)")}</option>
                     {project.lyrics.map((s) => <option key={s.id} value={s.id}>{t("Section: {name}", { name: s.name })}</option>)}
-                  </select>
+                  </Select>
                 </label>
               )}
                 </>
@@ -2677,9 +2677,9 @@ export default function VideoStudio({
                   a section spread over the segment, then fine-tuned with − / + like the synced lines. */}
               {!cues.length && !genBusy && project.lyrics.length > 0 && (
                 <div className="row spread-row">
-                  <select className="input sm grow" aria-label={t("Section")} value={section?.id ?? ""} onChange={(e) => setSectionId(e.target.value)}>
+                  <Select className="input sm grow" aria-label={t("Section")} value={section?.id ?? ""} onChange={(e) => setSectionId(e.target.value)}>
                     {project.lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
+                  </Select>
                   <button className="btn sm" onClick={spreadLyrics} disabled={!section?.text.trim()}>{t("Spread it on the segment")}</button>
                   <Hint text={t("If the audio could not place the lyrics: the lines of this section are spread over the segment, on the attacks of the sound. Then adjust each one with − / +.")} />
                 </div>
@@ -2692,11 +2692,11 @@ export default function VideoStudio({
               <div className="row">
                 <label className="field grow">
                   <span className="row" style={{ gap: 6 }}>{t("Hook list")} <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} /></span>
-                  <select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
+                  <Select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
                     onChange={(e) => setV({ hookPoolId: e.target.value || undefined })} disabled={!hookPools.length}>
                     <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
                     {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 {hookItems.length > 0 && (
                   <button className="btn primary" title={t("A different hook from the list for each one")}
@@ -2717,11 +2717,11 @@ export default function VideoStudio({
                     <div className="row">
                       <button className="btn sm quiet" onClick={() => drawInto(h.id)} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Another hook")}</button>
                       {/* The hook's text, drawn or picked, shows as chosen in the list. */}
-                      <select className="input sm grow" value={hookItems.includes(h.text) ? h.text : ""} aria-label={t("Pick from the list")}
+                      <Select className="input sm grow" value={hookItems.includes(h.text) ? h.text : ""} aria-label={t("Pick from the list")}
                         onChange={(e) => { if (e.target.value) editHook(h.id, fromList(e.target.value)); }}>
                         <option value="" disabled={hookItems.includes(h.text)}>{h.text.trim() && !hookItems.includes(h.text) ? t("Text retouched · pick from the list…") : t("Pick from the list…")}</option>
                         {hookItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ")}</option>)}
-                      </select>
+                      </Select>
                     </div>
                   )}
                   <div className="row">

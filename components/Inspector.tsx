@@ -4,7 +4,7 @@ import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
 import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
 import { CaseOptions, FontPicker, LookExtras, presetOf, StylePresets, TextColors } from "./TextControls";
-import { Range, Section } from "./ui";
+import { Range, Section, Select } from "./ui";
 
 interface Props {
   index: number;
@@ -47,16 +47,16 @@ export default function Inspector({
 
         <Section id="slide-format" title={t("Format & photo")}>
           <label className="field">{t("Format")}
-            <select className="input" value={cfg.format} onChange={(e) => onCfg((c) => ({ ...c, format: e.target.value as FormatId }))}>
+            <Select className="input" value={cfg.format} onChange={(e) => onCfg((c) => ({ ...c, format: e.target.value as FormatId }))}>
               <option value="9:16">9:16 · 1080×1920</option>
               <option value="3:4">3:4 · 1080×1440</option>
               <option value="4:5">4:5 · 1080×1350</option>
               <option value="1:1">1:1 · 1080×1080</option>
               <option value="orig">{t("Original shape")}</option>
-            </select>
+            </Select>
           </label>
           <label className="field">{t("Framing")}
-            <select className="input" value={pic.framing === "fill" ? "fill" : pic.bars === "blur" ? "fit-blur" : "fit-black"}
+            <Select className="input" value={pic.framing === "fill" ? "fill" : pic.bars === "blur" ? "fit-blur" : "fit-black"}
               onChange={(e) => {
                 const v = e.target.value;
                 setP(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
@@ -64,7 +64,7 @@ export default function Inspector({
               <option value="fill">{t("Fill (crop)")}</option>
               <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
               <option value="fit-black">{t("Fit whole, black bars")}</option>
-            </select>
+            </Select>
           </label>
           <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => onCfg((c) => ({ ...c, pic: zoomPic(c.pic, v) }))}
             onReset={() => setP({ zoom: 1, ox: 0, oy: 0 })} />
@@ -75,23 +75,23 @@ export default function Inspector({
         <Section id="slide-text" title={t("Text")}>
           <FontPicker style={st} fonts={fonts} onChange={setS} onFonts={onFonts} onPreview={onPreview} />
           <label className="field">{t("Style")}
-            <select className="input" value={st.look} onChange={(e) => setS({ look: e.target.value as TextStyle["look"] })}>
+            <Select className="input" value={st.look} onChange={(e) => setS({ look: e.target.value as TextStyle["look"] })}>
               <option value="outline">{t("Outline")}</option><option value="box">{t("Box")}</option><option value="shadow">{t("Shadow")}</option><option value="plain">{t("Plain")}</option>
-            </select>
+            </Select>
           </label>
           <Range label={t("Size")} value={st.size} min={18} max={200} onChange={(v) => setS({ size: v })} onReset={() => setS({ size: defaultStyle().size })} />
           <TextColors style={st} onChange={setS} />
           <LookExtras style={st} onChange={setS} />
           <div className="cols2">
             <label className="field">{t("Case")}
-              <select className="input" value={st.case} onChange={(e) => setS({ case: e.target.value as TextStyle["case"] })}>
+              <Select className="input" value={st.case} onChange={(e) => setS({ case: e.target.value as TextStyle["case"] })}>
                 <CaseOptions />
-              </select>
+              </Select>
             </label>
             <label className="field">{t("Align")}
-              <select className="input" value={st.align} onChange={(e) => setS({ align: e.target.value as TextStyle["align"] })}>
+              <Select className="input" value={st.align} onChange={(e) => setS({ align: e.target.value as TextStyle["align"] })}>
                 <option value="left">{t("Left")}</option><option value="center">{t("Center")}</option><option value="right">{t("Right")}</option>
-              </select>
+              </Select>
             </label>
           </div>
           <Range label={t("Width")} value={st.width} display={`${st.width}%`} min={20} max={100} onChange={(v) => setS({ width: v })} onReset={() => setS({ width: defaultStyle().width })} />

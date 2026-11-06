@@ -29,7 +29,7 @@ import SlidePreview from "./SlidePreview";
 import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
-import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Toast } from "./ui";
+import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 const VERSION = "v0.5";
 const HISTORY_KEY = "tktgen-undo";
@@ -1115,10 +1115,10 @@ export default function Studio({ userName }: { userName: string }) {
             <div className="row nowrap video-tools">
               {/* Several carousels per release, like the videos: one to keep, another to try. */}
               <label className="field">{t("Carousel")}
-                <select className="input" style={{ width: 150 }} value={currentCarouselId(project)}
+                <Select className="input" style={{ width: 150 }} value={currentCarouselId(project)}
                   onChange={(e) => { const id = e.target.value; updProject((p) => openCarousel(p, id)); }}>
                   {carouselsOf(project).map((c) => <option key={c.id} value={c.id}>{carouselName(c)}</option>)}
-                </select>
+                </Select>
               </label>
               <button className="btn icon" aria-label={t("New carousel")} title={t("New carousel: the same slides set-up, to generate again")} onClick={() => { updProject((p) => addCarousel(p)); say(t("New carousel")); }}><Icon name="plus" /></button>
               <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Carousel menu")} onClick={toggle}><Icon name="more" /></button>}>
@@ -1149,9 +1149,9 @@ export default function Studio({ userName }: { userName: string }) {
                     <label className="check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
                     <label className="check"><input type="checkbox" checked={!!ws.favorTop} onChange={(e) => upd((w) => ({ ...w, favorTop: e.target.checked }))} />{t("Favor my best hooks (by TikTok views)")}</label>
                     <label className="field">{t("Export format")}
-                      <select className="input" value={ws.exportFormat} onChange={(e) => upd((w) => ({ ...w, exportFormat: e.target.value as "jpg" | "png" }))}>
+                      <Select className="input" value={ws.exportFormat} onChange={(e) => upd((w) => ({ ...w, exportFormat: e.target.value as "jpg" | "png" }))}>
                         <option value="jpg">JPG</option><option value="png">PNG</option>
-                      </select>
+                      </Select>
                     </label>
                   </div>
                 )}

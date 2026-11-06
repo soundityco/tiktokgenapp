@@ -1,5 +1,6 @@
 "use client";
-import { type CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Children, type CSSProperties, Fragment, isValidElement, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
 
 const stack: symbol[] = [];
@@ -97,10 +98,10 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" |
       </label>
       {p.kind === "text" && (
         <label className="field">{t("Type")}
-          <select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "block" | "captions")}>
+          <Select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "block" | "captions")}>
             <option value="hooks">{t("One text per line")}</option>
             <option value="captions">{t("Post captions (with hashtags)")}</option>
-          </select>
+          </Select>
         </label>
       )}
       <ScopeSelect value={scope} onChange={setScope} />
@@ -116,10 +117,10 @@ export function ScopeSelect({ value, onChange }: { value: "shared" | "project"; 
   const { t } = useT();
   return (
     <label className="field">{t("Available in")}
-      <select className="input" value={value} onChange={(e) => onChange(e.target.value as "shared" | "project")}>
+      <Select className="input" value={value} onChange={(e) => onChange(e.target.value as "shared" | "project")}>
         <option value="shared">{t("All projects")}</option>
         <option value="project">{t("This project only")}</option>
-      </select>
+      </Select>
     </label>
   );
 }
@@ -264,4 +265,148 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
 export function Hint({ text }: { text: string }) {
   // An <i>, not a <span>: layout rules written for the spans around it never reach it.
   return <i className="hint" tabIndex={0} role="note" aria-label={text} title={text}>i</i>;
+}
+
+// ---------- Select: the app's own drop-down (not the browser's), written like a <Select> ----------
+
+type SelOpt = { value: string; label: ReactNode; text: string; disabled?: boolean; group?: string };
+const textOf = (n: ReactNode): string =>
+  n == null || typeof n === "boolean" ? "" : typeof n === "string" || typeof n === "number" ? String(n)
+    : Array.isArray(n) ? n.map(textOf).join("") : isValidElement(n) ? textOf((n.props as { children?: ReactNode }).children) : "";
+/** The <option>s and <optgroup>s written inside, read as a list (conditions and maps included). */
+function readOptions(children: ReactNode, group?: string): SelOpt[] {
+  const out: SelOpt[] = [];
+  Children.forEach(children, (c) => {
+    if (!isValidElement(c)) return;
+    const p = c.props as { value?: string | number; children?: ReactNode; disabled?: boolean; label?: string };
+    if (c.type === "option") out.push({ value: String(p.value ?? textOf(p.children)), label: p.children, text: textOf(p.children), disabled: p.disabled, group });
+    else if (c.type === "optgroup") out.push(...readOptions(p.children, p.label));
+    else if (c.type === Fragment) out.push(...readOptions(p.children, group));
+  });
+  return out;
+}
+
+/**
+ * A drop-down drawn in the app's style. Used exactly like a <Select>: same `value`, same `onChange(e)` reading
+ * `e.target.value`, same <option> / <optgroup> children. The list floats over everything (above when there is
+ * no room below), with the keyboard: arrows, Enter, Escape, and the first letters of an option.
+ */
+export function Select({ value, onChange, children, className = "input", style, disabled, title, id, onClick, ...aria }: {
+  value?: string | number;
+  onChange?: (e: { target: { value: string }; currentTarget: { value: string } }) => void;
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+  disabled?: boolean;
+  title?: string;
+  id?: string;
+  onClick?: (e: React.MouseEvent) => void;
+  "aria-label"?: string;
+}) {
+  const opts = readOptions(children);
+  const cur = String(value ?? "");
+  const selected = opts.findIndex((o) => o.value === cur);
+  const shown = opts[selected >= 0 ? selected : 0];
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [pos, setPos] = useState<CSSProperties | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const typed = useRef({ s: "", at: 0 });
+
+  const choose = (i: number) => {
+    const o = opts[i];
+    if (!o || o.disabled) return;
+    setOpen(false);
+    btn.current?.focus();
+    if (o.value !== cur) onChange?.({ target: { value: o.value }, currentTarget: { value: o.value } });
+  };
+  const step = (from: number, dir: 1 | -1) => {
+    for (let k = 1; k <= opts.length; k++) {
+      const i = (from + dir * k + opts.length * 2) % opts.length;
+      if (!opts[i].disabled) return i;
+    }
+    return from;
+  };
+  const show = () => { if (disabled || !opts.length) return; setActive(selected >= 0 ? selected : step(-1, 1)); setOpen(true); };
+
+  // Placed on the screen under the button (above when there is no room), as wide as it at least.
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const b = btn.current!.getBoundingClientRect();
+    const h = Math.min(320, list.current?.scrollHeight ?? 320);
+    const below = window.innerHeight - b.bottom - 8, above = b.top - 8;
+    const up = below < Math.min(h, 200) && above > below;
+    const maxH = Math.max(120, Math.min(320, up ? above - 6 : below - 6));
+    const width = Math.max(b.width, 160);
+    const left = Math.min(Math.max(8, b.left), window.innerWidth - 8 - width);
+    setPos(up ? { left, minWidth: width, bottom: window.innerHeight - b.top + 4, maxHeight: maxH } : { left, minWidth: width, top: b.bottom + 4, maxHeight: maxH });
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const out = (e: MouseEvent) => { if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false); };
+    const away = (e: Event) => { if (!list.current?.contains(e.target as Node)) setOpen(false); };
+    // Escape closes the list only (not the dialog it is in).
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); setOpen(false); btn.current?.focus(); } };
+    document.addEventListener("mousedown", out);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("resize", away);
+    window.addEventListener("keydown", esc, true);
+    return () => { document.removeEventListener("mousedown", out); window.removeEventListener("scroll", away, true); window.removeEventListener("resize", away); window.removeEventListener("keydown", esc, true); };
+  }, [open]);
+  useEffect(() => { if (open && active >= 0) list.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: "nearest" }); }, [open, active]);
+
+  const onKey = (e: React.KeyboardEvent) => {
+    const k = e.key;
+    let used = true;
+    if (!open && (k === "ArrowDown" || k === "ArrowUp" || k === "Enter" || k === " ")) show();
+    else if (open && k === "ArrowDown") setActive((a) => step(a, 1));
+    else if (open && k === "ArrowUp") setActive((a) => step(a, -1));
+    else if (open && (k === "Enter" || k === " ")) choose(active);
+    else if (open && k === "Home") setActive(step(-1, 1));
+    else if (open && k === "End") setActive(step(opts.length, -1));
+    else if (open && k === "Tab") { setOpen(false); used = false; }
+    else if (k.length === 1 && /\S/.test(k)) {
+      // Typing the first letters goes to the option that starts with them.
+      const now = Date.now();
+      typed.current = { s: (now - typed.current.at < 700 ? typed.current.s : "") + k.toLowerCase(), at: now };
+      const i = opts.findIndex((o) => !o.disabled && o.text.trim().toLowerCase().startsWith(typed.current.s));
+      if (i >= 0) { if (open) setActive(i); else if (opts[i].value !== cur) onChange?.({ target: { value: opts[i].value }, currentTarget: { value: opts[i].value } }); }
+    } else used = false;
+    // Handled here: the shortcuts of the studios (Space, arrows) do not get it.
+    if (used) { e.preventDefault(); e.stopPropagation(); }
+  };
+
+  let lastGroup: string | undefined;
+  return (
+    <>
+      <button ref={btn} type="button" id={id} className={className + " sel" + (open ? " open" : "")} style={style} disabled={disabled} title={title ?? shown?.text}
+        aria-haspopup="listbox" aria-expanded={open} aria-label={aria["aria-label"]}
+        onClick={(e) => { onClick?.(e); if (open) setOpen(false); else show(); }} onKeyDown={onKey}>
+        <span className="sel-value">{shown?.label ?? ""}</span>
+        <svg className="sel-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {open && createPortal(
+        <div ref={list} className="sel-list" role="listbox" aria-label={aria["aria-label"]} style={pos ?? { visibility: "hidden", top: 0, left: 0 }}
+          onMouseDown={(e) => e.preventDefault() /* the button keeps the focus */}>
+          {opts.map((o, i) => {
+            const head = o.group !== lastGroup && o.group ? <div className="sel-group" key={"g" + i}>{o.group}</div> : null;
+            lastGroup = o.group;
+            return (
+              <Fragment key={i}>
+                {head}
+                <div data-i={i} role="option" aria-selected={i === selected} aria-disabled={o.disabled || undefined}
+                  className={"sel-opt" + (i === active ? " active" : "") + (i === selected ? " on" : "") + (o.disabled ? " off" : "")}
+                  onMouseEnter={() => !o.disabled && setActive(i)} onClick={() => choose(i)}>
+                  <span className="sel-check" aria-hidden="true">{i === selected ? "✓" : ""}</span>
+                  <span className="sel-text">{o.label}</span>
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
 }

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useT } from "@/lib/i18n";
 import type { TextPool } from "@/lib/types";
 import Icon from "./Icon";
+import { Select } from "./ui";
 
 /** TikTok's limit for the text of a post. */
 const LIMIT = 4000;
@@ -35,12 +36,12 @@ export default function PostCaption({ value, poolId, pools, onChange, onPool, on
       <textarea className="input" rows={4} value={value} maxLength={LIMIT} onChange={(e) => onChange(e.target.value)}
         placeholder={t("The text of the post: a caption and its hashtags.")} aria-label={t("Caption and hashtags")} />
       <div className="row nowrap">
-        <select className="input sm grow" aria-label={t("Captions list")} value={poolId ?? ""}
+        <Select className="input sm grow" aria-label={t("Captions list")} value={poolId ?? ""}
           onChange={(e) => { if (e.target.value === "new") onNewList(); else onPool(e.target.value || undefined); }}>
           <option value="">{pools.length ? t("Written by hand") : t("No captions list yet")}</option>
           {pools.map((p) => <option key={p.id} value={p.id}>{t("From “{name}”", { name: p.name })}</option>)}
           <option value="new">{t("New captions list…")}</option>
-        </select>
+        </Select>
         <button className="btn sm icon" onClick={onDraw} disabled={!poolId} aria-label={t("Draw another caption")} title={t("Draw another caption")}><Icon name="refresh" size={14} /></button>
         <button className="btn sm" onClick={() => void copy()} disabled={!value.trim()}>{copied ? <><Icon name="check" size={14} />{t("Copied")}</> : <><Icon name="copy" size={14} />{t("Copy")}</>}</button>
       </div>

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
-import { Menu } from "./ui";
+import { Menu, Select } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { poolThemes, textItems } from "@/lib/generate";
@@ -280,40 +280,40 @@ export default function SlideCard(p: Props) {
       )}
       <div className="cols2 fields">
         <label className="field">{t("Text from")}
-          <select className="input" value={textVal} onChange={(e) => {
+          <Select className="input" value={textVal} onChange={(e) => {
             const v = e.target.value;
             p.onCfg((c) => ({ ...c, textSource: v === "" ? { kind: "none" } : v === "__lyrics" ? { kind: "lyrics" } : { kind: "pool", poolId: v } }));
           }}>
             <option value="">{t("No text")}</option>
             <option value="__lyrics">{t("Lyrics")}</option>
             {p.textPools.filter((x) => x.kind !== "block" || x.id === textVal).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="field">{t("Photo from")}
-          <select className="input" value={cfg.picPoolId ?? ""} onChange={(e) => {
+          <Select className="input" value={cfg.picPoolId ?? ""} onChange={(e) => {
             const v = e.target.value || null;
             p.onCfg((c) => ({ ...c, picPoolId: v }));
           }}>
             <option value="">{t("No photo")}</option>
             {p.picPools.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
+          </Select>
         </label>
       </div>
       {cfg.textSource.kind === "pool" && groups.length > 1 && !p.locked && (
-        <select className="input sm slide-pick" aria-label={t("Theme")} value={theme ?? "__all"}
+        <Select className="input sm slide-pick" aria-label={t("Theme")} value={theme ?? "__all"}
           onChange={(e) => { const v = e.target.value; p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: v === "__all" ? undefined : v } } : c)); }}>
           <option value="__all">{t("All themes ({n})", { n: allItems.length })}</option>
           {groups.map((g) => <option key={g.id || "other"} value={g.id}>{themeLabel(g.id, t)} · {g.items.length}</option>)}
-        </select>
+        </Select>
       )}
       {/* Under the sources, like the sections of a lyrics slide: the same place on every slide. */}
       {listItems.length > 1 && !p.locked && (
         // The text on the slide, drawn or picked, shows as chosen in the list (a text retouched by hand: none).
-        <select className="input sm slide-pick" value={listItems.includes(text) ? text : ""} aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
+        <Select className="input sm slide-pick" value={listItems.includes(text) ? text : ""} aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
           onChange={(e) => { if (e.target.value) p.onText(e.target.value); }}>
           <option value="" disabled={listItems.includes(text)}>{text.trim() && !listItems.includes(text) ? t("Text retouched · pick from the list…") : t("Pick from the list…")}</option>
           {listItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ").slice(0, 120)}</option>)}
-        </select>
+        </Select>
       )}
       {cfg.textSource.kind === "lyrics" && (() => {
         const src = cfg.textSource;

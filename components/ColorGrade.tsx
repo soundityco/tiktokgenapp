@@ -5,7 +5,7 @@ import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { VideoGrade } from "@/lib/types";
-import { Range, Section } from "./ui";
+import { Range, Section, Select } from "./ui";
 
 const LUTS_KEY = "tktgen-luts";
 
@@ -99,20 +99,20 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
         <fieldset className={"plain-set" + (simple ? " off" : "")} disabled={simple} title={simple ? t("Off for a standard SDR video") : undefined}>
         <label className="field">
           <span>{t("Camera profile")}</span>
-          <select className="input" value={g.profile} onChange={(e) => set({ profile: e.target.value as VideoGrade["profile"] })}>
+          <Select className="input" value={g.profile} onChange={(e) => set({ profile: e.target.value as VideoGrade["profile"] })}>
             {PROFILES.map((p) => <option key={p.id} value={p.id}>{t(p.label)}</option>)}
-          </select>
+          </Select>
         </label>
         {colour && (
           <>
             <label className="field">
               <span>{t("Look LUT (made in DaVinci, input DaVinci Wide Gamut / Intermediate)")}</span>
-              <select className="input" value={g.lut?.id ?? ""}
+              <Select className="input" value={g.lut?.id ?? ""}
                 onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); set({ lut: l }); }}>
                 <option value="">{t("None (plain conversion to Rec.709)")}</option>
                 {luts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 {g.lut && !luts.some((l) => l.id === g.lut!.id) && <option value={g.lut.id}>{g.lut.name}</option>}
-              </select>
+              </Select>
             </label>
             <div className="row">
               <label className="btn sm">

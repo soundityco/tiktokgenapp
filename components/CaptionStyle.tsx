@@ -3,7 +3,7 @@ import { useT } from "@/lib/i18n";
 import { defaultStyle } from "@/lib/defaults";
 import type { TextStyle } from "@/lib/types";
 import { CaseOptions, FontPicker, LookExtras, TextColors } from "./TextControls";
-import { Range, Section } from "./ui";
+import { Range, Section, Select } from "./ui";
 
 /** Text studio of the video captions: same controls as the carousel inspector, plus loaded fonts. */
 export default function CaptionStyle({
@@ -43,10 +43,10 @@ export default function CaptionStyle({
       </Section>
       <Section id={sec("look")} title={t("Look")} open={false}>
         <label className="field">{t("Style")}
-          <select className="input" value={style.look} onChange={(e) => onChange({ look: e.target.value as TextStyle["look"] })}>
+          <Select className="input" value={style.look} onChange={(e) => onChange({ look: e.target.value as TextStyle["look"] })}>
             <option value="outline">{t("Outline")}</option><option value="box">{t("Box")}</option>
             <option value="shadow">{t("Shadow")}</option><option value="plain">{t("Plain")}</option>
-          </select>
+          </Select>
         </label>
         <Range label={t("Size")} value={style.size} min={18} max={200} onChange={(v) => onChange({ size: v })} onReset={() => onChange({ size: defaults.size })} />
         <TextColors style={style} onChange={onChange} />
@@ -55,14 +55,14 @@ export default function CaptionStyle({
       <Section id={sec("layout")} title={t("Layout")} open={false}>
         <div className="cols2">
           <label className="field">{t("Case")}
-            <select className="input" value={style.case} onChange={(e) => onChange({ case: e.target.value as TextStyle["case"] })}>
+            <Select className="input" value={style.case} onChange={(e) => onChange({ case: e.target.value as TextStyle["case"] })}>
               <CaseOptions />
-            </select>
+            </Select>
           </label>
           <label className="field">{t("Align")}
-            <select className="input" value={style.align} onChange={(e) => onChange({ align: e.target.value as TextStyle["align"] })}>
+            <Select className="input" value={style.align} onChange={(e) => onChange({ align: e.target.value as TextStyle["align"] })}>
               <option value="left">{t("Left")}</option><option value="center">{t("Center")}</option><option value="right">{t("Right")}</option>
-            </select>
+            </Select>
           </label>
         </div>
         <Range label={t("Max text block width")} value={style.width} display={`${style.width}%`} min={20} max={100} onChange={(v) => onChange({ width: v })} onReset={() => onChange({ width: defaults.width })} />

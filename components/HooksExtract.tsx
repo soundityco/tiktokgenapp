@@ -4,7 +4,7 @@ import { norm, textItems } from "@/lib/generate";
 import { Crop, createOcr } from "@/lib/ocr";
 import type { TextPool } from "@/lib/types";
 import { useT } from "@/lib/i18n";
-import { Modal } from "./ui";
+import { Modal, Select } from "./ui";
 
 type Status = "New" | "Check spelling" | "Duplicate" | "Already in pool" | "No text found";
 interface Item { id: number; url: string; text: string; conf: number; status: Status; checked: boolean; views?: number }
@@ -237,13 +237,13 @@ export default function HooksExtract({ pools, initialPoolId, initialSource, onAd
 
       <div className="cols2">
         <label className="field">{t("Add hooks to")}
-          <select className="input" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
+          <Select className="input" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
             {!importPool && <option value={NEW_IMPORT_POOL}>{t("New list: {name}", { name: t("Imported hooks") })}</option>}
             {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="field">{t("Parallel workers")}
-          <select className="input" value={workers} onChange={(e) => setWorkers(+e.target.value)}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</select>
+          <Select className="input" value={workers} onChange={(e) => setWorkers(+e.target.value)}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</Select>
         </label>
       </div>
       <div className="row">
