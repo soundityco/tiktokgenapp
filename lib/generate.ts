@@ -103,21 +103,24 @@ export function weightedPickBag(
  * One hook from a list, for the video studio: the same shuffle bag as the carousel, so a hook used
  * on one side does not come back on the other before the list has been used up. Mutates `bags`.
  */
-export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = []): string | null {
+export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = [], theme?: string): string | null {
   const pool = ws.textPools.find((p) => p.id === poolId);
   if (!pool) return null;
-  const items = textItems(pool);
+  // One theme of the list only (its own shuffle bag), as for a slide; an empty theme: the whole list.
+  const inTheme = theme !== undefined ? themedItems(pool, theme) : [];
+  const items = inTheme.length ? inTheme : textItems(pool);
+  const bag = inTheme.length ? `${pool.id}#${theme}` : pool.id;
   if (!items.length) return null;
   const skip = new Set(exclude);
   if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length) {
     const rest = items.filter((i) => !skip.has(i));
-    const before = bags[pool.id] ?? [];
-    const chosen = weightedPickBag(pool.id, rest.length ? rest : items, pool.views, bags, ws.noRepeat);
+    const before = bags[bag] ?? [];
+    const chosen = weightedPickBag(bag, rest.length ? rest : items, pool.views, bags, ws.noRepeat);
     // The hooks left out (already on the video) stay in the bag: they were not drawn.
-    if (ws.noRepeat && bags[pool.id]) bags[pool.id] = [...bags[pool.id], ...before.filter((x) => skip.has(x) && !bags[pool.id].includes(x))];
+    if (ws.noRepeat && bags[bag]) bags[bag] = [...bags[bag], ...before.filter((x) => skip.has(x) && !bags[bag].includes(x))];
     return chosen;
   }
-  return pick(pool.id, items, bags, ws.noRepeat, skip);
+  return pick(bag, items, bags, ws.noRepeat, skip);
 }
 
 export type HookLink = { pool: string; line: number; text: string; count: number };

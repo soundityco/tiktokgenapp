@@ -542,13 +542,15 @@ export default function Studio({ userName }: { userName: string }) {
   const setGen = (i: number, patch: Partial<GenSlide>) =>
     updProject((p) => {
       const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
+      // Another photo (dropped, pasted, found on the web): the edits made on the previous one do not follow it.
+      const newPic = patch.picId !== undefined && patch.picId !== g[i].picId;
       g[i] = { ...g[i], ...patch };
-      return { ...p, generated: g };
+      return { ...p, generated: g, slides: newPic ? p.slides.map((s, k) => (k === i ? reframe(s) : s)) : p.slides };
     });
 
   // ---- generate ----
-  // A new photo starts centred, without the zoom or offset chosen for the previous one.
-  const reframe = (s: SlideCfg): SlideCfg => ({ ...s, pic: { ...s.pic, zoom: 1, ox: 0, oy: 0 } });
+  // A new photo starts centred and untouched: no zoom, offset or photo edits (light, colours…) of the previous one.
+  const reframe = (s: SlideCfg): SlideCfg => ({ ...s, pic: { ...s.pic, zoom: 1, ox: 0, oy: 0, adjust: undefined } });
 
   const generate = useCallback(() => {
     const current = wsRef.current;
@@ -565,7 +567,8 @@ export default function Studio({ userName }: { userName: string }) {
         const old = p.generated?.[i];
         return p.slides[i].textSource.kind === "lyrics" && old?.edited ? { ...g, text: old.text, edited: true } : g;
       });
-      const cfgs = p.slides.map((s) => (s.locked ? s : reframe(s)));
+      // Only a slide whose photo changed starts again from a plain photo (the same photo keeps its edits).
+      const cfgs = p.slides.map((s, i) => (s.locked || slides[i]?.picId === p.generated?.[i]?.picId ? s : reframe(s)));
       // The post's caption: drawn again from its list, if it has one (another one than the current).
       const caption = p.captionPoolId ? drawHook(w, p.captionPoolId, bags, p.caption ? [p.caption] : []) ?? p.caption : p.caption;
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: slides, slides: cfgs, caption } : x)) };
@@ -823,7 +826,7 @@ export default function Studio({ userName }: { userName: string }) {
   }
   /**
    * Downloads the open carousel, or every carousel of the release (`all`): one zip, one folder per carousel
-   * holding its pictures, its caption.txt (the post's text) and slide-texts.txt.
+   * holding its pictures and its caption.txt (the post's text), nothing else.
    */
   async function downloadAll(all = false) {
     if (!project) return;
@@ -853,8 +856,7 @@ export default function Studio({ userName }: { userName: string }) {
         if (!all) single = name;
         const dir = (root ?? zip).folder(name)!;
         files.forEach((f) => dir.file(f.name, f.blob));
-        dir.file("slide-texts.txt", p.slides.map((_, i) => `Slide ${i + 1}\n${p.generated?.[i]?.text ?? ""}`).join("\n\n"));
-        // The text of the post, ready to paste in TikTok.
+        // The pictures and the text of the post (ready to paste in TikTok), nothing else.
         if (p.caption?.trim()) dir.file("caption.txt", p.caption.trim() + "\n");
       }
       if (!made) throw new Error(t("Export failed"));
@@ -1072,12 +1074,13 @@ export default function Studio({ userName }: { userName: string }) {
             canUndo={!!history.past} canRedo={!!history.future} onUndo={undo} onRedo={redo}
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
-            onDrawHook={(poolId, exclude) => {
+            onDrawHook={(poolId, exclude, theme) => {
               // The latest workspace (not the one of this render): several hooks drawn in a row each take theirs out of the bag.
               const cur = wsRef.current ?? ws;
               const bags = { ...cur.bags };
-              const hook = drawHook(cur, poolId, bags, exclude);
-              if (hook !== null) upd((w) => ({ ...w, bags: { ...w.bags, [poolId]: bags[poolId] ?? [] } }));
+              const hook = drawHook(cur, poolId, bags, exclude, theme);
+              // The bag drawn from (the list's, or one theme's) keeps what is left.
+              if (hook !== null) upd((w) => ({ ...w, bags: { ...w.bags, ...Object.fromEntries(Object.entries(bags).filter(([k]) => k === poolId || k.startsWith(poolId + "#"))) } }));
               return hook;
             }}
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}

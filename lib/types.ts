@@ -242,6 +242,8 @@ export interface VideoSourceInfo {
 }
 
 export interface VideoSettings {
+  /** Only the hooks of this theme of the hook list (see lib/themes). */
+  hookTheme?: string;
   /** Text of the TikTok post (caption and hashtags), and the captions list it is drawn from. */
   caption?: string;
   captionPoolId?: string;

@@ -12,7 +12,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
-import { followLists, hookLink, textItems } from "@/lib/generate";
+import { followLists, hookLink, poolThemes, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
@@ -24,6 +24,7 @@ import CaptionStyle from "./CaptionStyle";
 import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
+import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select } from "./ui";
 
@@ -292,7 +293,7 @@ export default function VideoStudio({
   /** Hook lists of the release (the same as the carousel's). */
   hookPools: TextPool[];
   /** Draw a hook from a list (shared shuffle bag with the carousel); `exclude`: hooks already on this video. */
-  onDrawHook: (poolId: string, exclude: string[]) => string | null;
+  onDrawHook: (poolId: string, exclude: string[], theme?: string) => string | null;
   onProject: (fn: (p: Project) => Project) => void;
   onSaveNow: () => void;
   /** The release's name, and the menu to change it: the title of both studios. */
@@ -1865,6 +1866,8 @@ export default function VideoStudio({
       if (!blob) ({ blob, ext } = await recordRealtime(el, W, H, from, until, ac.signal));
       const file = `${name} clip.${ext}`;
       saveBlob(blob, file);
+      // The text of the post next to it, ready to paste in TikTok (when the video has one).
+      if (cfg.caption?.trim()) saveBlob(new Blob([cfg.caption.trim() + "\n"], { type: "text/plain" }), `${name} caption.txt`);
       setExp({ p: 1, step: "finish", done: true, file });
       if (!inBatch) notify(t("Video exported"), t("{name} is in your downloads.", { name: file }));
       return "done";
@@ -2049,9 +2052,16 @@ export default function VideoStudio({
   })();
   const hookPoolId = settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : slide1Pool ?? hookPools[0]?.id;
   const hookPool = hookPools.find((p) => p.id === hookPoolId);
-  const hookItems = useMemo(() => (hookPool ? textItems(hookPool) : []), [hookPool]);
+  // A hooks list sorted by theme: the video may draw from one theme only, as a slide does.
+  const hookThemes = useMemo(() => (hookPool?.kind === "hooks" ? poolThemes(hookPool) : []), [hookPool]);
+  const hookGroups = useMemo(() => themeGroups(hookThemes), [hookThemes]);
+  const hookTheme = settings.hookTheme !== undefined && hookThemes.includes(settings.hookTheme) ? settings.hookTheme : undefined;
+  const hookItems = useMemo(() => {
+    const all = hookPool ? textItems(hookPool) : [];
+    return hookTheme !== undefined ? all.filter((_, i) => hookThemes[i] === hookTheme) : all;
+  }, [hookPool, hookTheme, hookThemes]);
   /** A hook drawn for this video, different from the ones already on it. */
-  const drawFor = (taken: string[]) => (hookPoolId ? onDrawHook(hookPoolId, taken) : null);
+  const drawFor = (taken: string[]) => (hookPoolId ? onDrawHook(hookPoolId, taken, hookTheme) : null);
   /** A text of the list in a hook: linked to its line, so editing it in the list follows here. */
   const fromList = (text: string): Partial<VideoHook> => ({ text, link: hookLink(hookPool, text) });
   const drawInto = (id: string) => {
@@ -2693,11 +2703,19 @@ export default function VideoStudio({
                 <label className="field grow">
                   <span className="row" style={{ gap: 6 }}>{t("Hook list")} <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} /></span>
                   <Select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
-                    onChange={(e) => setV({ hookPoolId: e.target.value || undefined })} disabled={!hookPools.length}>
+                    onChange={(e) => setV({ hookPoolId: e.target.value || undefined, hookTheme: undefined })} disabled={!hookPools.length}>
                     <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
                     {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
                   </Select>
                 </label>
+                {hookGroups.length > 1 && (
+                  <label className="field grow">{t("Theme")}
+                    <Select className="input" value={hookTheme ?? "__all"} onChange={(e) => setV({ hookTheme: e.target.value === "__all" ? undefined : e.target.value })}>
+                      <option value="__all">{t("All themes ({n})", { n: hookThemes.length })}</option>
+                      {hookGroups.map((g) => <option key={g.id || "other"} value={g.id}>{themeLabel(g.id, t)} · {g.items.length}</option>)}
+                    </Select>
+                  </label>
+                )}
                 {hookItems.length > 0 && (
                   <button className="btn primary" title={t("A different hook from the list for each one")}
                     onClick={() => { if (hooks.length) drawAll(); else addHook(drawFor([]) ?? ""); }}><Icon name="sparkle" />{t("Generate")}</button>
