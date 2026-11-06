@@ -99,7 +99,6 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" |
         <label className="field">{t("Type")}
           <select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "block" | "captions")}>
             <option value="hooks">{t("One text per line")}</option>
-            <option value="block">{t("Lyrics block")}</option>
             <option value="captions">{t("Post captions (with hashtags)")}</option>
           </select>
         </label>

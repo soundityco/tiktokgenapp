@@ -102,7 +102,8 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
       <label className="field">{t("Type")}
         <select className="input" value={pool.kind} onChange={(e) => p.onChange((x) => ({ ...x, kind: e.target.value as TextPool["kind"] }))}>
           <option value="hooks">{t("One text per line")}</option>
-          <option value="block">{t("Lyrics block")}</option>
+          {/* Lyrics now live in the release (Lyrics button): an older block list keeps its type, no new one. */}
+          {pool.kind === "block" && <option value="block">{t("Lyrics block")}</option>}
           <option value="captions">{t("Post captions (with hashtags)")}</option>
         </select>
       </label>

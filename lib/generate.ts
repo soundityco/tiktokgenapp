@@ -1,3 +1,4 @@
+import { slideLyrics } from "./lyricsSections";
 import { GenSlide, LyricSection, PicPool, Project, TextPool, Workspace } from "./types";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g, " ").trim();
@@ -170,7 +171,7 @@ export function lyricsText(project: Project, sectionId?: string | null): string 
 
 export function pickText(project: Project, ws: Workspace, slideIdx: number, bags: Record<string, string[]>): string {
   const src = project.slides[slideIdx].textSource;
-  if (src.kind === "lyrics") return lyricsText(project, src.sectionId);
+  if (src.kind === "lyrics") return slideLyrics(project, src);
   if (src.kind === "pool") {
     const pool = ws.textPools.find((p) => p.id === src.poolId);
     if (!pool) return "";

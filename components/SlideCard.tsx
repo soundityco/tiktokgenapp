@@ -275,7 +275,7 @@ export default function SlideCard(p: Props) {
           }}>
             <option value="">{t("No text")}</option>
             <option value="__lyrics">{t("Lyrics")}</option>
-            {p.textPools.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            {p.textPools.filter((x) => x.kind !== "block" || x.id === textVal).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
         </label>
         <label className="field">{t("Photo from")}

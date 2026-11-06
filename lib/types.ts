@@ -70,11 +70,14 @@ export interface PhotoAdjust {
   grain?: number;
 }
 
-/** A lyrics slide uses the project's section by default, or its own section when `sectionId` is set. */
+/**
+ * A lyrics slide shows the sections of the release ticked for it (`sectionIds`, in the song's order), under an
+ * optional header. Older slides: `sectionId` (one section), or none (the release's default / first section).
+ */
 export type TextSource =
   | { kind: "none" }
   | { kind: "pool"; poolId: string }
-  | { kind: "lyrics"; sectionId?: string };
+  | { kind: "lyrics"; sectionId?: string; sectionIds?: string[]; header?: string };
 
 export interface SlideCfg {
   id: string;

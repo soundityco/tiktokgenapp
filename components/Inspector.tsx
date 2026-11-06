@@ -98,18 +98,37 @@ export default function Inspector({
           <Range label={t("Letter spacing")} value={st.tracking ?? 0} display={`${st.tracking ?? 0}%`} min={-10} max={50}
             onChange={(v) => setS({ tracking: v || undefined })} onReset={() => setS({ tracking: undefined })} />
           <Range label={t("Line spacing")} value={st.lineHeight} display={st.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => setS({ lineHeight: v })} onReset={() => setS({ lineHeight: defaultStyle().lineHeight })} />
-          {cfg.textSource.kind === "lyrics" && (
-            <label className="field">{t("Lyrics section for this slide")}
-              <select className="input" value={cfg.textSource.sectionId ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  onCfg((c) => ({ ...c, textSource: v ? { kind: "lyrics", sectionId: v } : { kind: "lyrics" } }));
-                }}>
-                <option value="">{t("Project default")}</option>
-                {lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </label>
-          )}
+          {cfg.textSource.kind === "lyrics" && (() => {
+            const src = cfg.textSource;
+            // Ticked: its own sections, or (older slides) the one it showed.
+            const ticked = src.sectionIds ?? (src.sectionId ? [src.sectionId] : lyrics[0] ? [lyrics[0].id] : []);
+            const tick = (id: string, on: boolean) => onCfg((c) => ({ ...c, textSource: { ...src, sectionId: undefined,
+              sectionIds: lyrics.map((l) => l.id).filter((x) => (x === id ? on : ticked.includes(x))) } }));
+            return (
+              <div className="field lyric-pick">{t("Sections on this slide")}
+                {lyrics.length ? (
+                  <div className="lyric-checks">
+                    {lyrics.map((l) => (
+                      <label key={l.id} className="check" title={l.text.slice(0, 200)}>
+                        <input type="checkbox" checked={ticked.includes(l.id)} onChange={(e) => tick(l.id, e.target.checked)} />
+                        <span className="truncate">{l.name}</span>
+                        <span className="muted xs truncate">{l.text.split("\n")[0]}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : <p className="muted xs">{t("No lyrics yet: add them with the Lyrics button above the slides.")}</p>}
+                <label className="check">
+                  <input type="checkbox" checked={src.header !== undefined}
+                    onChange={(e) => onCfg((c) => ({ ...c, textSource: { ...src, header: e.target.checked ? t("Lyrics") : undefined } }))} />
+                  {t("A header above the lyrics")}
+                </label>
+                {src.header !== undefined && (
+                  <input className="input" value={src.header} aria-label={t("Header")} placeholder={t("Lyrics")}
+                    onChange={(e) => onCfg((c) => ({ ...c, textSource: { ...src, header: e.target.value } }))} />
+                )}
+              </div>
+            );
+          })()}
           <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
         </Section>
 

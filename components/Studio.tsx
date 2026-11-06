@@ -14,6 +14,8 @@ import { drawHook, generateAll, hookKey, lyricsText, pickPic, pickText, poolsVis
 import { useT } from "@/lib/i18n";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
 import PostCaption from "./PostCaption";
+import LyricsEditor from "./LyricsEditor";
+import { migrateLyrics, refreshLyricSlides, relinkSections, slideLyrics } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
@@ -219,7 +221,7 @@ export default function Studio({ userName }: { userName: string }) {
         // Saved data this version cannot read must never be replaced by an empty workspace (the next
         // autosave would overwrite it): stop with an error instead.
         if (j.data && (j.data.v !== 1 || !Array.isArray(j.data.projects))) throw new Error("Your saved data could not be read by this version of the app. Nothing was changed.");
-        const next = normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace());
+        const next = migrateLyrics(normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace()), (n) => t("Part {n}", { n }));
         wsRef.current = next;
         setWs(next);
         // Google fonts used by the texts: loaded, then everything is drawn again with them.
@@ -417,7 +419,7 @@ export default function Studio({ userName }: { userName: string }) {
         const pool = ws.textPools.find((p) => p.id === source.poolId);
         if (!pool || !textItems(pool).length) out.push({ key: "The text list of slide {n} is empty", params: { n } });
         else poolUses.set(pool.id, (poolUses.get(pool.id) ?? 0) + 1);
-      } else if (!lyricsText(project, source.sectionId).trim()) {
+      } else if (!slideLyrics(project, source).trim()) {
         out.push({ key: "Slide {n} has no lyrics", params: { n } });
       }
       if (!s.picPoolId) out.push({ key: "Slide {n} has no photo", params: { n } });
@@ -515,8 +517,24 @@ export default function Studio({ userName }: { userName: string }) {
 
   const updProject = (fn: (p: Project) => Project) =>
     upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === w.currentProjectId ? fn(p) : p)) }));
-  const updSlide = (i: number, fn: (s: SlideCfg) => SlideCfg) =>
-    updProject((p) => ({ ...p, slides: p.slides.map((s, k) => (k === i ? fn(s) : s)) }));
+  const updSlide = (i: number, fn: (s: SlideCfg) => SlideCfg) => {
+    // Its text source changed: its text follows at once (lyrics: the ticked sections; a list: a text drawn from it).
+    const before = project?.slides[i];
+    const after = before ? fn(before) : undefined;
+    const moved = !!before && !!after && JSON.stringify(before.textSource) !== JSON.stringify(after.textSource);
+    updProject((p) => {
+      const q = { ...p, slides: p.slides.map((s, k) => (k === i ? fn(s) : s)) };
+      return moved ? refreshLyricSlides(q) : q;
+    });
+    if (moved && after?.textSource.kind === "pool") rerollText(i);
+  };
+  /** The release's lyrics changed (sections edited, moved, cut, merged): every lyrics slide follows. */
+  const setLyrics = (lyrics: Project["lyrics"], link?: { from: string; to: string; keep: boolean }) =>
+    updProject((p) => {
+      let q: Project = { ...p, lyrics };
+      if (link) q = relinkSections(q, link.from, link.to, link.keep);
+      return refreshLyricSlides(q);
+    });
   const setGen = (i: number, patch: Partial<GenSlide>) =>
     updProject((p) => {
       const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
@@ -748,7 +766,9 @@ export default function Studio({ userName }: { userName: string }) {
         textSource: s.textSource.kind === "pool" ? { kind: "pool" as const, poolId: map.get(s.textSource.poolId) ?? s.textSource.poolId } : s.textSource,
         picPoolId: s.picPoolId ? map.get(s.picPoolId) ?? s.picPoolId : null,
       }));
-      const lyrics = src.lyrics.map((l) => ({ ...l, id: uid() }));
+      const lmap = new Map(src.lyrics.map((l) => [l.id, uid()]));
+      const lyrics = src.lyrics.map((l) => ({ ...l, id: lmap.get(l.id)! }));
+      slides.forEach((s) => { if (s.textSource.kind === "lyrics" && s.textSource.sectionIds) s.textSource = { ...s.textSource, sectionIds: s.textSource.sectionIds.map((x) => lmap.get(x) ?? x) }; });
       const section = src.lyrics.findIndex((l) => l.id === src.lyricsSectionId);
       const videoId = uid();
       const copy: Project = { id, name: src.name + " " + t("(copy)"), slides, lyrics, lyricsSectionId: section >= 0 ? lyrics[section].id : null, generated: null, selectedSlide: 0, videos: [{ ...defaultVideo(), id: videoId, name: "Video 1" }], videoId };
@@ -868,7 +888,7 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       const data = JSON.parse(await file.text());
       if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a Rollout backup"));
-      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(normalizeWorkspace(data as Workspace)); say(t("Backup restored")); } });
+      setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(migrateLyrics(normalizeWorkspace(data as Workspace), (n) => t("Part {n}", { n }))); say(t("Backup restored")); } });
     } catch (e: any) { say(e?.message ?? t("Could not read this file")); }
   };
 
@@ -1100,12 +1120,11 @@ export default function Studio({ userName }: { userName: string }) {
                   <button className="btn quiet icon sm" aria-label={t("Add a slide after this one")} title={t("Add a slide after this one")} onClick={addSlide} disabled={nSlides >= MAX_SLIDES}><Icon name="plus" size={14} /></button>
                 </div>
               </div>
-              <div className="field">
-                <span className="field-head">{t("Lyrics")}<button type="button" className="field-link" onClick={() => setOverlay({ k: "lyrics" })}>{t("Edit")}</button></span>
-                <select className="input" style={{ width: 160 }} aria-label={t("Lyrics section")} value={project.lyricsSectionId ?? ""} onChange={(e) => updProject((p) => ({ ...p, lyricsSectionId: e.target.value || null }))}>
-                  <option value="">{project.lyrics.length ? t("First section") : t("None yet")}</option>
-                  {project.lyrics.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+              {/* The lyrics of the release, written once: each lyrics slide ticks the sections it shows. */}
+              <div className="field">{t("Lyrics")}
+                <button className="btn" onClick={() => setOverlay({ k: "lyrics" })} title={t("The lyrics of the release, cut into sections")}>
+                  <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : t("Add the lyrics")}
+                </button>
               </div>
               <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
               <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
@@ -1269,7 +1288,7 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {versionsOpen && (
         <VersionHistory onClose={() => setVersionsOpen(false)}
-          onRestore={(data) => { apply(normalizeWorkspace(data)); say(t("Version restored: undo to go back")); }} />
+          onRestore={(data) => { apply(migrateLyrics(normalizeWorkspace(data), (n) => t("Part {n}", { n }))); say(t("Version restored: undo to go back")); }} />
       )}
       {preview && studio === "carousel" && (
         <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}
@@ -1281,28 +1300,7 @@ export default function Studio({ userName }: { userName: string }) {
       {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => ({ ...p, name: n }))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} />}
       {overlay?.k === "lyrics" && (
-        <Modal title={t("Lyrics · {name}", { name: project.name })} wide onClose={() => setOverlay(null)}>
-          <p className="muted">{t("Split the song into sections (verse, chorus…). Choose which one goes on the slides with the Lyrics menu. Line breaks are kept exactly as typed.")}</p>
-          <div className="stack" style={{ maxHeight: "56dvh", overflow: "auto" }}>
-            {project.lyrics.map((l) => (
-              <div key={l.id} className="stack" style={{ gap: "var(--s2)" }}>
-                <div className="row nowrap">
-                  <input className="input grow" value={l.name} aria-label={t("Section name")} onChange={(e) => updProject((p) => ({ ...p, lyrics: p.lyrics.map((x) => (x.id === l.id ? { ...x, name: e.target.value } : x)) }))} />
-                  <button className="btn quiet icon danger" aria-label={t("Delete section")} onClick={() => updProject((p) => ({ ...p, lyrics: p.lyrics.filter((x) => x.id !== l.id), lyricsSectionId: p.lyricsSectionId === l.id ? null : p.lyricsSectionId }))}><Icon name="trash" /></button>
-                </div>
-                <textarea className="input" rows={5} aria-label={t("Lyrics")} value={l.text} onChange={(e) => updProject((p) => ({ ...p, lyrics: p.lyrics.map((x) => (x.id === l.id ? { ...x, text: e.target.value } : x)) }))} />
-              </div>
-            ))}
-          </div>
-          <div className="modal-foot">
-            <button className="btn left" onClick={() => updProject((p) => {
-              const names = [t("Verse 1"), t("Chorus"), t("Verse 2"), t("Bridge"), t("Outro")];
-              const section = { id: uid(), name: names[p.lyrics.length] ?? t("Section {n}", { n: p.lyrics.length + 1 }), text: "" };
-              return { ...p, lyrics: [...p.lyrics, section], lyricsSectionId: p.lyricsSectionId ?? section.id };
-            })}>+ {t("Add a section")}</button>
-            <button className="btn primary" onClick={() => setOverlay(null)}>{t("Done")}</button>
-          </div>
-        </Modal>
+        <LyricsEditor name={project.name} lyrics={project.lyrics} song={project.songLyrics} onChange={setLyrics} onClose={() => setOverlay(null)} />
       )}
       <Toast msg={toast} />
     </div>
