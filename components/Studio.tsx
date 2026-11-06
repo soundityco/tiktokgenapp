@@ -73,6 +73,9 @@ export default function Studio({ userName }: { userName: string }) {
   const [editor, setEditor] = useState<Editor>(null);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [studio, setStudio] = useState<"carousel" | "video">("carousel");
+  // Once opened, the video studio stays mounted (hidden on the carousel): coming back is instant, nothing is read again.
+  const [videoSeen, setVideoSeen] = useState(false);
+  useEffect(() => { if (studio === "video") setVideoSeen(true); }, [studio]);
   // The studio in use survives a reload (read after mount: the server render has no localStorage).
   useEffect(() => {
     try { if (localStorage.getItem(STUDIO_KEY) === "video") setStudio("video"); } catch { /* private mode */ }
@@ -961,8 +964,10 @@ export default function Studio({ userName }: { userName: string }) {
       )}
 
       <div className="main" data-mobile-tab={mobileTab} data-studio={studio}>
-        {studio === "video" ? (
+        {(studio === "video" || videoSeen) && (
+          <div style={{ display: studio === "video" ? "contents" : "none" }}>
           <VideoStudio
+            active={studio === "video"}
             canUndo={!!history.past} canRedo={!!history.future} onUndo={undo} onRedo={redo}
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
@@ -983,7 +988,9 @@ export default function Studio({ userName }: { userName: string }) {
             onSavePreset={savePreset}
             onDeletePreset={deletePreset}
           />
-        ) : (
+          </div>
+        )}
+        {studio === "carousel" && (
         <>
         <aside className="col side l">
           <section className="group">

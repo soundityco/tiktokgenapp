@@ -270,6 +270,7 @@ export default function VideoStudio({
   onProject,
   onSaveNow,
   releaseTitle,
+  active = true,
   fonts,
   onFonts,
   presets,
@@ -290,6 +291,8 @@ export default function VideoStudio({
   onSaveNow: () => void;
   /** The release's name, and the menu to change it: the title of both studios. */
   releaseTitle: ReactNode;
+  /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
+  active?: boolean;
   /** Fonts loaded by the user, shared with the carousel. */
   fonts: string[];
   onFonts: (names: string[]) => void;
@@ -827,6 +830,8 @@ export default function VideoStudio({
   };
 
   useEffect(() => () => { stop(); syncRef.current?.abort(); genRef.current?.abort(); stopTranscribe(); ctxRef.current?.close().catch(() => {}); }, [stop]);
+  // Hidden behind the carousel: the sound stops; a sync or a lyrics placement in progress goes on and ends by itself.
+  useEffect(() => { if (!active) stop(); }, [active, stop]);
 
 
   useEffect(() => {
@@ -2055,6 +2060,7 @@ export default function VideoStudio({
   };
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e) => {
+    if (!active) return; // hidden behind the carousel: its shortcuts are the carousel's
     const el = e.target as HTMLElement;
     if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable || e.metaKey || e.ctrlKey) return;
     if (!audioBuf || document.querySelector(".ov")) return;
