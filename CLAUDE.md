@@ -1,27 +1,34 @@
 # Rollout (anciennement TkTgen) : contexte du projet
 
-Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app pour artistes musicaux qui crée des carrousels TikTok (hooks, paroles, photos Drive) et un studio vidéo (prise caméra synchronisée sur l'audio officiel, paroles incrustées).
+Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app pour artistes musicaux qui crée des carrousels TikTok (hooks, paroles, photos Drive) et un studio vidéo (prise caméra synchronisée sur l'audio officiel, paroles incrustées). En ligne : https://getrollout.netlify.app
 
 ## Stack
-- Next.js 15 (App Router), TypeScript 5 (ne pas passer à 7), Auth.js (next-auth beta) avec login Google + `drive.readonly`.
+- Next.js 15 (App Router), TypeScript 5 (ne pas passer à 7 ; pas de `baseUrl` dans tsconfig), Auth.js (next-auth beta) avec login Google + `drive.readonly` + `drive.file`. Session JWT d'un an, renouvelée à chaque visite.
 - Données : Neon Postgres (table `workspaces`, un JSON par email, compare-and-swap sur `rev`). Sans `DATABASE_URL`, repli sur `.data/workspaces.json` (badge « Local file »).
-- Déploiement : GitHub + Netlify (`@netlify/plugin-nextjs`, `publish = ".next"` dans netlify.toml, ne pas définir de Base directory).
-- Tests : `npm test` (vitest). Typecheck : `npm run typecheck`.
+- Déploiement : GitHub + Netlify (`@netlify/plugin-nextjs`, `publish = ".next"` dans netlify.toml, ne pas définir de Base directory). Ne jamais coder le domaine en dur (origine déduite par requête, AUTH_URL dans Netlify).
+- Tests : `npm test` (vitest, fichiers dans `tests/`). Typecheck : `npm run typecheck`.
 - Ne jamais lire ni afficher `.env.local`.
 
 ## Architecture utile
-- `components/Studio.tsx` : carrousel. `components/VideoStudio.tsx` : studio vidéo. `components/Inspector.tsx` : réglages de texte du carrousel. `components/CaptionStyle.tsx` : même chose pour les paroles de la vidéo.
+- `components/Studio.tsx` : carrousel + coquille de l'app (header, release, overlays). `components/VideoStudio.tsx` : studio vidéo, gardé monté (caché) quand on passe au carrousel. `components/SlideCard.tsx` : carte de slide (sources, thème, sections de paroles). `components/Inspector.tsx` : réglages de la slide. `components/CaptionStyle.tsx` : style des paroles / hooks vidéo.
+- `components/ui.tsx` : Modal, Menu (option `float` pour sortir d'une colonne), Section (panneaux repliables, fermés par défaut), **Select** (menu déroulant maison : ne jamais utiliser de `<select>` natif).
 - `lib/render.ts` : rendu canvas (`drawStyledText`). `lib/types.ts` : modèle de données.
-- Médias (audio, vidéo, polices) : IndexedDB local (`lib/idb.ts`), jamais envoyés au serveur.
-- Synchro audio caméra ↔ officiel : `lib/syncAudio.ts` (spectrogramme log-mel + corrélation FFT, vote de pics, score de confiance).
-- Paroles depuis l'audio : `public/asr/worker.js` (Whisper via transformers.js 3.7.6 chargé depuis jsDelivr, modèles Hugging Face) → `lib/transcribe.ts` → `lib/lyricsAlign.ts` (alignement sur les paroles écrites, découpage mot à mot / phrase par phrase). Les mots sont dans `project.lyricWords` (temps absolus dans l'audio).
+- Médias (audio, vidéo, polices, LUT) : IndexedDB local (`lib/idb.ts`), jamais envoyés au serveur (sauf copie Drive voulue).
+- Plusieurs carrousels par release : `lib/carousels.ts` (le carrousel ouvert vit dans les champs du projet, les autres dans `project.carousels`).
+- Paroles : un seul texte par release, les sections `project.lyrics` (`lib/lyricsSections.ts` : découpage d'une chanson, slides en paroles, lien avec la vidéo via `songOf`/`lyricsLinked`, migrations au chargement). Éditeur unique `components/LyricsEditor.tsx` (bouton Paroles à droite du nom de la release dans les deux studios). Une slide retouchée à la main (`edited`) ne suit plus les sections.
+- Synchro audio caméra ↔ officiel : `lib/syncAudio.ts`. Paroles calées sur l'audio : `public/asr/worker.js` (Whisper via transformers.js 3.7.6 sur jsDelivr) → `lib/transcribe.ts` → `lib/lyricsAlign.ts`. Les mots sont dans `project.lyricWords` (temps absolus, `manual` = retouche gardée au recalage).
+- Thèmes des hooks, 100 % local : `lib/themes.ts` (lexique promo FR/EN + exemples) et `public/themes/worker.js` (multilingual-e5-small dans le navigateur) → `lib/themeAI.ts`. Priorité : thème mis à la main > modèle > lexique > groupe de mots. Une slide ou les hooks vidéo peuvent tirer dans un seul thème.
+- Légendes de post : listes de type `captions` (une case par légende, séparées par `---`), `components/PostCaption.tsx`. Exports : seulement images / MP4 + `caption.txt`.
 - i18n : `lib/fr.ts` (dictionnaire clé = texte anglais). Un test vérifie que chaque `t("…")` a une traduction française : en ajouter une à chaque nouveau texte.
 
 ## Design
-- Garder le look « éditorial » v0.3 actuel (pas la version Aurare v0.4). Interface sobre, cohérente, pas de look « SaaS généré par IA ».
+- Look « éditorial » sombre, sobre, pas de look « SaaS généré par IA ». Accent blanc (le rouge ne sert qu'au danger) ; couleurs en variables CSS dans `app/globals.css` (`--accent`, `--on-accent`, `--danger`, `--video`, `--music`…), jamais en dur.
+- Attention aux noms de classes : `.card.sel` = slide sélectionnée (le menu déroulant utilise `.dd`).
+- Ne pas animer `filter`/`transform` sur une colonne (ça décale les menus flottants).
+- Sauvegardes d'UI : tags git `ui-video-v1`, `ui-video-v2`, `ui-red-accent`.
 
 ## État et à faire
-- Fait : synchro automatique fiable, notification de fin de synchro, bande « vidéo dispo » sur la waveform, trim live, paroles depuis l'audio, studio texte vidéo avec polices chargées.
-- Pas encore testé en conditions réelles : le modèle vocal (téléchargement Hugging Face bloqué dans l'environnement de dev précédent).
-- À faire / idées : édition des mots générés, presets de style pour la vidéo, verrouillage de slide, export par lot, légende + hashtags par projet, avis de reconnexion Google.
+- Fait récemment : carrousels multiples, export par lot (carrousels en zip, vidéos à la suite), légende + hashtags, paroles uniques reliées carrousel ↔ vidéo, thèmes locaux, menus maison, presets de style vidéo, verrouillage de slide.
+- À faire / idées : version live sans audio officiel (le son de la prise comme référence), correction mot par mot sur la timeline, vérifier l'interface sur mobile.
+- Google : vérification du branding en cours (balise Search Console posée), puis publier l'app (sinon accès Drive coupé tous les 7 jours). Pour ouvrir à d'autres artistes : remplacer `drive.readonly` par le sélecteur de fichiers Google.
 - Import TikTok : en attente de la validation de l'app par TikTok.
