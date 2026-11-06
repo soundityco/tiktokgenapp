@@ -1387,12 +1387,29 @@ export default function VideoStudio({
     if (d?.mode === "press") setHead(headAt(wavePos(e))); // a click inside the segment: the playhead goes there
   };
 
+  // The waveform is drawn at the size it is shown, in screen pixels (Retina included): never stretched, always sharp.
+  const [waveBox, setWaveBox] = useState({ w: 0, dpr: 1 });
   useEffect(() => {
     const c = waveRef.current;
-    if (!c || !peaks.length || !audioBuf) return;
-    const W = c.width, H = c.height, dur = audioBuf.duration;
+    if (!c) return;
+    const ro = new ResizeObserver(() => setWaveBox({ w: Math.round(c.clientWidth), dpr: window.devicePixelRatio || 1 }));
+    ro.observe(c);
+    return () => ro.disconnect();
+  }, [audioBuf]);
+  useEffect(() => {
+    const c = waveRef.current;
+    if (!c || !peaks.length || !audioBuf || !waveBox.w) return;
+    const W = waveBox.w, H = c.clientHeight || 90, dur = audioBuf.duration, dpr = waveBox.dpr;
+    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
     const g = c.getContext("2d");
     if (!g) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+    // The app's colours (globals.css): the accent, the camera video (violet) and the music in it (green).
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue("--accent").trim() || "#f0eee8";
+    const head0 = css.getPropertyValue("--accent-hi").trim() || "#ffffff";
+    const vid = css.getPropertyValue("--video").trim() || "#a184ff";
+    const mus = css.getPropertyValue("--music").trim() || "#4fffb0";
     g.fillStyle = "#16161c";
     g.fillRect(0, 0, W, H);
     const x0 = (settings.crop.start / dur) * W;
@@ -1401,31 +1418,32 @@ export default function VideoStudio({
     if (videoBlob && videoDur > 0) {
       const v0 = clamp(settings.offset / dur, 0, 1) * W;
       const v1 = clamp((settings.offset + videoDur) / dur, 0, 1) * W;
-      g.fillStyle = "rgba(86,156,255,.16)";
+      g.fillStyle = vid;
+      g.globalAlpha = 0.14;
       g.fillRect(v0, 0, Math.max(0, v1 - v0), H);
-      g.fillStyle = "rgba(86,156,255,.95)";
+      g.globalAlpha = 1;
       g.fillRect(v0, 0, Math.max(0, v1 - v0), 15);
       if (settings.musicStart != null && settings.musicEnd != null) {
         const m0 = clamp((settings.offset + settings.musicStart) / dur, 0, 1) * W;
         const m1 = clamp((settings.offset + settings.musicEnd) / dur, 0, 1) * W;
-        g.fillStyle = "rgba(79,255,176,.9)";
+        g.fillStyle = mus;
         g.fillRect(m0, H - 4, Math.max(0, m1 - m0), 4);
       }
     }
-    // The app's colours (globals.css): changing the accent there changes the waveform too.
-    const css = getComputedStyle(document.documentElement);
-    const accent = css.getPropertyValue("--accent").trim() || "#f0eee8";
-    const head0 = css.getPropertyValue("--accent-hi").trim() || "#ffffff";
     g.fillStyle = accent; // the segment: a faint ground of the accent
     g.globalAlpha = 0.09;
     g.fillRect(x0, 0, Math.max(0, x1 - x0), H);
     g.globalAlpha = 1;
-    const bw = W / peaks.length;
+    // One bar per 3 px of screen (peaks merged by their max), snapped to whole pixels: crisp at any width.
     g.fillStyle = "#6f6e78";
-    peaks.forEach((v, i) => {
-      const h = Math.max(1, v * (H - 14));
-      g.fillRect(i * bw, (H - h) / 2, Math.max(1, bw - 0.6), h);
-    });
+    const step = 3, n = Math.max(1, Math.floor(W / step));
+    for (let i = 0; i < n; i++) {
+      const a = Math.floor((i / n) * peaks.length), b = Math.max(a + 1, Math.floor(((i + 1) / n) * peaks.length));
+      let v = 0;
+      for (let k = a; k < b && k < peaks.length; k++) v = Math.max(v, peaks[k]);
+      const h = Math.max(1, Math.round(v * (H - 18)));
+      g.fillRect(i * step, Math.round((H - h) / 2), 2, h);
+    }
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
     if (range) {
@@ -1445,11 +1463,12 @@ export default function VideoStudio({
       const v0 = clamp(settings.offset / dur, 0, 1) * W;
       if ((clamp((settings.offset + videoDur) / dur, 0, 1) * W) - v0 > 56) {
         g.fillStyle = "#0c0c0e";
-        g.font = "700 11px sans-serif";
-        g.fillText("VIDEO", v0 + 6, 12);
+        g.font = "600 10px ui-monospace, 'JetBrains Mono', monospace";
+        g.textBaseline = "middle";
+        g.fillText("VIDEO", Math.round(v0 + 6), 8);
       }
     }
-  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur]);
+  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur, waveBox]);
 
   // ---- lyrics timing ----
   const saveTimes = (id: string, times: (number | null)[]) =>
@@ -2371,7 +2390,7 @@ export default function VideoStudio({
                     ))}
                   </div>
                 )}
-                <canvas ref={waveRef} className="wave" width={1200} height={90}
+                <canvas ref={waveRef} className="wave"
                   onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={() => { dragWave.current = null; }} />
                 {hooks.length > 0 && (
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
