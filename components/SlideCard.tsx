@@ -6,7 +6,7 @@ import { Menu } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { textItems } from "@/lib/generate";
-import type { GenSlide, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
+import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { Wheel } from "./ui";
 import ImageFinder from "./ImageFinder";
 import type { FoundImage } from "@/lib/imageSearch";
@@ -43,6 +43,9 @@ interface Props {
   selected: boolean;
   textPools: TextPool[];
   picPools: PicPool[];
+  /** The release's lyrics, cut into sections: a lyrics slide ticks the ones it shows. */
+  lyrics: LyricSection[];
+  onEditLyrics: () => void;
   zones: boolean;
   fontsReady: boolean;
   onSelect: () => void;
@@ -296,6 +299,52 @@ export default function SlideCard(p: Props) {
           </select>
         </label>
       </div>
+      {cfg.textSource.kind === "lyrics" && (() => {
+        const src = cfg.textSource;
+        // Ticked: its own sections, or (older slides) the one it showed, or the first one.
+        const ticked = src.sectionIds ?? (src.sectionId ? [src.sectionId] : p.lyrics[0] ? [p.lyrics[0].id] : []);
+        const tick = (id: string, on: boolean) => p.onCfg((c) => ({ ...c, textSource: { ...src, sectionId: undefined,
+          sectionIds: p.lyrics.map((l) => l.id).filter((x) => (x === id ? on : ticked.includes(x))) } }));
+        const names = p.lyrics.filter((l) => ticked.includes(l.id)).map((l) => l.name);
+        if (!p.lyrics.length) return (
+          <div className="lyric-src">
+            <button className="btn sm" onClick={p.onEditLyrics}><Icon name="plus" size={13} />{t("Add the lyrics")}</button>
+          </div>
+        );
+        return (
+          <div className="lyric-src">
+            <label className="field">{t("Sections")}
+              <Menu float trigger={(_, toggle) => (
+                <button type="button" className="input lyric-src-pick" onClick={toggle} title={names.join(", ")}>
+                  <span className="truncate">{names.length ? names.join(" · ") : t("None ticked")}</span><Icon name="chevron" size={14} />
+                </button>
+              )}>
+                {() => (<>
+                  {p.lyrics.map((l) => (
+                    <label key={l.id} className="check menu-check" title={l.text.slice(0, 200)}>
+                      <input type="checkbox" checked={ticked.includes(l.id)} onChange={(e) => tick(l.id, e.target.checked)} />
+                      <span className="truncate">{l.name}</span>
+                    </label>
+                  ))}
+                  <div className="sep" />
+                  <button onClick={p.onEditLyrics}>{t("Edit the lyrics…")}</button>
+                </>)}
+              </Menu>
+            </label>
+            <div className="row nowrap lyric-src-head">
+              <label className="check xs">
+                <input type="checkbox" checked={src.header !== undefined}
+                  onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...src, header: e.target.checked ? t("Lyrics") : undefined } }))} />
+                {t("Header")}
+              </label>
+              {src.header !== undefined && (
+                <input className="input sm grow" value={src.header} aria-label={t("Header")} placeholder={t("Lyrics")}
+                  onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...src, header: e.target.value } }))} />
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -1,5 +1,7 @@
 /** French translations. The key is the English text used in the code. */
 export const FR: Record<string, string> = {
+  "None ticked": "Aucune cochée",
+  "Edit the lyrics…": "Modifier les paroles…",
   "Retouched on this slide: the lyrics of the release are not changed.": "Retouché sur cette slide : les paroles de la release ne changent pas.",
   "Back to the lyrics": "Revenir aux paroles",
   "Sections on this slide": "Sections sur cette slide",

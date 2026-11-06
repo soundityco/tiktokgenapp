@@ -670,3 +670,10 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .lyric-checks { display: grid; gap: 2px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r); padding: 4px 8px; }
 .lyric-checks .check { display: grid; grid-template-columns: auto minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 8px; text-transform: none; letter-spacing: normal; font-family: var(--sans); color: var(--text); font-size: var(--fs-sm); padding: 3px 0; }
 .lyric-pick .check { text-transform: none; letter-spacing: normal; font-family: var(--sans); }
+/* A lyrics slide: the sections it shows (a menu of ticks) and its optional header, under its sources. */
+.lyric-src { display: grid; gap: var(--s2); margin-top: var(--s2); }
+.lyric-src-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.lyric-src-pick svg { flex: none; color: var(--muted); }
+.lyric-src-head { gap: var(--s2); min-height: var(--h-sm); }
+.menu .menu-check { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--r); cursor: pointer; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs-sm); color: var(--text); }
+.menu .menu-check:hover { background: #1d1d23; }
