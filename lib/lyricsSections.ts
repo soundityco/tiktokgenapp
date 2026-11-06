@@ -145,3 +145,15 @@ export function relinkSections(p: Project, from: string, to: string, keep: boole
     return { ...s, textSource: { ...src, sectionId: undefined, sectionIds: [...new Set(next)] } };
   });
 }
+
+/** On opening: the lyrics slides of every release show their sections as they are now (a format change reaches them). */
+export function refreshAllLyrics(ws: Workspace): Workspace {
+  let changed = false;
+  const projects = ws.projects.map((p) => {
+    const q = refreshLyricSlides(p);
+    const moved = q.generated !== p.generated || !!q.carousels?.some((c, i) => c.generated !== p.carousels?.[i]?.generated);
+    if (moved) changed = true;
+    return moved ? q : p;
+  });
+  return changed ? { ...ws, projects } : ws;
+}

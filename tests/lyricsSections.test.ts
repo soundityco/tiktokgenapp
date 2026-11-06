@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrateLyrics, refreshLyricSlides, relinkSections, slideLyrics, splitSong } from "@/lib/lyricsSections";
+import { migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, splitSong } from "@/lib/lyricsSections";
 import type { Project, Workspace } from "@/lib/types";
 
 const label = (n: number) => `Part ${n}`;
@@ -106,5 +106,15 @@ Regarde nous en vie`;
   });
   it("no names: the block sung again is the chorus", () => {
     expect(splitSong("one\ntwo\n\nla la\nla\n\nthree\n\nla la\nla", label, "Refrain").map((p) => p.name)).toEqual(["Part 1", "Refrain", "Part 2", "Refrain"]);
+  });
+});
+
+describe("on opening", () => {
+  it("lyrics slides saved in an older format show the sections as they are now", () => {
+    const p = proj({ slides: [slide({ kind: "lyrics", sectionIds: ["v"], header: "Paroles" })], generated: [{ text: "Paroles\na\nb", picId: null }] });
+    const ws = { projects: [p] } as unknown as Workspace;
+    expect(refreshAllLyrics(ws).projects[0].generated?.[0].text).toBe("Paroles\n\na\nb");
+    const same = { projects: [refreshAllLyrics(ws).projects[0]] } as unknown as Workspace;
+    expect(refreshAllLyrics(same)).toBe(same);
   });
 });
