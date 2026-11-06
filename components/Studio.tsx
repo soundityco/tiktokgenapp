@@ -558,7 +558,12 @@ export default function Studio({ userName }: { userName: string }) {
     }
     upd((w) => {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
-      const { slides, bags } = generateAll(w, p, (i) => (p.slides[i].locked ? p.generated?.[i] : undefined));
+      const { slides: drawn, bags } = generateAll(w, p, (i) => (p.slides[i].locked ? p.generated?.[i] : undefined));
+      // The lyrics are not drawn: a lyrics slide keeps its text as it is (retouches included), only its photo is new.
+      const slides = drawn.map((g, i) => {
+        const old = p.generated?.[i];
+        return p.slides[i].textSource.kind === "lyrics" && old?.edited ? { ...g, text: old.text, edited: true } : g;
+      });
       const cfgs = p.slides.map((s) => (s.locked ? s : reframe(s)));
       // The post's caption: drawn again from its list, if it has one (another one than the current).
       const caption = p.captionPoolId ? drawHook(w, p.captionPoolId, bags, p.caption ? [p.caption] : []) ?? p.caption : p.caption;

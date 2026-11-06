@@ -203,7 +203,8 @@ export default function SlideCard(p: Props) {
         {FIND_PHOTOS && <button className="btn sm quiet icon" onClick={(e) => { e.stopPropagation(); setFinding(true); }} disabled={p.locked}
           title={t("Find a photo on the web (free to post)")} aria-label={t("Find a photo")}><Icon name="search" size={14} /></button>}
         <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId || p.locked} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
-        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind === "none" || p.locked} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
+        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind !== "pool" || p.locked}
+          title={cfg.textSource.kind === "lyrics" ? t("The lyrics are not drawn: tick the sections under the slide") : t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
         <button className="btn sm quiet icon" onClick={p.onSave} aria-label={t("Save this slide")} title={t("Save this slide")}><Icon name="download" size={14} /></button>
         <Menu trigger={(_, toggle) => <button className="btn sm quiet icon" aria-label={t("Slide actions")} title={t("Slide actions")} onClick={(e) => { e.stopPropagation(); toggle(); }}><Icon name="more" size={14} /></button>}>
           {(close) => (<>
