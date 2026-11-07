@@ -19,7 +19,8 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
       Array.from(dialog?.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       ) ?? []).filter((el) => el.offsetParent !== null);
-    const first = focusables()[0];
+    // On a phone, no keyboard popping up over the window as it opens.
+    const first = matchMedia("(pointer: coarse)").matches ? undefined : focusables()[0];
     (first ?? dialog)?.focus();
     const k = (e: KeyboardEvent) => {
       if (e.key === "Escape" && stack[stack.length - 1] === token) {

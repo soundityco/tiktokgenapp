@@ -30,7 +30,8 @@ import SlidePreview from "./SlidePreview";
 import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
-import { ConfirmDialog, Menu, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
+import { useInstall } from "./InstallApp";
+import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 const VERSION = "v0.5";
 const HISTORY_KEY = "tktgen-undo";
@@ -107,6 +108,14 @@ export default function Studio({ userName }: { userName: string }) {
   /** "Send to my phone" (QR code) for the open carousel. */
   const [shareOpen, setShareOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
+  const { canInstall, install, iosHelp, closeIosHelp } = useInstall();
+  // A new panel starts at its top (each panel is the whole page on a phone).
+  const pickMobileTab = (tab: MobileTab) => {
+    if (tab === mobileTab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    setMobileTab(tab);
+    window.scrollTo({ top: 0 });
+    try { navigator.vibrate?.(8); } catch { /* not on this phone */ }
+  };
   const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
   const [driveAuth, setDriveAuth] = useState(false);
   const [online, setOnline] = useState(true);
@@ -1006,7 +1015,7 @@ export default function Studio({ userName }: { userName: string }) {
   return (
     <div className="app">
       <header className="top">
-        <div className="brand"><Wordmark height={18} /> <small>{VERSION}</small></div>
+        <div className="brand"><Wordmark height={18} /> <small className="version">{VERSION}</small></div>
         <div className="studio-switch" role="group" aria-label={t("Studio")} ref={switchRef}>
           {/* The white pill under the chosen studio: it slides from one to the other. */}
           <span className="studio-thumb" aria-hidden style={thumb ?? { opacity: 0 }} />
@@ -1018,14 +1027,16 @@ export default function Studio({ userName }: { userName: string }) {
           </button>
         </div>
         <span className="grow" />
-        <span role="status" aria-live="polite" className={"badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
-          {saveState === "saved" ? t("Saved") : saveState === "saving" ? <span className="shine">{t("Saving…")}</span> : saveState === "conflict" ? t("Not saved") : t("Not saved")}
+        <span role="status" aria-live="polite" className={"badge save-badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
+          <span className="badge-text">{saveState === "saved" ? t("Saved") : saveState === "saving" ? <span className="shine">{t("Saving…")}</span> : saveState === "conflict" ? t("Not saved") : t("Not saved")}</span>
         </span>
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
-        <button className="btn" onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" />{t("Import hooks")}</button>
+        <button className="btn top-import" aria-label={t("Import hooks")} onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" /><span>{t("Import hooks")}</span></button>
         <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}><Icon name="sliders" /></button>}>
           {(close) => (<>
+            <button className="mobile-only" onClick={() => { close(); setOverlay({ k: "import", poolId: null }); }}><Icon name="list" size={14} />{t("Import hooks")}</button>
+            <div className="sep mobile-only" />
             <div className="label cap">{t("Language")}</div>
             <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
             <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
@@ -1033,6 +1044,7 @@ export default function Studio({ userName }: { userName: string }) {
             <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
             <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
             <button onClick={() => { close(); setVersionsOpen(true); }}>{t("Version history")}</button>
+            {canInstall && <><div className="sep" /><button onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
             <div className="sep" />
             <div className="label cap truncate">{userName}</div>
             <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>
@@ -1227,13 +1239,13 @@ export default function Studio({ userName }: { userName: string }) {
         )}
       </div>
 
-      {studio === "carousel" && (
-      <nav className="mobile-tabs" aria-label={t("Sections")}>
-        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => setMobileTab("slides")}><Icon name="sparkle" size={18} />{t("Slides")}</button>
-        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => setMobileTab("lists")}><Icon name="list" size={18} />{t("Lists")}</button>
-        <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => setMobileTab("style")}><Icon name="sliders" size={18} />{t("Style")}</button>
+      {/* Phone: one panel at a time, like an app (the centre, the files / lists on the left, the style on the right). */}
+      <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab}>
+        <span className="mobile-tabs-pill" aria-hidden />
+        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name={studio === "video" ? "film" : "image"} size={18} />{studio === "video" ? t("Video") : t("Slides")}</button>
+        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name={studio === "video" ? "folder" : "list"} size={18} />{studio === "video" ? t("Files") : t("Lists")}</button>
+        <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} />{t("Style")}</button>
       </nav>
-      )}
 
       {edText && (
         <TextPoolEditor pool={edText} onClose={() => setEditor(null)} onDelete={() => askDeletePool("text", edText.id)}
@@ -1293,6 +1305,16 @@ export default function Studio({ userName }: { userName: string }) {
         <DropPhotoDialog blob={dropPic.blob} slide={dropPic.i} pools={vPics} canDrive={driveWrite} busy={dropBusy}
           findSame={() => findSamePicture(dropPic.blob, vPics.flatMap((p) => p.pics.map((x) => x.id)))}
           onConfirm={(c) => void confirmDrop(c)} onClose={() => { if (!dropBusy) setDropPic(null); }} />
+      )}
+      {iosHelp && (
+        <Modal title={t("Install the app")} onClose={closeIosHelp}>
+          <ol className="install-steps">
+            <li><Icon name="share" size={16} /><span>{t("Tap Share at the bottom of Safari.")}</span></li>
+            <li><Icon name="plus" size={16} /><span>{t("Choose “Add to Home Screen”.")}</span></li>
+            <li><Icon name="check" size={16} /><span>{t("Open Rollout from its icon: full screen, like an app.")}</span></li>
+          </ol>
+          <div className="modal-foot"><button className="btn primary" onClick={closeIosHelp}>{t("Got it")}</button></div>
+        </Modal>
       )}
       {versionsOpen && (
         <VersionHistory onClose={() => setVersionsOpen(false)}

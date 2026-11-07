@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08080a">
+<title>Rollout · hors ligne</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #08080a; color: #f0eee8; font-family: system-ui, -apple-system, sans-serif; }
+  main { min-height: 100%; display: grid; place-content: center; gap: 14px; padding: 24px; text-align: center; }
+  h1 { margin: 0; font-family: Georgia, serif; font-weight: 400; font-size: 34px; }
+  p { margin: 0; color: #86858f; max-width: 300px; line-height: 1.5; }
+  button { justify-self: center; margin-top: 8px; height: 40px; padding: 0 18px; border: 0; border-radius: 4px; background: #f0eee8; color: #0b0b10; font: inherit; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pas de connexion</h1>
+  <p>Rollout a besoin d'internet pour ouvrir tes releases. Tes médias restent sur cet appareil.</p>
+  <button onclick="location.reload()">Réessayer</button>
+</main>
+<script>addEventListener("online", () => location.reload());</script>
+</body>
+</html>
