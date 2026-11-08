@@ -1628,11 +1628,14 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 /* Style page (phone), third pass: no title row in the control (the parts say it), the grip with more room above;
    the carousel's slide number in the deck bar, across from Zones; "Apply to all slides" at the end of the page. */
-.deck-num, .apply-all-m { display: none; }
+.apply-all-m { display: none; }
+/* The slide number keeps its cell in the deck bar everywhere (the dots stay centred, Zones on the right), seen only
+   on the Style page. */
+.deck-num { visibility: hidden; }
 @media (max-width: 1000px) {
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs { padding-top: 26px; }
   .main[data-mobile-tab="style"] .style-grip { top: 10px; }
-  .main[data-mobile-tab="style"] .deck-num { display: block; justify-self: start; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em;
+  .main[data-mobile-tab="style"] .deck-num { visibility: visible; justify-self: start; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em;
     text-transform: uppercase; color: var(--text); padding-left: 2px; }
   .main[data-studio="carousel"][data-mobile-tab="style"] .apply-all-m { display: flex; justify-content: center; padding: var(--s4) 0 var(--s2); }
   /* The fade under the control: shorter, it no longer dims the first lines before they scroll. */
