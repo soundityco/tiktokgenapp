@@ -2,7 +2,7 @@
 import { useT } from "@/lib/i18n";
 import { defaultStyle } from "@/lib/defaults";
 import type { TextStyle } from "@/lib/types";
-import { CaseOptions, FontPicker, LookExtras, TextColors } from "./TextControls";
+import { caseOptions, FontPicker, LookExtras, TextColors } from "./TextControls";
 import { Range, Section, Select } from "./ui";
 
 /** Text studio of the video captions: same controls as the carousel inspector, plus loaded fonts. */
@@ -56,7 +56,7 @@ export default function CaptionStyle({
         <div className="cols2">
           <label className="field">{t("Case")}
             <Select className="input" value={style.case} onChange={(e) => onChange({ case: e.target.value as TextStyle["case"] })}>
-              <CaseOptions />
+              {caseOptions(t)}
             </Select>
           </label>
           <label className="field">{t("Align")}

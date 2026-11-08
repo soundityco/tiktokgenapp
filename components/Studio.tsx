@@ -1108,7 +1108,7 @@ export default function Studio({ userName }: { userName: string }) {
   const textGroups = (roles: (keyof typeof ROLES)[]) => {
     const n = vText.filter((p) => roles.some((r) => ofRole(r)(p))).length;
     return (
-      <Family id="texts" icon="type" title={t("Texts")} count={t("{n} lists", { n })}>
+      <Family id="texts" icon="type" title={t("Texts")} count={(n === 1 ? t("1 list") : t("{n} lists", { n }))}>
           {roles.map((role) => (
             <section key={role} className="group sub">
               <div className="group-head"><h4 className="sub-label">{ROLES[role]}</h4><button className="btn quiet icon sm" aria-label={t("New list: {role}", { role: ROLES[role] })} title={t("New list: {role}", { role: ROLES[role] })} onClick={() => setOverlay({ k: "newPool", kind: "text", textKind: role })}><Icon name="plus" size={14} /></button></div>
@@ -1312,7 +1312,7 @@ export default function Studio({ userName }: { userName: string }) {
             {lyricsRow}
           </section>
           {textGroups(["hooks", "texts", "captions"])}
-          <Family id="photos" icon="image" title={t("Photos")} count={t("{n} lists", { n: vPics.length })}>
+          <Family id="photos" icon="image" title={t("Photos")} count={(vPics.length === 1 ? t("1 list") : t("{n} lists", { n: vPics.length }))}>
             {vPics.length ? listRows("photos") : <p className="muted xs group-empty">{t("No list yet.")}</p>}
             {/* Under the lists (the head keeps only its fold arrow, aligned with the texts'). */}
             <button className="lib-add" onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} />{t("New photo list")}</button>

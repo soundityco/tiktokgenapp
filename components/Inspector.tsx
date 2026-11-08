@@ -3,7 +3,7 @@ import { defaultPic, defaultStyle } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
 import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
-import { CaseOptions, FontPicker, LookExtras, presetOf, StylePresets, TextColors } from "./TextControls";
+import { caseOptions, FontPicker, LookExtras, presetOf, StylePresets, TextColors } from "./TextControls";
 import { Range, Section, Select } from "./ui";
 
 interface Props {
@@ -85,7 +85,7 @@ export default function Inspector({
           <div className="cols2">
             <label className="field">{t("Case")}
               <Select className="input" value={st.case} onChange={(e) => setS({ case: e.target.value as TextStyle["case"] })}>
-                <CaseOptions />
+                {caseOptions(t)}
               </Select>
             </label>
             <label className="field">{t("Align")}

@@ -360,8 +360,8 @@ export function LookExtras({ style, onChange }: { style: TextStyle; onChange: (p
 }
 
 /** The case options, shared by the carousel and the video. */
-export function CaseOptions() {
-  const { t } = useT();
+/** The case choices, as plain options (the app's Select reads its options directly: not through a component). */
+export function caseOptions(t: (k: string) => string) {
   return (
     <>
       <option value="asis">{t("As typed")}</option><option value="upper">{t("UPPERCASE")}</option>
