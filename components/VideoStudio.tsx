@@ -2359,6 +2359,9 @@ export default function VideoStudio({
                     {videoBlob && !onCopy && !d.originalId && driveWrite && !driveJob && <button onClick={() => { close(); void sendToDrive(videoBlob); }}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>}
                     {driveWrite === false && !d.originalId && <button onClick={() => { close(); void signIn("google", { redirectTo: "/studio" }); }}>{t("Reconnect Google to put it on my Drive")}</button>}
                     {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}>{t("Stop the transfer")}</button>}
+                    {/* The copy for the other devices, now (it is made by itself otherwise, once the take is synced). */}
+                    {videoBlob && !onCopy && driveWrite && !copyJob && settings.score !== undefined && <button onClick={() => { close(); copyFailed.current = null; void makeCopy(); }}>{settings.drive?.copy ? t("Make the Drive copy again") : t("Make the Drive copy now")}</button>}
+                    {copyJob && <button onClick={() => { close(); copyAc.current?.abort(); }}>{t("Stop the Drive copy")}</button>}
                     {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}>{t("Remove video")}</button></>}
                   </>))}>
                   {!settings.videoName && (
