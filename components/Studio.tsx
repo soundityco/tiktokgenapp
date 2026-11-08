@@ -122,6 +122,9 @@ export default function Studio({ userName }: { userName: string }) {
   const [headMore, setHeadMore] = useState(false);
   // Phone: the slides are a deck swiped sideways; the one in the middle is the selected one (and the other way round).
   const deckRef = useRef<HTMLDivElement>(null);
+  const deckWrapRef = useRef<HTMLDivElement>(null);
+  /** Where the deck bar goes (the top of the room kept under the middle slide's picture), or null off the phone. */
+  const [deckTop, setDeckTop] = useState<number | null>(null);
   const deckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deckOn = () => typeof window !== "undefined" && matchMedia("(max-width: 640px)").matches;
   const deckCentre = () => {
@@ -407,6 +410,22 @@ export default function Studio({ userName }: { userName: string }) {
 
   // ---- derived ----
   const project: Project | null = ws ? ws.projects.find((p) => p.id === ws.currentProjectId) ?? ws.projects[0] : null;
+  // The deck bar's place: measured under the middle slide's picture (every picture has the same height, so it
+  // does not move while swiping); again when the board changes size.
+  useLayoutEffect(() => {
+    const wrap = deckWrapRef.current;
+    if (!wrap) return;
+    const place = () => {
+      const sp = wrap.querySelector<HTMLElement>(".card.sel .deck-spacer");
+      if (!deckOn() || !sp || !sp.offsetParent) { setDeckTop(null); return; }
+      const top = Math.round(sp.getBoundingClientRect().top - wrap.getBoundingClientRect().top);
+      setDeckTop((cur) => (cur === top ? cur : top));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [project?.selectedSlide, project?.slides.length, mobileTab, studio, project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The deck follows the selected slide (a dot, a new slide, a tap): it slides to put it in the middle.
   useEffect(() => {
     const el = deckRef.current;
@@ -1266,10 +1285,11 @@ export default function Studio({ userName }: { userName: string }) {
               </ol>
             </div>
           )}
+          <div className="deck-wrap" ref={deckWrapRef}>
           <div ref={deckRef} onScroll={onDeckScroll} className={"slides" + (boardDrag ? " drag-in" : "")}>
             {project.slides.map((cfg, i) => (
               <SlideCard key={cfg.id} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady} below={deckBar}
+                textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
                 lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
@@ -1289,7 +1309,9 @@ export default function Studio({ userName }: { userName: string }) {
                 onDrop={() => { if (dragFrom !== null && dragFrom !== i) moveSlide(dragFrom, i); setDragFrom(null); setDragOver(null); }} />
             ))}
           </div>
-          {/* Phone: where we are in the deck of slides (a tap goes to that slide). */}
+          {/* Phone: the bar stays put while the slides swipe under it, over the room kept under the middle picture. */}
+          {deckTop !== null && <div className="deck-float" style={{ top: deckTop }}>{deckBar}</div>}
+          </div>
           <section className="post-box">
             <h3 className="label">{t("Caption and hashtags")}</h3>
             <PostCaption auto value={project.caption ?? ""} poolId={project.captionPoolId} pools={captionPools}

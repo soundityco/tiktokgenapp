@@ -1064,3 +1064,13 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
 /* The slide's own text: its name over it, like the sources under it, and room between it and the picture. */
 .card .slide-text { margin-top: var(--s3); }
 .card .slide-text textarea { width: 100%; }
+
+/* Phone: the deck bar (dots, zones) floats over the room kept under the middle picture, outside the swiping
+   deck, so it stays still while the slides move under it. */
+.deck-wrap { position: relative; }
+.deck-spacer, .deck-float { display: none; }
+@media (max-width: 640px) {
+  .deck-spacer { display: block; height: 30px; margin-top: var(--s3); }
+  .deck-float { display: block; position: absolute; left: 0; right: 0; z-index: 5; }
+  .deck-float .deck-bar { margin: 0; }
+}
