@@ -1491,3 +1491,24 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .sheet-open details.sec[data-sec^="slide-"] > summary, .sheet-open > details.sec[data-sec="video-render"] > summary { display: none; }
   .sheet-open details.sec[data-sec^="slide-"] > .body, .sheet-open > details.sec[data-sec="video-render"] > .body { padding-top: var(--s2); }
 }
+/* Video timeline block: the phone makes it the segment's (title, sync state, passage, length, lock, sync); the
+   computer keeps play and time in it. */
+.seg-top, .tr-range { display: none; }
+@media (max-width: 1000px) {
+  .app:has(.dock-player:not(:empty)) .seg-top { display: flex; align-items: center; min-height: 26px; }
+  .app:has(.dock-player:not(:empty)) .transport .tr-play, .app:has(.dock-player:not(:empty)) .transport .tr-time { display: none; }
+  .app:has(.dock-player:not(:empty)) .transport .tr-range { display: inline; font-size: 13px; color: var(--text); margin-right: 2px; }
+  .app:has(.dock-player:not(:empty)) .video-head .h-status { display: none; }
+}
+@media (max-width: 1000px) {
+  .app .video-center .seg-top > span.label { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .app:has(.dock-player:not(:empty)) .transport { flex-wrap: nowrap; }
+  .app:has(.dock-player:not(:empty)) .transport .tr-sync-lbl { display: none; }
+}
+@media (max-width: 640px) {
+  /* The sync state went down to the segment: "More" comes up beside the download, one row less. */
+  .app:has(.dock-player:not(:empty)) .video-head.studio-head { grid-template-columns: minmax(0, 1fr) max-content var(--h); }
+  .app:has(.dock-player:not(:empty)) .video-head .release-title { grid-column: 1; }
+  .app:has(.dock-player:not(:empty)) .video-head .h-more { grid-column: 2; grid-row: 1; }
+  .app:has(.dock-player:not(:empty)) .video-head .h-dl { grid-column: 3; grid-row: 1; }
+}

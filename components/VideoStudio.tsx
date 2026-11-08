@@ -2811,14 +2811,21 @@ export default function VideoStudio({
               )
             ) : (
               <>
-                <div className="row">
-                  <button className="btn icon" aria-label={playing ? t("Pause") : t("Play")} title={(playing ? t("Pause") : t("Play")) + " (Espace)"}
+                {/* Phone: the block is the segment's (play and time are on the dock): its title, and where the sync stands. */}
+                <div className="row seg-top">
+                  <span className="label">{t("Segment")}</span>
+                  <span className="grow" />
+                  <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+                </div>
+                <div className="row transport">
+                  <button className="btn icon tr-play" aria-label={playing ? t("Pause") : t("Play")} title={(playing ? t("Pause") : t("Play")) + " (Espace)"}
                     disabled={!playing && !!videoUrl && !playerReady}
                     onClick={() => (playing ? stop() : void play())}>
                     {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden /> : <Icon name={playing ? "pause" : "play"} />}
                   </button>
-                  <span className="mono xs">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>
-                  <span className="sep" />
+                  <span className="mono xs tr-time">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>
+                  <span className="sep tr-time" />
+                  <span className="mono xs tr-range">{mmss(settings.crop.start)} → {mmss(end)}</span>
                   {/* Length of the segment: the usual ones, or the one set on the waveform. */}
                   <Select className="input sm seg-len" aria-label={t("Length of the segment")} title={t("Length of the segment")}
                     value={PRESETS.find((d) => Math.abs(settings.crop.duration - d) < 0.01) ?? "custom"}
@@ -2845,7 +2852,7 @@ export default function VideoStudio({
                     <Menu trigger={(_, toggle) => (
                       <button className={"btn sm" + ((videoBlob && settings.score === undefined) || (hasLyrics && !placed) ? " primary" : "")} onClick={toggle}
                         aria-haspopup="menu">
-                        <Icon name="refresh" size={14} />{t("Sync")} <Icon name="chevron" size={12} />
+                        <Icon name="refresh" size={14} /><span className="tr-sync-lbl">{t("Sync")}</span> <Icon name="chevron" size={12} />
                       </button>
                     )}>
                       {(closeMenu) => (<>
