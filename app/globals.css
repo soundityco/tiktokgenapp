@@ -919,7 +919,7 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .top .brand-icon { display: inline-flex; }
   .top .brand-icon img { display: block; border-radius: 7px; }
   .top .studio-switch { margin: 0 auto; }
-  .top .top-hist { display: inline-flex; width: 36px; }
+  .top .top-hist { display: inline-flex; }
   .top .top-hist:disabled { opacity: .3; }
   .mobile-tabs .menu-wrap { display: flex; align-items: center; }
   .mobile-tabs-sep { display: block; width: 1px; align-self: stretch; margin: 10px 4px; background: rgba(255,255,255,.1); }
@@ -1157,3 +1157,14 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .menu .menu-note > svg { flex: none; margin-top: 2px; }
 .menu .menu-note span { display: grid; gap: 2px; font-weight: 600; }
 .menu .menu-note small { font-weight: 400; color: var(--muted); font-size: var(--fs-sm); }
+/* The studio switch: rounded between a pill and the sharp buttons (the container 8px, its thumb 5px). */
+.studio-switch { border-radius: 8px; }
+.studio-switch button, .studio-thumb { border-radius: 5px; }
+/* Phone: the dots are a scrubber too (a finger slides along them): a taller target, no page scroll from it. */
+@media (max-width: 640px) {
+  .deck-dots { touch-action: none; padding: 10px 8px; margin: -10px -8px; }
+}
+/* Undo / redo: one pair, the arrows 12px apart (narrow buttons, touching). */
+.top .top-hist, .top .top-hist.btn.icon { width: 28px; }
+.top .top-hist + .top-hist { margin-left: -8px; }
+@media (max-width: 640px) { .top .top-hist, .top .top-hist.btn.icon { width: 30px; } }

@@ -126,6 +126,20 @@ export default function Studio({ userName }: { userName: string }) {
   const deckWrapRef = useRef<HTMLDivElement>(null);
   /** Where the deck bar goes (the top of the room kept under the middle slide's picture), or null off the phone. */
   const [deckTop, setDeckTop] = useState<number | null>(null);
+  /** The slide in the middle right now (while swiping or scrubbing), before it becomes the selected one. */
+  const [deckLive, setDeckLive] = useState<number | null>(null);
+  /** Scrubbing the dots: the finger's place along them moves the deck live (snap off meanwhile). */
+  const scrub = useRef(false);
+  const scrubTo = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = deckRef.current;
+    const cards = el ? ([...el.children] as HTMLElement[]) : [];
+    if (!el || cards.length < 2) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (cards.length - 1);
+    const at = (c: HTMLElement) => c.offsetLeft - (el.clientWidth - c.offsetWidth) / 2;
+    const a = Math.floor(pos), b = Math.min(cards.length - 1, a + 1);
+    el.scrollLeft = at(cards[a]) + (at(cards[b]) - at(cards[a])) * (pos - a);
+  };
   const deckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deckOn = () => typeof window !== "undefined" && matchMedia("(max-width: 640px)").matches;
   const deckCentre = () => {
@@ -138,6 +152,8 @@ export default function Studio({ userName }: { userName: string }) {
   };
   const onDeckScroll = () => {
     if (!deckOn()) return;
+    const live = deckCentre();
+    if (live >= 0) setDeckLive((cur) => (cur === live ? cur : live));
     if (deckTimer.current) clearTimeout(deckTimer.current);
     deckTimer.current = setTimeout(() => {
       const i = deckCentre();
@@ -1085,9 +1101,28 @@ export default function Studio({ userName }: { userName: string }) {
   const deckBar = (
     <div className="deck-bar" onClick={(e) => e.stopPropagation()}>
       <span />
-      <div className="deck-dots" role="tablist" aria-label={t("Slides")}>
+      {/* A tap on a dot goes there; a finger sliding along the dots scrubs through the deck, live. */}
+      <div className="deck-dots" role="tablist" aria-label={t("Slides")}
+        onPointerDown={(e) => {
+          if (e.pointerType === "mouse") return;
+          scrub.current = true;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          deckRef.current?.style.setProperty("scroll-snap-type", "none");
+          scrubTo(e);
+        }}
+        onPointerMove={(e) => { if (scrub.current) scrubTo(e); }}
+        onPointerUp={() => {
+          if (!scrub.current) return;
+          scrub.current = false;
+          const el = deckRef.current;
+          el?.style.removeProperty("scroll-snap-type");
+          const i = deckCentre();
+          const c = el?.children[i] as HTMLElement | undefined;
+          if (el && c) el.scrollTo({ left: c.offsetLeft - (el.clientWidth - c.offsetWidth) / 2, behavior: "smooth" });
+        }}
+        onPointerCancel={() => { scrub.current = false; deckRef.current?.style.removeProperty("scroll-snap-type"); }}>
         {project.slides.map((_, i) => (
-          <button key={i} role="tab" aria-selected={i === sel} aria-label={t("Slide {n}", { n: i + 1 })} className={i === sel ? "on" : ""}
+          <button key={i} role="tab" aria-selected={i === sel} aria-label={t("Slide {n}", { n: i + 1 })} className={i === (deckLive ?? sel) ? "on" : ""}
             onClick={() => updProject((p) => ({ ...p, selectedSlide: i }))} />
         ))}
       </div>
