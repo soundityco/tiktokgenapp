@@ -56,12 +56,29 @@ export function useStyleParts<P extends string>(opts: {
     const centre = [...document.querySelectorAll<HTMLElement>(".main .col.center")].find((e) => e.offsetParent);
     if (!centre) return;
     const root = document.documentElement;
-    const set = () => root.style.setProperty("--pv-bottom", `${Math.ceil(parseFloat(getComputedStyle(root).getPropertyValue("--top-h") || "60") + centre.getBoundingClientRect().height)}px`);
+    const col = o.current.column();
+    let pvBottom = 0;
+    // The column is at least the room between the control and what follows it on the page, measured on the real
+    // page (not computed from the screen's height): at the end of the scroll, a short part's first setting is
+    // still right under the control, never under it.
+    const fit = () => {
+      if (!col) return;
+      const below = root.scrollHeight - (col.getBoundingClientRect().bottom + window.scrollY);
+      const min = Math.max(0, Math.floor(window.innerHeight - pvBottom - below));
+      if (col.style.minHeight !== `${min}px`) col.style.minHeight = `${min}px`;
+    };
+    const set = () => {
+      pvBottom = Math.ceil(parseFloat(getComputedStyle(root).getPropertyValue("--top-h") || "60") + centre.getBoundingClientRect().height);
+      root.style.setProperty("--pv-bottom", `${pvBottom}px`);
+      fit();
+    };
     set();
     const ro = new ResizeObserver(set);
     ro.observe(centre);
-    return () => ro.disconnect();
-  }, [on]);
+    if (col) ro.observe(col);
+    window.addEventListener("resize", set);
+    return () => { ro.disconnect(); window.removeEventListener("resize", set); if (col) col.style.minHeight = ""; };
+  }, [on, part]);
 
   return {
     part,

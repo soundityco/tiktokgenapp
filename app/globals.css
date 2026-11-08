@@ -1697,6 +1697,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @media (max-width: 1000px) {
   /* A short part (Framing, Colour…) cannot be scrolled under the control: the column is at least the room left
      between the control and the page's end, so the page stops scrolling with its first setting 16px under it. */
-  .main[data-mobile-tab="style"] .col.side.r { min-height: calc(100dvh - var(--pv-bottom, 400px) - 84px - env(safe-area-inset-bottom)); }
-  .app:has(.dock-player:not(:empty)) .main[data-mobile-tab="style"] .col.side.r { min-height: calc(100dvh - var(--pv-bottom, 400px) - 150px - env(safe-area-inset-bottom)); }
+  /* (Its min-height is measured by the page itself, see useStyleParts.) */
 }
+/* Every separator between contents (settings panels, menus, lists, results…) is the library's soft hairline: a darker
+   grey fading in from the left and out to the right. The frame's own lines (header, tabs, columns) stay as they are. */
+:root { --soft-line: linear-gradient(90deg, transparent, #18181d 18%, #18181d 82%, transparent); }
+details.sec, .batch-list li + li, .theme-item { border-top: 0; background-image: var(--soft-line); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
+.res, .hook-item, .ai-row, .storage-row { border-bottom: 0; background-image: var(--soft-line); background-size: 100% 1px; background-position: bottom; background-repeat: no-repeat; }
+.menu .sep, .dd .sep { background: var(--soft-line) !important; border: 0 !important; height: 1px; }
