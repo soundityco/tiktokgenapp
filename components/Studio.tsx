@@ -33,7 +33,7 @@ import VideoStudio from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
 import PicStack from "./PicStack";
-import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
+import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 const VERSION = "v0.5";
 const HISTORY_KEY = "tktgen-undo";
@@ -1067,17 +1067,14 @@ export default function Studio({ userName }: { userName: string }) {
   const textGroups = (roles: (keyof typeof ROLES)[]) => {
     const n = vText.filter((p) => roles.some((r) => ofRole(r)(p))).length;
     return (
-      <section className="lib-family">
-        <div className="fam-head"><Icon name="type" size={15} /><h3 className="label">{t("Texts")}</h3><span className="fam-count">{t("{n} lists", { n })}</span></div>
-        <div className="fam-body">
+      <Family id="texts" icon="type" title={t("Texts")} count={t("{n} lists", { n })}>
           {roles.map((role) => (
             <section key={role} className="group sub">
               <div className="group-head"><h4 className="sub-label">{ROLES[role]}</h4><button className="btn quiet icon sm" aria-label={t("New list: {role}", { role: ROLES[role] })} title={t("New list: {role}", { role: ROLES[role] })} onClick={() => setOverlay({ k: "newPool", kind: "text", textKind: role })}><Icon name="plus" size={14} /></button></div>
               {vText.some(ofRole(role)) ? listRows("text", ofRole(role)) : <p className="muted xs group-empty">{t("No list yet.")}</p>}
             </section>
           ))}
-        </div>
-      </section>
+      </Family>
     );
   };
 
@@ -1230,13 +1227,10 @@ export default function Studio({ userName }: { userName: string }) {
             {lyricsRow}
           </section>
           {textGroups(["hooks", "texts", "captions"])}
-          <section className="lib-family">
-            <div className="fam-head"><Icon name="image" size={15} /><h3 className="label">{t("Photos")}</h3><span className="fam-count">{t("{n} lists", { n: vPics.length })}</span>
-              <button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button></div>
-            <div className="fam-body flat">
-              {vPics.length ? listRows("photos") : <p className="muted xs group-empty">{t("No list yet.")}</p>}
-            </div>
-          </section>
+          <Family id="photos" icon="image" title={t("Photos")} count={t("{n} lists", { n: vPics.length })}
+            action={<button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button>}>
+            {vPics.length ? listRows("photos") : <p className="muted xs group-empty">{t("No list yet.")}</p>}
+          </Family>
         </aside>
 
         <main className="col center">
@@ -1316,7 +1310,7 @@ export default function Studio({ userName }: { userName: string }) {
             </details>
           )}
           {!project.generated && (
-            <div className="empty">
+            <div className="board-empty">
               <h2 className="display">{t("Make your next")} <em>{t("post")}</em>.</h2>
               <ol>
                 <li>{t("Add photos from your Drive")}</li>

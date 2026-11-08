@@ -222,6 +222,27 @@ export function Section({ title, children, open = false, id }: { title: ReactNod
   );
 }
 
+/** A family of the library (texts, photos): its head folds it away (remembered on this device); its own buttons
+ *  (a "+") stay usable. */
+export function Family({ id, icon, title, count, action, children }: { id: string; icon: string; title: string; count: string; action?: ReactNode; children: ReactNode }) {
+  const key = `tktgen-fam:${id}`;
+  const [open, setOpen] = useState(true);
+  useEffect(() => { try { if (localStorage.getItem(key) === "0") setOpen(false); } catch { /* private mode */ } }, [key]);
+  const toggle = () => setOpen((v) => { try { localStorage.setItem(key, v ? "0" : "1"); } catch { /* private mode */ } return !v; });
+  return (
+    <section className={"lib-family" + (open ? " open" : "")}>
+      <div className="fam-head">
+        <button type="button" className="fam-toggle" aria-expanded={open} onClick={toggle}>
+          <Icon name={icon as "type"} size={15} /><h3 className="label">{title}</h3><span className="fam-count">{count}</span>
+          <Icon name="chevron" size={14} />
+        </button>
+        {action}
+      </div>
+      {open && <div className="fam-body">{children}</div>}
+    </section>
+  );
+}
+
 /** Slider. With `onReset`, a double-click on the value (or the slider) puts the default value back. */
 export function Range(p: { label: string; value: number; display?: string; min: number; max: number; step?: number; onReset?: () => void; onChange: (v: number) => void }) {
   const { t } = useT();

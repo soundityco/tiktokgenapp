@@ -29,7 +29,7 @@ function Mini({ id }: { id: string }) {
 /** A photo list at a glance in the library: its first three photos, stacked like prints. */
 export default function PicStack({ ids }: { ids: string[] }) {
   return (
-    <span className={"pic-stack" + (ids.length ? "" : " empty")} aria-hidden>
+    <span className={"pic-stack" + (ids.length ? "" : " no-pics")} aria-hidden>
       {ids.length ? ids.slice(0, 3).map((id) => <Mini key={id} id={id} />) : <span className="pic-mini" />}
     </span>
   );
