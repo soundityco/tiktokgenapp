@@ -46,6 +46,9 @@ export function useStyleParts<P extends string>(opts: {
     const all = [...col.querySelectorAll<HTMLElement>(o.current.all)];
     if (!on) { all.forEach((e) => e.classList.remove("sheet-hide")); return; }
     const want = o.current.parts[part];
+    // The panels coming back would replay their unfolding (a black band sliding off their top): not on a switch.
+    col.classList.add("part-switch");
+    window.setTimeout(() => col.classList.remove("part-switch"), 450);
     for (const e of all) e.classList.toggle("sheet-hide", !e.matches(want));
     col.querySelectorAll<HTMLDetailsElement>(want).forEach((d) => { if (d.tagName === "DETAILS") d.open = true; });
   }, [part, on]);

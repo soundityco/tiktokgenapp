@@ -1722,3 +1722,5 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 1000px) {
   .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] { background-image: none; }
 }
+/* Style page: switching parts shows the panels at once (their unfolding is for a tap on their title). */
+.part-switch details.sec > .body { animation: none !important; }
