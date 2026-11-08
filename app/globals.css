@@ -154,8 +154,8 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 .card.sel .idx-chip { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .cv-wrap { background: #000; border-radius: 2px; overflow: hidden; outline: 1px solid var(--line-2); transition: outline-color .12s; }
 .card.sel .cv-wrap { outline: 2px solid var(--accent-hi); outline-offset: 0; }
-canvas.cv { width: 100%; height: auto; display: block; touch-action: pan-y; cursor: grab; }
-.card.sel canvas.cv { touch-action: none; }
+/* One finger: the page scrolls and the deck swipes; two fingers: the slide's own pinch (no page zoom). */
+canvas.cv { width: 100%; height: auto; display: block; touch-action: pan-x pan-y; cursor: grab; }
 .card.locked:not(.sel) .cv-wrap { outline-style: dashed; }
 .card.locked:not(.sel) .idx-chip { border-color: var(--warn); color: var(--warn); }
 .idx-chip svg { flex: none; }
@@ -231,7 +231,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .prose ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; } .prose a { color: var(--accent-hi); }
 
 @media (max-width: 1000px) {
-  .app { height: auto; min-height: 100dvh; grid-template-rows: none; grid-auto-rows: max-content; align-content: start; }
+  .app { height: auto; min-height: 100dvh; grid-template-rows: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; }
   .top { height: auto; flex-wrap: wrap; padding: var(--s3) var(--s4); }
   .main { display: block; min-height: 0; padding-bottom: 76px; }
   .col.side { padding: var(--s4); }
@@ -744,8 +744,9 @@ html:has(.ov) { overflow: hidden; }
 .menu { animation: drop-in .18s cubic-bezier(.2,.8,.2,1); }
 .menu.up { animation-name: drop-in-up; }
 .dd-list { animation: drop-in .16s cubic-bezier(.2,.8,.2,1); }
-@keyframes drop-in { from { opacity: 0; clip-path: inset(0 0 70% 0 round var(--r-lg)); } to { clip-path: inset(0 0 0 0 round var(--r-lg)); } }
-@keyframes drop-in-up { from { opacity: 0; clip-path: inset(70% 0 0 0 round var(--r-lg)); } to { clip-path: inset(0 0 0 0 round var(--r-lg)); } }
+/* The clip leaves room for the shadow (it unfolds with the list, instead of popping in at the end). */
+@keyframes drop-in { from { opacity: 0; clip-path: inset(-60px -60px 75% -60px); } to { opacity: 1; clip-path: inset(-60px -60px -60px -60px); } }
+@keyframes drop-in-up { from { opacity: 0; clip-path: inset(75% -60px -60px -60px); } to { opacity: 1; clip-path: inset(-60px -60px -60px -60px); } }
 .toast { animation: toast-in .32s cubic-bezier(.2,.8,.2,1); }
 @keyframes toast-in { from { opacity: 0; translate: 0 12px; } }
 /* A press you can feel. */
@@ -807,8 +808,8 @@ html:has(.ov) { overflow: hidden; }
   .ov > .modal::before { content: ""; position: absolute; top: 10px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-2); }
   .modal-foot { position: sticky; bottom: calc(-1 * (var(--s4) + env(safe-area-inset-bottom))); margin: 0 calc(-1 * var(--s4)); padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom)); background: var(--panel); }
   .modal-foot .btn { flex: 1; } .modal-foot .btn.left { flex: 1 1 100%; margin-right: 0; }
-  /* Bigger targets for a thumb. */
-  .btn { min-height: 40px; } .btn.sm { min-height: 34px; }
+  /* Bigger targets for a thumb: one height for every control, so a button and a select line up. */
+  :root { --h: 40px; --h-sm: 32px; }
   .top .version { display: none; }
 }
 @keyframes sheet-up { from { translate: 0 100%; } }
@@ -839,3 +840,68 @@ details.sec > summary::after { transition: transform .22s cubic-bezier(.3,1.3,.5
 .item .idx { transition: color .15s; } .item:hover .idx { color: var(--muted); }
 .item-name { transition: color .15s; }
 @media (prefers-reduced-motion: reduce) { details.sec[open] > .body { animation: none; } }
+
+/* Phone: the tools of both studios in three tidy lines. 1: the carousel / video picker with its buttons and the
+   history; 2 (carousel): generate and the number of slides; 3: the status on the left, the export on the right. */
+@media (max-width: 640px) {
+  .studio-head .video-tools { flex: 1 1 100%; flex-wrap: wrap; align-items: flex-end; gap: var(--s2); row-gap: var(--s3); }
+  .studio-head .video-tools > .field:first-child { flex: 1 1 110px; min-width: 0; }
+  .studio-head .video-tools > .field:first-child .dd { width: 100% !important; }
+  .studio-head .video-tools > .btn.primary { order: 2; flex: 1 1 150px; }
+  .studio-head .video-tools > .field:not(:first-child) { order: 2; flex: none; }
+  .studio-head .video-tools > .head-actions { order: 3; flex: 1 1 100%; margin-left: 0; align-items: center; gap: var(--s2); }
+  .studio-head .video-tools > .head-actions > :first-child { margin-right: auto; }
+  .video-status { height: var(--h-sm); }
+}
+
+/* Phone, final: the header stays at the top; the tab bar is a floating glass capsule, the open tab a white pill
+   that widens to show its name, the others just their icon. */
+@media (max-width: 1000px) {
+  .top { position: sticky; top: 0; z-index: 45; background: rgba(8,8,10,.78); backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); }
+  .mobile-tabs-pill { display: none !important; }
+  .mobile-tabs { left: 50%; right: auto; translate: -50% 0; bottom: calc(14px + env(safe-area-inset-bottom)); min-height: 0; width: auto; padding: 6px; gap: 4px;
+    border-radius: 999px; border: 1px solid rgba(255,255,255,.09); background: rgba(22,22,28,.66);
+    backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7);
+    box-shadow: 0 18px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.07); }
+  .mobile-tabs button { flex: none; flex-direction: row; gap: 0; height: 48px; min-width: 56px; padding: 0 17px; border-radius: 999px;
+    font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: -.005em; text-transform: none; color: var(--muted);
+    transition: background .35s cubic-bezier(.3,1.2,.5,1), color .25s, gap .35s cubic-bezier(.3,1.2,.5,1), padding .35s cubic-bezier(.3,1.2,.5,1), scale .12s; }
+  .mobile-tabs button svg { flex: none; }
+  .mobile-tabs button .tab-name { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
+    transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .2s; }
+  .mobile-tabs button.on { background: var(--accent); color: var(--on-accent); gap: 8px; padding: 0 20px 0 17px; }
+  .mobile-tabs button.on svg { color: var(--on-accent); transform: none; }
+  .mobile-tabs button.on .tab-name { max-width: 90px; opacity: 1; transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .25s .08s; }
+  .mobile-tabs button:not(.on):hover { color: var(--text); }
+}
+
+/* Phone: the slides as a deck, like a pile of cards. One in the middle, the next ones tucked behind it on each side,
+   smaller, tilted and darker; a swipe brings the next one forward (it snaps), and the one in the middle is the
+   selected slide. Only the picture moves (a transform); the rest of the card fades, so its menus stay in place. */
+.deck-dots { display: none; }
+@media (max-width: 640px) {
+  .col.center .slides { display: flex; gap: 0; align-items: flex-start; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
+    margin: 0 calc(-1 * var(--s4)); padding: 8px 20vw 14px; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .col.center .slides::-webkit-scrollbar { display: none; }
+  .col.center .slides > .card { position: relative; flex: 0 0 74vw; margin: 0 -7vw; padding: 0 2px; scroll-snap-align: center; scroll-snap-stop: always; }
+  .card.sel .cv-wrap { outline-width: 1px; }
+  .deck-dots { display: flex; justify-content: center; gap: 6px; margin: var(--s2) 0 var(--s5); }
+  .deck-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--line-2); cursor: pointer;
+    transition: width .3s cubic-bezier(.3,1.2,.5,1), background .2s; }
+  .deck-dots button.on { width: 20px; background: var(--accent); }
+  @supports (animation-timeline: view()) {
+    .col.center .slides > .card { animation: deck-stack linear both; animation-timeline: view(inline); }
+    .col.center .slides > .card > :not(.cv-wrap) { animation: deck-fade linear both; animation-timeline: view(inline); }
+    .col.center .slides > .card .cv-wrap { animation: deck-tilt linear both; animation-timeline: view(inline); transform-origin: 50% 90%;
+      box-shadow: 0 18px 40px rgba(0,0,0,.55); }
+  }
+}
+/* 0%: coming in on the right; 50%: in the middle; 100%: gone on the left. */
+@keyframes deck-tilt {
+  0% { scale: .8; rotate: 7deg; translate: -6vw 2%; filter: brightness(.45); }
+  50% { scale: 1; rotate: 0deg; translate: 0 0; filter: brightness(1); }
+  100% { scale: .8; rotate: -7deg; translate: 6vw 2%; filter: brightness(.45); }
+}
+@keyframes deck-stack { 0% { z-index: 1; } 35% { z-index: 2; } 50% { z-index: 3; } 65% { z-index: 2; } 100% { z-index: 1; } }
+@keyframes deck-fade { 0%, 32% { opacity: 0; } 50% { opacity: 1; } 68%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .col.center .slides > .card, .col.center .slides > .card > *, .col.center .slides > .card .cv-wrap { animation: none !important; } }

@@ -122,6 +122,8 @@ export default function SlideCard(p: Props) {
 
   const down = (e: React.PointerEvent) => {
     p.onSelect();
+    // A finger scrolls the page and swipes the deck; two fingers frame the photo (see the touch gestures below).
+    if (e.pointerType === "touch") return;
     const c = toCanvas(e);
     (e.target as Element).setPointerCapture(e.pointerId);
     const isText = inText(c.x, c.y);
@@ -162,6 +164,48 @@ export default function SlideCard(p: Props) {
     const h = (e: WheelEvent) => wheelRef.current(e);
     el.addEventListener("wheel", h, { passive: false });
     return () => el.removeEventListener("wheel", h);
+  }, []);
+
+  // Touch: two fingers pinch to zoom and move together to frame the photo; started on the text, they size and
+  // move the text. One finger is left to the page (scroll, swipe between slides).
+  const pinch = useRef<{ d: number; mx: number; my: number; text: boolean; pic: SlideCfg["pic"]; size: number; x: number; y: number; k: number } | null>(null);
+  const touchRef = useRef<(e: TouchEvent) => void>(() => {});
+  touchRef.current = (e) => {
+    const c = cv.current;
+    if (!c || p.locked) return;
+    if (e.type === "touchend" || e.type === "touchcancel") { if (e.touches.length < 2) pinch.current = null; return; }
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const [a, b] = [e.touches[0], e.touches[1]];
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+    const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
+    if (e.type === "touchstart" || !pinch.current) {
+      p.onSelect();
+      const m = toCanvas({ clientX: mx, clientY: my });
+      pinch.current = { d, mx, my, text: inText(m.x, m.y), pic: fit(cfg.pic), size: cfg.style.size, x: cfg.style.x, y: cfg.style.y, k: m.k };
+      return;
+    }
+    const g = pinch.current;
+    const W = c.width, H = c.height;
+    const dx = (mx - g.mx) * g.k, dy = (my - g.my) * g.k;
+    if (g.text) {
+      p.onCfg((s) => ({ ...s, style: { ...s.style, size: clamp(Math.round(g.size * (d / g.d)), 18, 200), x: clamp(g.x + (dx / W) * 100, 0, 100), y: clamp(g.y + (dy / H) * 100, 0, 100) } }));
+    } else {
+      const z = zoomPic(g.pic, clamp(+(g.pic.zoom * (d / g.d)).toFixed(3), 0.5, 4));
+      p.onCfg((s) => ({ ...s, pic: fit({ ...z, ox: z.ox + dx / W, oy: z.oy + dy / H }) }));
+    }
+  };
+  useEffect(() => {
+    const el = cv.current;
+    if (!el) return;
+    const h = (e: TouchEvent) => touchRef.current(e);
+    const stop = (e: Event) => e.preventDefault(); // Safari's own page zoom
+    for (const ev of ["touchstart", "touchmove", "touchend", "touchcancel"]) el.addEventListener(ev, h as EventListener, { passive: false });
+    el.addEventListener("gesturestart", stop);
+    return () => {
+      for (const ev of ["touchstart", "touchmove", "touchend", "touchcancel"]) el.removeEventListener(ev, h as EventListener);
+      el.removeEventListener("gesturestart", stop);
+    };
   }, []);
 
   const dbl = (e: React.MouseEvent) => {

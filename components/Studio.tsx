@@ -109,6 +109,26 @@ export default function Studio({ userName }: { userName: string }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
   const { canInstall, install, iosHelp, closeIosHelp } = useInstall();
+  // Phone: the slides are a deck swiped sideways; the one in the middle is the selected one (and the other way round).
+  const deckRef = useRef<HTMLDivElement>(null);
+  const deckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deckOn = () => typeof window !== "undefined" && matchMedia("(max-width: 640px)").matches;
+  const deckCentre = () => {
+    const el = deckRef.current;
+    if (!el) return -1;
+    const mid = el.scrollLeft + el.clientWidth / 2;
+    let best = -1, dist = Infinity;
+    [...el.children].forEach((c, i) => { const h = c as HTMLElement; const d = Math.abs(h.offsetLeft + h.offsetWidth / 2 - mid); if (d < dist) { dist = d; best = i; } });
+    return best;
+  };
+  const onDeckScroll = () => {
+    if (!deckOn()) return;
+    if (deckTimer.current) clearTimeout(deckTimer.current);
+    deckTimer.current = setTimeout(() => {
+      const i = deckCentre();
+      if (i >= 0) updProject((p) => (p.selectedSlide === i ? p : { ...p, selectedSlide: i }));
+    }, 90);
+  };
   // A new panel starts at its top (each panel is the whole page on a phone).
   const pickMobileTab = (tab: MobileTab) => {
     if (tab === mobileTab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
@@ -376,6 +396,14 @@ export default function Studio({ userName }: { userName: string }) {
 
   // ---- derived ----
   const project: Project | null = ws ? ws.projects.find((p) => p.id === ws.currentProjectId) ?? ws.projects[0] : null;
+  // The deck follows the selected slide (a dot, a new slide, a tap): it slides to put it in the middle.
+  useEffect(() => {
+    const el = deckRef.current;
+    const i = project?.selectedSlide ?? 0;
+    const c = el?.children[i] as HTMLElement | undefined;
+    if (!deckOn() || !el || !c || deckCentre() === i) return;
+    el.scrollTo({ left: c.offsetLeft - (el.clientWidth - c.offsetWidth) / 2, behavior: "smooth" });
+  }, [project?.selectedSlide, project?.slides.length, mobileTab, studio]); // eslint-disable-line react-hooks/exhaustive-deps
   const vText = useMemo(() => (ws && project ? poolsVisible(ws.textPools, project.id) : []), [ws, project]);
   /** Lists a slide can take its text from (not the captions lists, which are for the post). */
   const slideTexts = useMemo(() => vText.filter((p) => p.kind !== "captions"), [vText]);
@@ -944,6 +972,7 @@ export default function Studio({ userName }: { userName: string }) {
   );
 
   const sel = Math.min(project.selectedSlide, project.slides.length - 1);
+
   const edText = editor?.k === "text" ? ws.textPools.find((x) => x.id === editor.id) : undefined;
   const edPics = editor?.k === "photos" ? ws.picPools.find((x) => x.id === editor.id) : undefined;
   const nSlides = project.slides.length;
@@ -1196,7 +1225,7 @@ export default function Studio({ userName }: { userName: string }) {
               </ol>
             </div>
           )}
-          <div className={"slides" + (boardDrag ? " drag-in" : "")}>
+          <div ref={deckRef} onScroll={onDeckScroll} className={"slides" + (boardDrag ? " drag-in" : "")}>
             {project.slides.map((cfg, i) => (
               <SlideCard key={cfg.id} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
                 textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady}
@@ -1217,6 +1246,13 @@ export default function Studio({ userName }: { userName: string }) {
                 onDragStart={() => setDragFrom(i)} onDragEnd={() => { setDragFrom(null); setDragOver(null); }}
                 onDragOver={() => setDragOver(i)}
                 onDrop={() => { if (dragFrom !== null && dragFrom !== i) moveSlide(dragFrom, i); setDragFrom(null); setDragOver(null); }} />
+            ))}
+          </div>
+          {/* Phone: where we are in the deck of slides (a tap goes to that slide). */}
+          <div className="deck-dots" role="tablist" aria-label={t("Slides")}>
+            {project.slides.map((_, i) => (
+              <button key={i} role="tab" aria-selected={i === sel} aria-label={t("Slide {n}", { n: i + 1 })} className={i === sel ? "on" : ""}
+                onClick={() => updProject((p) => ({ ...p, selectedSlide: i }))} />
             ))}
           </div>
           <section className="post-box">
@@ -1241,10 +1277,9 @@ export default function Studio({ userName }: { userName: string }) {
 
       {/* Phone: one panel at a time, like an app (the centre, the files / lists on the left, the style on the right). */}
       <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab}>
-        <span className="mobile-tabs-pill" aria-hidden />
-        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name={studio === "video" ? "film" : "image"} size={18} />{studio === "video" ? t("Video") : t("Slides")}</button>
-        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name={studio === "video" ? "folder" : "list"} size={18} />{studio === "video" ? t("Files") : t("Lists")}</button>
-        <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} />{t("Style")}</button>
+        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name={studio === "video" ? "film" : "image"} size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
+        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name={studio === "video" ? "folder" : "list"} size={18} /><span className="tab-name">{studio === "video" ? t("Files") : t("Lists")}</span></button>
+        <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
       </nav>
 
       {edText && (
