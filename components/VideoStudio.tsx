@@ -2332,7 +2332,7 @@ export default function VideoStudio({
           </div>
         </div>
       </div>
-      <div className={"video-grid" + (settings.format === "16:9" ? " wide" : "")}>
+      <div className={"video-grid" + (settings.format === "16:9" ? " wide" : "") + (videoBlob ? "" : " no-take")}>
         <div className="stack video-stage">
           <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "") + (videoUrl && !playerReady ? " shine-box" : "")} style={{ position: "relative" }}>
               <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
@@ -2354,12 +2354,13 @@ export default function VideoStudio({
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
               onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
           </div>
-          <div className="row">
-            <span className="label">{t("On the video")}</span>
+          {/* What the video shows (not what is edited: that is the tabs beside): eyes, on or off. */}
+          <div className="row shown-on">
+            <span className="label">{t("Shown")}</span>
             <button className={"btn sm" + (settings.captions ? " on" : "")} aria-pressed={settings.captions}
-              onClick={() => setV({ captions: !settings.captions })}>{t("Lyrics")}</button>
+              onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={14} />{t("Lyrics")}</button>
             <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
-              onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}>{t("Hook")}</button>
+              onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
           </div>
           {lookErr && grade?.lut && (
             <p className="notice warn xs">
@@ -2398,8 +2399,8 @@ export default function VideoStudio({
                 </div>
               ) : (
                 <div className="timeline-empty">
-                  <p>{t("Import the official audio to see the timeline.")}</p>
-                  {audioPick}
+                  {/* One place to import it: the official audio's tile, in the library. */}
+                  <p>{t("The timeline shows once the official audio is in the library.")}</p>
                 </div>
               )
             ) : (
@@ -2622,10 +2623,10 @@ export default function VideoStudio({
                   <span className="xs grow truncate">
                     {project.lyrics.length
                       ? `${t("Lyrics of the release")} · ${t("{n} sections", { n: project.lyrics.length })} · ${t("{n} sung lines", { n: sungLines })}`
-                      : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}
+                      : t("No lyrics yet: add them in the library (Lyrics).")}
                   </span>
                   <Hint text={t("The same lyrics as the carousel's. When you change them, the video places the changed lines again; your retouches stay.")} />
-                  <button className={"btn sm" + (project.lyrics.length ? " quiet" : "")} onClick={onEditLyrics}>{project.lyrics.length ? t("Edit") : t("Add the lyrics")}</button>
+                  {project.lyrics.length > 0 && <button className="btn sm quiet" onClick={onEditLyrics}>{t("Edit")}</button>}
                 </div>
               )}
               {/* Not linked yet (older releases): the song's own text, open while nothing is placed, then folded. */}

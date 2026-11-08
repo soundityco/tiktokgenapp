@@ -5,7 +5,7 @@ import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { VideoGrade } from "@/lib/types";
-import { Range, Section, Select } from "./ui";
+import { Range, Section, Select, Hint } from "./ui";
 
 const LUTS_KEY = "tktgen-luts";
 
@@ -67,11 +67,11 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
   if (!grade) {
     return (
       <div className="stack">
-        <p className="muted xs">{t("Grade the camera footage here, live: the log is converted like a CST in DaVinci, then your sliders and your look LUT are applied. The export applies it on the 10-bit camera file.")}</p>
         <div className="row">
           <button className="btn sm primary" onClick={() => onChange(sdr
             ? { ...NEUTRAL_GRADE, profile: "rec709" } // standard video: the simple settings only
             : { ...NEUTRAL_GRADE, ...(luts.length ? { lut: luts[luts.length - 1] } : {}) })}>{t("Grade this video")}</button>
+          <Hint text={t("Grade the camera footage here, live: the log is converted like a CST in DaVinci, then your sliders and your look LUT are applied. The export applies it on the 10-bit camera file.")} />
         </div>
       </div>
     );

@@ -1299,3 +1299,28 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .field .val.editable:hover { background: var(--raised); color: var(--text); }
 .field .val-edit { float: right; width: 64px; height: 20px; padding: 0 5px; border: 1px solid var(--muted); border-radius: 3px; background: var(--bg); color: var(--text);
   font-family: var(--mono); font-size: var(--fs-xs); text-align: right; outline: none; }
+
+/* Audit, lighter screens. */
+/* Computer: a slide card shows its tools when it is hovered or selected; the others just their number. */
+@media (hover: hover) and (min-width: 641px) {
+  .slides .card .card-head > *:not(.idx-chip):not(.grow) { transition: opacity .15s; }
+  .slides .card:not(.sel):not(:hover):not(:focus-within) .card-head > *:not(.idx-chip):not(.grow) { opacity: 0; }
+}
+/* The checks before generating: a small amber badge beside Generate, the list on a click. */
+.gen-row { gap: 6px; align-items: center; }
+.btn.warn-badge { gap: 5px; padding: 0 10px; color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); font-family: var(--mono); font-size: var(--fs-sm); }
+.btn.warn-badge:hover:not(:disabled), .btn.warn-badge.open { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.preflight-pop { padding: var(--s2) var(--s3) var(--s3); max-width: 340px; }
+.preflight-pop .label { color: var(--warn); margin-bottom: 6px; }
+.preflight-pop ul { margin: 0; padding-left: 16px; display: grid; gap: 6px; color: var(--text); line-height: 1.45; }
+/* The style column's help, in an (i). */
+.insp-help { gap: 6px; margin-top: var(--s2); }
+/* What the video shows: eyes, apart from the edit tabs. */
+.shown-on .btn svg { opacity: .9; }
+.shown-on .btn:not(.on) { color: var(--muted); }
+/* Phone, video studio: no camera take yet, a small preview (the import and the timeline come up). */
+@media (max-width: 640px) {
+  .video-grid.no-take .cv-wrap { max-width: 120px; }
+}
+.preflight-pop, .preflight-pop ul { font-family: var(--sans); text-transform: none; letter-spacing: normal; font-size: var(--fs-sm); font-weight: 400; }
+.preflight-pop ul { color: var(--text); }

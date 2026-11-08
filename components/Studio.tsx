@@ -1342,7 +1342,24 @@ export default function Studio({ userName }: { userName: string }) {
                 </>)}
               </Menu></div>
               <div className="field h-gen"><span className="field-k">{t("Draw")}</span>
-                <button className="btn primary" onClick={generate} title={t("Draws the texts and photos of every slide again. Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+                <div className="row nowrap gen-row">
+                  <button className="btn primary" onClick={generate} title={t("Draws the texts and photos of every slide again. Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+                  {/* What to check before generating: a small badge beside it, the list on a click. */}
+                  {warnings.length > 0 && (
+                    <Menu float left trigger={(open, toggle) => (
+                      <button className={"btn warn-badge" + (open ? " open" : "")} onClick={toggle} aria-label={t("{n} points to check before generating", { n: warnings.length })} title={t("{n} points to check before generating", { n: warnings.length })}>
+                        <Icon name="alert" size={14} />{warnings.length}
+                      </button>
+                    )}>
+                      {() => (
+                        <div className="preflight-pop">
+                          <div className="label cap">{t("{n} points to check before generating", { n: warnings.length })}</div>
+                          <ul className="xs">{warnings.map((w, i) => <li key={i}>{t(w.key, w.params)}</li>)}</ul>
+                        </div>
+                      )}
+                    </Menu>
+                  )}
+                </div>
               </div>
               {/* Phone: the rest of the tools fold under this button. */}
               <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
@@ -1387,14 +1404,6 @@ export default function Studio({ userName }: { userName: string }) {
               </div>
             </div>
           </div>
-          {warnings.length > 0 && (
-            <details className="notice warn preflight">
-              <summary>{t("{n} points to check before generating", { n: warnings.length })}</summary>
-              <ul className="xs">
-                {warnings.map((w, i) => <li key={i}>{t(w.key, w.params)}</li>)}
-              </ul>
-            </details>
-          )}
           {!project.generated && (
             <div className="board-empty">
               <h2 className="display">{t("Make your next")} <em>{t("post")}</em>.</h2>

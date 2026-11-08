@@ -4,7 +4,7 @@ import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
 import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
 import { caseOptions, FontPicker, LookExtras, presetOf, StylePresets, TextColors } from "./TextControls";
-import { Range, Section, Select } from "./ui";
+import { Range, Section, Select, Hint } from "./ui";
 
 interface Props {
   index: number;
@@ -113,8 +113,10 @@ export default function Inspector({
         </Section>
       </div>
 
-      <p className="muted xs">{t("On the preview: drag the text to move it (it snaps to the centre), scroll on it to resize, drag the photo to reframe it, scroll on it to zoom, double-click it to reset.")}</p>
-      <p className="muted xs">{t("Space: full-size preview without the TikTok zones")}</p>
+      <div className="row insp-help muted xs">
+        <Hint text={t("On the preview: drag the text to move it (it snaps to the centre), scroll on it to resize, drag the photo to reframe it, scroll on it to zoom, double-click it to reset.") + " " + t("Space: full-size preview without the TikTok zones")} />
+        {t("Preview tips")}
+      </div>
     </div>
   );
 }
