@@ -872,6 +872,12 @@ details.sec > summary::after { transition: transform .22s cubic-bezier(.3,1.3,.5
   .col.center .slides::-webkit-scrollbar { display: none; }
   .col.center .slides > .card { position: relative; flex: 0 0 74vw; margin: 0 -7vw; padding: 0 2px; scroll-snap-align: center; scroll-snap-stop: always; }
   .card.sel .cv-wrap { outline-width: 1px; }
+  /* Under the picture (its tools, text, sources): the full width of the page, like the rest of it. The card is
+     74vw wide, the page 100vw less its 16px sides: 13vw - 14px more on each side. The middle card is on top. */
+  .col.center .slides > .card > :not(.cv-wrap) { margin-left: calc(14px - 13vw); margin-right: 0; width: calc(100% + 26vw - 28px); max-width: none; }
+  .col.center .slides > .card:not(.sel) > :not(.cv-wrap) { pointer-events: none; }
+  /* What is under a side card's picture is not shown: the deck is as tall as the middle card, no gap. */
+  .col.center .slides > .card:not(.sel) > .cv-wrap ~ * { display: none; }
   .deck-dots { display: flex; justify-content: center; gap: 6px; margin: var(--s2) 0 var(--s5); }
   .deck-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--line-2); cursor: pointer;
     transition: width .3s cubic-bezier(.3,1.2,.5,1), background .2s; }
