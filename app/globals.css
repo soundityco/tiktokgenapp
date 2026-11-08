@@ -1043,3 +1043,10 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
    after its last list. */
 .col.side.l .group > .group-head { border-bottom: 0; margin-bottom: 0; }
 .col.side.l .group > .item:last-child { border-bottom: 0; }
+/* Room under the head of both studios: it reads as the head of the board, apart from what it heads. */
+.carousel-head { margin-bottom: 48px; }
+.video-center > .video-head { margin-bottom: 32px; } /* + the board's own 16px gap */
+@media (max-width: 640px) {
+  .carousel-head { margin-bottom: 32px; }
+  .video-center > .video-head { margin-bottom: 16px; }
+}
