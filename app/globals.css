@@ -960,7 +960,7 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .studio-head .h-gen .btn { padding: 0 18px; }
   .studio-head .h-gen .field-k { display: none; }
   .studio-head .h-status { align-self: center; }
-  .studio-head .h-more { display: inline-flex; grid-column: 2; grid-row: 2; gap: 6px; }
+  .studio-head .h-more { display: inline-flex; grid-column: 4 / 6; grid-row: 2; justify-self: end; gap: 6px; } /* right, under share / download: room for Generate and its badge */
   .studio-head .h-more svg { transition: transform .25s cubic-bezier(.3,1.2,.5,1); }
   .studio-head .h-more.on svg { transform: rotate(180deg); }
   .studio-head .badge:not(.h-status), .studio-head > .video-tools > .btn:not(.h-gen):not(.h-more):not(.h-new):not(.h-share):not(.h-dl) { grid-column: 1 / -1; }
@@ -1295,7 +1295,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .main[data-studio="video"] .release-list button.on { background: linear-gradient(90deg, color-mix(in srgb, #a184ff 24%, transparent), transparent 85%); }
 .main[data-studio="video"] .release-list button.on::before { background: var(--grad-video); }
 /* A slider's value: a click turns it into a field to type the number. */
-.field .val.editable { cursor: text; border-radius: 3px; padding: 0 3px; margin-right: -3px; transition: background .12s, color .12s; }
+.field .val.editable { cursor: text; border-radius: 3px; padding: 0 3px; transition: background .12s, color .12s; }
 .field .val.editable:hover { background: var(--raised); color: var(--text); }
 .field .val-edit { float: right; width: 64px; height: 20px; padding: 0 5px; border: 1px solid var(--muted); border-radius: 3px; background: var(--bg); color: var(--text);
   font-family: var(--mono); font-size: var(--fs-xs); text-align: right; outline: none; }
@@ -1324,3 +1324,4 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 .preflight-pop, .preflight-pop ul { font-family: var(--sans); text-transform: none; letter-spacing: normal; font-size: var(--fs-sm); font-weight: 400; }
 .preflight-pop ul { color: var(--text); }
+@media (max-width: 640px) { .studio-head.more .h-pick { justify-self: stretch; } }
