@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 /** The phone layout (the studios' tabs and dock): the style is a page of its own there, part by part. */
 export const PHONE_QUERY = "(max-width: 1000px)";
@@ -119,10 +119,8 @@ const clampPv = () => {
 
 /** The Style page's control: "Style" over the parts, the chosen one on the studio's gradient (it slides). Dragged
  *  down from its top line, the preview above grows (up: it shrinks), like going from a post to its timeline. */
-export function StyleTabs<P extends string>({ parts, part, onPart, title, tone, aside }: {
-  parts: SheetPart<P>[]; part: P; onPart: (p: P) => void; title: ReactNode; tone: "carousel" | "video";
-  /** At the right of the title (the carousel: "Apply to all slides"). */
-  aside?: ReactNode;
+export function StyleTabs<P extends string>({ parts, part, onPart, tone }: {
+  parts: SheetPart<P>[]; part: P; onPart: (p: P) => void; tone: "carousel" | "video";
 }) {
   const at = Math.max(0, parts.findIndex((p) => p.id === part));
   const drag = useRef<{ y: number; h: number; hi: number } | null>(null);
@@ -148,7 +146,6 @@ export function StyleTabs<P extends string>({ parts, part, onPart, title, tone, 
       }}
       onPointerUp={end} onPointerCancel={end}>
       <span className="style-grip" aria-hidden />
-      <div className="style-tabs-top"><span className="label">{title}</span>{aside}</div>
       <div className={"sheet-seg " + tone} role="tablist" style={{ "--n": parts.length, "--i": at } as CSSProperties}>
         <span className="sheet-seg-thumb" aria-hidden />
         {parts.map((p) => (

@@ -3181,7 +3181,7 @@ export default function VideoStudio({
         </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")} ref={rightColRef}>
-          <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} title={t("Style")} tone="video" />
+          <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} tone="video" />
           {/* How the camera picture fits the post: the first part of the video's style. */}
           <Section id="video-render" title={t("Framing")}>
           {/* Phone's Style page: its title, like the other parts' (the panel's own is hidden there). */}

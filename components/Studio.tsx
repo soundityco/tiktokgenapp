@@ -1229,7 +1229,8 @@ export default function Studio({ userName }: { userName: string }) {
   // Space on a computer: the deck already swipes, so no full-screen view). Right under the middle slide's picture.
   const deckBar = (
     <div className="deck-bar" onClick={(e) => e.stopPropagation()}>
-      <span />
+      {/* The Style page: which slide is styled, across from Zones. */}
+      <span className="deck-num">{t("Slide {n}", { n: (deckLive ?? sel) + 1 })}</span>
       {/* A tap on a dot goes there; a finger sliding along the dots scrubs through the deck, live. */}
       <div className="deck-dots" role="tablist" aria-label={t("Slides")}
         onPointerDown={(e) => {
@@ -1564,13 +1565,13 @@ export default function Studio({ userName }: { userName: string }) {
         </main>
 
         <aside className="col side r" ref={rightColRef}>
-          <StyleTabs parts={carParts} part={carStyle.part} onPart={carStyle.pick} tone="carousel"
-            title={<>{t("Style")} <span className="style-of">· {t("Slide {n}", { n: sel + 1 })}</span></>}
-            aside={<button className="btn sm quiet" onClick={applyAll}>{t("Apply to all slides")}</button>} />
+          <StyleTabs parts={carParts} part={carStyle.part} onPart={carStyle.pick} tone="carousel" />
           <Inspector index={sel} cfg={project.slides[sel]} zones={ws.zones} onZones={(v) => upd((w) => ({ ...w, zones: v }))}
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
             lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts} onPreview={setFontPreview}
             onSavePreset={(name) => savePreset(name, project.slides[sel].style)} onApplyPreset={applyPreset} onDeletePreset={deletePreset} />
+          {/* Phone's Style page: at the very end (a computer has it at the top of the column). */}
+          <div className="apply-all-m"><button className="btn sm quiet" onClick={applyAll} title={t("Copy format, photo and text settings to every slide")}>{t("Apply to all slides")}</button></div>
         </aside>
         </>
         )}
