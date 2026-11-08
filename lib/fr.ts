@@ -7,6 +7,8 @@ export const FR: Record<string, string> = {
   "In your downloads and your gallery.": "Dans tes téléchargements et ta galerie.",
   "The phone refused: press and hold a picture above, then “Save”.": "Le téléphone a refusé : appuie longuement sur une image au-dessus, puis « Enregistrer ».",
   "Share…": "Partager…",
+  "Zones": "Zones",
+  "TikTok's interface zones on the slides": "Les zones de l'interface TikTok sur les slides",
   "Text on the slide": "Texte de la slide",
   "Draw": "Tirage",
   "Draws the texts and photos of every slide again. Shortcut: G": "Tire à nouveau les textes et les photos de chaque slide. Raccourci : G",

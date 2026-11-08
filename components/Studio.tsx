@@ -1274,11 +1274,20 @@ export default function Studio({ userName }: { userName: string }) {
             ))}
           </div>
           {/* Phone: where we are in the deck of slides (a tap goes to that slide). */}
-          <div className="deck-dots" role="tablist" aria-label={t("Slides")}>
-            {project.slides.map((_, i) => (
-              <button key={i} role="tab" aria-selected={i === sel} aria-label={t("Slide {n}", { n: i + 1 })} className={i === sel ? "on" : ""}
-                onClick={() => updProject((p) => ({ ...p, selectedSlide: i }))} />
-            ))}
+          {/* Phone: where we are in the deck (a tap goes there), and the TikTok zones on / off (the clean preview,
+              like Space on a computer: the deck already swipes, so no full-screen view). */}
+          <div className="deck-bar">
+            <span />
+            <div className="deck-dots" role="tablist" aria-label={t("Slides")}>
+              {project.slides.map((_, i) => (
+                <button key={i} role="tab" aria-selected={i === sel} aria-label={t("Slide {n}", { n: i + 1 })} className={i === sel ? "on" : ""}
+                  onClick={() => updProject((p) => ({ ...p, selectedSlide: i }))} />
+              ))}
+            </div>
+            <button className={"deck-zones" + (ws.zones ? " on" : "")} aria-pressed={ws.zones} onClick={() => upd((w) => ({ ...w, zones: !w.zones }))}
+              title={t("TikTok's interface zones on the slides")}>
+              <Icon name={ws.zones ? "eye" : "eye-off"} size={15} />{t("Zones")}
+            </button>
           </div>
           <section className="post-box">
             <h3 className="label">{t("Caption and hashtags")}</h3>
