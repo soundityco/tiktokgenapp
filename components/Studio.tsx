@@ -1617,7 +1617,7 @@ export default function Studio({ userName }: { userName: string }) {
           <span key={studio} className="ds-icon"><Icon name={studio === "video" ? "reel" : "deck"} size={22} /></span>
         </button>
         <span className="mobile-tabs-sep" aria-hidden />
-        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
+        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{/* One word in both studios: the dock keeps its exact layout when switching. */}{t("Create")}</span></button>
         {/* The style of what is on screen, in a sheet over the page (the preview kept in sight above it). */}
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} aria-label={t("Style")} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name="library" size={18} /><span className="tab-name">{/* The dock's room on a phone: the French word, shortened. */}{lang === "fr" ? "Biblio" : t("Library")}</span></button>

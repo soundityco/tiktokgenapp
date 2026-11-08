@@ -1734,7 +1734,7 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 1000px) {
   /* The dock is as wide with or without the video's player: switching studio does not resize it. */
   .mobile-tabs { width: min(430px, calc(100vw - 20px)); }
-  .mobile-tabs > .mobile-tabs-sep { margin-left: auto; margin-right: auto; }
+  .mobile-tabs > .mobile-tabs-sep, .mobile-tabs > .mobile-tabs-sep:first-of-type { margin: 11px auto !important; }
 }
 @media (max-width: 1000px) {
   /* The studio's own page (phone): dots behind the head and the preview's block only, fading to black from the
