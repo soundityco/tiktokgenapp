@@ -30,7 +30,8 @@
   --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
   --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --r: 4px; --r-lg: 8px; --h: 34px; --h-sm: 26px;
+  /* Corners: the controls (buttons, pickers, fields), then what floats (menus, lists). */
+  --r: 7px; --r-lg: 11px; --h: 34px; --h-sm: 26px;
   --fs-xs: 11px; --fs-sm: 12px; --fs: 13px; --fs-lg: 15px; --fs-display: 30px;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 40px;
   color-scheme: dark;
@@ -409,7 +410,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .font-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; }
 .font-list > * { flex: none; } /* each row keeps its height: the list scrolls instead of squeezing them */
 .font-group { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); padding: var(--s2) var(--s2) 4px; }
-.font-opt { display: block; width: 100%; height: auto; min-height: 34px; text-align: left; background: none; border: 0; color: var(--text); padding: 6px var(--s2); font-size: 17px; line-height: 1.3; border-radius: 3px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.font-opt { display: block; width: 100%; height: auto; min-height: 34px; text-align: left; background: none; border: 0; color: var(--text); padding: 6px var(--s2); font-size: 17px; line-height: 1.3; border-radius: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .font-opt:hover { background: var(--raised); }
 .font-opt.on { color: var(--accent-hi); }
 .font-style { flex-wrap: wrap; gap: 6px; }
@@ -420,7 +421,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .color-field .input.bad { border-color: var(--danger); }
 /* Content | Style switch of a tab. */
 .seg { display: inline-flex; width: fit-content; justify-self: start; align-self: flex-start; border: 1px solid var(--line-2); border-radius: var(--r); padding: 2px; gap: 2px; margin-top: var(--s3); }
-.seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 3px; background: none; color: var(--muted); font-size: var(--fs-sm); cursor: pointer; }
+.seg button { height: 26px; padding: 0 12px; border: 0; border-radius: 5px; background: none; color: var(--muted); font-size: var(--fs-sm); cursor: pointer; }
 .seg button.on { background: var(--raised); color: var(--text); }
 .plain-set { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: var(--s3); }
 .plain-set.off { opacity: .4; }
@@ -439,7 +440,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
   background: rgba(8,8,10,.82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--line-2); }
 /* Six edits in two rows of three: they fit the narrowest slide, nothing scrolls out of sight. */
 .adjust-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
-.adjust-tools button { min-width: 0; height: 24px; padding: 0 4px; border: 0; border-radius: 3px; background: none; color: var(--muted); font-size: 11px; cursor: pointer;
+.adjust-tools button { min-width: 0; height: 24px; padding: 0 4px; border: 0; border-radius: 5px; background: none; color: var(--muted); font-size: 11px; cursor: pointer;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .adjust-tools button.on { background: var(--raised); color: var(--text); }
 .adjust-tools button.set::after { content: ""; display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent-hi); margin-left: 4px; vertical-align: middle; }
@@ -559,7 +560,7 @@ details.sec > summary .sec-sub { margin-right: auto; padding-left: .4em; color: 
 .media.empty { background: transparent; border-style: dashed; border-color: var(--line-2); margin: 0; max-width: none; gap: 8px; } /* not the empty board's .empty */
 .media.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .media-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.media-ic { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; background: var(--bg); color: var(--muted); }
+.media-ic { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--bg); color: var(--muted); }
 .media:not(.empty) .media-ic { color: var(--text); }
 .media-txt { display: grid; gap: 1px; min-width: 0; flex: 1; }
 .media-name { display: block; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1162,8 +1163,8 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .menu .menu-note span { display: grid; gap: 2px; font-weight: 600; }
 .menu .menu-note small { font-weight: 400; color: var(--muted); font-size: var(--fs-sm); }
 /* The studio switch: rounded between a pill and the sharp buttons (the container 8px, its thumb 5px). */
-.studio-switch { border-radius: 8px; }
-.studio-switch button, .studio-thumb { border-radius: 5px; }
+.studio-switch { border-radius: 11px; }
+.studio-switch button, .studio-thumb { border-radius: 8px; }
 /* Phone: the dots are a scrubber too (a finger slides along them): a taller target, no page scroll from it. */
 @media (max-width: 640px) {
   .deck-dots { touch-action: none; padding: 10px 8px; margin: -10px -8px; }
@@ -1210,7 +1211,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .mobile-tabs > .mobile-tabs-sep, .mobile-tabs > .mobile-tabs-sep:first-of-type { margin: 11px 7px; }
 }
 /* The account button: the same rounded square on a computer too. */
-.top .me { border-radius: 8px; }
+.top .me { border-radius: 10px; }
 @media (max-width: 640px) { .mobile-tabs > .dock-studio { margin: 1px 0 1px 1px; } .mobile-tabs .me { margin: 0 1px 0 0; } }
 
 /* Phone header: the full logo again (the studio switch moved to the dock), on a fade from the app's background
@@ -1295,9 +1296,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .main[data-studio="video"] .release-list button.on { background: linear-gradient(90deg, color-mix(in srgb, #a184ff 24%, transparent), transparent 85%); }
 .main[data-studio="video"] .release-list button.on::before { background: var(--grad-video); }
 /* A slider's value: a click turns it into a field to type the number. */
-.field .val.editable { cursor: text; border-radius: 3px; padding: 0 3px; transition: background .12s, color .12s; }
+.field .val.editable { cursor: text; border-radius: 5px; padding: 0 3px; transition: background .12s, color .12s; }
 .field .val.editable:hover { background: var(--raised); color: var(--text); }
-.field .val-edit { float: right; width: 64px; height: 20px; padding: 0 5px; border: 1px solid var(--muted); border-radius: 3px; background: var(--bg); color: var(--text);
+.field .val-edit { float: right; width: 64px; height: 20px; padding: 0 5px; border: 1px solid var(--muted); border-radius: 5px; background: var(--bg); color: var(--text);
   font-family: var(--mono); font-size: var(--fs-xs); text-align: right; outline: none; }
 
 /* Audit, lighter screens. */
