@@ -7,6 +7,8 @@ export const FR: Record<string, string> = {
   "In your downloads and your gallery.": "Dans tes téléchargements et ta galerie.",
   "The phone refused: press and hold a picture above, then “Save”.": "Le téléphone a refusé : appuie longuement sur une image au-dessus, puis « Enregistrer ».",
   "Share…": "Partager…",
+  "Demo": "Démo",
+  "Demo: a brand-new account, nothing is saved (a reload starts again). Click to go back to your account.": "Démo : un compte tout neuf, rien n'est enregistré (recharger repart de zéro). Clique pour revenir à ton compte.",
   "Drive copy updated: {video}": "Copie Drive mise à jour : {video}",
   "The Drive copy of {video} could not be made": "La copie Drive de {video} n'a pas pu être faite",
   "Another video's copy first: {video}": "D'abord la copie d'une autre vidéo : {video}",

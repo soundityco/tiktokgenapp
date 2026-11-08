@@ -1,3 +1,4 @@
+import { isDemo } from "./demo";
 import { getSession } from "next-auth/react";
 import { decodeImage, looksLikeImage } from "./imageFormat";
 import type { Img } from "./render";
@@ -125,6 +126,7 @@ export async function downloadDriveFile(id: string): Promise<Blob> {
 
 /** Did the user allow the app to create files in their Drive (signed in after drive.file was added)? */
 export async function canWriteDrive(): Promise<boolean> {
+  if (isDemo()) return false; // demo: nothing goes to the Drive
   const s: any = await getSession();
   return typeof s?.scope === "string" && s.scope.includes("auth/drive.file");
 }
@@ -193,6 +195,7 @@ async function findOrMakeFolder(): Promise<string> {
 export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal, mime?: string,
   /** Private labels of the app on the file (what it is), to find it again from another browser. */
   appProperties?: Record<string, string>): Promise<string> {
+  if (isDemo()) throw new Error("Demo mode: nothing is saved to your Drive.");
   const folder = await appFolder();
   const type = mime || blob.type || "video/mp4";
   const start = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
@@ -266,6 +269,7 @@ export async function listAppFolder(): Promise<AppFile[]> {
 
 /** Delete a file the app made (a copy replaced or of a video removed). Never throws. */
 export async function deleteDriveFile(id: string): Promise<void> {
+  if (isDemo()) return;
   try {
     await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`, { method: "DELETE", headers: { Authorization: `Bearer ${await getToken()}` } });
   } catch (e) { console.warn("[drive] delete failed", e); }

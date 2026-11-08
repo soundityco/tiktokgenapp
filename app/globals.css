@@ -1384,3 +1384,13 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   border-left: 1px solid var(--line-2); border-top: 1px solid var(--line-2); transform: rotate(45deg); }
 .hint-pop.up::before { top: auto; bottom: -6px; transform: rotate(225deg); }
 @keyframes hint-in { from { opacity: 0; } }
+
+/* Demo mode's mark in the top bar. */
+.demo-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .1em; text-transform: uppercase; text-decoration: none; color: #1a1020; background: var(--grad-carousel); font-weight: 700; }
+
+/* Hairlines between the rows of a list: softer, a darker grey fading in from the left and out to the right, so they
+   never run into the column's edges nor the texts' tree. */
+.item { border-bottom: 0; background-image: linear-gradient(90deg, transparent, #18181d 18%, #18181d 82%, transparent);
+  background-size: 100% 1px; background-position: bottom; background-repeat: no-repeat; }
+.item:last-child, .col.side.l .group > .item:last-child, .fam-body:not(:has(> .group.sub)) > .item { background-image: none; }

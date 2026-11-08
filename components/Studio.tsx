@@ -33,6 +33,7 @@ import VideoStudio, { type CopyJob } from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
 import { merge3 } from "@/lib/merge";
+import { isDemo } from "@/lib/demo";
 import PicStack from "./PicStack";
 import StorageDialog from "./StorageDialog";
 import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
@@ -229,6 +230,7 @@ export default function Studio({ userName }: { userName: string }) {
 
   const historyTimer = useRef<number | null>(null);
   const persistHistory = useCallback(() => {
+    if (isDemo()) return; // the demo's steps never reach the account's history
     if (historyTimer.current) window.clearTimeout(historyTimer.current);
     historyTimer.current = window.setTimeout(() => {
       try {
@@ -309,6 +311,16 @@ export default function Studio({ userName }: { userName: string }) {
       // The fonts saved in the user's Drive from another browser or device come here too.
       .then(() => syncFontsWithDrive())
       .then((f) => { if (f) setFonts(f); });
+    // Demo: a brand-new account, in memory only (lib/demo).
+    if (isDemo()) {
+      const next = linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(defaultWorkspace()), (n) => t("Part {n}", { n }), t("Chorus"))));
+      rev.current = 0;
+      wsRef.current = next;
+      setWs(next);
+      past.current = []; future.current = []; lastHistory.current = 0;
+      syncHistory();
+      return;
+    }
     fetch("/api/workspace")
       .then(async (r) => {
         const j = await r.json();
@@ -340,6 +352,7 @@ export default function Studio({ userName }: { userName: string }) {
   }, []);
 
   const saveWorkspace = useCallback(async (data: Workspace) => {
+    if (isDemo()) { setSaveState("saved"); return; } // demo: never saved
     setSaveState("saving");
     try {
       const r = await fetch("/api/workspace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, baseRev: rev.current }) });
@@ -410,7 +423,7 @@ export default function Studio({ userName }: { userName: string }) {
     if (!haveWs) return;
     let busy = false;
     const pull = async () => {
-      if (busy || document.visibilityState !== "visible" || saveStateRef.current !== "saved" || saveBusy.current || conflict.current) return;
+      if (isDemo() || busy || document.visibilityState !== "visible" || saveStateRef.current !== "saved" || saveBusy.current || conflict.current) return;
       busy = true;
       try {
         const r = await fetch("/api/workspace", { cache: "no-store" });
@@ -1306,6 +1319,9 @@ export default function Studio({ userName }: { userName: string }) {
           </button>
         </div>
         <span className="grow" />
+        {isDemo() && (
+          <a className="demo-badge" href="/studio" title={t("Demo: a brand-new account, nothing is saved (a reload starts again). Click to go back to your account.")}>{t("Demo")}</a>
+        )}
         {/* A background job (a take's copy for the other devices): its progress, wherever the user is; a click opens
             that video. */}
         {copyJob && (
@@ -1320,9 +1336,9 @@ export default function Studio({ userName }: { userName: string }) {
         {/* Undo / redo: the whole release's history, the same for both studios, always here. */}
         <button className="btn icon quiet top-hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
         <button className="btn icon quiet top-hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
-        <span role="status" aria-live="polite" className={"badge save-badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
+        {!isDemo() && <span role="status" aria-live="polite" className={"badge save-badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
           <span className="badge-text">{saveState === "saved" ? t("Saved") : saveState === "saving" ? <span className="shine">{t("Saving…")}</span> : saveState === "conflict" ? t("Not saved") : t("Not saved")}</span>
-        </span>
+        </span>}
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
         <div className="top-settings"><Menu trigger={(open, toggle) => <button className={"me" + (open ? " open" : "")} aria-label={t("Settings and account")} title={userName} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
