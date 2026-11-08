@@ -1354,3 +1354,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @media (max-width: 640px) { .bg-job .bg-label { display: none; } .bg-job { padding: 0 8px 0 5px; gap: 5px; } }
 /* The Drive copy of the open video, under its preview (a phone does not show the library beside it). */
 .copy-status { display: flex; align-items: center; gap: 7px; color: var(--muted); margin: 0; }
+/* The Drive copy's state, one look in both places (under the preview, the library's tile). */
+.copy-line { min-height: 22px; display: flex; align-items: center; }
+.copy-status { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 7px; color: var(--muted); }
+.copy-status.ok { color: var(--ok); }
+.copy-status.bad { color: var(--danger); }
+.copy-status .copy-act { height: 22px; padding: 0 8px; color: var(--text); border: 1px solid var(--line-2); }
+.copy-status .copy-act:hover { border-color: var(--muted); }
+.copy-status.compact { flex-basis: 100%; }

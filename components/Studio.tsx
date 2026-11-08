@@ -1368,6 +1368,7 @@ export default function Studio({ userName }: { userName: string }) {
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
             onCopyJob={setCopyJob}
+            onToast={say}
             library={textGroups(["hooks", "captions"])}
             lyricsRow={lyricsRow}
             captionPools={captionPools}
