@@ -1020,6 +1020,19 @@ export default function VideoStudio({
 
   // A copy on its way: leaving the page (reload, close) would lose it, the browser asks first. Opening another video
   // does not stop it: it ends and is saved on its own video.
+  // While a copy is made, the screen stays on (a phone that sleeps stops the page, and the copy with it).
+  const copying = !!copyJob;
+  useEffect(() => {
+    if (!copying) return;
+    type Lock = { release: () => Promise<void> };
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<Lock> } };
+    let lock: Lock | null = null;
+    let off = false;
+    const take = () => { if (document.visibilityState === "visible") nav.wakeLock?.request("screen").then((l) => { if (off) void l.release(); else lock = l; }).catch(() => {}); };
+    take();
+    document.addEventListener("visibilitychange", take); // the lock goes when the page is hidden: taken again on return
+    return () => { off = true; document.removeEventListener("visibilitychange", take); void lock?.release().catch(() => {}); };
+  }, [copying]);
   useEffect(() => {
     if (!copyJob) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
