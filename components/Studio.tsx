@@ -918,12 +918,20 @@ export default function Studio({ userName }: { userName: string }) {
       return { ...p, slides, generated, selectedSlide: to };
     });
 
-  const applyAll = () => {
+  /** Copies the selected slide's settings to every slide: all of them, or one part only (the phone's Style page:
+   *  the text's look without its place, the photo's format and framing, or the text's place). */
+  const applyAll = (part?: "text" | "photo" | "position") => {
     updProject((p) => {
       const src = p.slides[p.selectedSlide];
-      return { ...p, slides: p.slides.map((s) => ({ ...s, format: src.format, pic: { ...src.pic }, style: { ...src.style } })) };
+      return { ...p, slides: p.slides.map((s) => {
+        if (part === "text") return { ...s, style: { ...src.style, x: s.style.x, y: s.style.y } };
+        if (part === "photo") return { ...s, format: src.format, pic: { ...src.pic } };
+        if (part === "position") return { ...s, style: { ...s.style, x: src.style.x, y: src.style.y } };
+        return { ...s, format: src.format, pic: { ...src.pic }, style: { ...src.style } };
+      }) };
     });
-    say(t("Settings copied to all slides"));
+    say(part === "text" ? t("Text style copied to all slides") : part === "photo" ? t("Photo settings copied to all slides")
+      : part === "position" ? t("Text position copied to all slides") : t("Settings copied to all slides"));
   };
 
   // ---- lists (pools) ----
@@ -1600,7 +1608,6 @@ export default function Studio({ userName }: { userName: string }) {
             lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts} onPreview={setFontPreview}
             onSavePreset={(name) => savePreset(name, project.slides[sel].style)} onApplyPreset={applyPreset} onDeletePreset={deletePreset} />
           {/* Phone's Style page: at the very end (a computer has it at the top of the column). */}
-          <div className="apply-all-m"><button className="btn sm quiet" onClick={applyAll} title={t("Copy format, photo and text settings to every slide")}>{t("Apply to all slides")}</button></div>
         </aside>
         </>
         )}

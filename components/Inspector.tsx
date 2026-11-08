@@ -12,7 +12,8 @@ interface Props {
   zones: boolean;
   onZones: (v: boolean) => void;
   onCfg: (fn: (c: SlideCfg) => SlideCfg) => void;
-  onApplyAll: () => void;
+  /** Copies one panel's settings (the text's look, the photo, the text's place) to every slide. */
+  onApplyAll: (part: "text" | "photo" | "position") => void;
   lyrics: LyricSection[];
   presets: StylePreset[];
   onSavePreset: (name: string) => void;
@@ -37,7 +38,6 @@ export default function Inspector({
       {cfg.locked && <p className="notice warn xs">{t("This slide is locked: Generate and re-rolls won't change it.")}</p>}
       <div className="insp-title">
         <h2>{t("Slide {n}", { n: index + 1 })}</h2>
-        <button className="btn sm" onClick={onApplyAll} title={t("Copy format, photo and text settings to every slide")}>{t("Apply to all slides")}</button>
       </div>
 
       <div>
@@ -69,7 +69,8 @@ export default function Inspector({
           <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => onCfg((c) => ({ ...c, pic: zoomPic(c.pic, v) }))}
             onReset={() => setP({ zoom: 1, ox: 0, oy: 0 })} />
           <Range label={t("Darken")} value={pic.darken} display={`${pic.darken}%`} min={0} max={80} onChange={(v) => setP({ darken: v })} onReset={() => setP({ darken: defaultPic().darken })} />
-          <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, pic: { ...defaultPic(), framing: c.pic.framing, bars: c.pic.bars, darken: c.pic.darken } }))}>{t("Reset framing")}</button></div>
+          <div className="row"><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, pic: { ...defaultPic(), framing: c.pic.framing, bars: c.pic.bars, darken: c.pic.darken } }))}>{t("Reset framing")}</button>
+            <button className="btn sm quiet" onClick={() => onApplyAll("photo")} title={t("Copy this slide's format and photo settings to every slide")}>{t("Apply to all slides")}</button></div>
         </Section>
 
         <Section id="slide-text" title={t("Text")}>
@@ -98,7 +99,8 @@ export default function Inspector({
           <Range label={t("Letter spacing")} value={st.tracking ?? 0} display={`${st.tracking ?? 0}%`} min={-10} max={50}
             onChange={(v) => setS({ tracking: v || undefined })} onReset={() => setS({ tracking: undefined })} />
           <Range label={t("Line spacing")} value={st.lineHeight} display={st.lineHeight.toFixed(2)} min={0.9} max={1.8} step={0.01} onChange={(v) => setS({ lineHeight: v })} onReset={() => setS({ lineHeight: defaultStyle().lineHeight })} />
-          <div><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button></div>
+          <div className="row"><button className="btn sm" onClick={() => onCfg((c) => ({ ...c, style: { ...defaultStyle(), x: c.style.x, y: c.style.y } }))}>{t("Reset text style")}</button>
+            <button className="btn sm quiet" onClick={() => onApplyAll("text")} title={t("Copy this slide's text style to every slide")}>{t("Apply to all slides")}</button></div>
         </Section>
 
         <Section id="slide-position" title={t("Position")} open={false}>
@@ -110,6 +112,7 @@ export default function Inspector({
             <button className="btn sm" onClick={() => setS({ y: 50 })}>{t("Center vertically")}</button>
           </div>
           <label className="check"><input type="checkbox" checked={zones} onChange={(e) => onZones(e.target.checked)} />{t("Show TikTok interface zones")}</label>
+          <div><button className="btn sm quiet" onClick={() => onApplyAll("position")} title={t("Copy this slide's text position to every slide")}>{t("Apply to all slides")}</button></div>
         </Section>
       </div>
 
