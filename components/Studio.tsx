@@ -1423,6 +1423,7 @@ export default function Studio({ userName }: { userName: string }) {
           <VideoStudio
             active={studio === "video"}
             stylePage={mobileTab === "style"}
+            libraryPage={mobileTab === "lists"}
             canUndo={!!history.past} canRedo={!!history.future} onUndo={undo} onRedo={redo}
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}

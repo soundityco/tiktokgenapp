@@ -291,6 +291,7 @@ export default function VideoStudio({
   onToast,
   active = true,
   stylePage = false,
+  libraryPage = false,
   captionPools,
   onDrawCaption,
   onNewCaptionList,
@@ -327,6 +328,8 @@ export default function VideoStudio({
   active?: boolean;
   /** The phone's Style page is open: the preview, then the style part by part. */
   stylePage?: boolean;
+  /** The phone's Library page is open: no player on the dock there (nothing to watch). */
+  libraryPage?: boolean;
   /** The captions lists of the release, and drawing one of their captions for this video's post. */
   captionPools: TextPool[];
   onDrawCaption: (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => void;
@@ -3340,7 +3343,7 @@ export default function VideoStudio({
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
                       </div>
         </aside>
-      {dockSlot && audioBuf && createPortal(
+      {dockSlot && audioBuf && !libraryPage && createPortal(
         <div className="dp">
           <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
             onClick={() => (playing ? stop() : void play())}>
