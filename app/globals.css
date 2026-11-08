@@ -1731,3 +1731,8 @@ details.sec:first-of-type { background-image: none; }
   .main[data-mobile-tab="style"] .col.center { touch-action: pan-x; overscroll-behavior: contain; }
   .main[data-mobile-tab="style"] > .col, .main[data-mobile-tab="style"] .video-shell, .main[data-mobile-tab="style"] .video-shell > .col { animation: none !important; }
 }
+@media (max-width: 1000px) {
+  /* The dock is as wide with or without the video's player: switching studio does not resize it. */
+  .mobile-tabs { width: min(430px, calc(100vw - 20px)); }
+  .mobile-tabs > .mobile-tabs-sep { margin-left: auto; margin-right: auto; }
+}
