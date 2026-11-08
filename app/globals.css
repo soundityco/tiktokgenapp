@@ -549,7 +549,7 @@ details.sec > summary .sec-sub { margin-right: auto; padding-left: .4em; color: 
 /* ---------- Video studio: the media tiles (audio and camera video, same shape) ---------- */
 .media-list { gap: var(--s3); }
 .media { display: grid; gap: 8px; padding: 10px 10px 10px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--raised); min-width: 0; }
-.media.empty { background: transparent; border-style: dashed; border-color: var(--line-2); }
+.media.empty { background: transparent; border-style: dashed; border-color: var(--line-2); margin: 0; max-width: none; gap: 8px; } /* not the empty board's .empty */
 .media.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .media-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .media-ic { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; background: var(--bg); color: var(--muted); }
@@ -1074,3 +1074,19 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .deck-float { display: block; position: absolute; left: 0; right: 0; z-index: 5; }
   .deck-float .deck-bar { margin: 0; }
 }
+
+/* The library: the left column (phone: the middle tab) of both studios. Its title like the style column's
+   ("Slide 3"); the release's lyrics as a file of the release, a tile like the official audio. */
+.lib-title { font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1; margin: 0 0 var(--s5); }
+.video-col-l > .lib-title { margin-bottom: 0; }
+button.media { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; transition: border-color .15s, background .15s; }
+button.media:hover { border-color: #3b3b46; }
+button.media.empty:hover { border-color: var(--muted); }
+button.media.warn .media-name { color: var(--warn); }
+.lib-lyrics .media-head > svg:last-child { flex: none; color: var(--faint); transform: rotate(-90deg); transition: color .15s; }
+.lib-lyrics.empty .media-head > svg:last-child { transform: none; color: var(--warn); }
+.lib-lyrics:hover .media-head > svg:last-child { color: var(--text); }
+.col.side.l .group > .lib-lyrics { margin-top: var(--s1); }
+/* Video library: the shared texts come after the release's files, apart from them. */
+.video-col-l > .group { margin-top: var(--s2); }
+.video-col-l > .media-list { align-content: start; align-self: start; }

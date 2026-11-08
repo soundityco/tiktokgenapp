@@ -10,6 +10,7 @@ Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app
 - Ne jamais lire ni afficher `.env.local`.
 
 ## Architecture utile
+- Trois espaces dans les deux studios : **Bibliothèque** (colonne de gauche / onglet du milieu sur mobile : la release — paroles, et pour la vidéo audio + prises — puis les listes de textes partagées, et les photos pour le carrousel), **Création** (board central), **Style** (colonne de droite ; le Cadrage vidéo y est). Les morceaux partagés (`lyricsRow`, `textGroup`) sont construits dans `Studio.tsx` et passés à `VideoStudio`. Sauvegarde avant cette refonte : tag `ui-before-library`.
 - `components/Studio.tsx` : carrousel + coquille de l'app (header, release, overlays). `components/VideoStudio.tsx` : studio vidéo, gardé monté (caché) quand on passe au carrousel. `components/SlideCard.tsx` : carte de slide (sources, thème, sections de paroles). `components/Inspector.tsx` : réglages de la slide. `components/CaptionStyle.tsx` : style des paroles / hooks vidéo.
 - `components/ui.tsx` : Modal, Menu (option `float` pour sortir d'une colonne), Section (panneaux repliables, fermés par défaut), **Select** (menu déroulant maison : ne jamais utiliser de `<select>` natif).
 - `lib/render.ts` : rendu canvas (`drawStyledText`). `lib/types.ts` : modèle de données.

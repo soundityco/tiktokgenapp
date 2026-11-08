@@ -1034,6 +1034,29 @@ export default function Studio({ userName }: { userName: string }) {
       </div>
     ));
 
+  const sungCount = (() => { const x = sungOf(project.lyrics); return x ? x.split("\n").length : 0; })();
+  // The library (left column / phone tab of both studios). The release's lyrics, shown as a file of the release
+  // like the official audio; the text lists (hooks, texts, captions), the same in both studios.
+  const lyricsRow = (
+    <button type="button" className={"media lib-lyrics" + (project.lyrics.length ? "" : " empty warn")} onClick={() => setOverlay({ k: "lyrics" })}>
+      <div className="media-head">
+        <span className="media-ic"><Icon name="type" size={16} /></span>
+        <div className="media-txt">
+          <span className="label">{t("Lyrics")}</span>
+          <span className="media-name">{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : t("Add the lyrics")}</span>
+        </div>
+        <Icon name={project.lyrics.length ? "chevron" : "plus"} size={14} />
+      </div>
+      {project.lyrics.length > 0 && <div className="media-meta"><span>{t("{n} sung lines", { n: sungCount })}</span><span>{t("Slides and videos")}</span></div>}
+    </button>
+  );
+  const textGroup = (
+    <section className="group">
+      <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
+      {listRows("text")}
+    </section>
+  );
+
   // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
   // its lyrics right next to it, at the same place in both studios.
   // Phone: where we are in the deck (a tap goes there) and the TikTok zones on / off (the clean preview, like
@@ -1053,7 +1076,6 @@ export default function Studio({ userName }: { userName: string }) {
       </button>
     </div>
   );
-  const sungCount = (() => { const x = sungOf(project.lyrics); return x ? x.split("\n").length : 0; })();
   const releaseTitle = (<>
     <div className="stack release-title">
       <span className="label">{t("Release")}</span>
@@ -1174,6 +1196,8 @@ export default function Studio({ userName }: { userName: string }) {
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
+            library={textGroup}
+            lyricsRow={lyricsRow}
             captionPools={captionPools}
             onDrawCaption={drawCaptionFrom}
             onNewCaptionList={() => setOverlay({ k: "newPool", kind: "text", textKind: "captions" })}
@@ -1189,10 +1213,12 @@ export default function Studio({ userName }: { userName: string }) {
         {studio === "carousel" && (
         <>
         <aside className="col side l">
+          <h2 className="lib-title">{t("Library")}</h2>
           <section className="group">
-            <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
-            {listRows("text")}
+            <div className="group-head"><h3 className="label">{t("Release")}</h3></div>
+            {lyricsRow}
           </section>
+          {textGroup}
           <section className="group">
             <div className="group-head"><h3 className="label">{t("Photos")}</h3><button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button></div>
             {listRows("photos")}
@@ -1335,7 +1361,7 @@ export default function Studio({ userName }: { userName: string }) {
       {/* Phone: one panel at a time, like an app (the centre, the files / lists on the left, the style on the right). */}
       <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab}>
         <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name={studio === "video" ? "film" : "image"} size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
-        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name={studio === "video" ? "folder" : "list"} size={18} /><span className="tab-name">{studio === "video" ? t("Files") : t("Lists")}</span></button>
+        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name="library" size={18} /><span className="tab-name">{t("Library")}</span></button>
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <span className="mobile-tabs-sep" aria-hidden />
         <Menu trigger={(open, toggle) => <button className={"me mobile-me" + (open ? " open" : "")} aria-label={t("Settings and account")} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>

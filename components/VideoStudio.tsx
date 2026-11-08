@@ -274,6 +274,8 @@ export default function VideoStudio({
   onProject,
   onSaveNow,
   releaseTitle,
+  library,
+  lyricsRow,
   active = true,
   captionPools,
   onDrawCaption,
@@ -299,6 +301,10 @@ export default function VideoStudio({
   onSaveNow: () => void;
   /** The release's name, and the menu to change it: the title of both studios. */
   releaseTitle: ReactNode;
+  /** The library's shared part (the text lists, the same as the carousel's), under the release's files. */
+  library?: ReactNode;
+  /** The release's lyrics, as a row of the library (next to the official audio). */
+  lyricsRow?: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
   active?: boolean;
   /** The captions lists of the release, and drawing one of their captions for this video's post. */
@@ -2189,8 +2195,10 @@ export default function VideoStudio({
 
   return (
     <div className="video-shell" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}>
-        {/* Left: the files of the clip, and how the camera picture fits the post. */}
+        {/* Left: the library. The release's files (audio, lyrics, this video's camera take), then the text lists
+            shared with the carousel (hooks, captions). */}
         <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")}>
+          <h2 className="lib-title">{t("Library")}</h2>
           <div className="stack media-list">
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
             <input id="audio-file" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
@@ -2224,6 +2232,7 @@ export default function VideoStudio({
                 </div>
               )}
             </MediaTile>
+            {lyricsRow}
             <div className="tree-branch">
             <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
               <span className="label">{t("Video")}</span><span className="tree-name">{clipName(clip)}</span>
@@ -2277,44 +2286,7 @@ export default function VideoStudio({
             )}
             </div>
           </div>
-          <Section id="video-render" title={t("Framing")}>
-          <div className="row">
-            <button className={"btn sm" + (settings.format !== "16:9" ? " on" : "")} aria-pressed={settings.format !== "16:9"}
-              onClick={() => setV({ format: "9:16" })}>9:16</button>
-            <button className={"btn sm" + (settings.format === "16:9" ? " on" : "")} aria-pressed={settings.format === "16:9"}
-              onClick={() => setV({ format: "16:9" })}>16:9</button>
-            <Select className="input sm grow" aria-label={t("Framing")}
-              value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
-              onChange={(e) => {
-                const v = e.target.value;
-                setFrame(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
-              }}>
-              <option value="fill">{t("Fill (crop)")}</option>
-              <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
-              <option value="fit-black">{t("Fit whole, black bars")}</option>
-            </Select>
-          </div>
-          <div className="row">
-            <label className="check xs">
-              <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
-              {t("TikTok zones")}
-            </label>
-            <label className="check xs">
-              <input type="checkbox" checked={aids.guides} onChange={(e) => setAids({ guides: e.target.checked })} />
-              {t("Alignment guides")}
-            </label>
-          </div>
-          <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
-            onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
-            onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
-          <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>
-            <span className="label">{t("Progressive zoom")}</span>
-            {[undefined, 1.05, 1.1].map((v) => (
-              <button key={v ?? 0} className={"btn sm" + ((settings.push ?? undefined) === v ? " on" : "")} aria-pressed={(settings.push ?? undefined) === v}
-                onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
-            ))}
-          </div>
-          </Section>
+          {library}
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">
@@ -2803,6 +2775,45 @@ export default function VideoStudio({
         </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")}>
+          {/* How the camera picture fits the post: the first part of the video's style. */}
+          <Section id="video-render" title={t("Framing")}>
+          <div className="row">
+            <button className={"btn sm" + (settings.format !== "16:9" ? " on" : "")} aria-pressed={settings.format !== "16:9"}
+              onClick={() => setV({ format: "9:16" })}>9:16</button>
+            <button className={"btn sm" + (settings.format === "16:9" ? " on" : "")} aria-pressed={settings.format === "16:9"}
+              onClick={() => setV({ format: "16:9" })}>16:9</button>
+            <Select className="input sm grow" aria-label={t("Framing")}
+              value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFrame(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
+              }}>
+              <option value="fill">{t("Fill (crop)")}</option>
+              <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
+              <option value="fit-black">{t("Fit whole, black bars")}</option>
+            </Select>
+          </div>
+          <div className="row">
+            <label className="check xs">
+              <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
+              {t("TikTok zones")}
+            </label>
+            <label className="check xs">
+              <input type="checkbox" checked={aids.guides} onChange={(e) => setAids({ guides: e.target.checked })} />
+              {t("Alignment guides")}
+            </label>
+          </div>
+          <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
+            onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
+            onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
+          <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>
+            <span className="label">{t("Progressive zoom")}</span>
+            {[undefined, 1.05, 1.1].map((v) => (
+              <button key={v ?? 0} className={"btn sm" + ((settings.push ?? undefined) === v ? " on" : "")} aria-pressed={(settings.push ?? undefined) === v}
+                onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
+            ))}
+          </div>
+          </Section>
           {tab === "hook" ? (
             <div className="stack">
               <div className="row col-head">
