@@ -76,6 +76,8 @@ interface Props {
   onDragOver?: () => void;
   /** Shown right under the picture of the selected slide (the phone's deck bar: where we are, the zones). */
   below?: React.ReactNode;
+  /** "fields": only what is under the picture (the phone shows it once, under the deck). */
+  part?: "fields";
   onDragEnd?: () => void;
   onDrop?: () => void;
   dragging?: boolean;
@@ -282,89 +284,9 @@ export default function SlideCard(p: Props) {
   const listItems = theme !== undefined && itemThemes.includes(theme) ? allItems.filter((_, i) => itemThemes[i] === theme) : allItems;
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
-  return (
-    <div className={"card" + (p.selected ? " sel" : "") + (p.locked ? " locked" : "") + (p.dragging ? " dragging" : "") + (p.dragOver ? " drop-target" : "")} onClick={p.onSelect}
-      onDragOver={(e) => {
-        // A picture from outside (another tab, the desktop), not a slide being moved.
-        if (!p.locked && (e.dataTransfer.types.includes("Files") || e.dataTransfer.types.includes("text/uri-list"))) {
-          e.preventDefault(); e.dataTransfer.dropEffect = "copy"; if (!dropHere) setDropHere(true); return;
-        }
-        if (p.onDragOver) { e.preventDefault(); p.onDragOver(); }
-      }}
-      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropHere(false); }}
-      onDrop={(e) => {
-        if (dropHere) {
-          e.preventDefault(); setDropHere(false);
-          const dt = e.dataTransfer;
-          void droppedImage(dt).then((got) => { if (got) p.onImage(got.blob, got.name); else setDropErr(t("This picture could not be read. Save it, then drop the file.")); });
-          return;
-        }
-        if (p.onDrop) { e.preventDefault(); p.onDrop(); }
-      }}
-      onDragEnd={p.onDragEnd}>
-      <div className="card-head">
-        <span className="grip" draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(p.index)); p.onDragStart?.(); }}
-          title={t("Drag to reorder")} aria-hidden="true">⠿</span>
-        <button className="idx-chip" onClick={(e) => { e.stopPropagation(); p.onSelect(); }} aria-label={p.locked ? `${t("Slide {n}", { n: p.index + 1 })} · ${t("Locked")}` : t("Slide {n}", { n: p.index + 1 })} aria-pressed={p.selected}>
-          {p.locked && <Icon name="lock" size={10} />}{String(p.index + 1).padStart(2, "0")}
-        </button>
-        <span className="grow" />
-        {FIND_PHOTOS && <button className="btn sm quiet icon" onClick={(e) => { e.stopPropagation(); setFinding(true); }} disabled={p.locked}
-          title={t("Find a photo on the web (free to post)")} aria-label={t("Find a photo")}><Icon name="search" size={14} /></button>}
-        <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId || p.locked} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
-        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind !== "pool" || p.locked}
-          title={cfg.textSource.kind === "lyrics" ? t("The lyrics are not drawn: tick the sections under the slide") : t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
-        <button className="btn sm quiet icon" onClick={p.onSave} aria-label={t("Save this slide")} title={t("Save this slide")}><Icon name="download" size={14} /></button>
-        <Menu trigger={(_, toggle) => <button className="btn sm quiet icon" aria-label={t("Slide actions")} title={t("Slide actions")} onClick={(e) => { e.stopPropagation(); toggle(); }}><Icon name="more" size={14} /></button>}>
-          {(close) => (<>
-            <button disabled={!p.canMoveLeft} onClick={(e) => { e.stopPropagation(); close(); p.onMoveLeft(); }}><Icon name="arrowLeft" size={14} />{t("Move left")}</button>
-            <button disabled={!p.canMoveRight} onClick={(e) => { e.stopPropagation(); close(); p.onMoveRight(); }}><Icon name="arrowRight" size={14} />{t("Move right")}</button>
-            <div className="sep" />
-            <button onClick={(e) => { e.stopPropagation(); close(); p.onDuplicate(); }}><Icon name="copy" size={14} />{t("Duplicate slide")}</button>
-            <button disabled={!hasAdjust} onClick={(e) => { e.stopPropagation(); close(); p.onAdjustAll(cfg.pic.adjust); }}
-              title={t("Handy for photos of the same shoot")}><Icon name="sliders" size={14} />{t("Put these photo edits on every slide")}</button>
-            <button onClick={(e) => { e.stopPropagation(); close(); p.onToggleLock(); }}><Icon name={p.locked ? "unlock" : "lock"} size={14} />{p.locked ? t("Unlock slide") : t("Lock slide")}</button>
-            <div className="sep" />
-            <button className="danger" style={{ color: "var(--danger)" }} onClick={(e) => { e.stopPropagation(); close(); p.onDelete(); }}><Icon name="trash" size={14} />{t("Delete slide")}</button>
-          </>)}
-        </Menu>
-      </div>
-      <div className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "")} data-drop={t("Drop here")}>
-        {dropHere && <div className="drop-hint">{t("Drop the picture here")}</div>}
-        <canvas ref={cv} className="cv" width={1080} height={1920}
-          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
-        {!adjusting && img && !p.locked && (
-          <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
-            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); }}>
-            <Icon name="sliders" size={15} />
-          </button>
-        )}
-        {adjusting && (() => {
-          const cur = ADJUST.find((x) => x.k === tool) ?? ADJUST[0];
-          const v = adj[cur.k] ?? 0;
-          const setAdj = (n: number) => p.onCfg((c) => {
-            const next = { ...(c.pic.adjust ?? {}), [cur.k]: n || undefined };
-            return { ...c, pic: { ...c.pic, adjust: Object.values(next).some((x) => x) ? next : undefined } };
-          });
-          return (
-            <div className="adjust-panel" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-              <div className="adjust-tools" role="tablist" aria-label={t("Photo edits")}>
-                {ADJUST.map((x) => (
-                  <button key={x.k} role="tab" aria-selected={tool === x.k} className={(tool === x.k ? "on" : "") + (adj[x.k] ? " set" : "")}
-                    onClick={() => setTool(x.k)}>{t(x.label)}</button>
-                ))}
-              </div>
-              <div className="adjust-value">{v > 0 && cur.min < 0 ? "+" : ""}{v}</div>
-              <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
-              <div className="adjust-actions">
-                <button className="btn sm quiet" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
-                <button className="btn sm" onClick={() => setAdjusting(false)}>{t("Done")}</button>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-      {p.selected && p.below}
+  // Under the picture: the slide's text and sources. On a phone they show once, under the deck (part "fields"),
+  // so they fade in place instead of sliding with the cards.
+  const fields = (<>
       {err && <span className="notice bad">{err}</span>}
       {dropErr && <span className="notice warn xs">{dropErr}</span>}
       {finding && <ImageFinder onClose={() => setFinding(false)} onPick={(img) => { setFinding(false); p.onWebPic(img); }} />}
@@ -465,6 +387,93 @@ export default function SlideCard(p: Props) {
           </div>
         );
       })()}
+  </>);
+  if (p.part === "fields") return <div className="card card-fields">{fields}</div>;
+
+  return (
+    <div className={"card" + (p.selected ? " sel" : "") + (p.locked ? " locked" : "") + (p.dragging ? " dragging" : "") + (p.dragOver ? " drop-target" : "")} onClick={p.onSelect}
+      onDragOver={(e) => {
+        // A picture from outside (another tab, the desktop), not a slide being moved.
+        if (!p.locked && (e.dataTransfer.types.includes("Files") || e.dataTransfer.types.includes("text/uri-list"))) {
+          e.preventDefault(); e.dataTransfer.dropEffect = "copy"; if (!dropHere) setDropHere(true); return;
+        }
+        if (p.onDragOver) { e.preventDefault(); p.onDragOver(); }
+      }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropHere(false); }}
+      onDrop={(e) => {
+        if (dropHere) {
+          e.preventDefault(); setDropHere(false);
+          const dt = e.dataTransfer;
+          void droppedImage(dt).then((got) => { if (got) p.onImage(got.blob, got.name); else setDropErr(t("This picture could not be read. Save it, then drop the file.")); });
+          return;
+        }
+        if (p.onDrop) { e.preventDefault(); p.onDrop(); }
+      }}
+      onDragEnd={p.onDragEnd}>
+      <div className="card-head">
+        <span className="grip" draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(p.index)); p.onDragStart?.(); }}
+          title={t("Drag to reorder")} aria-hidden="true">⠿</span>
+        <button className="idx-chip" onClick={(e) => { e.stopPropagation(); p.onSelect(); }} aria-label={p.locked ? `${t("Slide {n}", { n: p.index + 1 })} · ${t("Locked")}` : t("Slide {n}", { n: p.index + 1 })} aria-pressed={p.selected}>
+          {p.locked && <Icon name="lock" size={10} />}{String(p.index + 1).padStart(2, "0")}
+        </button>
+        <span className="grow" />
+        {FIND_PHOTOS && <button className="btn sm quiet icon" onClick={(e) => { e.stopPropagation(); setFinding(true); }} disabled={p.locked}
+          title={t("Find a photo on the web (free to post)")} aria-label={t("Find a photo")}><Icon name="search" size={14} /></button>}
+        <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId || p.locked} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
+        <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind !== "pool" || p.locked}
+          title={cfg.textSource.kind === "lyrics" ? t("The lyrics are not drawn: tick the sections under the slide") : t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
+        <button className="btn sm quiet icon" onClick={p.onSave} aria-label={t("Save this slide")} title={t("Save this slide")}><Icon name="download" size={14} /></button>
+        <Menu trigger={(_, toggle) => <button className="btn sm quiet icon" aria-label={t("Slide actions")} title={t("Slide actions")} onClick={(e) => { e.stopPropagation(); toggle(); }}><Icon name="more" size={14} /></button>}>
+          {(close) => (<>
+            <button disabled={!p.canMoveLeft} onClick={(e) => { e.stopPropagation(); close(); p.onMoveLeft(); }}><Icon name="arrowLeft" size={14} />{t("Move left")}</button>
+            <button disabled={!p.canMoveRight} onClick={(e) => { e.stopPropagation(); close(); p.onMoveRight(); }}><Icon name="arrowRight" size={14} />{t("Move right")}</button>
+            <div className="sep" />
+            <button onClick={(e) => { e.stopPropagation(); close(); p.onDuplicate(); }}><Icon name="copy" size={14} />{t("Duplicate slide")}</button>
+            <button disabled={!hasAdjust} onClick={(e) => { e.stopPropagation(); close(); p.onAdjustAll(cfg.pic.adjust); }}
+              title={t("Handy for photos of the same shoot")}><Icon name="sliders" size={14} />{t("Put these photo edits on every slide")}</button>
+            <button onClick={(e) => { e.stopPropagation(); close(); p.onToggleLock(); }}><Icon name={p.locked ? "unlock" : "lock"} size={14} />{p.locked ? t("Unlock slide") : t("Lock slide")}</button>
+            <div className="sep" />
+            <button className="danger" style={{ color: "var(--danger)" }} onClick={(e) => { e.stopPropagation(); close(); p.onDelete(); }}><Icon name="trash" size={14} />{t("Delete slide")}</button>
+          </>)}
+        </Menu>
+      </div>
+      <div className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "")} data-drop={t("Drop here")}>
+        {dropHere && <div className="drop-hint">{t("Drop the picture here")}</div>}
+        <canvas ref={cv} className="cv" width={1080} height={1920}
+          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
+        {!adjusting && img && !p.locked && (
+          <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); }}>
+            <Icon name="sliders" size={15} />
+          </button>
+        )}
+        {adjusting && (() => {
+          const cur = ADJUST.find((x) => x.k === tool) ?? ADJUST[0];
+          const v = adj[cur.k] ?? 0;
+          const setAdj = (n: number) => p.onCfg((c) => {
+            const next = { ...(c.pic.adjust ?? {}), [cur.k]: n || undefined };
+            return { ...c, pic: { ...c.pic, adjust: Object.values(next).some((x) => x) ? next : undefined } };
+          });
+          return (
+            <div className="adjust-panel" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+              <div className="adjust-tools" role="tablist" aria-label={t("Photo edits")}>
+                {ADJUST.map((x) => (
+                  <button key={x.k} role="tab" aria-selected={tool === x.k} className={(tool === x.k ? "on" : "") + (adj[x.k] ? " set" : "")}
+                    onClick={() => setTool(x.k)}>{t(x.label)}</button>
+                ))}
+              </div>
+              <div className="adjust-value">{v > 0 && cur.min < 0 ? "+" : ""}{v}</div>
+              <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
+              <div className="adjust-actions">
+                <button className="btn sm quiet" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
+                <button className="btn sm" onClick={() => setAdjusting(false)}>{t("Done")}</button>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+      {p.selected && p.below}
+      {fields}
     </div>
   );
 }

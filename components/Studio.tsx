@@ -128,6 +128,8 @@ export default function Studio({ userName }: { userName: string }) {
   const [deckTop, setDeckTop] = useState<number | null>(null);
   /** The slide in the middle right now (while swiping or scrubbing), before it becomes the selected one. */
   const [deckLive, setDeckLive] = useState<number | null>(null);
+  /** The deck is moving (a swipe, a scrub, a jump to a dot): the fields under it fade out meanwhile. */
+  const [deckSwiping, setDeckSwiping] = useState(false);
   /** Scrubbing the dots: the finger's place along them moves the deck live (snap off meanwhile). */
   const scrub = useRef(false);
   const scrubTo = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -155,7 +157,9 @@ export default function Studio({ userName }: { userName: string }) {
     const live = deckCentre();
     if (live >= 0) setDeckLive((cur) => (cur === live ? cur : live));
     if (deckTimer.current) clearTimeout(deckTimer.current);
+    setDeckSwiping(true);
     deckTimer.current = setTimeout(() => {
+      setDeckSwiping(false);
       const i = deckCentre();
       if (i >= 0) updProject((p) => (p.selectedSlide === i ? p : { ...p, selectedSlide: i }));
     }, 90);
@@ -1160,6 +1164,29 @@ export default function Studio({ userName }: { userName: string }) {
     </div>
   </>);
 
+  // One slide card (the deck's, or on a phone the selected slide's fields under the deck).
+  const cardFor = (cfg: SlideCfg, i: number, part?: "fields") => (
+              <SlideCard key={(part ?? "") + cfg.id} part={part} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
+                textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
+                lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
+                locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
+                onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
+                onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt, edited: true })}
+                onLyricsBack={() => setGen(i, { text: cfg.textSource.kind === "lyrics" ? slideLyrics(project, cfg.textSource) : "", edited: false })}
+                onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
+                onWebPic={(img) => setGen(i, { picId: webPicId(img.full), picName: img.author || img.license,
+                  picCredit: { author: img.author, license: img.license, page: img.page, required: img.creditRequired } })}
+                onImage={(blob, name) => { setBoardDrag(false); setDropPic({ i, blob, name }); }}
+                onDuplicate={() => duplicateSlide(i)} onDelete={() => deleteSlide(i)}
+                onAdjustAll={(a) => { updProject((p) => ({ ...p, slides: p.slides.map((s) => (s.locked ? s : { ...s, pic: { ...s.pic, adjust: a ? { ...a } : undefined } })) })); say(t("Photo edits put on every slide")); }}
+                onMoveLeft={() => moveSlide(i, i - 1)} onMoveRight={() => moveSlide(i, i + 1)}
+                onToggleLock={() => updSlide(i, (s) => ({ ...s, locked: !s.locked }))}
+                dragging={dragFrom === i} dragOver={dragOver === i && dragFrom !== i}
+                onDragStart={() => setDragFrom(i)} onDragEnd={() => { setDragFrom(null); setDragOver(null); }}
+                onDragOver={() => setDragOver(i)}
+                onDrop={() => { if (dragFrom !== null && dragFrom !== i) moveSlide(dragFrom, i); setDragFrom(null); setDragOver(null); }} />
+  );
+
   // Settings and account: in the top bar on a computer, at the end of the tab bar on a phone.
   const settingsMenu = (close: () => void) => (<>
             <div className="label cap">{t("Language")}</div>
@@ -1358,31 +1385,16 @@ export default function Studio({ userName }: { userName: string }) {
           )}
           <div className="deck-wrap" ref={deckWrapRef}>
           <div ref={deckRef} onScroll={onDeckScroll} className={"slides" + (boardDrag ? " drag-in" : "")}>
-            {project.slides.map((cfg, i) => (
-              <SlideCard key={cfg.id} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
-                lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
-                locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
-                onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
-                onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt, edited: true })}
-                onLyricsBack={() => setGen(i, { text: cfg.textSource.kind === "lyrics" ? slideLyrics(project, cfg.textSource) : "", edited: false })}
-                onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
-                onWebPic={(img) => setGen(i, { picId: webPicId(img.full), picName: img.author || img.license,
-                  picCredit: { author: img.author, license: img.license, page: img.page, required: img.creditRequired } })}
-                onImage={(blob, name) => { setBoardDrag(false); setDropPic({ i, blob, name }); }}
-                onDuplicate={() => duplicateSlide(i)} onDelete={() => deleteSlide(i)}
-                onAdjustAll={(a) => { updProject((p) => ({ ...p, slides: p.slides.map((s) => (s.locked ? s : { ...s, pic: { ...s.pic, adjust: a ? { ...a } : undefined } })) })); say(t("Photo edits put on every slide")); }}
-                onMoveLeft={() => moveSlide(i, i - 1)} onMoveRight={() => moveSlide(i, i + 1)}
-                onToggleLock={() => updSlide(i, (s) => ({ ...s, locked: !s.locked }))}
-                dragging={dragFrom === i} dragOver={dragOver === i && dragFrom !== i}
-                onDragStart={() => setDragFrom(i)} onDragEnd={() => { setDragFrom(null); setDragOver(null); }}
-                onDragOver={() => setDragOver(i)}
-                onDrop={() => { if (dragFrom !== null && dragFrom !== i) moveSlide(dragFrom, i); setDragFrom(null); setDragOver(null); }} />
-            ))}
+            {project.slides.map((cfg, i) => cardFor(cfg, i))}
           </div>
           {/* Phone: the bar stays put while the slides swipe under it, over the room kept under the middle picture. */}
           {deckTop !== null && <div className="deck-float" style={{ top: deckTop }}>{deckBar}</div>}
           </div>
+          {/* Phone: the selected slide's text and sources, once, under the deck: they fade out while swiping and fade
+              back in for the next slide, instead of sliding sideways with the cards. */}
+          {deckTop !== null && project.slides[sel] && (
+            <div className={"deck-fields" + (deckSwiping ? " leaving" : "")}>{cardFor(project.slides[sel], sel, "fields")}</div>
+          )}
           <section className="post-box">
             <h3 className="label">{t("Caption and hashtags")}</h3>
             <PostCaption auto value={project.caption ?? ""} poolId={project.captionPoolId} pools={captionPools}
