@@ -1430,7 +1430,8 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-mobile-tab="style"] .col.center,
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center {
     position: sticky; top: var(--top-h, 60px); z-index: 6; padding-top: 4px; padding-bottom: 14px;
-    background: var(--bg); }
+    /* The board's dots behind the picture, as on a computer and on the studio's own page. */
+    background-color: var(--bg); background-image: radial-gradient(rgba(255,255,255,.055) 1px, transparent 1px); background-size: 20px 20px; }
   .main[data-studio="video"][data-mobile-tab="style"] .video-grid { display: block; }
   /* A smaller picture there: the style gets the rest of the screen. */
   /* Its height: --pv-h, set by dragging the Style control (40% of the screen to start with). */
@@ -1584,7 +1585,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-studio="video"][data-mobile-tab="style"] .video-grid .cv-wrap { max-width: 100%; }
 }
 @media (max-width: 1000px) {
-  /* The part that slides: no line on top, a glow of the studio's colour behind it instead (violet / orange). */
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { border-top: 0; box-shadow: 0 -12px 34px -10px var(--glow-carousel), inset 0 1px 0 rgba(255,255,255,.06); }
-  .main[data-studio="video"][data-mobile-tab="style"] .col.side.r > .style-tabs { box-shadow: 0 -12px 34px -10px var(--glow-video), inset 0 1px 0 rgba(255,255,255,.06); }
+  /* The part that slides: its hairline on top (the studio-coloured glow was tried, the line kept). */
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { border-top: 1px solid rgba(255,255,255,.1); box-shadow: none; }
 }
