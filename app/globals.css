@@ -1569,3 +1569,13 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-studio="video"][data-mobile-tab="style"] .video-grid { margin-top: 8px; }
   .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides > .card { flex-basis: min(74vw, calc(var(--pv-h, 40dvh) * .5625 + 4px)); }
 }
+@media (max-width: 1000px) {
+  /* Style page, second pass: the part that slides is black (true black), rounder, its grip further from its top
+     edge and bigger; the video uses the room the slides' dots take in the carousel (the control stays put). */
+  .main[data-mobile-tab="style"] .col.side.r { background: #000; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { background: #000; border-radius: 26px 26px 0 0; border-top-color: rgba(255,255,255,.1);
+    padding-top: 26px; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { background: linear-gradient(180deg, #000, rgba(0,0,0,0)); }
+  .main[data-mobile-tab="style"] .style-grip { top: 10px; width: 42px; height: 5px; margin-left: -21px; border-radius: 3px; background: rgba(255,255,255,.28); }
+  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap:not(.landscape) { width: min(100%, calc((var(--pv-h, 40dvh) + 46px) * 9 / 16)); }
+}
