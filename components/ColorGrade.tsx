@@ -138,7 +138,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
             onChange={(v) => set({ temp: v })} onReset={() => set({ temp: 0 })} />
           <Range label={t("Tint")} value={g.tint} display={`${g.tint > 0 ? "+" : ""}${g.tint}`} min={-100} max={100}
             onChange={(v) => set({ tint: v })} onReset={() => set({ tint: 0 })} />
-          <Range label={t("Saturation")} value={g.sat} display={`${Math.round(g.sat * 100)} %`} min={0} max={2} step={0.01}
+          <Range label={t("Saturation")} value={g.sat} scale={100} display={`${Math.round(g.sat * 100)} %`} min={0} max={2} step={0.01}
             onChange={(v) => set({ sat: v })} onReset={() => set({ sat: 1 })} />
         </Section>
       )}

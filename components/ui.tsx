@@ -252,14 +252,45 @@ export function Family({ id, icon, title, count, action, children }: { id: strin
 }
 
 /** Slider. With `onReset`, a double-click on the value (or the slider) puts the default value back. */
-export function Range(p: { label: string; value: number; display?: string; min: number; max: number; step?: number; onReset?: () => void; onChange: (v: number) => void }) {
+export function Range(p: { label: string; value: number; display?: string; min: number; max: number; step?: number; onReset?: () => void; onChange: (v: number) => void;
+  /** The shown number is the value times this (saturation 0–2 shown 0–200 %). */
+  scale?: number }) {
   const { t } = useT();
   const back = p.onReset;
-  const hint = back ? t("Double-click to reset") : undefined;
+  const scale = p.scale ?? 1;
+  // A click on the value: type it. Enter or leaving the field sets it (rounded to the step, kept in range), Escape
+  // gives up. The slider's double-click still puts the default back.
+  const [edit, setEdit] = useState<string | null>(null);
+  const shown = (p.display ?? String(p.value));
+  const startEdit = () => {
+    const n = /[-+]?\d+(?:[.,]\d+)?/.exec(shown)?.[0];
+    setEdit(n ? n.replace("+", "") : String(+(p.value * scale).toFixed(4)));
+  };
+  const commit = () => {
+    if (edit === null) return;
+    const n = parseFloat(edit.replace(",", ".").replace(/[^\d.+-]/g, ""));
+    setEdit(null);
+    if (!Number.isFinite(n)) return;
+    const step = p.step ?? 1;
+    let v = Math.round((n / scale - p.min) / step) * step + p.min;
+    v = Math.min(p.max, Math.max(p.min, +v.toFixed(6)));
+    if (v !== p.value) p.onChange(v);
+  };
+  const hint = t("Click to type a value") + (back ? " · " + t("double-click the slider to reset") : "");
   return (
     <label className="field">
-      <span>{p.label}<span className={"val" + (back ? " resettable" : "")} title={hint} onDoubleClick={back}>{p.display ?? p.value}</span></span>
-      <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={hint}
+      <span>{p.label}
+        {edit !== null ? (
+          <input className="val-edit" autoFocus inputMode="decimal" value={edit} aria-label={p.label}
+            onFocus={(e) => e.currentTarget.select()} onChange={(e) => setEdit(e.target.value)} onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setEdit(null); } }} />
+        ) : (
+          <span className={"val editable" + (back ? " resettable" : "")} title={hint} role="button" tabIndex={0}
+            onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); startEdit(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); startEdit(); } }}>{shown}</span>
+        )}
+      </span>
+      <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={back ? t("Double-click to reset") : undefined}
         style={{ "--fill": `${((p.value - p.min) / Math.max(1e-9, p.max - p.min)) * 100}%` } as CSSProperties} />
     </label>
   );

@@ -1294,3 +1294,8 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .release-list button.on::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--grad-carousel); }
 .main[data-studio="video"] .release-list button.on { background: linear-gradient(90deg, color-mix(in srgb, #a184ff 24%, transparent), transparent 85%); }
 .main[data-studio="video"] .release-list button.on::before { background: var(--grad-video); }
+/* A slider's value: a click turns it into a field to type the number. */
+.field .val.editable { cursor: text; border-radius: 3px; padding: 0 3px; margin-right: -3px; transition: background .12s, color .12s; }
+.field .val.editable:hover { background: var(--raised); color: var(--text); }
+.field .val-edit { float: right; width: 64px; height: 20px; padding: 0 5px; border: 1px solid var(--muted); border-radius: 3px; background: var(--bg); color: var(--text);
+  font-family: var(--mono); font-size: var(--fs-xs); text-align: right; outline: none; }

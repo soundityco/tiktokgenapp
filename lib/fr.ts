@@ -7,6 +7,8 @@ export const FR: Record<string, string> = {
   "In your downloads and your gallery.": "Dans tes téléchargements et ta galerie.",
   "The phone refused: press and hold a picture above, then “Save”.": "Le téléphone a refusé : appuie longuement sur une image au-dessus, puis « Enregistrer ».",
   "Share…": "Partager…",
+  "Click to type a value": "Clique pour taper une valeur",
+  "double-click the slider to reset": "double-clic sur le curseur pour réinitialiser",
   "Go to the carousel studio": "Aller au studio carrousel",
   "Go to the video studio": "Aller au studio vidéo",
   "App installed": "App installée",
