@@ -1232,10 +1232,10 @@ export default function Studio({ userName }: { userName: string }) {
           {/* The white pill under the chosen studio: it slides from one to the other. */}
           <span className="studio-thumb" aria-hidden style={thumb ?? { opacity: 0 }} />
           <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
-            <Icon name="image" size={14} />{t("Carousel")}
+            <Icon name="deck" size={15} />{t("Carousel")}
           </button>
           <button className={studio === "video" ? "on" : ""} aria-pressed={studio === "video"} onClick={() => switchStudio("video")}>
-            <Icon name="film" size={14} />{t("Video")}
+            <Icon name="reel" size={15} />{t("Video")}
           </button>
         </div>
         <span className="grow" />
