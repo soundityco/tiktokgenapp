@@ -1080,7 +1080,8 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
 /* The library: the left column (phone: the middle tab) of both studios. Its title like the style column's
    ("Slide 3"); the release's lyrics as a file of the release, a tile like the official audio. */
 .lib-title { font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1; margin: 0 0 var(--s5); }
-.video-col-l > .lib-title { margin-bottom: 0; }
+.video-col-l > .lib-title { margin-bottom: var(--s2); } /* + the column's 16px gap: 24px, like the carousel's */
+.video-col-l .media-list > .tree-head { margin-bottom: 0; } /* RELEASE → its first file: 12px, like the carousel's */
 button.media { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; transition: border-color .15s, background .15s; }
 button.media:hover { border-color: #3b3b46; }
 button.media.empty:hover { border-color: var(--muted); }
