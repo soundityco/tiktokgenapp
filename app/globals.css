@@ -1168,3 +1168,39 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .top .top-hist, .top .top-hist.btn.icon { width: 28px; }
 .top .top-hist + .top-hist { margin-left: -8px; }
 @media (max-width: 640px) { .top .top-hist, .top .top-hist.btn.icon { width: 30px; } }
+
+/* Phone: the studio switch lives in the dock, first: a small two-floor button (carousel above, video below), the
+   open studio lit white on a sliding plate; a tap goes to the other. The header keeps the icon and the actions. */
+.dock-studio { display: none; }
+@media (max-width: 640px) {
+  .top .studio-switch { display: none; }
+  .top > .grow { display: block; }
+  .mobile-tabs > .dock-studio { position: relative; display: grid; grid-template-rows: 1fr 1fr; flex: none; width: 40px; min-width: 0; height: 48px; padding: 3px; gap: 0;
+    border-radius: 13px; background: var(--panel); border: 1px solid var(--line-2); }
+  .dock-studio::before { content: ""; position: absolute; left: 3px; right: 3px; top: 3px; height: calc(50% - 3px); border-radius: 9px; background: var(--accent);
+    transition: transform .34s cubic-bezier(.3,1.3,.5,1); }
+  .dock-studio.video::before { transform: translateY(100%); }
+  .dock-studio .ds-ic { position: relative; z-index: 1; display: grid; place-items: center; color: var(--faint); transition: color .25s; }
+  .dock-studio.carousel .ds-car, .dock-studio.video .ds-vid { color: var(--on-accent); }
+  .mobile-tabs > .mobile-tabs-sep:first-of-type { margin-left: 6px; }
+}
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) { .dock-studio::before { transition: none; } }
+/* The studio button's plate: a gradient of the studio, gold for the carousel, violet into blue for the video
+   (the video's colour of the timeline); switching slides the plate and runs the gradient from one to the other. */
+@media (max-width: 640px) {
+  .dock-studio::before {
+    background: linear-gradient(180deg, #f3d28a 0%, #e3a86f 30%, #c98bd8 62%, var(--video) 80%, #6f8dff 100%) 0 0 / 100% 260% no-repeat;
+    box-shadow: 0 0 14px color-mix(in srgb, #e9b877 45%, transparent);
+    transition: transform .42s cubic-bezier(.3,1.3,.5,1), background-position .55s cubic-bezier(.4,0,.2,1), box-shadow .45s;
+  }
+  .dock-studio.video::before { background-position: 0 100%; box-shadow: 0 0 14px color-mix(in srgb, var(--video) 55%, transparent); }
+  .dock-studio.carousel .ds-car, .dock-studio.video .ds-vid { color: #15121c; }
+  .dock-studio { border-color: color-mix(in srgb, #e9b877 30%, var(--line-2)); transition: border-color .45s; }
+  .dock-studio.video { border-color: color-mix(in srgb, var(--video) 35%, var(--line-2)); }
+  /* Room for it on a 360px screen: slimmer tabs. */
+  .mobile-tabs { padding: 5px; gap: 2px; }
+  .mobile-tabs > button:not(.dock-studio) { min-width: 46px; padding: 0 13px; }
+  .mobile-tabs > button.on:not(.dock-studio) { padding: 0 16px 0 13px; }
+  .mobile-tabs > .mobile-tabs-sep { margin: 10px 3px; }
+  .mobile-tabs .me { margin: 0 2px 0 1px; }
+}

@@ -1405,7 +1405,14 @@ export default function Studio({ userName }: { userName: string }) {
 
       {/* Phone: one panel at a time, like an app (the centre, the files / lists on the left, the style on the right). */}
       <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab}>
-        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name={studio === "video" ? "film" : "image"} size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
+        {/* The studio: carousel above, video below, the open one lit; a tap goes to the other. */}
+        <button className={"dock-studio " + studio} aria-label={studio === "video" ? t("Go to the carousel studio") : t("Go to the video studio")}
+          onClick={() => { switchStudio(studio === "video" ? "carousel" : "video"); try { navigator.vibrate?.(8); } catch { /* not on this phone */ } }}>
+          <span className="ds-ic ds-car"><Icon name="image" size={15} /></span>
+          <span className="ds-ic ds-vid"><Icon name="film" size={15} /></span>
+        </button>
+        <span className="mobile-tabs-sep" aria-hidden />
+        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
         <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name="library" size={18} /><span className="tab-name">{t("Library")}</span></button>
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <span className="mobile-tabs-sep" aria-hidden />
