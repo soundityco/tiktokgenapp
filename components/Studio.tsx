@@ -1038,7 +1038,7 @@ export default function Studio({ userName }: { userName: string }) {
   // The library (left column / phone tab of both studios). The release's lyrics, shown as a file of the release
   // like the official audio; the text lists (hooks, texts, captions), the same in both studios.
   const lyricsRow = (
-    <button type="button" className={"media lib-lyrics" + (project.lyrics.length ? "" : " empty warn")} onClick={() => setOverlay({ k: "lyrics" })}>
+    <button type="button" className={"media m-lyrics lib-lyrics" + (project.lyrics.length ? "" : " empty warn")} onClick={() => setOverlay({ k: "lyrics" })}>
       <div className="media-head">
         <span className="media-ic"><Icon name="type" size={16} /></span>
         <div className="media-txt">
@@ -1047,7 +1047,7 @@ export default function Studio({ userName }: { userName: string }) {
         </div>
         <Icon name={project.lyrics.length ? "chevron" : "plus"} size={14} />
       </div>
-      {project.lyrics.length > 0 && <div className="media-meta"><span>{t("{n} sung lines", { n: sungCount })}</span><span>{t("Slides and videos")}</span></div>}
+      {project.lyrics.length > 0 && <div className="media-meta"><span>{t("{n} sung lines", { n: sungCount })}</span></div>}
     </button>
   );
   const textGroup = (
@@ -1101,17 +1101,6 @@ export default function Studio({ userName }: { userName: string }) {
           <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setOverlay({ k: "confirm", title: t("Delete project"), label: t("Delete"), message: t("Are you sure you want to delete “{name}”? Its slide setup and project-only lists will be deleted too. This can't be undone.", { name: project.name }), run: deleteProject }); }}>{t("Delete")}</button>
         </>)}
       </Menu>
-    </div>
-    {/* The lyrics of the release, written once: the carousel's slides tick their sections, the video sings them all. */}
-    <div className={"field release-lyrics" + (project.lyrics.length ? "" : " missing")}>{t("Lyrics")}
-      {/* A source of the release, like its media: a brighter outline than the pickers around it. */}
-      <button className={"btn lyrics-btn" + (project.lyrics.length ? "" : " needs")} onClick={() => setOverlay({ k: "lyrics" })}
-        title={project.lyrics.length ? t("The lyrics of the release, cut into sections") : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}>
-        <Icon name="type" size={15} />
-        {project.lyrics.length
-          ? <><span>{t("{n} sections", { n: project.lyrics.length })}</span><span className="lyrics-meta">{t("{n} sung lines", { n: sungCount })}</span></>
-          : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
-      </button>
     </div>
   </>);
 

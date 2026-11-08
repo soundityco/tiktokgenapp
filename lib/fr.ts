@@ -9,7 +9,6 @@ export const FR: Record<string, string> = {
   "Share…": "Partager…",
   "Library": "Bibliothèque",
   "This release": "Cette release",
-  "Slides and videos": "Slides et vidéos",
   "Zones": "Zones",
   "TikTok's interface zones on the slides": "Les zones de l'interface TikTok sur les slides",
   "Text on the slide": "Texte de la slide",

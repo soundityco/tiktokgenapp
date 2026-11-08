@@ -2207,6 +2207,7 @@ export default function VideoStudio({
             <div className="tree-head" title={t("The audio and the lyrics belong to the release: every video of it uses them.")}>
               <span className="label">{t("Release")}</span>
             </div>
+            {lyricsRow}
             <MediaTile icon="music" label={t("Official audio")} loading={(!!audioBlob && !audioBuf) || driveBusy}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
               meta={audioBlob && (<>
@@ -2232,7 +2233,6 @@ export default function VideoStudio({
                 </div>
               )}
             </MediaTile>
-            {lyricsRow}
             <div className="tree-branch">
             <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
               <span className="label">{t("Video")}</span><span className="tree-name">{clipName(clip)}</span>
@@ -2979,7 +2979,7 @@ function MediaTile({ icon, label, name, meta, menu, warn, loading, children }: {
 }) {
   const { t } = useT();
   return (
-    <div className={"media" + (name ? "" : " empty") + (warn ? " warn" : "") + (loading ? " shine-box" : "")} aria-busy={loading || undefined}>
+    <div className={"media m-" + icon + (name ? "" : " empty") + (warn ? " warn" : "") + (loading ? " shine-box" : "")} aria-busy={loading || undefined}>
       <div className="media-head">
         <span className="media-ic"><Icon name={icon} size={16} /></span>
         <div className="media-txt">

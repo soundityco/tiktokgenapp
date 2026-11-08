@@ -17,6 +17,8 @@
   --accent: #f0eee8; --accent-hi: #ffffff; --on-accent: #0b0b10; --blue: #5b8cff;
   /* The timeline: where the camera video is (violet), and the music found in it (green). */
   --video: #a184ff; --music: #4fffb0;
+  /* The lyrics' own colour, a light gold (the library's lyrics tile). */
+  --lyrics: #d8b56a;
   --ok: #7ad9a1; --warn: #f0c35c; --danger: #ff6b80;
 
   --sans: "TikTok Sans Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -1090,3 +1092,16 @@ button.media.warn .media-name { color: var(--warn); }
 /* Video library: the shared texts come after the release's files, apart from them. */
 .video-col-l > .group { margin-top: var(--s2); }
 .video-col-l > .media-list { align-content: start; align-self: start; }
+
+/* The library at a glance: each kind of file of the release has its colour, the one it has elsewhere (the timeline:
+   green for the audio, violet for the camera video; a light gold for the lyrics). A full outline once there, a
+   dashed one while it is still to add. */
+.media.m-lyrics { --kind: var(--lyrics); }
+.media.m-music { --kind: var(--music); }
+.media.m-film { --kind: var(--video); }
+.media.m-lyrics, .media.m-music, .media.m-film { border-color: color-mix(in srgb, var(--kind) 42%, var(--line)); }
+.media.m-lyrics.empty, .media.m-music.empty, .media.m-film.empty { border-color: color-mix(in srgb, var(--kind) 34%, transparent); }
+.media.m-lyrics .media-ic, .media.m-music .media-ic, .media.m-film .media-ic { color: var(--kind); background: color-mix(in srgb, var(--kind) 10%, var(--bg)); }
+button.media.m-lyrics:hover { border-color: color-mix(in srgb, var(--kind) 75%, transparent); }
+button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last-child { color: var(--lyrics); }
+.media.m-music.warn, .media.m-film.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
