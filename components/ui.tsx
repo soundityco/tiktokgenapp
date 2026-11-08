@@ -306,7 +306,8 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
   const set = (v: number) => onChange(Math.round(Math.max(min, Math.min(max, v))));
   return (
     <div className="wheel" role="slider" tabIndex={0} aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}
-      style={{ backgroundPositionX: `${-value * PX}px` }}
+      // One tile per tick spacing, placed from the centre: at 0 a long tick sits right under the centre mark.
+      style={{ backgroundPositionX: `calc(50% + 20px - ${value * PX + 0.5}px), calc(50% + 4px - ${value * PX + 0.5}px)` }}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, v: value, last: value }; }}
       onPointerMove={(e) => {
         const d = drag.current;

@@ -86,6 +86,9 @@ interface Props {
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+/** Window event: a card opened its photo edits (the others close theirs). */
+const ADJUST_OPEN = "rollout:adjust-open";
+
 export default function SlideCard(p: Props) {
   const { t } = useT();
   const { cfg, gen } = p;
@@ -102,6 +105,13 @@ export default function SlideCard(p: Props) {
   const [dropErr, setDropErr] = useState<string | null>(null);
   useEffect(() => { if (!dropErr) return; const id = setTimeout(() => setDropErr(null), 4000); return () => clearTimeout(id); }, [dropErr]);
   const [tool, setTool] = useState<keyof PhotoAdjust>("exposure");
+  // One photo's edits open at a time: opening another card's closes this one.
+  const myId = useRef(Math.random());
+  useEffect(() => {
+    const other = (e: Event) => { if ((e as CustomEvent).detail !== myId.current) setAdjusting(false); };
+    window.addEventListener(ADJUST_OPEN, other);
+    return () => window.removeEventListener(ADJUST_OPEN, other);
+  }, []);
   const adj = cfg.pic.adjust ?? {};
   const hasAdjust = Object.values(adj).some((x) => x);
 
@@ -443,7 +453,7 @@ export default function SlideCard(p: Props) {
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
         {!adjusting && img && !p.locked && (
           <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
-            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); }}>
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current })); }}>
             <Icon name="sliders" size={15} />
           </button>
         )}

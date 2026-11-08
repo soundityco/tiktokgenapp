@@ -430,7 +430,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 /* Photo edit wheel: ticks every 8 px, a longer one every 40 px, they slide under a fixed centre mark. */
 .wheel { position: relative; height: 34px; cursor: ew-resize; touch-action: none; user-select: none; outline: none;
   background-image: repeating-linear-gradient(90deg, var(--text) 0 1px, transparent 1px 40px), repeating-linear-gradient(90deg, var(--line-2) 0 1px, transparent 1px 8px);
-  background-size: 100% 16px, 100% 10px; background-repeat: repeat-x; background-position-y: 9px, 12px;
+  background-size: 40px 16px, 8px 10px; background-repeat: repeat-x; background-position-y: 9px, 12px;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); }
 .wheel:focus-visible { box-shadow: 0 0 0 1px var(--accent-hi); border-radius: 3px; }
 .wheel-mark { position: absolute; left: 50%; top: 3px; bottom: 3px; width: 2px; margin-left: -1px; background: var(--accent-hi); border-radius: 1px; }
