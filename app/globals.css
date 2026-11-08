@@ -1237,3 +1237,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .lib-add { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; margin-top: var(--s1); padding: 0 10px; border: 1px dashed var(--line-2); border-radius: var(--r);
   background: none; color: var(--muted); font-size: var(--fs-sm); cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
 .lib-add:hover { color: var(--text); border-color: var(--muted); background: var(--raised); }
+/* One right edge in the library: the fold arrows, the "+" icons and the text lists' counts end on it. The trash of
+   a row shows on hover in the count's place (a phone has none: delete from the list's editor). */
+.fam-body .group.sub > .group-head .btn.icon.sm { margin-right: -6px; }
+.lib-item { position: relative; }
+.lib-item .del { position: absolute; right: -6px; top: 50%; translate: 0 -50%; }
+.lib-item .lib-count { transition: opacity .12s; }
+.lib-item:hover .lib-count, .lib-item:focus-within .lib-count { opacity: 0; }
+@media (hover: none) { .lib-item .del { display: none; } .lib-item:hover .lib-count { opacity: 1; } }

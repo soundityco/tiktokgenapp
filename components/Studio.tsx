@@ -1058,7 +1058,7 @@ export default function Studio({ userName }: { userName: string }) {
           onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setEditor({ k: kind, id: p.id }); } }}>
           {pics ? <PicStack ids={p.pics.slice(0, 3).map((x) => x.id)} /> : <span className="idx">{String(n + 1).padStart(2, "0")}</span>}
           <div className="grow" style={{ minWidth: 0 }}>
-            <div className="lib-item-top"><span className="truncate item-name">{p.name}</span><span className="lib-count">{count}</span></div>
+            <div className="lib-item-top"><span className="truncate item-name">{p.name}</span>{!pics && <span className="lib-count">{count}</span>}</div>
             <div className="xs truncate lib-preview">
               {pics ? (count ? t("{n} photos", { n: count }) : t("Empty list"))
                 : p.kind === "block" ? t("Lyrics block") : first ? <em>{first}</em> : t("Empty list")}
