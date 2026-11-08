@@ -4,7 +4,7 @@ import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
-import { canWriteDrive, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, uploadToDrive } from "@/lib/drive";
+import { canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, uploadToDrive } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, repairOrder, retimeCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
@@ -17,7 +17,7 @@ import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
-import { convertSegment, cropFor, grabFrame, type ConvertCrop, type ConvertStep } from "@/lib/convert";
+import { convertSegment, copyPlanFor, cropFor, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -342,6 +342,12 @@ export default function VideoStudio({
   const [driveWrite, setDriveWrite] = useState<boolean | null>(null);
   /** Transfer with Drive in progress. */
   const [driveJob, setDriveJob] = useState<null | { kind: "send" | "fetch"; p: number }>(null);
+  /** The video open here is the Drive working copy (the camera file is on another device). */
+  const [onCopy, setOnCopy] = useState(false);
+  /** The working copy being made, then sent to the Drive. */
+  const [copyJob, setCopyJob] = useState<null | { step: "make" | "send"; p: number }>(null);
+  const copyAc = useRef<AbortController | null>(null);
+  const copyFailed = useRef<string | null>(null);
   const [driveErr, setDriveErr] = useState<string | null>(null);
   const driveAc = useRef<AbortController | null>(null);
   const [audioBuf, setAudioBuf] = useState<AudioBuffer | null>(null);
@@ -733,9 +739,29 @@ export default function VideoStudio({
             })
             .catch(() => { if (!off && token === ioRef.current) setErr(t("Could not read this audio file.")); });
         }
+        setOnCopy(false);
         if (b) { fileClip.current = clip.id; setVideoBlob(b); }
-        // No camera file: a picture kept by mistake for this video (older versions) is dropped.
-        else { posterRef.current = null; void delMedia(`poster:${clip.id}`).catch(() => {}); }
+        else {
+          // No camera file: a picture kept by mistake for this video (older versions) is dropped.
+          posterRef.current = null; void delMedia(`poster:${clip.id}`).catch(() => {});
+          // Its working copy instead (kept on this device, else fetched from the Drive): work goes on here.
+          const cp = clip.drive?.copy;
+          if (cp) {
+            let cb = await getMedia(`copy:${clip.id}`);
+            if (cb && cb.size !== cp.size) cb = null;
+            if (!cb) {
+              setDriveJob({ kind: "fetch", p: 0 });
+              try {
+                cb = await downloadDriveFileProgress(cp.id, (p) => { if (!off) setDriveJob({ kind: "fetch", p }); }, new AbortController().signal);
+                void putMedia(`copy:${clip.id}`, cb).catch(() => {});
+              } catch (e) {
+                console.warn("[copy] download failed", e);
+                if (!off) setErr(t("The Drive copy of this video could not be fetched. Check your connection, or pick the camera file."));
+              } finally { if (!off) setDriveJob(null); }
+            }
+            if (cb && !off && token === ioRef.current) { fileClip.current = clip.id; setOnCopy(true); setVideoBlob(cb); }
+          }
+        }
         setLoadedClip(clip.id);
       } catch { if (!off) setLoadedClip(clip.id); /* IndexedDB unavailable */ }
     })();
@@ -848,6 +874,50 @@ export default function VideoStudio({
     }
   };
 
+  // ---- The working copy for the other devices: made by itself once the take is synced ----
+  // The passage used (+2 s), as rich as the take (lib/convert copyPlanFor), on the Drive; made again when the passage
+  // moves out of it; 15 s after the last change (not while the sync is being set). Never from a copy.
+  const makeCopy = async () => {
+    const blob = videoBlob;
+    if (!blob || onCopy || copyAc.current) return;
+    const cur = settingsRef.current;
+    const clipId = clip.id;
+    const segS = cur.crop.start - cur.offset, segE = segS + cur.crop.duration;
+    const from = Math.max(0, segS - 2), to = Math.min(videoDur, segE + 2);
+    const key = `${clipId}|${blob.size}|${from.toFixed(1)}|${to.toFixed(1)}`;
+    if (to <= from || copyFailed.current === key) return;
+    const ac = new AbortController();
+    copyAc.current = ac;
+    setCopyJob({ step: "make", p: 0 });
+    try {
+      const plan = copyPlanFor(cur.source);
+      const copy = await makeWorkCopy(blob, plan, from, to, (p) => setCopyJob({ step: "make", p }), ac.signal);
+      setCopyJob({ step: "send", p: 0 });
+      const id = await uploadToDrive(copy, driveName(t("copy")), (p) => setCopyJob({ step: "send", p }), ac.signal, "video/mp4", { tktgen: "copy", clip: clipId });
+      if (ac.signal.aborted) { void deleteDriveFile(id); return; }
+      const old = settingsRef.current.drive?.copy?.id;
+      setDrive({ copy: { id, from, to, of: blob.size, size: copy.size, tenBit: plan.tenBit } });
+      onSaveNow();
+      if (old && old !== id) void deleteDriveFile(old);
+    } catch (e) {
+      if (!ac.signal.aborted) { console.warn("[copy] not made", e); copyFailed.current = key; }
+    } finally {
+      if (copyAc.current === ac) copyAc.current = null;
+      setCopyJob(null);
+    }
+  };
+  useEffect(() => {
+    if (!videoBlob || onCopy || !driveWrite || copyJob || settings.score === undefined || !videoDur) return;
+    const segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
+    if (segE <= 0 || segS >= videoDur) return;
+    const cp = settings.drive?.copy;
+    if (cp && cp.of === videoBlob.size && cp.from <= Math.max(0, segS - 0.3) + 1e-3 && cp.to >= Math.min(videoDur, segE + 0.3) - 1e-3) return;
+    const id = window.setTimeout(() => void makeCopy(), 15_000);
+    return () => clearTimeout(id);
+  }, [videoBlob, onCopy, driveWrite, copyJob, settings.score, settings.offset, settings.crop.start, settings.crop.duration, settings.drive?.copy, videoDur]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Another video opened: its copy job stops (it is made again for the right one later).
+  useEffect(() => () => copyAc.current?.abort(), [clip.id]);
+
   useEffect(() => () => { stop(); syncRef.current?.abort(); genRef.current?.abort(); stopTranscribe(); ctxRef.current?.close().catch(() => {}); }, [stop]);
   // Hidden behind the carousel: the sound stops; a sync or a lyrics placement in progress goes on and ends by itself.
   useEffect(() => { if (!active) stop(); }, [active, stop]);
@@ -900,12 +970,14 @@ export default function VideoStudio({
     setErr(null);
     // The same camera file again (another browser, data cleared): plug it back, keep the sync and every setting.
     const cur = settingsRef.current;
-    if (!videoBlob && cur.videoName === f.name) {
+    if ((!videoBlob || onCopy) && cur.videoName === f.name) {
       const info = await probeVideo(f);
       const same = cur.videoSize ? cur.videoSize === f.size
         : !!info.duration && !!cur.source?.duration && Math.abs(info.duration - cur.source.duration) < 0.05;
       if (same) {
         fileClip.current = clip.id;
+        // Back on the camera file (it was the Drive copy): the original is used again, the copy stays on the Drive.
+        if (onCopy) { setOnCopy(false); void delMedia(`copy:${clip.id}`).catch(() => {}); }
         setVideoBlob(f);
         if (!cur.videoSize) setV({ videoSize: f.size });
         void askPersistentStorage();
@@ -914,6 +986,11 @@ export default function VideoStudio({
         return;
       }
     }
+    // A new take: the working copy of the previous one leaves the Drive and this device.
+    copyAc.current?.abort();
+    if (cur.drive?.copy?.id) void deleteDriveFile(cur.drive.copy.id);
+    setOnCopy(false);
+    void delMedia(`copy:${clip.id}`).catch(() => {});
     // The light copy and the picture of the previous file go first, so they are never shown for this one.
     posterRef.current = null;
     stillRef.current = null;
@@ -963,7 +1040,7 @@ export default function VideoStudio({
 
   // Videos imported before the detection existed (or before it read the duration): read them once.
   useEffect(() => {
-    if (videoBlob && (!settings.source || settings.source.duration === undefined)) void describeVideo(videoBlob, false);
+    if (videoBlob && !onCopy && (!settings.source || settings.source.duration === undefined)) void describeVideo(videoBlob, false);
   }, [videoBlob, clip.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The duration read from the file's index: the video band shows at once, before the player opened the file.
   useEffect(() => {
@@ -989,7 +1066,11 @@ export default function VideoStudio({
 
   const removeVideo = async () => {
     syncRef.current?.abort();
+    copyAc.current?.abort();
     stop();
+    if (settingsRef.current.drive?.copy?.id) void deleteDriveFile(settingsRef.current.drive.copy.id);
+    setOnCopy(false);
+    void delMedia(`copy:${clip.id}`).catch(() => {});
     setVideoBlob(null);
     setVideoDur(0);
     setV({ videoName: undefined, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
@@ -1057,7 +1138,10 @@ export default function VideoStudio({
     const rest = clips.filter((c) => c.id !== id);
     onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => c.id !== id), videoId: rest[Math.max(0, clips.indexOf(clip) - 1)].id }));
     onSaveNow();
+    if (clip.drive?.copy?.id) void deleteDriveFile(clip.drive.copy.id);
+    copyAc.current?.abort();
     await delMedia(`video:${id}`).catch(() => {});
+    await delMedia(`copy:${id}`).catch(() => {});
     await delMedia(`poster:${id}`).catch(() => {});
     await delMedia(`audio:${id}`).catch(() => {});
   };
@@ -2257,13 +2341,22 @@ export default function VideoStudio({
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
-                      {videoDur > 0 ? <span className="mono">{fmtTime(videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
+                      {videoDur > 0 ? <span className="mono">{fmtTime(onCopy && src?.duration ? src.duration : videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
                       {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
-                      {d.originalId && <span>Drive</span>}
+                      {d.originalId && !onCopy && <span>Drive</span>}
+                      {/* The copy of the take: here it stands in for the camera file; elsewhere it is being made / is ready. */}
+                      {onCopy ? (
+                        <span className="row" style={{ gap: 4 }}><span className="pill-copy">{t("Drive copy")}</span>
+                          <Hint text={t("The camera file is on another device: you work here on its copy from your Drive ({quality}, the passage used). The export here uses it; on the device that has the camera file, the export uses the original.", { quality: d.copy?.tenBit ? t("10-bit, as filmed") : t("1080p+, as filmed") })} /></span>
+                      ) : copyJob ? (
+                        <span className="shine">{copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) })}</span>
+                      ) : d.copy && d.copy.of === videoBlob?.size ? (
+                        <span className="row" style={{ gap: 4 }}><Icon name="check" size={12} />{t("Copy on your Drive")}<Hint text={t("A copy of the passage used ({quality}) is on your Drive: open this video on another device to go on working there.", { quality: d.copy.tenBit ? t("10-bit, as filmed") : t("1080p+, as filmed") })} /></span>
+                      ) : null}
                     </>)}
                   menu={settings.videoName && ((close) => (<>
                     <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}>{t("Replace from this computer")}</button>
-                    {videoBlob && !d.originalId && driveWrite && !driveJob && <button onClick={() => { close(); void sendToDrive(videoBlob); }}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>}
+                    {videoBlob && !onCopy && !d.originalId && driveWrite && !driveJob && <button onClick={() => { close(); void sendToDrive(videoBlob); }}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>}
                     {driveWrite === false && !d.originalId && <button onClick={() => { close(); void signIn("google", { redirectTo: "/studio" }); }}>{t("Reconnect Google to put it on my Drive")}</button>}
                     {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}>{t("Stop the transfer")}</button>}
                     {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}>{t("Remove video")}</button></>}

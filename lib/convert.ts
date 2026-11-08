@@ -204,22 +204,24 @@ export function copyArgs(plan: CopyPlan, from: number, to: number): string[] {
   ];
 }
 
-/** Make the working copy (in this browser, with the ffmpeg engine): `onProgress` from 0 to 1. */
+/**
+ * Make the working copy (in this browser, with the ffmpeg engine): `onProgress` from 0 to 1. It runs on an engine
+ * of its own, so the preview's pictures and an export never wait behind it; that engine goes when it is done.
+ */
 export function makeWorkCopy(file: Blob, plan: CopyPlan, from: number, to: number, onProgress: (p: number) => void, signal: AbortSignal): Promise<Blob> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
-    worker ??= new Worker("/ffmpeg/worker.js", { type: "module" });
-    const w = worker;
-    const cleanup = () => { w.removeEventListener("message", onMsg); w.removeEventListener("error", onErr); signal.removeEventListener("abort", onAbort); };
-    const id = ++jobs;
-    const onMsg = mine(id, (e: MessageEvent) => {
+    const w = new Worker("/ffmpeg/worker.js", { type: "module" });
+    const cleanup = () => { w.removeEventListener("message", onMsg); w.removeEventListener("error", onErr); signal.removeEventListener("abort", onAbort); w.terminate(); };
+    const id = 1;
+    const onMsg = (e: MessageEvent) => {
       const m = e.data;
       if (m.type === "progress") onProgress(m.p);
       else if (m.type === "done") { cleanup(); onProgress(1); resolve(new Blob([m.data], { type: "video/mp4" })); }
-      else if (m.type === "error") { cleanup(); restart(w); console.warn("[copy] ffmpeg log:\n" + (m.log ?? []).join("\n")); reject(new Error(m.message)); }
-    });
-    const onErr = (e: ErrorEvent) => { cleanup(); restart(w); reject(new Error(e.message || "converter could not start")); };
-    const onAbort = () => { cleanup(); restart(w); reject(new DOMException("aborted", "AbortError")); };
+      else if (m.type === "error") { cleanup(); console.warn("[copy] ffmpeg log:\n" + (m.log ?? []).join("\n")); reject(new Error(m.message)); }
+    };
+    const onErr = (e: ErrorEvent) => { cleanup(); reject(new Error(e.message || "converter could not start")); };
+    const onAbort = () => { cleanup(); reject(new DOMException("aborted", "AbortError")); };
     w.addEventListener("message", onMsg);
     w.addEventListener("error", onErr);
     signal.addEventListener("abort", onAbort, { once: true });

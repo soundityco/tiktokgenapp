@@ -238,6 +238,13 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
 }
 
 /** Files the app put in the Rollout folder with this label (see uploadToDrive), with their labels. */
+/** Delete a file the app made (a copy replaced or of a video removed). Never throws. */
+export async function deleteDriveFile(id: string): Promise<void> {
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`, { method: "DELETE", headers: { Authorization: `Bearer ${await getToken()}` } });
+  } catch (e) { console.warn("[drive] delete failed", e); }
+}
+
 export async function listAppFiles(kind: string): Promise<{ id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[]> {
   const q = `appProperties has { key='tktgen' and value='${kind}' } and trashed = false and '${await appFolder()}' in parents`;
   const out: { id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[] = [];

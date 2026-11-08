@@ -256,7 +256,13 @@ export interface VideoSettings {
   /** What the camera file is (read at import). */
   source?: VideoSourceInfo;
   /** The camera file kept in the user's Google Drive, to open the clip on another device. */
-  drive?: { originalId?: string };
+  drive?: {
+    originalId?: string;
+    /** The working copy on the Drive (lib/convert makeWorkCopy): the take's own clock from 0 to `to`, real pictures
+     *  from `from`; made from the camera file of `of` bytes. The other devices work on it, the one with the
+     *  camera file exports from the camera file. */
+    copy?: { id: string; from: number; to: number; of: number; size: number; tenBit: boolean };
+  };
   /** Part of the official audio used by the post (seconds). The imported file itself is never trimmed. */
   crop: { start: number; duration: number };
   /** Official-audio time of the first video frame (video t=0). */

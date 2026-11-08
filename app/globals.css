@@ -1325,3 +1325,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .preflight-pop, .preflight-pop ul { font-family: var(--sans); text-transform: none; letter-spacing: normal; font-size: var(--fs-sm); font-weight: 400; }
 .preflight-pop ul { color: var(--text); }
 @media (max-width: 640px) { .studio-head.more .h-pick { justify-self: stretch; } }
+/* The working copy of a take, standing in for the camera file on this device. */
+.pill-copy { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
+  text-transform: uppercase; color: #120d1c; background: var(--grad-video); font-weight: 600; }
