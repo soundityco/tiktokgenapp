@@ -268,6 +268,9 @@ function whenReady(el: HTMLVideoElement, wait = 3000): Promise<void> {
  * find where the camera recording sits in the official track, trim the segment, place the
  * lyrics once, then export a vertical clip with the official audio and the lyrics burned in.
  */
+/** Minutes and seconds, no tenths (the dock's player). */
+const mmss = (x: number) => { const v = Math.max(0, Math.floor(x)); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}`; };
+
 /** The parts of the video's style, as a phone opens them. */
 type VPart = "framing" | "lyrics" | "hook" | "color";
 
@@ -287,7 +290,8 @@ export default function VideoStudio({
   onCopyJob,
   onToast,
   active = true,
-  openStyle = 0,
+  styleCmd,
+  onStyleOpen,
   captionPools,
   onDrawCaption,
   onNewCaptionList,
@@ -322,8 +326,10 @@ export default function VideoStudio({
   lyricsRow?: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
   active?: boolean;
-  /** Bumped by the dock's Style button (phone): opens the style sheet. */
-  openStyle?: number;
+  /** From the dock's Style button (phone): open or close the style sheet (a new `n` each time). */
+  styleCmd?: { n: number; open: boolean };
+  /** Whether the style sheet is open (the dock shows its Style button on). */
+  onStyleOpen?: (open: boolean) => void;
   /** The captions lists of the release, and drawing one of their captions for this video's post. */
   captionPools: TextPool[];
   onDrawCaption: (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => void;
@@ -2385,10 +2391,12 @@ export default function VideoStudio({
   useEffect(() => { if (!active) vSheet.close(); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   // The dock's Style button: the part used last (lyrics or hook: the one the tabs are on).
   useEffect(() => {
-    if (!openStyle) return;
+    if (!styleCmd?.n) return;
+    if (!styleCmd.open) { if (vSheet.part !== null) vSheet.close(); return; }
     const p = vSheet.lastPart();
     openVPart(p === "lyrics" || p === "hook" ? (tab === "hook" ? "hook" : "lyrics") : p);
-  }, [openStyle]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [styleCmd?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onStyleOpen?.(vSheet.part !== null); }, [vSheet.part !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   // Phone: the player sits on top of the dock (Studio's slot), always at hand.
   const [dockSlot, setDockSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -3087,7 +3095,7 @@ export default function VideoStudio({
 
           {tab === "hook" && (
             <div className="tab-body">
-              <div className="row">
+              <div className="row hook-pick">
                 <label className="field grow">
                   <span className="row" style={{ gap: 6 }}>{t("Hook list")} <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} /></span>
                   <Select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
@@ -3176,7 +3184,7 @@ export default function VideoStudio({
         </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + vSheet.sheetProps.className} data-part={vSheet.sheetProps["data-part"]} ref={rightColRef}>
-          <SheetHead parts={vParts} part={vSheet.part} onPart={openVPart} onClose={vSheet.close} onTall={vSheet.toggleTall} closeLabel={t("Close")} />
+          <SheetHead parts={vParts} part={vSheet.part} onPart={openVPart} onClose={vSheet.close} onTall={vSheet.toggleTall} closeLabel={t("Close")} title={t("Style")} tone="video" />
           {/* How the camera picture fits the post: the first part of the video's style. */}
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
@@ -3307,7 +3315,7 @@ export default function VideoStudio({
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
                       </div>
         </aside>
-      {dockSlot && audioBuf && createPortal(
+      {dockSlot && audioBuf && vSheet.part === null && createPortal(
         <div className="dp">
           <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
             onClick={() => (playing ? stop() : void play())}>
@@ -3336,7 +3344,7 @@ export default function VideoStudio({
             </span>
             <span className="dp-head" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
           </div>
-          <span className="dp-time mono">{fmtTime(Math.max(0, head - settings.crop.start))}<span className="muted"> / {fmtTime(segLen)}</span></span>
+          <span className="dp-time mono">{mmss(head - settings.crop.start)}<span className="muted"> / {mmss(segLen)}</span></span>
         </div>,
         dockSlot,
       )}

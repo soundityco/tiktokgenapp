@@ -1412,7 +1412,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .col.side { overflow-x: hidden; overflow-y: auto; }
 
 /* ---------- Phone: the style in a sheet over everything, the video's player on the dock ---------- */
-.sheet-head { display: none; }
+.sheet-head, .dock-fade { display: none; }
+/* The hook list's row: the Generate button on the same line as the selects' bottoms. */
+.hook-pick { align-items: flex-end; }
 .dock-player:empty { display: none; }
 @keyframes sheet-rise { from { translate: 0 100%; } }
 @keyframes sheet-fall { to { translate: 0 100%; } }
@@ -1422,17 +1424,29 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
      its player too), the preview glided up above it. */
   .main .col.side.r:not(.sheet-open) { display: none !important; }
   .main .col.side.r.sheet-open { display: grid !important; align-content: start; gap: var(--s4); position: fixed; left: 0; right: 0; bottom: 0; top: var(--sheet-top);
-    z-index: 60; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: 0;
-    padding: 0 var(--s4) calc(var(--s6) + env(safe-area-inset-bottom));
-    background: var(--panel); border: 0; border-top: 1px solid var(--line-2); border-radius: 18px 18px 0 0; box-shadow: 0 -20px 60px rgba(0,0,0,.6);
+    z-index: 38; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: 0;
+    padding: 0 var(--s4) calc(120px + env(safe-area-inset-bottom));
+    background: var(--panel); border: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -24px 60px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
     animation: sheet-rise .38s cubic-bezier(.2,.9,.25,1) backwards; transition: top .34s cubic-bezier(.2,.9,.25,1), translate .3s cubic-bezier(.2,.9,.25,1); }
   .main .col.side.r.sheet-open.tall { top: var(--sheet-tall); }
   .main .col.side.r.sheet-open.dragging { transition: none; }
   .main .col.side.r.sheet-open.closing { animation: sheet-fall .26s cubic-bezier(.4,0,.8,.4) forwards; pointer-events: none; }
-  .sheet-open > .sheet-head { display: block; position: sticky; top: 0; z-index: 3; margin: 0 calc(-1 * var(--s4)); padding: 20px var(--s4) 10px;
-    background: var(--panel); border-bottom: 1px solid var(--line); touch-action: none; cursor: grab; }
-  .sheet-grip { position: absolute; top: 8px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-2); }
-  .sheet-parts { gap: 6px; }
+  /* Its head: the grip, "Style" and the close button, then the parts as one control across the sheet. */
+  .main .col.side.r.sheet-open > .sheet-head { display: grid; gap: 10px; position: sticky; top: 0; z-index: 3; width: auto; max-width: none; min-width: 0;
+    margin: 0 calc(-1 * var(--s4)); padding: 22px var(--s4) 14px; border-radius: 22px 22px 0 0;
+    background: linear-gradient(180deg, var(--panel) 80%, color-mix(in srgb, var(--panel) 0%, transparent)); touch-action: none; cursor: grab; }
+  .sheet-grip { position: absolute; top: 9px; left: 50%; width: 38px; height: 4px; margin-left: -19px; border-radius: 2px; background: rgba(255,255,255,.18); }
+  .sheet-top { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
+  .sheet-x { display: grid; place-items: center; width: 30px; height: 30px; margin-right: -4px; border: 0; border-radius: 8px; background: var(--raised); color: var(--muted); cursor: pointer; }
+  .sheet-x:active { scale: .94; }
+  .sheet-seg { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); padding: 4px; border-radius: 13px;
+    background: var(--bg); border: 1px solid var(--line-2); }
+  .sheet-seg button { position: relative; z-index: 1; height: 40px; min-width: 0; padding: 0 4px; border: 0; border-radius: 9px; background: none;
+    color: var(--muted); font: 600 14px/1 var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: color .3s; }
+  .sheet-seg button.on { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .sheet-seg-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / var(--n)); border-radius: 9px;
+    translate: calc(var(--i) * 100%) 0; transition: translate .38s cubic-bezier(.3,1.15,.5,1); background: var(--grad-video); box-shadow: 0 4px 14px var(--glow-video); }
+  .sheet-seg.carousel .sheet-seg-thumb { background: var(--grad-carousel); box-shadow: 0 4px 14px var(--glow-carousel); }
   .sheet-hide { display: none !important; }
   /* The preview shrinks and grows with the sheet, smoothly. */
   .sheet-preview { transition: scale .38s cubic-bezier(.2,.9,.25,1); }
@@ -1441,7 +1455,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 
   /* The video's player on top of the dock: a square play button above the studio's, then the segment as a film
      strip with a rounded playhead, the time at the end. */
-  .mobile-tabs:has(.dock-player:not(:empty)) { flex-wrap: wrap; width: min(430px, calc(100vw - 20px)); row-gap: 5px; }
+  .mobile-tabs:has(.dock-player:not(:empty)) { flex-wrap: wrap; width: min(430px, calc(100vw - 20px)); row-gap: 14px; }
   .mobile-tabs:has(.dock-player:not(:empty)) > .mobile-tabs-sep { margin-left: auto; margin-right: auto; }
   .dock-player { flex: 0 0 100%; min-width: 0; }
   .dp { display: flex; align-items: center; gap: 10px; padding: 0 8px 0 1px; animation: dp-in .4s cubic-bezier(.2,.9,.25,1) backwards; }
@@ -1461,7 +1475,16 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .dp-strip:not(.on) + .dp-head { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 3px; }
   .dp-time { flex: none; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
   .app:has(.dock-player:not(:empty)) .main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
-  .app:has(.dock-player:not(:empty)) .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
+  .app:has(.dock-player:not(:empty)) .toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
+  .app:has(.dock-player:not(:empty)) .main { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+  /* Behind the dock, the page fades to black (the header's gradient, upside down). */
+  .dock-fade { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 39; height: calc(116px + env(safe-area-inset-bottom)); pointer-events: none;
+    background: linear-gradient(0deg, var(--bg) 0%, var(--bg) 30%, color-mix(in srgb, var(--bg) 70%, transparent) 62%, transparent 100%); transition: height .3s; }
+  .app:has(.dock-player:not(:empty)) .dock-fade { height: calc(190px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 640px) {
+  /* A little more room inside the dock (its corners stay concentric with the buttons'). */
+  .mobile-tabs { padding: 7px; border-radius: 17px; }
 }
 @media (max-width: 1000px) {
   /* In the sheet, the chip names the part: its panel's own title would say it twice. */

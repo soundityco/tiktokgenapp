@@ -105,9 +105,12 @@ export function useStyleSheet<P extends string>(opts: {
 }
 
 /** The sheet's top: a grip (pull it down to close, up or a tap to make it tall), the parts, and a close button. */
-export function SheetHead<P extends string>({ parts, part, onPart, onClose, onTall, closeLabel }: {
+export function SheetHead<P extends string>({ parts, part, onPart, onClose, onTall, closeLabel, title, tone }: {
   parts: SheetPart<P>[]; part: P | null; onPart: (p: P) => void; onClose: () => void; onTall: () => void; closeLabel: string;
+  /** The label over the parts ("Style"), and the studio whose gradient the chosen part wears. */
+  title: string; tone: "carousel" | "video";
 }) {
+  const at = Math.max(0, parts.findIndex((p) => p.id === part));
   const drag = useRef<{ y: number; sheet: HTMLElement } | null>(null);
   const end = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -139,12 +142,16 @@ export function SheetHead<P extends string>({ parts, part, onPart, onClose, onTa
       }}
       onPointerUp={end} onPointerCancel={end}>
       <span className="sheet-grip" aria-hidden />
-      <div className="row nowrap sheet-parts">
+      <div className="sheet-top">
+        <span className="label">{title}</span>
+        <button className="sheet-x" aria-label={closeLabel} onClick={onClose}><Icon name="x" size={16} /></button>
+      </div>
+      {/* The parts: one control across the sheet, the chosen one on the studio's gradient (it slides to the next). */}
+      <div className={"sheet-seg " + tone} role="tablist" style={{ "--n": parts.length, "--i": at } as React.CSSProperties}>
+        <span className="sheet-seg-thumb" aria-hidden />
         {parts.map((p) => (
-          <button key={p.id} className={"btn sm" + (part === p.id ? " on" : "")} aria-pressed={part === p.id} onClick={() => onPart(p.id)}>{p.label}</button>
+          <button key={p.id} role="tab" className={part === p.id ? "on" : ""} aria-selected={part === p.id} onClick={() => onPart(p.id)}>{p.label}</button>
         ))}
-        <span className="grow" />
-        <button className="btn icon quiet sm" aria-label={closeLabel} onClick={onClose}><Icon name="x" size={16} /></button>
       </div>
     </div>
   );

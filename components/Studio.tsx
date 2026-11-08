@@ -163,8 +163,16 @@ export default function Studio({ userName }: { userName: string }) {
     first: "text",
   });
   // The dock's Style button: the carousel's sheet here, the video studio's there (it opens its own).
-  const [videoStyle, setVideoStyle] = useState(0);
-  const openStyle = () => { if (studio === "video") setVideoStyle((n) => n + 1); else carSheet.openPart(carSheet.lastPart()); };
+  // The video studio's sheet is its own: a command (open or close it) and its state back, for the dock.
+  const [videoStyle, setVideoStyle] = useState<{ n: number; open: boolean }>({ n: 0, open: false });
+  const [videoSheetOpen, setVideoSheetOpen] = useState(false);
+  const styleOpen = studio === "video" ? videoSheetOpen : carSheet.part !== null;
+  const toggleStyle = () => {
+    if (studio === "video") setVideoStyle((c) => ({ n: c.n + 1, open: !videoSheetOpen }));
+    else if (carSheet.part !== null) carSheet.close();
+    else carSheet.openPart(carSheet.lastPart());
+  };
+  const closeStyle = () => { carSheet.close(); if (videoSheetOpen) setVideoStyle((c) => ({ n: c.n + 1, open: false })); };
   /** The slide in the middle right now (while swiping or scrubbing), before it becomes the selected one. */
   const [deckLive, setDeckLive] = useState<number | null>(null);
   /** The deck is moving (a swipe, a scrub, a jump to a dot): the fields under it fade out meanwhile. */
@@ -210,8 +218,9 @@ export default function Studio({ userName }: { userName: string }) {
   };
   // A new panel starts at its top (each panel is the whole page on a phone).
   const pickMobileTab = (tab: MobileTab) => {
-    carSheet.close();
-    if (tab === mobileTab) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    const wasStyle = styleOpen;
+    closeStyle();
+    if (tab === mobileTab) { if (!wasStyle) window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     setMobileTab(tab);
     window.scrollTo({ top: 0 });
     try { navigator.vibrate?.(8); } catch { /* not on this phone */ }
@@ -1109,7 +1118,7 @@ export default function Studio({ userName }: { userName: string }) {
   // Switching studios keeps the same workspace in memory: save first, close any dialog, swap the view.
   const switchStudio = (next: "carousel" | "video") => {
     if (next === studio) return;
-    carSheet.close();
+    closeStyle();
     void flushSave();
     setEditor(null);
     setOverlay(null);
@@ -1390,7 +1399,8 @@ export default function Studio({ userName }: { userName: string }) {
           <div style={{ display: studio === "video" ? "contents" : "none" }}>
           <VideoStudio
             active={studio === "video"}
-            openStyle={videoStyle}
+            styleCmd={videoStyle}
+            onStyleOpen={setVideoSheetOpen}
             canUndo={!!history.past} canRedo={!!history.future} onUndo={undo} onRedo={redo}
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
@@ -1561,7 +1571,7 @@ export default function Studio({ userName }: { userName: string }) {
         </main>
 
         <aside className={"col side r" + carSheet.sheetProps.className} data-part={carSheet.sheetProps["data-part"]} ref={rightColRef}>
-          <SheetHead parts={carParts} part={carSheet.part} onPart={carSheet.openPart} onClose={carSheet.close} onTall={carSheet.toggleTall} closeLabel={t("Close")} />
+          <SheetHead parts={carParts} part={carSheet.part} onPart={carSheet.openPart} onClose={carSheet.close} onTall={carSheet.toggleTall} closeLabel={t("Close")} title={t("Style")} tone="carousel" />
           <Inspector index={sel} cfg={project.slides[sel]} zones={ws.zones} onZones={(v) => upd((w) => ({ ...w, zones: v }))}
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
             lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts} onPreview={setFontPreview}
@@ -1572,6 +1582,8 @@ export default function Studio({ userName }: { userName: string }) {
       </div>
 
       {/* Phone: one panel at a time, like an app (the centre, the files / lists on the left, the style on the right). */}
+      {/* Phone: the page fades to black behind the dock, like under the header. */}
+      <div className="dock-fade" aria-hidden />
       <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab}>
         {/* The video studio's player (its play button and a timeline to scrub), on top of the dock. */}
         <div id="dock-player" className="dock-player" />
@@ -1581,10 +1593,10 @@ export default function Studio({ userName }: { userName: string }) {
           <span key={studio} className="ds-icon"><Icon name={studio === "video" ? "reel" : "deck"} size={22} /></span>
         </button>
         <span className="mobile-tabs-sep" aria-hidden />
-        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
+        <button className={mobileTab === "slides" && !styleOpen ? "on" : ""} aria-pressed={mobileTab === "slides" && !styleOpen} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
         <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name="library" size={18} /><span className="tab-name">{t("Library")}</span></button>
         {/* The style of what is on screen, in a sheet over the page (the preview kept in sight above it). */}
-        <button aria-label={t("Style")} onClick={() => { if (mobileTab !== "slides") pickMobileTab("slides"); openStyle(); }}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
+        <button className={styleOpen ? "on" : ""} aria-pressed={styleOpen} aria-label={t("Style")} onClick={() => { if (mobileTab !== "slides") setMobileTab("slides"); toggleStyle(); }}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <span className="mobile-tabs-sep" aria-hidden />
         <Menu trigger={(open, toggle) => <button className={"me mobile-me" + (open ? " open" : "")} aria-label={t("Settings and account")} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}
