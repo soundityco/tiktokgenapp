@@ -2779,11 +2779,13 @@ export default function VideoStudio({
                 </div>
                 {settings.takes && settings.takes.length > 1 && (
                   <div className="row">
-                    <span className="muted xs">{t("Takes found in the video (pick the one to use):")}</span>
+                    <span className="muted xs row" style={{ gap: 4 }}>{t("Takes found in the video (pick the one to use):")}
+                      <Hint text={t("The song plays more than once in this video (you sang it twice, or started over): each take is one of those passes. The first times are where it sits in the video, the second where it falls in the song. Pick the one to use; if you filmed only one pass, the other is a part of the song that sounds alike (a loop of the beat): keep the right one and ignore it.")} /></span>
                     {settings.takes.map((k, i) => (
                       <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " on" : "")}
-                        aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}>
-                        {t("Take {n}", { n: i + 1 })} <span className="mono xs">{fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)}</span>
+                        aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}
+                        title={t("In the video {a}–{b} · in the song {c}–{d}", { a: fmtTime(k.musicStart), b: fmtTime(k.musicEnd), c: fmtTime(k.offset + k.musicStart), d: fmtTime(k.offset + k.musicEnd) })}>
+                        {t("Take {n}", { n: i + 1 })} <span className="mono xs">{t("video")} {fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)} · {t("song")} {fmtTime(k.offset + k.musicStart)}–{fmtTime(k.offset + k.musicEnd)}</span>
                       </button>
                     ))}
                   </div>
