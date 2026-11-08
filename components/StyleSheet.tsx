@@ -91,7 +91,8 @@ const pvBounds = () => {
   const floor = dock ? dock.top - 8 : window.innerHeight - 90;
   const c = visibleCentre(), pv = visiblePreview();
   const extra = c && pv ? c.getBoundingClientRect().height - pv.getBoundingClientRect().height : 40;
-  return [170, Math.max(200, floor - topH - extra - 112 - 70)] as const;
+  // Down to the control alone above the dock: the biggest preview, the settings scrolled under it.
+  return [170, Math.max(200, floor - topH - extra - 112 - 8)] as const;
 };
 const clampPv = () => {
   const v = parseFloat(document.documentElement.style.getPropertyValue("--pv-h"));

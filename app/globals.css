@@ -1443,7 +1443,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* The page scrolls (not the column: what sticks needs the page as its frame), long enough for the preview to
      stay put whatever the part shown. */
   .main[data-mobile-tab="style"] .col.side.r { border-top: 0; padding-top: var(--s2); overflow-x: clip; overflow-y: visible;
-    min-height: calc(100dvh - var(--pv-bottom, 400px) + 40px); }
+ }
   /* Its control: "Style" over the parts, in one row across the page, held right under the preview (the settings
      scroll under it). Its top line is a grip: dragged down, the preview grows. */
   .style-tabs { display: grid; gap: 8px; }
@@ -1505,7 +1505,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* Behind the dock, the page fades to black (the header's gradient, upside down). */
   .dock-fade { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 39; height: calc(116px + env(safe-area-inset-bottom)); pointer-events: none;
     background: linear-gradient(0deg, var(--bg) 0%, var(--bg) 30%, color-mix(in srgb, var(--bg) 70%, transparent) 62%, transparent 100%); transition: height .3s; }
-  .app:has(.dock-player:not(:empty)) .dock-fade { height: calc(190px + env(safe-area-inset-bottom)); }
+  .app:has(.dock-player:not(:empty)) .dock-fade { height: calc(160px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 640px) {
   /* A little more room inside the dock (its corners stay concentric with the buttons'). */
@@ -1539,3 +1539,17 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 /* "Format" over the framing: only on the phone's Style page (a computer has the panel's own title). */
 .style-only { display: none !important; }
 @media (max-width: 1000px) { .main[data-mobile-tab="style"] .style-only { display: flex !important; } }
+@media (max-width: 1000px) {
+  /* Style page: every part's title at the same distance under the control (Format sat in its panel's body). */
+  .main[data-mobile-tab="style"] .video-col-r > details.sec[data-sec="video-render"] > .body,
+  .main[data-mobile-tab="style"] details.sec[data-sec^="slide-"] > .body { padding-top: 0; margin-top: 0; }
+  /* Its end: the last setting just above the dock, no empty black under it. */
+  .app:has(.dock-player:not(:empty)) .main[data-mobile-tab="style"] { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+  .main[data-mobile-tab="style"] .col.side.r { padding-bottom: 0; }
+  /* Its control: a hairline on top with the grip, it can be pulled up and down. */
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { box-shadow: none; border-top: 1px solid var(--line-2); }
+}
+@media (max-width: 1000px) {
+  /* The presets' panel starts flush: the same 13px as the other parts. */
+  .main[data-mobile-tab="style"] details.sec[data-sec="slide-presets"] > .body { padding-top: 13px; }
+}
