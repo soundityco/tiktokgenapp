@@ -151,6 +151,11 @@ export interface LyricWord {
   until?: number;
   /** Retimed by hand: this timing wins over the automatic one, also when the lyrics are placed again. */
   manual?: boolean;
+  /** Word-by-word captions only: the timing retouched by hand there (start, end, leaves the screen). The phrases
+   *  keep s / e / until: a word retouched alone never moves its phrase. */
+  ws?: number;
+  we?: number;
+  wu?: number;
 }
 
 export interface GenSlide {
@@ -284,6 +289,8 @@ export interface VideoSettings {
   captions: boolean;
   /** How the generated lyrics are cut into captions: one word at a time or one phrase at a time. */
   captionMode?: "phrase" | "word";
+  /** Word by word: each word at the time the model heard it, or spread over its phrase by syllables (lib/lyricsAlign). */
+  wordTiming?: "ai" | "even";
   /** Longest line of a caption, in characters (smart line breaks happen before it is exceeded). */
   lineChars?: number;
   /** Own text style for the captions; falls back to the selected carousel slide's style. */

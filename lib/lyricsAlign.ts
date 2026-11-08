@@ -7,6 +7,8 @@ import type { LyricWord } from "./types";
  */
 
 /** Lower case, no accents, no punctuation: the form words are compared in. */
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
+
 export function norm(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -296,6 +298,48 @@ export interface CueOptions {
   /** Only the words overlapping this window of the track. */
   from?: number;
   to?: number;
+  /** Word by word: each word at the time heard by the model ("ai", the default), or spread over its phrase by its
+   *  syllables ("even": the phrases are well placed, the model's word times less so). Retouches win either way. */
+  wordTiming?: "ai" | "even";
+}
+
+/** Syllables of a word, roughly (groups of vowels): its share of the phrase when the words are spread. */
+export function syllables(w: string): number {
+  return Math.max(1, (norm(w).match(/[aeiouyàâäéèêëîïôöùûüœæ]+/g) ?? []).length);
+}
+
+/** The phrases (as phrase by phrase shows them) of time-sorted words. */
+function phrasesOf(ws: LyricWord[], lineChars: number): LyricWord[][] {
+  const hard: LyricWord[][] = [[ws[0]]];
+  for (let i = 1; i < ws.length; i++) {
+    const prev = ws[i - 1], cur = ws[i];
+    const lineChange = prev.line !== undefined && cur.line !== undefined && prev.line !== cur.line;
+    if (cur.s - prev.e >= 0.6 || lineChange || /[.!?…]$/.test(prev.w)) hard.push([cur]);
+    else hard[hard.length - 1].push(cur);
+  }
+  return hard.flatMap((g) => splitLong(g, lineChars * 2, 5));
+}
+
+/**
+ * The words as word-by-word captions show them: their own retouch there if any (ws / we / wu), else the model's
+ * time or (wordTiming "even") a share of their phrase by syllables. New objects carrying `src`, the word they show.
+ */
+function wordView(ws: LyricWord[], lineChars: number, timing: "ai" | "even"): (LyricWord & { src: LyricWord })[] {
+  const out = new Map<LyricWord, LyricWord & { src: LyricWord }>();
+  const view = (x: LyricWord, s: number, e: number) => ({ ...x, s: r3(x.ws ?? s), e: r3(x.we ?? e), until: x.wu, src: x });
+  if (timing === "even") {
+    for (const g of phrasesOf(ws, lineChars)) {
+      const S = g[0].s, E = Math.max(g[g.length - 1].e, S + 0.05);
+      const total = g.reduce((n, x) => n + syllables(x.w), 0);
+      let at = 0;
+      for (const x of g) {
+        const share = syllables(x.w) / total;
+        out.set(x, view(x, S + (E - S) * at, S + (E - S) * (at + share)));
+        at += share;
+      }
+    }
+  }
+  return ws.map((x) => out.get(x) ?? view(x, x.s, x.e)).sort((a, b) => a.s - b.s);
 }
 
 const WEAK = new Set(
@@ -345,16 +389,10 @@ export function buildCues(words: LyricWord[], mode: "phrase" | "word", opts: Cue
 
   let groups: LyricWord[][];
   if (mode === "word") {
-    groups = ws.map((x) => [x]);
+    // Their own timing (retouches made here, the spread): the phrases never see it.
+    groups = wordView(ws, lineChars, opts.wordTiming ?? "ai").map((x) => [x]);
   } else {
-    const hard: LyricWord[][] = [[ws[0]]];
-    for (let i = 1; i < ws.length; i++) {
-      const prev = ws[i - 1], cur = ws[i];
-      const lineChange = prev.line !== undefined && cur.line !== undefined && prev.line !== cur.line;
-      if (cur.s - prev.e >= 0.6 || lineChange || /[.!?…]$/.test(prev.w)) hard.push([cur]);
-      else hard[hard.length - 1].push(cur);
-    }
-    groups = hard.flatMap((g) => splitLong(g, lineChars * 2, 5));
+    groups = phrasesOf(ws, lineChars);
   }
 
   const hold = mode === "word" ? 0.25 : 0.5;
@@ -369,13 +407,14 @@ export function buildCues(words: LyricWord[], mode: "phrase" | "word", opts: Cue
   });
 }
 
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /** Move a caption earlier or later: its words (and the end set by hand, if any) move by `delta` seconds. */
 export function shiftCue(all: LyricWord[], cue: Cue, delta: number): LyricWord[] {
   const mine = new Set(cue.words);
   return all.map((x) => (mine.has(x)
-    ? { ...x, s: r3(x.s + delta), e: r3(x.e + delta), ...(x.until === undefined ? {} : { until: r3(x.until + delta) }), manual: true }
+    ? { ...x, s: r3(x.s + delta), e: r3(x.e + delta), ...(x.until === undefined ? {} : { until: r3(x.until + delta) }), manual: true,
+      // A word retouched word by word goes with its phrase.
+      ...(x.ws === undefined ? {} : { ws: r3(x.ws + delta) }), ...(x.we === undefined ? {} : { we: r3(x.we + delta) }), ...(x.wu === undefined ? {} : { wu: r3(x.wu + delta) }) }
     : x));
 }
 
@@ -446,12 +485,50 @@ export function retimeCue(all: LyricWord[], cues: Cue[], i: number, what: "start
 }
 
 /**
+ * The ± buttons of a word-by-word caption, kept in that mode's own timing (ws / we / wu): the phrases (s / e / until)
+ * stay where they are. `start` changes when the word appears (earlier: the word before leaves then), `end` when it
+ * leaves (later: the next word comes then). Every word keeps at least 0.05 s on screen. Null: nothing can move.
+ */
+export function retimeWordCue(all: LyricWord[], cues: Cue[], i: number, what: "start" | "end", delta: number): LyricWord[] | null {
+  const MIN = 0.05;
+  const c = cues[i], prev = cues[i - 1], next = cues[i + 1];
+  const src = (cue: Cue | undefined) => (cue?.words[0] as LyricWord & { src?: LyricWord } | undefined)?.src;
+  const me = src(c);
+  if (!c || !me) return null;
+  const set = new Map<LyricWord, LyricWord>();
+  const put = (w: LyricWord, patch: Partial<LyricWord>) => set.set(w, { ...(set.get(w) ?? w), ...patch });
+  if (what === "start") {
+    const lo = prev ? prev.start + MIN : 0;
+    const ns = r3(Math.max(lo, Math.min(c.end - MIN, c.start + delta)));
+    if (Math.abs(ns - c.start) < 0.005) return null;
+    put(me, { ws: ns, we: r3(Math.max(c.words[0].e, ns + MIN)) });
+    const p = src(prev);
+    if (p && prev && ns < prev.end) put(p, { wu: ns });
+  } else {
+    const hi = next ? next.end - MIN : c.end + 60;
+    const ne = r3(Math.max(c.start + MIN, Math.min(hi, c.end + delta)));
+    if (Math.abs(ne - c.end) < 0.005) return null;
+    put(me, { wu: ne });
+    const n = src(next);
+    if (n && next && ne > next.start) put(n, { ws: ne, we: r3(Math.max(next.words[0].e, ne + MIN)) });
+  }
+  return all.map((x) => set.get(x) ?? x);
+}
+
+/** The word-by-word retouches dropped: those captions go back to the automatic timing. */
+export const clearWordTiming = (all: LyricWord[]): LyricWord[] =>
+  all.map((x) => (x.ws === undefined && x.we === undefined && x.wu === undefined ? x : (({ ws: _s, we: _e, wu: _u, ...rest }) => rest)(x)));
+
+/** Some words were retouched word by word. */
+export const hasWordTiming = (words: LyricWord[] | undefined): boolean => !!words?.some((x) => x.ws !== undefined || x.we !== undefined || x.wu !== undefined);
+
+/**
  * The lyrics were placed again (text edited, synced again): the words retimed by hand keep their timing.
  * Old and new words are matched in order (longest common sequence of the words), so an edit elsewhere
  * in the text, or a line added or removed, leaves the other retouches where they were.
  */
 export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
-  if (!prev.some((x) => x.manual) || !next.length) return next;
+  if (!prev.some((x) => x.manual || x.ws !== undefined || x.wu !== undefined) || !next.length) return next;
   const a = [...prev].sort((x, y) => x.s - y.s), b = [...next].sort((x, y) => x.s - y.s);
   const ka = a.map((x) => norm(x.w)), kb = b.map((x) => norm(x.w));
   const n = a.length, m = b.length;
@@ -467,6 +544,8 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
     if (ka[i] === kb[j]) {
       const o = a[i];
       if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true };
+      // The word-by-word retouches stay too.
+      if (o.ws !== undefined || o.we !== undefined || o.wu !== undefined) out[j] = { ...out[j], ws: o.ws, we: o.we, wu: o.wu };
       i++; j++;
     } else if (L[(i + 1) * (m + 1) + j] >= L[i * (m + 1) + j + 1]) i++;
     else j++;

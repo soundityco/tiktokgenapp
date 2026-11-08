@@ -1352,3 +1352,5 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   background: conic-gradient(var(--video) calc(var(--p, 0) * 360deg), color-mix(in srgb, var(--video) 22%, transparent) 0);
   -webkit-mask: radial-gradient(circle, transparent 4px, #000 4.5px); mask: radial-gradient(circle, transparent 4px, #000 4.5px); }
 @media (max-width: 640px) { .bg-job .bg-label { display: none; } .bg-job { padding: 0 8px 0 5px; gap: 5px; } }
+/* The Drive copy of the open video, under its preview (a phone does not show the library beside it). */
+.copy-status { display: flex; align-items: center; gap: 7px; color: var(--muted); margin: 0; }

@@ -1,12 +1,12 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, listAppFiles, uploadToDrive } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, hasManual, keepManual, parseLyrics, repairOrder, retimeCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
@@ -360,6 +360,8 @@ export default function VideoStudio({
   const copyClip = useRef<string | null>(null);
   const stopCopyOf = (id: string) => { if (copyClip.current === id) copyAc.current?.abort(); };
   const copyFailed = useRef<string | null>(null);
+  /** The copy of the open video will be made again in a few seconds (its passage changed). */
+  const [copyDue, setCopyDue] = useState(false);
   const [driveErr, setDriveErr] = useState<string | null>(null);
   const driveAc = useRef<AbortController | null>(null);
   const [audioBuf, setAudioBuf] = useState<AudioBuffer | null>(null);
@@ -472,8 +474,8 @@ export default function VideoStudio({
   const mode = settings.captionMode ?? "phrase";
   const lineChars = settings.lineChars ?? 22;
   const cues = useMemo(
-    () => buildCues(project.lyricWords ?? [], mode, { lineChars, from: settings.crop.start, to: settings.crop.start + settings.crop.duration }),
-    [project.lyricWords, mode, lineChars, settings.crop.start, settings.crop.duration]
+    () => buildCues(project.lyricWords ?? [], mode, { lineChars, from: settings.crop.start, to: settings.crop.start + settings.crop.duration, wordTiming: settings.wordTiming }),
+    [project.lyricWords, mode, lineChars, settings.crop.start, settings.crop.duration, settings.wordTiming]
   );
 
   /** Font under the pointer in a font list (lyrics or hook style): shown on the video until the pointer leaves. */
@@ -933,8 +935,9 @@ export default function VideoStudio({
     if (segE <= 0 || segS >= videoDur) return;
     const cp = settings.drive?.copy;
     if (cp && cp.of === videoBlob.size && cp.from <= Math.max(0, segS - 0.3) + 1e-3 && cp.to >= Math.min(videoDur, segE + 0.3) - 1e-3) return;
-    const id = window.setTimeout(() => void makeCopy(), 15_000);
-    return () => clearTimeout(id);
+    setCopyDue(true);
+    const id = window.setTimeout(() => { setCopyDue(false); void makeCopy(); }, 15_000);
+    return () => { clearTimeout(id); setCopyDue(false); };
   }, [videoBlob, onCopy, driveWrite, copyJob, settings.score, settings.offset, settings.crop.start, settings.crop.duration, settings.drive?.copy, videoDur]); // eslint-disable-line react-hooks/exhaustive-deps
   // No camera file here and no copy opened: its copy arrived since (the data came after the video opened), or it is on
   // the Drive without the data saying so (the page that made it was left at once): found by its label, opened.
@@ -2285,7 +2288,8 @@ export default function VideoStudio({
 
   const retime = (i: number, what: "start" | "end", dir: 1 | -1) => {
     const c = cues[i];
-    const out = c && retimeCue(project.lyricWords ?? [], cues, i, what, dir * 0.1);
+    // Word by word: that mode's own timing (the phrases never move from it).
+    const out = c && (mode === "word" ? retimeWordCue : retimeCue)(project.lyricWords ?? [], cues, i, what, dir * 0.1);
     if (!out) return;
     stop();
     // The preview shows the edge that moved.
@@ -2535,6 +2539,20 @@ export default function VideoStudio({
             <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
               onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
           </div>
+          {/* Where the Drive copy of this video stands: on a phone the library tile is on another tab. */}
+          {(() => {
+            const cp = settings.drive?.copy;
+            const line = onCopy && cp ? t("You work on the Drive copy ({from} → {to})", { from: fmtTime(cp.from), to: fmtTime(cp.to) })
+              : copyJob?.clip === clip.id ? (copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) }))
+              : copyDue ? (cp ? t("The passage changed: the Drive copy is updated in a few seconds") : t("The Drive copy is made in a few seconds"))
+              : cp && videoBlob && cp.of === videoBlob.size ? t("Drive copy up to date")
+              : null;
+            return line ? (
+              <p className={"copy-status xs" + (copyJob?.clip === clip.id || copyDue ? " shine" : "")}>
+                <span className="bg-ring" style={{ "--p": copyJob?.clip === clip.id ? copyJob.p : cp ? 1 : 0 } as CSSProperties} aria-hidden />{line}
+              </p>
+            ) : null;
+          })()}
           {lookErr && grade?.lut && (
             <p className="notice warn xs">
               {t("The LUT “{name}” is not in this browser: the picture is shown without it.", { name: grade.lut.name })}{" "}
@@ -3041,6 +3059,20 @@ export default function VideoStudio({
                 {mode === "phrase" && (
                   <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
                     onChange={(v) => setV({ lineChars: v })} />
+                )}
+                {/* Word by word: where each word comes from. The phrases are well placed; the model's word times less so,
+                    "spread" shares each phrase by syllables. Retouches made here stay in this mode only. */}
+                {mode === "word" && (
+                  <div className="field">{t("Word timing")}
+                    <div className="row" style={{ gap: 6 }}>
+                      <button className={"btn sm" + ((settings.wordTiming ?? "ai") === "ai" ? " on" : "")} onClick={() => setV({ wordTiming: "ai" })}>{t("As heard (AI)")}</button>
+                      <button className={"btn sm" + (settings.wordTiming === "even" ? " on" : "")} onClick={() => setV({ wordTiming: "even" })}>{t("Spread in the phrase")}</button>
+                      <Hint text={t("Spread: each word gets its share of its phrase by syllables, between the phrase's real start and end. Your word retouches win either way, and never move the phrases.")} />
+                    </div>
+                    {hasWordTiming(project.lyricWords) && (
+                      <button className="btn sm quiet" style={{ justifySelf: "start" }} onClick={() => onProject((p) => ({ ...p, lyricWords: clearWordTiming(p.lyricWords ?? []) }))}>{t("Undo the word-by-word retouches")}</button>
+                    )}
+                  </div>
                 )}
               </Section>
                 <CaptionStyle
