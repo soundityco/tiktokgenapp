@@ -1076,8 +1076,7 @@ export default function Studio({ userName }: { userName: string }) {
 
   // Settings and account: in the top bar on a computer, at the end of the tab bar on a phone.
   const settingsMenu = (close: () => void) => (<>
-            <button className="mobile-only" onClick={() => { close(); setOverlay({ k: "import", poolId: null }); }}><Icon name="list" size={14} />{t("Import hooks")}</button>
-            <div className="sep mobile-only" />
+            <button className="mobile-only menu-source" onClick={() => { close(); setOverlay({ k: "import", poolId: null }); }}><Icon name="list" size={14} />{t("Import hooks")}</button>
             <div className="label cap">{t("Language")}</div>
             <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
             <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
@@ -1113,7 +1112,7 @@ export default function Studio({ userName }: { userName: string }) {
         </span>
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
-        <button className="btn top-import" aria-label={t("Import hooks")} onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" /><span>{t("Import hooks")}</span></button>
+        <button className="btn source top-import" aria-label={t("Import hooks")} onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" /><span>{t("Import hooks")}</span></button>
         <div className="top-settings"><Menu trigger={(open, toggle) => <button className={"me" + (open ? " open" : "")} aria-label={t("Settings and account")} title={userName} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}
         </Menu></div>

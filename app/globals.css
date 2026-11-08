@@ -1021,8 +1021,12 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
 
 /* The lyrics of the release: a source, like the media. The same sharp button as the pickers, but a bright
    outline and its count in bold; without lyrics, the amber "to do" of the app. */
-.lyrics-btn { border-color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs); color: var(--text); }
-.lyrics-btn:hover:not(:disabled) { border-color: var(--text); }
+/* What feeds the release (its lyrics, the hooks imported from TikTok): a bright outline and bold text. */
+.lyrics-btn, .btn.source { border-color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs); color: var(--text); }
+.lyrics-btn:hover:not(:disabled), .btn.source:hover:not(:disabled) { border-color: var(--text); }
+/* The same in the account menu on a phone: a framed first row, apart from the settings. */
+.menu .menu-source { border: 1px solid var(--muted); font-weight: 600; color: var(--text); margin-bottom: var(--s1); }
+.menu .menu-source:hover { border-color: var(--text); }
 .lyrics-btn .lyrics-meta { font-weight: 400; color: var(--muted); }
 .lyrics-btn .lyrics-meta::before { content: "·"; margin-right: 7px; color: var(--faint); }
 /* "Draw" over generate, like the pickers' names. */
