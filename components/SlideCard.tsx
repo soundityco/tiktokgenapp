@@ -107,11 +107,19 @@ export default function SlideCard(p: Props) {
   const [tool, setTool] = useState<keyof PhotoAdjust>("exposure");
   // One photo's edits open at a time: opening another card's closes this one.
   const myId = useRef(Math.random());
+  // A click or a tap anywhere off the picture closes its edits (the slide stays selected).
+  const picWrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const other = (e: Event) => { if ((e as CustomEvent).detail !== myId.current) setAdjusting(false); };
     window.addEventListener(ADJUST_OPEN, other);
     return () => window.removeEventListener(ADJUST_OPEN, other);
   }, []);
+  useEffect(() => {
+    if (!adjusting) return;
+    const away = (e: PointerEvent) => { if (!picWrap.current?.contains(e.target as Node)) setAdjusting(false); };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [adjusting]);
   const adj = cfg.pic.adjust ?? {};
   const hasAdjust = Object.values(adj).some((x) => x);
 
@@ -447,7 +455,7 @@ export default function SlideCard(p: Props) {
           </>)}
         </Menu>
       </div>
-      <div className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "")} data-drop={t("Drop here")}>
+      <div ref={picWrap} className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "")} data-drop={t("Drop here")}>
         {dropHere && <div className="drop-hint">{t("Drop the picture here")}</div>}
         <canvas ref={cv} className="cv" width={1080} height={1920}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
