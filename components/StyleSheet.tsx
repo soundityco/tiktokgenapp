@@ -82,22 +82,38 @@ export function useStyleParts<P extends string>(opts: {
 /** The preview's height on the Style page (px), chosen by dragging the control under it; kept on this device. */
 const PV_KEY = "tktgen-pv-h";
 const visibleCentre = () => [...document.querySelectorAll<HTMLElement>(".main .col.center")].find((e) => e.offsetParent);
-const visiblePreview = () => [...document.querySelectorAll<HTMLElement>(".main .col.center .video-stage .cv-wrap, .main .col.center .card.sel .cv-wrap")].find((e) => e.offsetParent);
-/** From small to as tall as leaves the parts' control and a few settings in sight above the dock. */
-const pvBounds = () => {
+/** The block on top is the preview's height plus this, in both studios (see globals.css): the same sizes give
+ *  the same place to the control. */
+const PV_EXTRA = 76;
+/** The preview's height now (the variable, else what the block measures). */
+const pvNow = () => {
+  const v = parseFloat(document.documentElement.style.getPropertyValue("--pv-h"));
+  if (v > 0) return v;
+  const c = visibleCentre();
+  return c ? c.getBoundingClientRect().height - PV_EXTRA : 300;
+};
+/** From small to as tall as leaves the parts' control in sight above the dock (`here`: also where the page is now,
+ *  for a drag; without it, the screen's own limit, the same in both studios). */
+const pvBounds = (here = true) => {
   const root = getComputedStyle(document.documentElement);
   const topH = parseFloat(root.getPropertyValue("--top-h") || "60");
-  const dock = document.querySelector<HTMLElement>(".mobile-tabs")?.getBoundingClientRect();
-  const floor = dock ? dock.top - 8 : window.innerHeight - 90;
-  const c = visibleCentre(), pv = visiblePreview();
-  const extra = c && pv ? c.getBoundingClientRect().height - pv.getBoundingClientRect().height : 40;
-  // Down to the control alone above the dock: the biggest preview, the settings scrolled under it.
-  return [170, Math.max(200, floor - topH - extra - 112 - 8)] as const;
+  const dockEl = document.querySelector<HTMLElement>(".mobile-tabs");
+  const dock = dockEl?.getBoundingClientRect();
+  // The video's dock is taller (its player): the carousel counts that row too, so both allow the same size.
+  const playerRow = dockEl?.querySelector(".dock-player:not(:empty)") ? 0 : 60;
+  const floor = dock ? dock.top - 8 - playerRow : window.innerHeight - 150;
+  const tabs = [...document.querySelectorAll<HTMLElement>(".style-tabs")].find((e) => e.offsetParent)?.getBoundingClientRect();
+  const tabsH = tabs?.height ?? 120;
+  // Held under the header: the biggest picture that leaves the control above the dock…
+  const stuck = floor - topH - PV_EXTRA - tabsH;
+  // …and where the page is now (not scrolled yet: the block sits lower).
+  const now = here && tabs ? pvNow() + floor - tabs.bottom : stuck;
+  return [170, Math.max(200, Math.min(stuck, now))] as const;
 };
 const clampPv = () => {
   const v = parseFloat(document.documentElement.style.getPropertyValue("--pv-h"));
   if (!(v > 0)) return;
-  const [lo, hi] = pvBounds();
+  const [lo, hi] = pvBounds(false);
   document.documentElement.style.setProperty("--pv-h", `${Math.round(Math.min(hi, Math.max(lo, v)))}px`);
 };
 
@@ -109,7 +125,7 @@ export function StyleTabs<P extends string>({ parts, part, onPart, title, tone, 
   aside?: ReactNode;
 }) {
   const at = Math.max(0, parts.findIndex((p) => p.id === part));
-  const drag = useRef<{ y: number; h: number } | null>(null);
+  const drag = useRef<{ y: number; h: number; hi: number } | null>(null);
   const end = () => {
     if (!drag.current) return;
     drag.current = null;
@@ -120,16 +136,14 @@ export function StyleTabs<P extends string>({ parts, part, onPart, title, tone, 
     <div className="style-tabs"
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
-        const pv = visiblePreview();
         e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = { y: e.clientY, h: pv ? pv.getBoundingClientRect().height : 300 };
+        drag.current = { y: e.clientY, h: pvNow(), hi: pvBounds()[1] };
         document.documentElement.classList.add("pv-dragging");
       }}
       onPointerMove={(e) => {
         const d = drag.current;
         if (!d) return;
-        const [lo, hi] = pvBounds();
-        const h = Math.round(Math.min(hi, Math.max(lo, d.h + e.clientY - d.y)));
+        const h = Math.round(Math.min(d.hi, Math.max(170, d.h + e.clientY - d.y)));
         document.documentElement.style.setProperty("--pv-h", `${h}px`);
       }}
       onPointerUp={end} onPointerCancel={end}>

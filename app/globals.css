@@ -1579,3 +1579,12 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-mobile-tab="style"] .style-grip { top: 10px; width: 42px; height: 5px; margin-left: -21px; border-radius: 3px; background: rgba(255,255,255,.28); }
   .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap:not(.landscape) { width: min(100%, calc((var(--pv-h, 40dvh) + 46px) * 9 / 16)); }
 }
+@media (max-width: 1000px) {
+  /* Style page: the video follows the dragged height like the carousel's slides (the page's 200px cap is off). */
+  .main[data-studio="video"][data-mobile-tab="style"] .video-grid .cv-wrap { max-width: 100%; }
+}
+@media (max-width: 1000px) {
+  /* The part that slides: no line on top, a glow of the studio's colour behind it instead (violet / orange). */
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { border-top: 0; box-shadow: 0 -12px 34px -10px var(--glow-carousel), inset 0 1px 0 rgba(255,255,255,.06); }
+  .main[data-studio="video"][data-mobile-tab="style"] .col.side.r > .style-tabs { box-shadow: 0 -12px 34px -10px var(--glow-video), inset 0 1px 0 rgba(255,255,255,.06); }
+}
