@@ -222,7 +222,7 @@ export function Section({ title, children, open = false, id }: { title: ReactNod
     try { const v = localStorage.getItem(key); return v === null ? open : v === "1"; } catch { return open; }
   });
   return (
-    <details className="sec" open={shown}
+    <details className="sec" open={shown} data-sec={id}
       onToggle={(e) => { if (key) try { localStorage.setItem(key, (e.currentTarget as HTMLDetailsElement).open ? "1" : "0"); } catch { /* private mode */ } }}>
       <summary>{title}</summary>
       <div className="body">{children}</div>

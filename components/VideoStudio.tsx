@@ -28,6 +28,8 @@ import ShareDialog from "./ShareDialog";
 import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select } from "./ui";
+import { createPortal } from "react-dom";
+import { PHONE_QUERY, SheetChips, SheetHead, useStyleSheet, type SheetPart } from "./StyleSheet";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -266,6 +268,9 @@ function whenReady(el: HTMLVideoElement, wait = 3000): Promise<void> {
  * find where the camera recording sits in the official track, trim the segment, place the
  * lyrics once, then export a vertical clip with the official audio and the lyrics burned in.
  */
+/** The parts of the video's style, as a phone opens them. */
+type VPart = "framing" | "lyrics" | "hook" | "color";
+
 export default function VideoStudio({
   canUndo,
   canRedo,
@@ -1363,6 +1368,7 @@ export default function VideoStudio({
   };
 
   // ---- playback ----
+  const playRef = useRef<() => Promise<void>>(async () => {});
   const play = async () => {
     // Not before the video can play: a click would otherwise start everything later, by surprise.
     if (!audioBuf || (videoUrl && !playerReady)) return;
@@ -1589,6 +1595,8 @@ export default function VideoStudio({
     if (crop.start !== cur.crop.start) setHead(crop.start);
     onSaveNow();
   };
+
+  playRef.current = play;
 
   const toggleLink = () => {
     const cur = settingsRef.current;
@@ -2358,6 +2366,30 @@ export default function VideoStudio({
   /** Files still opening: the panels wait (greyed) so nothing is edited half-loaded. */
   const studioLoading = !!audioBlob && (!audioBuf || (!!videoUrl && !playerReady));
   const [tab, setTab] = useState<"lyrics" | "hook" | "caption">("lyrics");
+  // Phone: the video's style opens as a sheet under the preview (no Style tab), on the part chosen under it.
+  const rightColRef = useRef<HTMLElement>(null);
+  const vParts: SheetPart<VPart>[] = [
+    { id: "framing", label: t("Framing") }, { id: "lyrics", label: t("Lyrics") }, { id: "hook", label: t("Hook") }, { id: "color", label: t("Colour") },
+  ];
+  const vSheet = useStyleSheet<VPart>({
+    preview: () => videoRef.current?.parentElement ?? null,
+    sheet: () => rightColRef.current,
+    parts: { framing: '[data-sec="video-render"]', lyrics: ".sheet-text", hook: ".sheet-text", color: "#video-color" },
+    all: ':scope > [data-sec="video-render"], :scope > .sheet-text, :scope > #video-color',
+  });
+  const openVPart = (p: VPart) => { if (p === "lyrics" || p === "hook") setTab(p); vSheet.openPart(p); };
+  useEffect(() => { if (!active) vSheet.close(); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Phone: the player sits on top of the dock (Studio's slot), always at hand.
+  const [dockSlot, setDockSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!active) { setDockSlot(null); return; }
+    const mq = matchMedia(PHONE_QUERY);
+    const pick = () => setDockSlot(mq.matches ? document.getElementById("dock-player") : null);
+    pick();
+    mq.addEventListener("change", pick);
+    return () => mq.removeEventListener("change", pick);
+  }, [active]);
+  const dockDrag = useRef<{ was: boolean } | null>(null);
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
     !audioBlob ? { text: t("Audio missing"), tone: "warn" }
@@ -2686,6 +2718,8 @@ export default function VideoStudio({
             <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
               onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
           </div>
+          {/* Phone: the style of the video, part by part, in a sheet under the preview. */}
+          <SheetChips label={t("Style")} parts={vParts} part={vSheet.part} onPart={openVPart} />
           {/* Where the Drive copy of this video stands, right where the passage is changed (the library says the same). */}
           {copyState && <div className="copy-line">{copyStatusEl()}</div>}
           {lookErr && grade?.lut && (
@@ -3103,7 +3137,8 @@ export default function VideoStudio({
       </div>
         </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
-        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")}>
+        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + vSheet.sheetProps.className} data-part={vSheet.sheetProps["data-part"]} ref={rightColRef}>
+          <SheetHead parts={vParts} part={vSheet.part} onPart={openVPart} onClose={vSheet.close} onTall={vSheet.toggleTall} closeLabel={t("Close")} />
           {/* How the camera picture fits the post: the first part of the video's style. */}
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
@@ -3144,7 +3179,7 @@ export default function VideoStudio({
           </div>
           </Section>
           {tab === "hook" ? (
-            <div className="stack">
+            <div className="stack sheet-text">
               <div className="row col-head">
                 <span className="label">{t("Hook style")}</span>
                 <Hint text={settings.hookStyle ? t("Own style for the hooks.") : t("Default hook style: white with a black outline, at the top, until you change something.")} />
@@ -3176,7 +3211,7 @@ export default function VideoStudio({
               )}
                         </div>
           ) : (
-            <div className="stack">
+            <div className="stack sheet-text">
               <div className="row col-head">
                 <span className="label">{t("Lyrics style")}</span>
                 <Hint text={settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")} />
@@ -3234,6 +3269,40 @@ export default function VideoStudio({
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
                       </div>
         </aside>
+      {dockSlot && audioBuf && createPortal(
+        <div className="dp">
+          <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
+            onClick={() => (playing ? stop() : void play())}>
+            {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden /> : <Icon name={playing ? "pause" : "play"} size={18} />}
+          </button>
+          {/* The segment: drag along it to move in the video (playing goes on from there once let go). */}
+          <div className="dp-track" role="slider" aria-label={t("Position in the segment")} aria-valuemin={0} aria-valuemax={Math.round(segLen)} aria-valuenow={Math.round(head - settings.crop.start)}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              dockDrag.current = { was: playing };
+              if (playing) stop();
+              const r = e.currentTarget.getBoundingClientRect();
+              setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
+            }}
+            onPointerMove={(e) => {
+              if (!dockDrag.current) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
+            }}
+            onPointerUp={() => { const was = dockDrag.current?.was; dockDrag.current = null; if (was) setTimeout(() => void playRef.current(), 0); }}
+            onPointerCancel={() => { dockDrag.current = null; }}>
+            <span className="dp-rail">
+              {cues.filter((c) => c.start > settings.crop.start && c.start < settings.crop.start + segLen).map((c, i) => (
+                <i key={i} className="dp-tick" style={{ left: `${((c.start - settings.crop.start) / segLen) * 100}%` }} />
+              ))}
+              <span className="dp-fill" style={{ width: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
+            </span>
+            <span className="dp-knob" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
+          </div>
+          <span className="dp-time mono">{fmtTime(Math.max(0, head - settings.crop.start))}<span className="muted"> / {fmtTime(segLen)}</span></span>
+        </div>,
+        dockSlot,
+      )}
       {clipDialog === "rename" && (
         <PromptDialog title={t("Rename the video")} label={t("Name")} initial={clipName(clip)} confirmLabel={t("Rename")}
           onSubmit={renameClip} onClose={() => setClipDialog(null)} />
