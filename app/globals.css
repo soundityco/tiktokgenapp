@@ -1367,11 +1367,12 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
    again at the next role; down to the end of the last role's lists. The photos have no roles: no line. */
 .fam-body { border-left: 0; }
 .fam-body > .group.sub { position: relative; }
-.fam-body > .group.sub::after { content: ""; position: absolute; left: -14px; top: 0; bottom: calc(-1 * var(--s3)); width: 1px;
-  background: linear-gradient(180deg, var(--line-2) 0, var(--line-2) 10px, transparent 100%); }
-.fam-body > .group.sub:first-child::after { top: -4px; }
+/* From the branch's corner down (nothing above it), solid a little, then fading. */
+.fam-body > .group.sub::after { content: ""; position: absolute; left: -14px; top: 9px; bottom: calc(-1 * var(--s3)); width: 1px;
+  background: linear-gradient(180deg, var(--line-2) 0, var(--line-2) 6px, transparent 100%); }
 .fam-body > .group.sub:last-child::after { bottom: 0; }
 .fam-body:not(:has(> .group.sub)) { margin-left: 0; padding-left: 0; }
+.fam-body:not(:has(> .group.sub)) > .item { border-bottom: 0; } /* the photo lists: no hairlines between them */
 /* The (i)'s bubble: on the screen whatever the (i)'s place, its arrow on it. */
 .hint.on { color: var(--text); border-color: var(--muted); }
 .hint-pop { position: fixed; z-index: 300; max-width: min(300px, calc(100vw - 16px)); padding: 10px 12px; border-radius: var(--r-lg);
