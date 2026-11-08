@@ -2504,12 +2504,14 @@ export default function VideoStudio({
             {/* On the copy: it holds the passage it was made for (+2 s). Moved past it, the pictures are not on this device. */}
             {onCopy && settings.drive?.copy && (() => {
               const cp = settings.drive.copy, segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
-              return segS < cp.from - 0.05 || segE > cp.to + 0.05
+              // Only where the copy is shorter than the take: past the take's own end, the take itself stops (notice below).
+              const take = settings.source?.duration ?? Infinity;
+              return (segS < cp.from - 0.05 && cp.from > 0.05) || (segE > cp.to + 0.05 && cp.to < take - 0.05)
                 ? <p className="notice warn xs">{t("The Drive copy holds {from} to {to} of the take: past it, there are no pictures on this device. Make the passage longer on the device that has the camera file (its copy follows), or pick the camera file here.", { from: fmtTime(cp.from), to: fmtTime(cp.to) })}</p>
                 : null;
             })()}
-            {/* On the Drive copy, the copy's own notice (above) says it better. */}
-            {!onCopy && settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
+            {/* Past the take's end (the take itself, not its copy: on the copy, the take's own length). */}
+            {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + (onCopy && settings.source?.duration ? settings.source.duration : videoDur) + 0.02 && (
               <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
             )}
             </div>
