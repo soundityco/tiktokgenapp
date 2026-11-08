@@ -1564,7 +1564,9 @@ export default function Studio({ userName }: { userName: string }) {
         </main>
 
         <aside className="col side r" ref={rightColRef}>
-          <StyleTabs parts={carParts} part={carStyle.part} onPart={carStyle.pick} title={t("Style")} tone="carousel" />
+          <StyleTabs parts={carParts} part={carStyle.part} onPart={carStyle.pick} tone="carousel"
+            title={<>{t("Style")} <span className="style-of">· {t("Slide {n}", { n: sel + 1 })}</span></>}
+            aside={<button className="btn sm quiet" onClick={applyAll}>{t("Apply to all slides")}</button>} />
           <Inspector index={sel} cfg={project.slides[sel]} zones={ws.zones} onZones={(v) => upd((w) => ({ ...w, zones: v }))}
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
             lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts} onPreview={setFontPreview}
@@ -1587,7 +1589,7 @@ export default function Studio({ userName }: { userName: string }) {
         </button>
         <span className="mobile-tabs-sep" aria-hidden />
         <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
-        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name="library" size={18} /><span className="tab-name">{t("Library")}</span></button>
+        <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name="library" size={18} /><span className="tab-name">{/* The dock's room on a phone: the French word, shortened. */}{lang === "fr" ? "Biblio" : t("Library")}</span></button>
         {/* The style of what is on screen, in a sheet over the page (the preview kept in sight above it). */}
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} aria-label={t("Style")} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <span className="mobile-tabs-sep" aria-hidden />

@@ -663,6 +663,8 @@ export const FR: Record<string, string> = {
   "{n} takes found in the video": "{n} prises trouvées dans la vidéo",
   "Takes found in the video (pick the one to use):": "Prises trouvées dans la vidéo (choisis celle à utiliser) :",
   "Take {n}": "Prise {n}",
+  "The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.": "Le rendu de toute la vidéo : un LUT pour les images en log, puis exposition, contraste et couleur, pareil sur l'aperçu et l'export.",
+  "The shape of the post and how the camera picture fills it. On the preview, drag the picture to reframe it and pinch to zoom.": "La forme du post et la façon dont l'image de la caméra le remplit. Sur l'aperçu, fais glisser l'image pour la recadrer et pince pour zoomer.",
   "Presets": "Presets",
   "Position in the segment": "Position dans le segment",
   "The song plays more than once in this video (you sang it twice, or started over): each take is one of those passes. The first times are where it sits in the video, the second where it falls in the song. Pick the one to use; if you filmed only one pass, the other is a part of the song that sounds alike (a loop of the beat): keep the right one and ignore it.": "Le morceau passe plus d'une fois dans cette vidéo (tu l'as chanté deux fois, ou tu as recommencé) : chaque prise est l'un de ces passages. Les premiers temps disent où elle est dans la vidéo, les seconds où elle tombe dans le morceau. Choisis celle à utiliser ; si tu n'as filmé qu'un passage, l'autre est un bout du morceau qui sonne pareil (une boucle de l'instru) : garde la bonne et ignore-la.",

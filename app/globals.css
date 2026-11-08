@@ -1430,18 +1430,35 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-mobile-tab="style"] .col.center,
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center {
     position: sticky; top: var(--top-h, 60px); z-index: 6; padding-top: 4px; padding-bottom: 14px;
-    background: linear-gradient(180deg, var(--bg) 90%, color-mix(in srgb, var(--bg) 0%, transparent));
-    box-shadow: 0 -60px 0 var(--bg); /* nothing shows through the header's fade above it */ }
+    background: var(--bg); }
   .main[data-studio="video"][data-mobile-tab="style"] .video-grid { display: block; }
   /* A smaller picture there: the style gets the rest of the screen. */
-  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap:not(.landscape) { width: min(100%, calc(40dvh * 9 / 16)); margin: 0 auto; }
-  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides > .card { flex-basis: 40vw; margin: 0 -2vw; }
-  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides { padding-left: 30vw; padding-right: 30vw; }
+  /* Its height: --pv-h, set by dragging the Style control (40% of the screen to start with). */
+  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap:not(.landscape) { width: min(100%, calc(var(--pv-h, 40dvh) * 9 / 16)); margin: 0 auto; }
+  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap.landscape { width: min(100%, calc(var(--pv-h, 40dvh) * 16 / 9)); margin: 0 auto; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides > .card { flex-basis: min(74vw, calc(var(--pv-h, 40dvh) * .5625)); margin: 0 -2vw; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides { padding-left: calc(50vw - min(37vw, var(--pv-h, 40dvh) * .28125)); padding-right: calc(50vw - min(37vw, var(--pv-h, 40dvh) * .28125)); }
+  html.pv-dragging, html.pv-dragging * { user-select: none; cursor: grabbing !important; }
   .main[data-studio="carousel"][data-mobile-tab="style"] .card-head { display: none; }
-  .main[data-mobile-tab="style"] .col.side.r { border-top: 0; padding-top: var(--s2); }
-  /* Its control: "Style" over the parts, in one row across the page. */
+  /* The page scrolls (not the column: what sticks needs the page as its frame), long enough for the preview to
+     stay put whatever the part shown. */
+  .main[data-mobile-tab="style"] .col.side.r { border-top: 0; padding-top: var(--s2); overflow-x: clip; overflow-y: visible;
+    min-height: calc(100dvh - var(--pv-bottom, 400px) + 40px); }
+  /* Its control: "Style" over the parts, in one row across the page, held right under the preview (the settings
+     scroll under it). Its top line is a grip: dragged down, the preview grows. */
   .style-tabs { display: grid; gap: 8px; }
-  .main .col.side.r > .style-tabs { min-width: 0; max-width: none; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { position: sticky; top: calc(var(--pv-bottom, 400px) - 1px); z-index: 5; min-width: 0; max-width: none;
+    margin: calc(-1 * var(--s2)) calc(-1 * var(--s4)) 0; padding: 14px var(--s4) 12px; background: var(--panel); border-radius: 18px 18px 0 0;
+    box-shadow: 0 -1px 0 rgba(255,255,255,.05); touch-action: none; cursor: grab; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 18px; pointer-events: none;
+    background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel) 0%, transparent)); }
+  .style-grip { position: absolute; top: 5px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: rgba(255,255,255,.18); }
+  .style-tabs-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: 28px; }
+  .style-tabs-top .style-of { color: var(--text); }
+  /* "Slide 1 · Apply to all" moved up into the control: not twice. */
+  .main[data-mobile-tab="style"] .insp-title { display: none; }
+  /* The parts' titles (Format, Lyrics style, Colour…) all on the same line height, whatever sits at their right. */
+  .main[data-mobile-tab="style"] .col-head { min-height: var(--h-sm); }
   .sheet-seg { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); padding: 4px; border-radius: 13px;
     background: var(--bg); border: 1px solid var(--line-2); }
   .sheet-seg button { position: relative; z-index: 1; height: 40px; min-width: 0; padding: 0 4px; border: 0; border-radius: 9px; background: none;
@@ -1452,12 +1469,12 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .sheet-seg.carousel .sheet-seg-thumb { background: var(--grad-carousel); box-shadow: 0 4px 14px var(--glow-carousel); }
   .sheet-hide { display: none !important; }
 
-  /* Under the video (its page): what it shows and its size on one line, the Drive copy's state under it. */
+  /* Under the video (its page): "Shown" over its two eyes, the size at their right, the Drive copy's state under. */
   .video-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s3); row-gap: 10px; }
   .video-stage > * { grid-column: 1 / -1; }
-  .video-stage > .shown-on { grid-column: 1; grid-row: 2; }
-  .video-stage > .stage-fmt { grid-column: 2; grid-row: 2; align-self: center; margin: 0; }
-  .video-stage > .copy-line { padding-top: 10px; border-top: 1px solid var(--line); }
+  .video-stage > .shown-on { grid-column: 1; grid-row: 2; flex-wrap: wrap; row-gap: 8px; }
+  .video-stage > .shown-on > .label { flex-basis: 100%; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; font-weight: 500; }
+  .video-stage > .stage-fmt { grid-column: 2; grid-row: 2; align-self: end; margin: 0; min-height: var(--h-sm); }
   /* The segment's title sits at the top of its block, not in the middle of the badge's height. */
   .seg-top { align-items: flex-start !important; }
 
@@ -1519,3 +1536,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .app:has(.dock-player:not(:empty)) .video-head .h-more { grid-column: 2; grid-row: 1; }
   .app:has(.dock-player:not(:empty)) .video-head .h-dl { grid-column: 3; grid-row: 1; }
 }
+/* "Format" over the framing: only on the phone's Style page (a computer has the panel's own title). */
+.style-only { display: none !important; }
+@media (max-width: 1000px) { .main[data-mobile-tab="style"] .style-only { display: flex !important; } }

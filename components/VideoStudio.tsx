@@ -3184,6 +3184,8 @@ export default function VideoStudio({
           <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} title={t("Style")} tone="video" />
           {/* How the camera picture fits the post: the first part of the video's style. */}
           <Section id="video-render" title={t("Framing")}>
+          {/* Phone's Style page: its title, like the other parts' (the panel's own is hidden there). */}
+          <div className="row col-head style-only"><span className="label">{t("Format")}</span><Hint text={t("The shape of the post and how the camera picture fills it. On the preview, drag the picture to reframe it and pinch to zoom.")} /></div>
           <div className="row">
             <button className={"btn sm" + (settings.format !== "16:9" ? " on" : "")} aria-pressed={settings.format !== "16:9"}
               onClick={() => setV({ format: "9:16" })}>9:16</button>
@@ -3304,7 +3306,7 @@ export default function VideoStudio({
                         </div>
           )}
           <div id="video-color" className="stack">
-            <div className="row col-head"><span className="label">{t("Colour")}</span></div>
+            <div className="row col-head"><span className="label">{t("Colour")}</span><Hint text={t("The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.")} /></div>
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
