@@ -72,7 +72,7 @@ function CaptionsEditor({ text, onText }: { text: string; onText: (text: string)
         <div className="caption-item" key={i}>
           <span className="idx">{String(i + 1).padStart(2, "0")}</span>
           <textarea className="input" rows={Math.min(8, Math.max(3, c.split("\n").length + 1))} value={c} aria-label={t("Caption {n}", { n: i + 1 })}
-            placeholder={t("The caption, then its hashtags (on their own line if you like).")}
+            placeholder={i === 0 && items.length === 1 ? t("e.g. My new song is out 🎧 tell me your favourite line in the comments") + "\n" + t("#newmusic #independentartist #rap") : t("The caption, then its hashtags (on their own line if you like).")}
             onChange={(e) => set(items.map((x, k) => (k === i ? e.target.value : x)))} />
           <button className="btn quiet icon sm" aria-label={t("Delete this caption")} title={t("Delete this caption")}
             onClick={() => set(items.length > 1 ? items.filter((_, k) => k !== i) : [""])}><Icon name="trash" size={14} /></button>

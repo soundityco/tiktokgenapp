@@ -112,15 +112,26 @@ export function normalizeWorkspace(w: Workspace): Workspace {
   };
 }
 
-export function defaultWorkspace(): Workspace {
+/** Names of a new account's first lists, in the user's language (given by the app). */
+export interface StarterNames { release: string; hooks: string; transitions: string; captions: string; pics: [string, string, string] }
+
+export function defaultWorkspace(names?: StarterNames): Workspace {
   const textPools: TextPool[] = [];
   const picPools: PicPool[] = [];
   for (let i = 1; i <= 3; i++) {
     const p = slidePools(i);
+    // Lists an artist uses for real: the hooks (slide 1), the transitions (slide 2), photos by kind.
+    if (names) {
+      p.text.name = i === 1 ? names.hooks : names.transitions;
+      p.pics.name = names.pics[i - 1];
+    }
     if (i < 3) textPools.push(p.text); // slide 3 uses the project's lyrics
     picPools.push(p.pics);
   }
-  const project = newProject("My first release", textPools, picPools);
+  // The post's captions, empty (its editor shows an example).
+  const captions: TextPool = { id: uid(), name: names?.captions ?? "Captions", scope: "shared", kind: "captions", text: "" };
+  textPools.push(captions);
+  const project = { ...newProject(names?.release ?? "My first release", textPools, picPools), captionPoolId: captions.id };
   return {
     v: 1,
     projects: [project],

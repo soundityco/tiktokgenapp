@@ -19,7 +19,7 @@ describe("text list roles", () => {
   });
   it("new workspaces: slide 1 draws hooks, the next slides texts", () => {
     const ws = defaultWorkspace();
-    expect(ws.textPools.map((p) => p.kind)).toEqual(["hooks", "texts"]);
+    expect(ws.textPools.map((p) => p.kind)).toEqual(["hooks", "texts", "captions"]);
     expect(ws.textRolesV1).toBe(true);
   });
   it("hooks and texts are both one-per-line lists", () => {

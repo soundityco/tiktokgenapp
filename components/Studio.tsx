@@ -229,6 +229,9 @@ export default function Studio({ userName }: { userName: string }) {
   const say = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); }, []);
 
   const historyTimer = useRef<number | null>(null);
+  /** A new account's first lists, named for real use (hooks, transitions, captions, photos by kind). */
+  const starterNames = () => ({ release: t("My first release"), hooks: t("Hooks"), transitions: t("Transitions"), captions: t("Captions"),
+    pics: [t("Portraits"), t("Stage & live"), t("Studio & backstage")] as [string, string, string] });
   const persistHistory = useCallback(() => {
     if (isDemo()) return; // the demo's steps never reach the account's history
     if (historyTimer.current) window.clearTimeout(historyTimer.current);
@@ -313,7 +316,7 @@ export default function Studio({ userName }: { userName: string }) {
       .then((f) => { if (f) setFonts(f); });
     // Demo: a brand-new account, in memory only (lib/demo).
     if (isDemo()) {
-      const next = linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(defaultWorkspace()), (n) => t("Part {n}", { n }), t("Chorus"))));
+      const next = linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(defaultWorkspace(starterNames())), (n) => t("Part {n}", { n }), t("Chorus"))));
       rev.current = 0;
       wsRef.current = next;
       setWs(next);
@@ -330,7 +333,7 @@ export default function Studio({ userName }: { userName: string }) {
         // Saved data this version cannot read must never be replaced by an empty workspace (the next
         // autosave would overwrite it): stop with an error instead.
         if (j.data && (j.data.v !== 1 || !Array.isArray(j.data.projects))) throw new Error("Your saved data could not be read by this version of the app. Nothing was changed.");
-        const next = linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace()), (n) => t("Part {n}", { n }), t("Chorus"))));
+        const next = linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(j.data ? (j.data as Workspace) : defaultWorkspace(starterNames())), (n) => t("Part {n}", { n }), t("Chorus"))));
         wsRef.current = next;
         setWs(next);
         // Google fonts used by the texts: loaded, then everything is drawn again with them.
