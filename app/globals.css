@@ -1447,13 +1447,13 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* Its control: "Style" over the parts, in one row across the page, held right under the preview (the settings
      scroll under it). Its top line is a grip: dragged down, the preview grows. */
   .style-tabs { display: grid; gap: 8px; }
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { position: sticky; top: calc(var(--pv-bottom, 400px) - 1px); z-index: 5; min-width: 0; max-width: none;
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { position: sticky; top: var(--pv-bottom, 400px); z-index: 7; min-width: 0; max-width: none;
     margin: calc(-1 * var(--s2)) calc(-1 * var(--s4)) 0; padding: 14px var(--s4) 12px; background: var(--panel); border-radius: 18px 18px 0 0;
     box-shadow: 0 -1px 0 rgba(255,255,255,.05); touch-action: none; cursor: grab; }
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 18px; pointer-events: none;
     background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel) 0%, transparent)); }
   .style-grip { position: absolute; top: 5px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: rgba(255,255,255,.18); }
-  .style-tabs-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: 28px; }
+  .style-tabs-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); height: var(--h-sm); }
   .style-tabs-top .style-of { color: var(--text); }
   /* "Slide 1 · Apply to all" moved up into the control: not twice. */
   .main[data-mobile-tab="style"] .insp-title { display: none; }
@@ -1552,4 +1552,20 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @media (max-width: 1000px) {
   /* The presets' panel starts flush: the same 13px as the other parts. */
   .main[data-mobile-tab="style"] details.sec[data-sec="slide-presets"] > .body { padding-top: 13px; }
+}
+@media (max-width: 1000px) {
+  /* Style page, carousel: held like the video's. The column is no scroll box of its own, nothing in it repaints
+     while the page scrolls, and a finger on the slides only swipes them sideways (up and down is the settings'). */
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center { overflow: visible; contain: layout paint; }
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center { contain: layout paint; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides,
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides canvas.cv { touch-action: pan-x; }
+}
+@media (max-width: 1000px) {
+  /* Style page: the same block on top in both studios (the video, or the slides and their dots), so switching
+     studio leaves the control and the settings exactly where they were. The picture is --pv-h tall in both. */
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center,
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center { height: calc(var(--pv-h, 40dvh) + 76px); overflow: clip; box-sizing: border-box; }
+  .main[data-studio="video"][data-mobile-tab="style"] .video-grid { margin-top: 8px; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides > .card { flex-basis: min(74vw, calc(var(--pv-h, 40dvh) * .5625 + 4px)); }
 }

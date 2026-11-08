@@ -56,7 +56,7 @@ export function useStyleParts<P extends string>(opts: {
     const centre = [...document.querySelectorAll<HTMLElement>(".main .col.center")].find((e) => e.offsetParent);
     if (!centre) return;
     const root = document.documentElement;
-    const set = () => root.style.setProperty("--pv-bottom", `${Math.round(parseFloat(getComputedStyle(root).getPropertyValue("--top-h") || "60") + centre.getBoundingClientRect().height)}px`);
+    const set = () => root.style.setProperty("--pv-bottom", `${Math.ceil(parseFloat(getComputedStyle(root).getPropertyValue("--top-h") || "60") + centre.getBoundingClientRect().height)}px`);
     set();
     const ro = new ResizeObserver(set);
     ro.observe(centre);
