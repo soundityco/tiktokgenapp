@@ -1736,3 +1736,12 @@ details.sec:first-of-type { background-image: none; }
   .mobile-tabs { width: min(430px, calc(100vw - 20px)); }
   .mobile-tabs > .mobile-tabs-sep { margin-left: auto; margin-right: auto; }
 }
+@media (max-width: 1000px) {
+  /* The studio's own page (phone): dots behind the head and the preview's block only, fading to black from the
+     picture's bottom to the block's end (measured: --dots-fade, --dots-end); the rest of the page is plain black. */
+  .main[data-mobile-tab="slides"] .col.center { background-image: none; position: relative; isolation: isolate; }
+  .main[data-mobile-tab="slides"] .col.center::before { content: ""; position: absolute; left: 0; right: 0; top: 0; z-index: -1; pointer-events: none;
+    height: var(--dots-end, 0px); background-image: radial-gradient(rgba(255,255,255,.055) 1px, transparent 1px); background-size: 20px 20px;
+    -webkit-mask-image: linear-gradient(180deg, #000 var(--dots-fade, 0px), transparent var(--dots-end, 0px));
+    mask-image: linear-gradient(180deg, #000 var(--dots-fade, 0px), transparent var(--dots-end, 0px)); }
+}

@@ -155,6 +155,34 @@ export default function Studio({ userName }: { userName: string }) {
   const carParts: SheetPart<CarPart>[] = [
     { id: "text", label: t("Text") }, { id: "photo", label: t("Photo") }, { id: "position", label: t("Position") }, { id: "presets", label: t("Presets") },
   ];
+  // Phone, the studio's own page: the board's dots run from the top down to the end of the preview's block (the
+  // video's info lines / the slides' dots and Zones), fading out from the picture's bottom; below, plain black.
+  useEffect(() => {
+    if (mobileTab !== "slides" || typeof ResizeObserver === "undefined") return;
+    const mq = matchMedia("(max-width: 1000px)");
+    let ro: ResizeObserver | null = null;
+    let centre: HTMLElement | null = null;
+    const measure = () => {
+      if (!centre) return;
+      const top = centre.getBoundingClientRect().top;
+      const pic = centre.querySelector<HTMLElement>(".video-stage .cv-wrap, .card.sel .cv-wrap");
+      const ends = [...centre.querySelectorAll<HTMLElement>(".video-stage, .deck-float, .deck-wrap")].filter((e) => e.offsetParent);
+      if (!pic || !ends.length) { centre.style.removeProperty("--dots-end"); return; }
+      const end = Math.max(...ends.map((e) => e.getBoundingClientRect().bottom)) - top + 8;
+      centre.style.setProperty("--dots-fade", `${Math.round(pic.getBoundingClientRect().bottom - top)}px`);
+      centre.style.setProperty("--dots-end", `${Math.round(end)}px`);
+    };
+    const t = window.setTimeout(() => {
+      centre = [...document.querySelectorAll<HTMLElement>(".main .col.center")].find((e) => e.offsetParent) ?? null;
+      if (!centre || !mq.matches) return;
+      measure();
+      ro = new ResizeObserver(measure);
+      ro.observe(centre);
+      centre.querySelectorAll<HTMLElement>(".video-stage, .deck-wrap").forEach((e) => ro!.observe(e));
+    }, 60);
+    window.addEventListener("resize", measure);
+    return () => { clearTimeout(t); ro?.disconnect(); window.removeEventListener("resize", measure); };
+  }, [mobileTab, studio, !!ws]);
   // The header's height (phone: the Style page holds the preview right under it).
   useEffect(() => {
     const top = document.querySelector<HTMLElement>(".app > .top");
