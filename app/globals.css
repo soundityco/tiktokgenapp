@@ -1711,3 +1711,14 @@ details.sec, .batch-list li + li, .theme-item { border-top: 0; background-image:
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.side.r { display: block !important; }
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.side.r > .style-tabs { margin-bottom: var(--s4); }
 }
+@media (max-width: 1000px) {
+  /* Room under the control (both studios): the fade below it stays clear of the first setting. */
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.side.r > .style-tabs,
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.side.r > .style-tabs { margin-bottom: 24px; }
+}
+/* The first panel of a block never had a line on top (nor its padding): the soft line skips it too, and the
+   carousel's Style page parts have none. */
+details.sec:first-of-type { background-image: none; }
+@media (max-width: 1000px) {
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] { background-image: none; }
+}
