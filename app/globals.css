@@ -1705,3 +1705,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 details.sec, .batch-list li + li, .theme-item { border-top: 0; background-image: var(--soft-line); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
 .res, .hook-item, .ai-row, .storage-row { border-bottom: 0; background-image: var(--soft-line); background-size: 100% 1px; background-position: bottom; background-repeat: no-repeat; }
 .menu .sep, .dd .sep { background: var(--soft-line) !important; border: 0 !important; height: 1px; }
+@media (max-width: 1000px) {
+  /* Style page, video: laid out like the carousel's (a plain column, the 16px under the control set on it), not
+     through the grid's gap that Safari lets the sticky control eat. */
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.side.r { display: block !important; }
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.side.r > .style-tabs { margin-bottom: var(--s4); }
+}
