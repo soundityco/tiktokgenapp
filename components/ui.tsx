@@ -332,9 +332,63 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
 }
 
 /** A small ⓘ: the explanation shows on hover (or focus), instead of a sentence always on screen. */
+/**
+ * An (i) with its explanation in a bubble: on hover with a mouse (a click pins it), on a tap on a phone. The bubble
+ * goes under the (i), or above it when there is no room below, slid so it never leaves the screen, its arrow on
+ * the (i); above everything (windows too); Escape, a scroll or a tap elsewhere closes it.
+ */
 export function Hint({ text }: { text: string }) {
   // An <i>, not a <span>: layout rules written for the spans around it never reach it.
-  return <i className="hint" tabIndex={0} role="note" aria-label={text} title={text}>i</i>;
+  const ref = useRef<HTMLElement>(null);
+  const bubble = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState<null | "hover" | "pinned">(null);
+  const [pos, setPos] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const a = ref.current?.getBoundingClientRect(), b = bubble.current?.getBoundingClientRect();
+    if (!a || !b) return;
+    const M = 8, GAP = 8, W = window.innerWidth, H = window.innerHeight;
+    const below = a.bottom + GAP + b.height <= H - M || a.top - GAP - b.height < M;
+    const top = Math.max(M, Math.min(H - M - b.height, below ? a.bottom + GAP : a.top - GAP - b.height));
+    const left = Math.max(M, Math.min(W - M - b.width, a.left + a.width / 2 - b.width / 2));
+    setPos({ top, left, "--ax": `${Math.round(a.left + a.width / 2 - left)}px` } as CSSProperties);
+    bubble.current?.classList.toggle("up", !below);
+  }, [open, text]);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => {
+      const t = e.target;
+      if (t instanceof Node && (ref.current?.contains(t) || bubble.current?.contains(t))) return;
+      setOpen(null);
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(null); } };
+    const gone = () => setOpen(null);
+    window.addEventListener("pointerdown", away, true);
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("scroll", gone, true);
+    window.addEventListener("resize", gone);
+    return () => {
+      window.removeEventListener("pointerdown", away, true);
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("scroll", gone, true);
+      window.removeEventListener("resize", gone);
+    };
+  }, [open]);
+  const hoverable = () => typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches;
+  return (
+    <>
+      <i ref={ref} className={"hint" + (open ? " on" : "")} tabIndex={0} role="button" aria-label={text} aria-expanded={!!open}
+        onMouseEnter={() => { if (hoverable()) setOpen((o) => o ?? "hover"); }}
+        onMouseLeave={() => setOpen((o) => (o === "hover" ? null : o))}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => (o === "pinned" ? null : "pinned")); }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setOpen((o) => (o ? null : "pinned")); } }}
+        onBlur={() => setOpen((o) => (o === "pinned" ? o : null))}>i</i>
+      {open && typeof document !== "undefined" && createPortal(
+        <div ref={bubble} className="hint-pop" role="tooltip" style={pos ?? { visibility: "hidden", top: 0, left: 0 }}>{text}</div>,
+        document.body,
+      )}
+    </>
+  );
 }
 
 // ---------- Select: the app's own drop-down (not the browser's), written like a <Select> ----------

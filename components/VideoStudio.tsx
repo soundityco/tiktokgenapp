@@ -1012,7 +1012,14 @@ export default function VideoStudio({
       hint: t("A copy of the passage used ({quality}) is on your Drive: open this video on another device to go on working there.", { quality: q }) };
     return null;
   })();
-  const copyStatusEl = (compact = false) => copyState && (
+  const copyStatusEl = (compact = false) => compact && onCopy && settings.drive?.copy ? (
+    // The library's tile, on the copy: its badge and the part of the take it holds, on one line.
+    <span className="copy-status compact on-copy xs">
+      <span className="pill-copy">{t("Drive copy")}</span>
+      <span className="mono">{fmtTime(settings.drive.copy.from)} → {fmtTime(settings.drive.copy.to)}</span>
+      {copyState?.hint && <Hint text={copyState.hint} />}
+    </span>
+  ) : copyState && (
     <span className={"copy-status xs" + (copyState.busy ? " busy" : "") + (copyState.ok ? " ok" : "") + (copyState.bad ? " bad" : "") + (compact ? " compact" : "")}>
       {copyState.ok ? <Icon name="check" size={12} /> : <span className="bg-ring" style={{ "--p": copyState.p } as CSSProperties} aria-hidden />}
       <span className={copyState.busy ? "shine" : undefined}>{copyState.text}</span>
@@ -2548,7 +2555,6 @@ export default function VideoStudio({
                       {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
                       {d.originalId && !onCopy && <span>Drive</span>}
                       {/* The copy of the take: the same words as under the preview. */}
-                      {onCopy && <span className="pill-copy">{t("Drive copy")}</span>}
                       {copyStatusEl(true)}
                     </>)}
                   menu={settings.videoName && ((close) => (<>

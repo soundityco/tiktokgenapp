@@ -1362,3 +1362,20 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .copy-status .copy-act { height: 22px; padding: 0 8px; color: var(--text); border: 1px solid var(--line-2); }
 .copy-status .copy-act:hover { border-color: var(--muted); }
 .copy-status.compact { flex-basis: 100%; }
+.copy-status.on-copy { gap: 7px; color: var(--muted); }
+/* The texts' tree: its line stops at the last branch (no tail under the last role's lists). */
+.fam-body:has(> .group.sub) { border-left: 0; }
+.fam-body > .group.sub { position: relative; }
+.fam-body > .group.sub::after { content: ""; position: absolute; left: -14px; top: 0; bottom: calc(-1 * var(--s3)); border-left: 1px solid var(--line-2); }
+.fam-body > .group.sub:first-child::after { top: -4px; }
+.fam-body > .group.sub:last-child::after { bottom: auto; height: 9.5px; } /* down to its branch (the middle of the role's 18px line) */
+/* The (i)'s bubble: on the screen whatever the (i)'s place, its arrow on it. */
+.hint.on { color: var(--text); border-color: var(--muted); }
+.hint-pop { position: fixed; z-index: 300; max-width: min(300px, calc(100vw - 16px)); padding: 10px 12px; border-radius: var(--r-lg);
+  background: #1a1a20; border: 1px solid var(--line-2); box-shadow: 0 14px 36px rgba(0,0,0,.55);
+  color: #d9d7d0; font-family: var(--sans); font-size: var(--fs-sm); font-style: normal; font-weight: 400; line-height: 1.5; letter-spacing: normal;
+  text-transform: none; white-space: pre-line; text-align: left; pointer-events: auto; animation: hint-in .14s ease-out; }
+.hint-pop::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 5px); top: -6px; width: 10px; height: 10px; background: #1a1a20;
+  border-left: 1px solid var(--line-2); border-top: 1px solid var(--line-2); transform: rotate(45deg); }
+.hint-pop.up::before { top: auto; bottom: -6px; transform: rotate(225deg); }
+@keyframes hint-in { from { opacity: 0; } }
