@@ -221,7 +221,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
           e.target.value = "";
         }} />
         <button className="btn sm" onClick={() => file.current?.click()}>{t("Import .txt")}</button>
-        {pool.kind === "hooks" && <button className="btn sm" onClick={p.onImport}>{t("Import hooks…")}</button>}
+        {pool.kind === "hooks" && <button className="btn sm source" onClick={p.onImport} title={t("From TikTok screenshots or your TikTok account")}><Icon name="list" size={14} />{t("Import hooks…")}</button>}
         {pool.kind === "hooks" && p.onRefreshViews && Object.keys(pool.views ?? {}).length > 0 && (
           <button className={"btn sm" + (p.viewsBusy ? " shine-box" : "")} onClick={p.onRefreshViews} disabled={p.viewsBusy}>
             {p.viewsBusy ? t("Updating…") : t("Update views")}

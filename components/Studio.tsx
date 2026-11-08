@@ -1112,7 +1112,6 @@ export default function Studio({ userName }: { userName: string }) {
 
   // Settings and account: in the top bar on a computer, at the end of the tab bar on a phone.
   const settingsMenu = (close: () => void) => (<>
-            <button className="mobile-only menu-source" onClick={() => { close(); setOverlay({ k: "import", poolId: null }); }}><Icon name="list" size={14} />{t("Import hooks")}</button>
             <div className="label cap">{t("Language")}</div>
             <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
             <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
@@ -1148,7 +1147,6 @@ export default function Studio({ userName }: { userName: string }) {
         </span>
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
-        <button className="btn source top-import" aria-label={t("Import hooks")} onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" /><span>{t("Import hooks")}</span></button>
         <div className="top-settings"><Menu trigger={(open, toggle) => <button className={"me" + (open ? " open" : "")} aria-label={t("Settings and account")} title={userName} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}
         </Menu></div>
@@ -1441,7 +1439,13 @@ export default function Studio({ userName }: { userName: string }) {
         <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}
           onNav={(i) => updProject((p) => ({ ...p, selectedSlide: i }))} onClose={() => setPreview(false)} />
       )}
-      {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} textKind={overlay.textKind} onCreate={createPool} onClose={() => setOverlay(null)} />}
+      {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} textKind={overlay.textKind} onCreate={createPool} onClose={() => setOverlay(null)}
+        onCreateImport={(name, scope) => {
+          // The new hooks list, then the import window straight into it.
+          const id = uid();
+          upd((w) => ({ ...w, textPools: [...w.textPools, { id, name: name || t("Imported hooks"), scope, projectId: scope === "project" ? project.id : undefined, kind: "hooks", text: "" }] }));
+          setOverlay({ k: "import", poolId: id });
+        }} />}
       {overlay?.k === "newProject" && <PromptDialog title={t("New project")} label={t("Release name")} confirmLabel={t("Create")} onSubmit={createProject} onClose={() => setOverlay(null)} />}
       {shareOpen && (
         <ShareDialog kind="images" caption={project.caption} onClose={() => setShareOpen(false)}

@@ -2,6 +2,7 @@
 import { Children, type CSSProperties, Fragment, isValidElement, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
+import Icon from "./Icon";
 
 const stack: symbol[] = [];
 
@@ -86,7 +87,9 @@ export function PromptDialog(p: { title: string; label: string; initial?: string
   );
 }
 
-export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" | "texts" | "block" | "captions"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "texts" | "block" | "captions") => void; onClose: () => void }) {
+export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" | "texts" | "block" | "captions"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "texts" | "block" | "captions") => void; onClose: () => void;
+  /** A hooks list: make it, then fill it from TikTok screenshots or the account (the import window takes over). */
+  onCreateImport?: (name: string, scope: "shared" | "project") => void }) {
   const { t } = useT();
   const [name, setName] = useState("");
   const [scope, setScope] = useState<"shared" | "project">("shared");
@@ -108,6 +111,9 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" |
       )}
       <ScopeSelect value={scope} onChange={setScope} />
       <div className="modal-foot">
+        {p.kind === "text" && kind === "hooks" && p.onCreateImport && (
+          <button className="btn source left" onClick={() => p.onCreateImport!(name.trim(), scope)} title={t("From TikTok screenshots or your TikTok account")}><Icon name="list" size={14} />{t("Create and import hooks…")}</button>
+        )}
         <button className="btn" onClick={p.onClose}>{t("Cancel")}</button>
         <button className="btn primary" onClick={go} disabled={!name.trim()}>{t("Create")}</button>
       </div>
