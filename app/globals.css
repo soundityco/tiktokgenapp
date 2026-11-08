@@ -1245,3 +1245,5 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .lib-item .lib-count { transition: opacity .12s; }
 .lib-item:hover .lib-count, .lib-item:focus-within .lib-count { opacity: 0; }
 @media (hover: none) { .lib-item .del { display: none; } .lib-item:hover .lib-count { opacity: 1; } }
+/* The first text of a list stops before the right edge's count / trash. */
+.lib-item .lib-preview { padding-right: 30px; }
