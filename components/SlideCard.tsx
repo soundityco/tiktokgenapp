@@ -73,6 +73,8 @@ interface Props {
   onAdjustAll: (a: PhotoAdjust | undefined) => void;
   onDragStart?: () => void;
   onDragOver?: () => void;
+  /** Shown right under the picture of the selected slide (the phone's deck bar: where we are, the zones). */
+  below?: React.ReactNode;
   onDragEnd?: () => void;
   onDrop?: () => void;
   dragging?: boolean;
@@ -361,6 +363,7 @@ export default function SlideCard(p: Props) {
           );
         })()}
       </div>
+      {p.selected && p.below}
       {err && <span className="notice bad">{err}</span>}
       {dropErr && <span className="notice warn xs">{dropErr}</span>}
       {finding && <ImageFinder onClose={() => setFinding(false)} onPick={(img) => { setFinding(false); p.onWebPic(img); }} />}
