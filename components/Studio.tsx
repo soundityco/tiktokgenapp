@@ -707,7 +707,10 @@ export default function Studio({ userName }: { userName: string }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable) return;
+      // Only where text is typed does the field keep its own undo; after a slider, a colour, a checkbox, the app's.
+      const typing = el.tagName === "TEXTAREA" || el.isContentEditable
+        || (el.tagName === "INPUT" && /^(text|search|email|url|number|password|tel)?$/.test((el as HTMLInputElement).type));
+      if (typing) return;
       if (!(e.metaKey || e.ctrlKey)) return;
       const key = e.key.toLowerCase();
       if (key === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }

@@ -7,6 +7,7 @@ export const FR: Record<string, string> = {
   "In your downloads and your gallery.": "Dans tes téléchargements et ta galerie.",
   "The phone refused: press and hold a picture above, then “Save”.": "Le téléphone a refusé : appuie longuement sur une image au-dessus, puis « Enregistrer ».",
   "Share…": "Partager…",
+  "The Drive copy holds {from} to {to} of the take: past it, there are no pictures on this device. Make the passage longer on the device that has the camera file (its copy follows), or pick the camera file here.": "La copie Drive contient de {from} à {to} de la prise : au-delà, il n'y a pas d'images sur cet appareil. Allonge le passage sur l'appareil qui a le fichier caméra (sa copie suit), ou choisis le fichier caméra ici.",
   "Making the copy of {video} for your other devices": "Copie de {video} pour tes autres appareils",
   "Sending the copy of {video} to your Drive": "Envoi de la copie de {video} sur ton Drive",
   "keep this page open": "garde cette page ouverte",

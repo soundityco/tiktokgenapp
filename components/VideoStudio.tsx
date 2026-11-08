@@ -2447,6 +2447,13 @@ export default function VideoStudio({
               );
             })()}
             {driveErr && <p className="notice bad xs">{driveErr}</p>}
+            {/* On the copy: it holds the passage it was made for (+2 s). Moved past it, the pictures are not on this device. */}
+            {onCopy && settings.drive?.copy && (() => {
+              const cp = settings.drive.copy, segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
+              return segS < cp.from - 0.05 || segE > cp.to + 0.05
+                ? <p className="notice warn xs">{t("The Drive copy holds {from} to {to} of the take: past it, there are no pictures on this device. Make the passage longer on the device that has the camera file (its copy follows), or pick the camera file here.", { from: fmtTime(cp.from), to: fmtTime(cp.to) })}</p>
+                : null;
+            })()}
             {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + videoDur && (
               <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
             )}
