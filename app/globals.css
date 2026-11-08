@@ -1106,3 +1106,36 @@ button.media.m-lyrics:hover { border-color: color-mix(in srgb, var(--kind) 75%, 
 button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last-child { color: var(--lyrics); }
 .media.m-music.warn, .media.m-film.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .group-empty { padding: 6px 0 2px; color: var(--faint); }
+
+/* Library: two families (texts, photos), each under its own head on a hairline, its lists hanging from a vertical
+   line like the video's release → video tree. A text list shows its first text (serif italic, the editorial voice),
+   a photo list its first photos, stacked like prints. */
+.lib-family { border-top: 1px solid var(--line-2); padding-top: var(--s4); margin-top: var(--s2); margin-bottom: var(--s5); }
+.fam-head { display: flex; align-items: center; gap: 8px; min-height: var(--h-sm); margin-bottom: var(--s2); }
+.fam-head > svg { color: var(--text); flex: none; }
+.fam-head .label { color: var(--text); margin: 0; }
+.fam-count { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.fam-head .btn.icon.sm { margin-right: -6px; }
+.fam-body { position: relative; margin-left: 7px; padding-left: 14px; border-left: 1px solid var(--line-2); }
+.fam-body .group.sub { margin-bottom: var(--s3); }
+.fam-body .group.sub:last-child { margin-bottom: 0; }
+.fam-body .group.sub > .group-head { position: relative; padding-bottom: 2px; }
+.fam-body .group.sub > .group-head::before { content: ""; position: absolute; left: -14px; top: 50%; width: 9px; border-top: 1px solid var(--line-2); }
+.sub-label { margin: 0; font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.lib-item { gap: 10px; }
+.lib-item-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.lib-count { margin-left: auto; flex: none; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.lib-preview { color: var(--faint); margin-top: 1px; }
+.lib-preview em { font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--muted); letter-spacing: 0; }
+.lib-item:hover .lib-preview em { color: var(--text); }
+.pic-stack { position: relative; flex: none; width: 40px; height: 32px; }
+.pic-stack .pic-mini { position: absolute; top: 2px; width: 22px; height: 28px; border-radius: 2px; overflow: hidden; background: var(--raised);
+  outline: 1px solid var(--line-2); box-shadow: 0 2px 6px rgba(0,0,0,.45); transition: transform .2s cubic-bezier(.3,1.2,.5,1); }
+.pic-stack .pic-mini:nth-child(1) { left: 0; transform: rotate(-7deg); z-index: 1; }
+.pic-stack .pic-mini:nth-child(2) { left: 9px; transform: rotate(0deg); z-index: 2; }
+.pic-stack .pic-mini:nth-child(3) { left: 18px; transform: rotate(7deg); z-index: 3; }
+.pic-stack.empty .pic-mini { left: 9px; transform: none; background: transparent; outline-style: dashed; box-shadow: none; }
+.lib-item:hover .pic-stack .pic-mini:nth-child(1) { transform: rotate(-11deg) translateX(-2px); }
+.lib-item:hover .pic-stack .pic-mini:nth-child(3) { transform: rotate(11deg) translateX(2px); }
+.pic-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (prefers-reduced-motion: reduce) { .pic-stack .pic-mini { transition: none; } }

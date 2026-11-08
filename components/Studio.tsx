@@ -32,6 +32,7 @@ import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
+import PicStack from "./PicStack";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 const VERSION = "v0.5";
@@ -1017,22 +1018,29 @@ export default function Studio({ userName }: { userName: string }) {
   };
   const deletePreset = (id: string) => upd((w) => ({ ...w, presets: (w.presets ?? []).filter((x) => x.id !== id) }));
 
+  // A list of the library at a glance: a photo list shows its first photos, a text list its first text.
   const listRows = (kind: "text" | "photos", only?: (p: TextPool) => boolean) =>
-    (kind === "text" ? (only ? vText.filter(only) : vText) : vPics).map((p, n) => (
-      <div key={p.id} className="item" role="button" tabIndex={0} onClick={() => setEditor({ k: kind, id: p.id })}
-        onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setEditor({ k: kind, id: p.id }); } }}>
-        <span className="idx">{String(n + 1).padStart(2, "0")}</span>
-        <div className="grow" style={{ minWidth: 0 }}>
-          <div className="truncate item-name">{p.name}</div>
-          <div className="muted xs">
-            {"pics" in p ? t("{n} photos", { n: p.pics.length }) : p.kind === "block" ? t("Lyrics block") : p.kind === "captions" ? t("{n} captions", { n: textItems(p).length }) : t("{n} texts", { n: textItems(p).length })}
-            {" · "}{p.scope === "shared" ? t("all projects") : t("this project")}
+    (kind === "text" ? (only ? vText.filter(only) : vText) : vPics).map((p, n) => {
+      const pics = "pics" in p;
+      const first = pics ? "" : (textItems(p)[0] ?? "").replace(/\|/g, " ").replace(/\s+/g, " ").trim();
+      const count = pics ? p.pics.length : textItems(p).length;
+      return (
+        <div key={p.id} className={"item lib-item" + (pics ? " is-pics" : "")} role="button" tabIndex={0} onClick={() => setEditor({ k: kind, id: p.id })}
+          title={p.scope === "shared" ? t("all projects") : t("this project")}
+          onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setEditor({ k: kind, id: p.id }); } }}>
+          {pics ? <PicStack ids={p.pics.slice(0, 3).map((x) => x.id)} /> : <span className="idx">{String(n + 1).padStart(2, "0")}</span>}
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="lib-item-top"><span className="truncate item-name">{p.name}</span><span className="lib-count">{count}</span></div>
+            <div className="xs truncate lib-preview">
+              {pics ? (count ? t("{n} photos", { n: count }) : t("Empty list"))
+                : p.kind === "block" ? t("Lyrics block") : first ? <em>{first}</em> : t("Empty list")}
+            </div>
           </div>
+          <button className="btn quiet icon sm del" aria-label={t("Delete {name}", { name: p.name })} title={t("Delete")}
+            onClick={(e) => { e.stopPropagation(); askDeletePool(kind, p.id); }}><Icon name="trash" size={14} /></button>
         </div>
-        <button className="btn quiet icon sm del" aria-label={t("Delete {name}", { name: p.name })} title={t("Delete")}
-          onClick={(e) => { e.stopPropagation(); askDeletePool(kind, p.id); }}><Icon name="trash" size={14} /></button>
-      </div>
-    ));
+      );
+    });
 
   const sungCount = (() => { const x = sungOf(project.lyrics); return x ? x.split("\n").length : 0; })();
   // The library (left column / phone tab of both studios). The release's lyrics, shown as a file of the release
@@ -1052,16 +1060,26 @@ export default function Studio({ userName }: { userName: string }) {
   );
   // The text lists by role, each group always there (empty, its "+" makes the first list). The carousel shows the
   // three; the video only hooks and captions (it has no slides after the first).
-  const ROLES = { hooks: t("Hooks"), texts: t("Texts"), captions: t("Captions") } as const;
-  const textGroups = (roles: (keyof typeof ROLES)[]) => roles.map((role) => {
-    const of = (p: TextPool) => (role === "texts" ? p.kind === "texts" || p.kind === "block" : p.kind === role);
+  const ROLES = { hooks: t("Hooks"), texts: t("Other slides"), captions: t("Captions") } as const;
+  // Two families in the library, told apart at a glance: the texts (their roles as branches, like the video's
+  // release → video tree), then the photos.
+  const ofRole = (role: keyof typeof ROLES) => (p: TextPool) => (role === "texts" ? p.kind === "texts" || p.kind === "block" : p.kind === role);
+  const textGroups = (roles: (keyof typeof ROLES)[]) => {
+    const n = vText.filter((p) => roles.some((r) => ofRole(r)(p))).length;
     return (
-      <section key={role} className="group">
-        <div className="group-head"><h3 className="label">{ROLES[role]}</h3><button className="btn quiet icon sm" aria-label={t("New list: {role}", { role: ROLES[role] })} title={t("New list: {role}", { role: ROLES[role] })} onClick={() => setOverlay({ k: "newPool", kind: "text", textKind: role })}><Icon name="plus" size={14} /></button></div>
-        {vText.some(of) ? listRows("text", of) : <p className="muted xs group-empty">{t("No list yet.")}</p>}
+      <section className="lib-family">
+        <div className="fam-head"><Icon name="type" size={15} /><h3 className="label">{t("Texts")}</h3><span className="fam-count">{t("{n} lists", { n })}</span></div>
+        <div className="fam-body">
+          {roles.map((role) => (
+            <section key={role} className="group sub">
+              <div className="group-head"><h4 className="sub-label">{ROLES[role]}</h4><button className="btn quiet icon sm" aria-label={t("New list: {role}", { role: ROLES[role] })} title={t("New list: {role}", { role: ROLES[role] })} onClick={() => setOverlay({ k: "newPool", kind: "text", textKind: role })}><Icon name="plus" size={14} /></button></div>
+              {vText.some(ofRole(role)) ? listRows("text", ofRole(role)) : <p className="muted xs group-empty">{t("No list yet.")}</p>}
+            </section>
+          ))}
+        </div>
       </section>
     );
-  });
+  };
 
   // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
   // its lyrics right next to it, at the same place in both studios.
@@ -1212,9 +1230,12 @@ export default function Studio({ userName }: { userName: string }) {
             {lyricsRow}
           </section>
           {textGroups(["hooks", "texts", "captions"])}
-          <section className="group">
-            <div className="group-head"><h3 className="label">{t("Photos")}</h3><button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button></div>
-            {listRows("photos")}
+          <section className="lib-family">
+            <div className="fam-head"><Icon name="image" size={15} /><h3 className="label">{t("Photos")}</h3><span className="fam-count">{t("{n} lists", { n: vPics.length })}</span>
+              <button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button></div>
+            <div className="fam-body flat">
+              {vPics.length ? listRows("photos") : <p className="muted xs group-empty">{t("No list yet.")}</p>}
+            </div>
           </section>
         </aside>
 
