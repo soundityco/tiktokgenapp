@@ -25,6 +25,7 @@ Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app
 - Look « éditorial » sombre, sobre, pas de look « SaaS généré par IA ». Accent blanc (le rouge ne sert qu'au danger) ; couleurs en variables CSS dans `app/globals.css` (`--accent`, `--on-accent`, `--danger`, `--video`, `--music`…), jamais en dur.
 - Attention aux noms de classes : `.card.sel` = slide sélectionnée (le menu déroulant utilise `.dd`).
 - Ne pas animer `filter`/`transform` sur une colonne (ça décale les menus flottants).
+- En-tête des studios : chaque contrôle porte une classe `h-*` (`h-gen`, `h-pick`, `h-new`, `h-count`, `h-opts`, `h-share`, `h-dl`, `h-status`) et les conteneurs sont en `display: contents` (`.slot`), pour placer le tout en grille : 2 lignes sur desktop, « Plus » sur mobile (≤ 640 px). Annuler / rétablir et le compte (initiale) sont dans la barre du haut ; sur mobile, réglages au bout du dock, carrousel en pile à glisser, photo à deux doigts, texte par appui long.
 - Sauvegardes d'UI : tags git `ui-video-v1`, `ui-video-v2`, `ui-red-accent`.
 
 ## État et à faire

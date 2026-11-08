@@ -16,7 +16,7 @@ import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateC
 import PostCaption from "./PostCaption";
 import ShareDialog from "./ShareDialog";
 import LyricsEditor from "./LyricsEditor";
-import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf } from "@/lib/lyricsSections";
+import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf, sungOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
@@ -1017,6 +1017,7 @@ export default function Studio({ userName }: { userName: string }) {
 
   // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
   // its lyrics right next to it, at the same place in both studios.
+  const sungCount = (() => { const x = sungOf(project.lyrics); return x ? x.split("\n").length : 0; })();
   const releaseTitle = (<>
     <div className="stack release-title">
       <span className="label">{t("Release")}</span>
@@ -1044,10 +1045,14 @@ export default function Studio({ userName }: { userName: string }) {
       </Menu>
     </div>
     {/* The lyrics of the release, written once: the carousel's slides tick their sections, the video sings them all. */}
-    <div className="field release-lyrics">{t("Lyrics")}
-      <button className={"btn" + (project.lyrics.length ? "" : " needs")} onClick={() => setOverlay({ k: "lyrics" })}
+    <div className={"field release-lyrics" + (project.lyrics.length ? "" : " missing")}>{t("Lyrics")}
+      {/* A source of the release, like its media: a brighter outline than the pickers around it. */}
+      <button className={"btn lyrics-btn" + (project.lyrics.length ? "" : " needs")} onClick={() => setOverlay({ k: "lyrics" })}
         title={project.lyrics.length ? t("The lyrics of the release, cut into sections") : t("This release has no lyrics yet. Add them: the slides and the videos use them.")}>
-        <Icon name="type" size={15} />{project.lyrics.length ? t("{n} sections", { n: project.lyrics.length }) : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
+        <Icon name="type" size={15} />
+        {project.lyrics.length
+          ? <><span>{t("{n} sections", { n: project.lyrics.length })}</span><span className="lyrics-meta">{t("{n} sung lines", { n: sungCount })}</span></>
+          : <>{t("Add the lyrics")}<span className="tab-dot" /></>}
       </button>
     </div>
   </>);
@@ -1083,15 +1088,16 @@ export default function Studio({ userName }: { userName: string }) {
           </button>
         </div>
         <span className="grow" />
+        {/* Undo / redo: the whole release's history, the same for both studios, always here. */}
+        <button className="btn icon quiet top-hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
+        <button className="btn icon quiet top-hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
         <span role="status" aria-live="polite" className={"badge save-badge " + (saveState === "error" || saveState === "conflict" ? "bad" : saveState === "saved" ? "ok" : "")}><span className="dot" />
           <span className="badge-text">{saveState === "saved" ? t("Saved") : saveState === "saving" ? <span className="shine">{t("Saving…")}</span> : saveState === "conflict" ? t("Not saved") : t("Not saved")}</span>
         </span>
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
         <button className="btn top-import" aria-label={t("Import hooks")} onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" /><span>{t("Import hooks")}</span></button>
-        <button className="btn icon quiet top-hist" aria-label={t("Undo")} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
-        <button className="btn icon quiet top-hist" aria-label={t("Redo")} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
-        <div className="top-settings"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}><Icon name="sliders" /></button>}>
+        <div className="top-settings"><Menu trigger={(open, toggle) => <button className={"me" + (open ? " open" : "")} aria-label={t("Settings and account")} title={userName} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}
         </Menu></div>
         <input ref={restoreInput} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) restore(f); e.target.value = ""; }} />
@@ -1180,7 +1186,9 @@ export default function Studio({ userName }: { userName: string }) {
                     onClick={() => { closeMenu(); setOverlay({ k: "confirm", title: t("Delete carousel"), label: t("Delete"), message: t("Delete “{name}”? Its slides and drawn texts and photos go with it. This can't be undone.", { name: carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!) }), run: () => updProject((p) => deleteCarousel(p)) }); }}>{t("Delete this carousel")}</button>
                 </>)}
               </Menu></div>
-              <button className="btn primary h-gen" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+              <div className="field h-gen"><span className="field-k">{t("Draw")}</span>
+                <button className="btn primary" onClick={generate} title={t("Draws the texts and photos of every slide again. Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+              </div>
               {/* Phone: the rest of the tools fold under this button. */}
               <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
               <div className="field h-count">{t("Slides")}
@@ -1193,8 +1201,8 @@ export default function Studio({ userName }: { userName: string }) {
               <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
               <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
               <div className="row nowrap head-actions">
-              {exportProgress && <span className="badge" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
-              {busy && <button className="btn" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
+              {exportProgress && <span className="badge h-progress" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
+              {busy && <button className="btn h-cancel" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
               <div className="slot h-opts"><Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
                 {() => (
                   <div className="stack" style={{ padding: "var(--s2) var(--s3)", minWidth: 270 }}>
@@ -1298,7 +1306,7 @@ export default function Studio({ userName }: { userName: string }) {
         <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name={studio === "video" ? "folder" : "list"} size={18} /><span className="tab-name">{studio === "video" ? t("Files") : t("Lists")}</span></button>
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <span className="mobile-tabs-sep" aria-hidden />
-        <Menu trigger={(_, toggle) => <button className="mobile-me" aria-label={t("Settings and account")} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
+        <Menu trigger={(open, toggle) => <button className={"me mobile-me" + (open ? " open" : "")} aria-label={t("Settings and account")} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}
         </Menu>
       </nav>
