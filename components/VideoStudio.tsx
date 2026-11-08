@@ -980,6 +980,31 @@ export default function VideoStudio({
     return () => { off = true; };
   }, [videoBlob, onCopy, loadedClip, clip.id, clip.drive?.copy?.id, settings.videoName]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // On the copy, the passage goes past it: a longer copy of this video may be on the Drive without the data saying
+  // so (made on the other device, its save lost): looked for by its label, written into the data (then fetched below).
+  const longerLook = useRef<string | null>(null);
+  useEffect(() => {
+    const cp = settings.drive?.copy;
+    if (!onCopy || !cp) return;
+    const segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
+    if (segS >= cp.from - 0.05 && segE <= cp.to + 0.05) return;
+    const key = `${clip.id}|${cp.id}|${segS.toFixed(1)}|${segE.toFixed(1)}`;
+    if (longerLook.current === key) return;
+    longerLook.current = key;
+    void listAppFiles("copy").then((files) => {
+      const better = files
+        .filter((f) => f.appProperties?.clip === clip.id && f.id !== cp.id && f.appProperties.to)
+        .map((f) => ({ f, from: Number(f.appProperties.from ?? 0), to: Number(f.appProperties.to) }))
+        .filter((x) => x.to > cp.to + 0.05 || x.from < cp.from - 0.05)
+        .sort((a, b) => (b.to - b.from) - (a.to - a.from))[0];
+      if (!better) return;
+      const a = better.f.appProperties;
+      onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id
+        ? { ...c, drive: { ...(c.drive ?? {}), copy: { id: better.f.id, from: better.from, to: better.to, of: Number(a.of ?? cp.of), size: Number(better.f.size ?? 0), tenBit: a.bits ? a.bits === "10" : cp.tenBit } } } : c)) }));
+      onSaveNow();
+    }).catch(() => {});
+  }, [onCopy, settings.drive?.copy?.id, settings.crop.start, settings.crop.duration, settings.offset]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The copy was made again on the device that has the camera file (a longer passage): this one gets the new copy.
   useEffect(() => {
     const id = settings.drive?.copy?.id;
