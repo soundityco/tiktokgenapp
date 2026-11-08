@@ -238,6 +238,32 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
 }
 
 /** Files the app put in the Rollout folder with this label (see uploadToDrive), with their labels. */
+/** The Drive's space: used and limit (no limit: an unlimited plan), in bytes. */
+export async function driveQuota(): Promise<{ used: number; limit: number | null }> {
+  const r = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", { headers: { Authorization: `Bearer ${await getToken()}` } });
+  if (!r.ok) throw new Error(`about ${r.status}`);
+  const q = (await r.json()).storageQuota ?? {};
+  return { used: Number(q.usage ?? 0), limit: q.limit ? Number(q.limit) : null };
+}
+
+export interface AppFile { id: string; name: string; mimeType: string; size: number; appProperties?: Record<string, string> }
+/** Every file in the app's Drive folder (what Rollout put there), with its size. */
+export async function listAppFolder(): Promise<AppFile[]> {
+  const folder = await appFolder();
+  const out: AppFile[] = [];
+  let page: string | undefined;
+  do {
+    const params = new URLSearchParams({ q: `'${folder}' in parents and trashed = false`, fields: "nextPageToken, files(id,name,mimeType,size,appProperties)", pageSize: "1000" });
+    if (page) params.set("pageToken", page);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${await getToken()}` } });
+    if (!r.ok) throw new Error(`list ${r.status}`);
+    const j = await r.json();
+    for (const f of j.files ?? []) out.push({ id: f.id, name: f.name ?? "", mimeType: f.mimeType ?? "", size: Number(f.size ?? 0), appProperties: f.appProperties });
+    page = j.nextPageToken;
+  } while (page);
+  return out;
+}
+
 /** Delete a file the app made (a copy replaced or of a video removed). Never throws. */
 export async function deleteDriveFile(id: string): Promise<void> {
   try {

@@ -33,6 +33,7 @@ import VideoStudio from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
 import PicStack from "./PicStack";
+import StorageDialog from "./StorageDialog";
 import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 const VERSION = "v0.5";
@@ -112,6 +113,7 @@ export default function Studio({ userName }: { userName: string }) {
   const [fontsReady, setFontsReady] = useState(false);
   const [preview, setPreview] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
   const [fonts, setFonts] = useState<string[]>([]);
   /** Fonts saved before their family and style were read from the files: the texts using them follow. */
   const [renamedFonts, setRenamedFonts] = useState<Record<string, FaceInfo>>({});
@@ -1217,6 +1219,7 @@ export default function Studio({ userName }: { userName: string }) {
             <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
             <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
             <button onClick={() => { close(); setVersionsOpen(true); }}>{t("Version history")}</button>
+            <button onClick={() => { close(); setStorageOpen(true); }}>{t("Storage")}</button>
             {/* The installed app: nothing here. The browser: installed, or the install, standing out. */}
             {canInstall && <><div className="sep" /><button className="menu-primary" onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
             {installed && <><div className="sep" /><div className="menu-note"><Icon name="check" size={14} /><span>{t("App installed")}<small>{t("Open it from your dock or home screen.")}</small></span></div></>}
@@ -1536,6 +1539,10 @@ export default function Studio({ userName }: { userName: string }) {
           </ol>
           <div className="modal-foot"><button className="btn primary" onClick={closeIosHelp}>{t("Got it")}</button></div>
         </Modal>
+      )}
+      {storageOpen && (
+        <StorageDialog onClose={() => setStorageOpen(false)}
+          usedCopies={new Set(ws.projects.flatMap((p) => (p.videos ?? []).map((v) => v.drive?.copy?.id).filter((x): x is string => !!x)))} />
       )}
       {versionsOpen && (
         <VersionHistory onClose={() => setVersionsOpen(false)}
