@@ -29,7 +29,7 @@ import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select } from "./ui";
 import { createPortal } from "react-dom";
-import { PHONE_QUERY, SheetHead, useStyleSheet, type SheetPart } from "./StyleSheet";
+import { PHONE_QUERY, StyleTabs, useStyleParts, type SheetPart } from "./StyleSheet";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -290,8 +290,7 @@ export default function VideoStudio({
   onCopyJob,
   onToast,
   active = true,
-  styleCmd,
-  onStyleOpen,
+  stylePage = false,
   captionPools,
   onDrawCaption,
   onNewCaptionList,
@@ -326,10 +325,8 @@ export default function VideoStudio({
   lyricsRow?: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
   active?: boolean;
-  /** From the dock's Style button (phone): open or close the style sheet (a new `n` each time). */
-  styleCmd?: { n: number; open: boolean };
-  /** Whether the style sheet is open (the dock shows its Style button on). */
-  onStyleOpen?: (open: boolean) => void;
+  /** The phone's Style page is open: the preview, then the style part by part. */
+  stylePage?: boolean;
   /** The captions lists of the release, and drawing one of their captions for this video's post. */
   captionPools: TextPool[];
   onDrawCaption: (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => void;
@@ -2380,23 +2377,16 @@ export default function VideoStudio({
   const vParts: SheetPart<VPart>[] = [
     { id: "framing", label: t("Framing") }, { id: "lyrics", label: t("Lyrics") }, { id: "hook", label: t("Hook") }, { id: "color", label: t("Colour") },
   ];
-  const vSheet = useStyleSheet<VPart>({
-    preview: () => videoRef.current?.parentElement ?? null,
-    sheet: () => rightColRef.current,
+  const vStyle = useStyleParts<VPart>({
+    column: () => rightColRef.current,
     parts: { framing: '[data-sec="video-render"]', lyrics: ".sheet-text", hook: ".sheet-text", color: "#video-color" },
     all: ':scope > [data-sec="video-render"], :scope > .sheet-text, :scope > #video-color',
     first: "framing",
+    active: active && stylePage,
   });
-  const openVPart = (p: VPart) => { if (p === "lyrics" || p === "hook") setTab(p); vSheet.openPart(p); };
-  useEffect(() => { if (!active) vSheet.close(); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The dock's Style button: the part used last (lyrics or hook: the one the tabs are on).
-  useEffect(() => {
-    if (!styleCmd?.n) return;
-    if (!styleCmd.open) { if (vSheet.part !== null) vSheet.close(); return; }
-    const p = vSheet.lastPart();
-    openVPart(p === "lyrics" || p === "hook" ? (tab === "hook" ? "hook" : "lyrics") : p);
-  }, [styleCmd?.n]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { onStyleOpen?.(vSheet.part !== null); }, [vSheet.part !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickVPart = (p: VPart) => { if (p === "lyrics" || p === "hook") setTab(p); vStyle.pick(p); };
+  // The lyrics / hook part follows the tabs (a hook picked in the Video page shows its style here).
+  const vPart: VPart = vStyle.part === "lyrics" || vStyle.part === "hook" ? (tab === "hook" ? "hook" : "lyrics") : vStyle.part;
   // Phone: the player sits on top of the dock (Studio's slot), always at hand.
   const [dockSlot, setDockSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -2787,7 +2777,7 @@ export default function VideoStudio({
             );
             return videoBlob && !videoDur ? <p className="muted xs shine">{t("Opening the camera video…")}</p> : null;
           })()}
-          <p className="muted xs row" style={{ gap: 6 }}>
+          <p className="muted xs row stage-fmt" style={{ gap: 6 }}>
             {!videoBlob && <span>{t("Nothing to preview yet.")}</span>}
             <span className="mono">{outW}×{outH}</span>
             {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}
@@ -3190,8 +3180,8 @@ export default function VideoStudio({
       </div>
         </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
-        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + vSheet.sheetProps.className} data-part={vSheet.sheetProps["data-part"]} ref={rightColRef}>
-          <SheetHead parts={vParts} part={vSheet.part} onPart={openVPart} onClose={vSheet.close} onTall={vSheet.toggleTall} closeLabel={t("Close")} title={t("Style")} tone="video" />
+        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")} ref={rightColRef}>
+          <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} title={t("Style")} tone="video" />
           {/* How the camera picture fits the post: the first part of the video's style. */}
           <Section id="video-render" title={t("Framing")}>
           <div className="row">
@@ -3322,7 +3312,7 @@ export default function VideoStudio({
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
                       </div>
         </aside>
-      {dockSlot && audioBuf && vSheet.part === null && createPortal(
+      {dockSlot && audioBuf && createPortal(
         <div className="dp">
           <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
             onClick={() => (playing ? stop() : void play())}>
