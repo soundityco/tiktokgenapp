@@ -118,6 +118,8 @@ export default function Studio({ userName }: { userName: string }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
   const { canInstall, install, iosHelp, closeIosHelp } = useInstall();
+  // Phone: the tools of the studio head folded under "More" (the release, share, download and generate stay out).
+  const [headMore, setHeadMore] = useState(false);
   // Phone: the slides are a deck swiped sideways; the one in the middle is the selected one (and the other way round).
   const deckRef = useRef<HTMLDivElement>(null);
   const deckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1158,18 +1160,18 @@ export default function Studio({ userName }: { userName: string }) {
 
         <main className="col center">
           {/* Same header as the video studio: the release on the left, its tools, the export on the right. */}
-          <div className="video-head studio-head carousel-head">
+          <div className={"video-head studio-head carousel-head" + (headMore ? " more" : "")}>
             <div className="row nowrap video-title">{releaseTitle}</div>
             <div className="row nowrap video-tools">
               {/* Several carousels per release, like the videos: one to keep, another to try. */}
-              <label className="field">{t("Carousel")}
+              <label className="field h-pick">{t("Carousel")}
                 <Select className="input" style={{ width: 150 }} value={currentCarouselId(project)}
                   onChange={(e) => { const id = e.target.value; updProject((p) => openCarousel(p, id)); }}>
                   {carouselsOf(project).map((c) => <option key={c.id} value={c.id}>{carouselName(c)}</option>)}
                 </Select>
               </label>
-              <button className="btn icon" aria-label={t("New carousel")} title={t("New carousel: the same slides set-up, to generate again")} onClick={() => { updProject((p) => addCarousel(p)); say(t("New carousel")); }}><Icon name="plus" /></button>
-              <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Carousel menu")} onClick={toggle}><Icon name="more" /></button>}>
+              <button className="btn icon h-new" aria-label={t("New carousel")} title={t("New carousel: the same slides set-up, to generate again")} onClick={() => { updProject((p) => addCarousel(p)); say(t("New carousel")); }}><Icon name="plus" /></button>
+              <div className="slot h-new"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Carousel menu")} onClick={toggle}><Icon name="more" /></button>}>
                 {(closeMenu) => (<>
                   <button onClick={() => { closeMenu(); setOverlay({ k: "renameCarousel" }); }}>{t("Rename")}</button>
                   <button onClick={() => { closeMenu(); updProject((p) => duplicateCarousel(p, t("(copy)"))); }}>{t("Duplicate")}</button>
@@ -1177,9 +1179,11 @@ export default function Studio({ userName }: { userName: string }) {
                   <button className="danger" style={{ color: "var(--danger)" }} disabled={carouselsOf(project).length < 2}
                     onClick={() => { closeMenu(); setOverlay({ k: "confirm", title: t("Delete carousel"), label: t("Delete"), message: t("Delete “{name}”? Its slides and drawn texts and photos go with it. This can't be undone.", { name: carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!) }), run: () => updProject((p) => deleteCarousel(p)) }); }}>{t("Delete this carousel")}</button>
                 </>)}
-              </Menu>
-              <button className="btn primary" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
-              <div className="field">{t("Slides")}
+              </Menu></div>
+              <button className="btn primary h-gen" onClick={generate} title={t("Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+              {/* Phone: the rest of the tools fold under this button. */}
+              <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
+              <div className="field h-count">{t("Slides")}
                 <div className="stepper">
                   <button className="btn quiet icon sm" aria-label={t("Delete slide")} title={t("Delete slide")} onClick={() => deleteSlide(sel)} disabled={nSlides <= 1}><Icon name="minus" size={14} /></button>
                   <span>{nSlides === 1 ? t("1 slide") : t("{n} slides", { n: nSlides })}</span>
@@ -1191,7 +1195,7 @@ export default function Studio({ userName }: { userName: string }) {
               <div className="row nowrap head-actions">
               {exportProgress && <span className="badge" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
-              <Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
+              <div className="slot h-opts"><Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
                 {() => (
                   <div className="stack" style={{ padding: "var(--s2) var(--s3)", minWidth: 270 }}>
                     <label className="check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
@@ -1203,19 +1207,19 @@ export default function Studio({ userName }: { userName: string }) {
                     </label>
                   </div>
                 )}
-              </Menu>
-              <button className="btn icon" aria-label={t("Send to my phone")} title={t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
+              </Menu></div>
+              <button className="btn icon h-share" aria-label={t("Send to my phone")} title={t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
               {carouselsOf(project).length > 1 && !busy ? (
-                <Menu trigger={(_, toggle) => (
-                  <button className="btn primary" onClick={toggle}><Icon name="download" />{t("Download")}<Icon name="chevron" size={14} /></button>
+                <div className="slot h-dl"><Menu trigger={(_, toggle) => (
+                  <button className="btn primary" aria-label={t("Download")} onClick={toggle}><Icon name="download" /><span className="lbl">{t("Download")}</span><Icon name="chevron" size={14} /></button>
                 )}>
                   {(closeMenu) => (<>
                     <button disabled={!project.generated} onClick={() => { closeMenu(); void downloadAll(); }}>{t("This carousel")}</button>
                     <button onClick={() => { closeMenu(); void downloadAll(true); }}>{t("All the carousels ({n})", { n: carouselsOf(project).length })}</button>
                   </>)}
-                </Menu>
+                </Menu></div>
               ) : (
-                <button className={"btn primary" + (busy ? " shine-box" : "")} onClick={() => void downloadAll()} disabled={busy || !project.generated}><Icon name="download" />{busy ? t("Exporting…") : t("Download all")}</button>
+                <button className={"btn primary h-dl" + (busy ? " shine-box" : "")} aria-label={t("Download all")} onClick={() => void downloadAll()} disabled={busy || !project.generated}><Icon name="download" /><span className="lbl">{busy ? t("Exporting…") : t("Download all")}</span></button>
               )}
               </div>
             </div>

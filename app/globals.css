@@ -841,19 +841,6 @@ details.sec > summary::after { transition: transform .22s cubic-bezier(.3,1.3,.5
 .item-name { transition: color .15s; }
 @media (prefers-reduced-motion: reduce) { details.sec[open] > .body { animation: none; } }
 
-/* Phone: the tools of both studios in three tidy lines. 1: the carousel / video picker with its buttons and the
-   history; 2 (carousel): generate and the number of slides; 3: the status on the left, the export on the right. */
-@media (max-width: 640px) {
-  .studio-head .video-tools { flex: 1 1 100%; flex-wrap: wrap; align-items: flex-end; gap: var(--s2); row-gap: var(--s3); }
-  .studio-head .video-tools > .field:first-child { flex: 1 1 110px; min-width: 0; }
-  .studio-head .video-tools > .field:first-child .dd { width: 100% !important; }
-  .studio-head .video-tools > .btn.primary { order: 2; flex: 1 1 150px; }
-  .studio-head .video-tools > .field:not(:first-child) { order: 2; flex: none; }
-  .studio-head .video-tools > .head-actions { order: 3; flex: 1 1 100%; margin-left: 0; align-items: center; gap: var(--s2); }
-  .studio-head .video-tools > .head-actions > :first-child { margin-right: auto; }
-  .video-status { height: var(--h-sm); }
-}
-
 /* Phone, final: the header stays at the top; the tab bar is a floating glass capsule, the open tab a white pill
    that widens to show its name, the others just their icon. */
 @media (max-width: 1000px) {
@@ -925,3 +912,42 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .mobile-tabs .menu { right: 0; left: auto; top: auto; bottom: calc(100% + 14px); max-height: 70dvh; overflow-y: auto; }
 }
 .brand-full { display: inline-flex; align-items: center; gap: 10px; }
+
+/* The head of both studios. On a computer the slots are not there (display: contents). On a phone every control
+   joins one grid and the head reads:
+     the release (its name cut with "…")            share · download / export
+     generate (or the video's status)               More ▾
+   and "More" unfolds the rest: the lyrics, the carousel / video picker, the number of slides, the options. */
+.slot { display: contents; }
+.h-more { display: none; }
+@media (max-width: 640px) {
+  .studio-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--s3) var(--s2); align-items: end; }
+  .studio-head .video-title, .studio-head .video-tools, .studio-head .head-actions, .studio-head .slot { display: contents; }
+  .studio-head .release-title { grid-column: 1; grid-row: 1; min-width: 0; }
+  .studio-head .release-title .menu-wrap, .studio-head .release-pick { min-width: 0; max-width: 100%; }
+  .studio-head .release-pick .display { min-width: 0; }
+  .studio-head .release-pick .display { font-size: 26px; }
+  .studio-head .h-share { grid-column: 2; grid-row: 1; }
+  .studio-head .h-dl { grid-column: 3; grid-row: 1; }
+  .studio-head .h-dl .lbl, .studio-head .h-dl .btn .lbl { display: none; }
+  .studio-head .h-dl.btn, .studio-head .h-dl .btn { padding: 0 12px; }
+  .studio-head .h-gen, .studio-head .h-status { grid-column: 1; grid-row: 2; justify-self: stretch; }
+  .studio-head .h-status { justify-self: start; align-self: center; }
+  .studio-head .h-more { display: inline-flex; grid-column: 2 / 4; grid-row: 2; gap: 6px; }
+  .studio-head .h-more svg { transition: transform .25s cubic-bezier(.3,1.2,.5,1); }
+  .studio-head .h-more.on svg { transform: rotate(180deg); }
+  .studio-head .badge:not(.h-status), .studio-head > .video-tools > .btn:not(.h-gen):not(.h-more):not(.h-new):not(.h-share):not(.h-dl) { grid-column: 1 / -1; }
+  /* Folded away until "More". */
+  .studio-head .release-lyrics, .studio-head .h-pick, .studio-head .h-new, .studio-head .h-count, .studio-head .h-opts { display: none; }
+  .studio-head.more .release-lyrics, .studio-head.more .h-count { display: grid; }
+  .studio-head.more .h-pick { display: grid; grid-column: 1; }
+  .studio-head.more .h-new { display: inline-flex; }
+  .studio-head.more .slot.h-new, .studio-head.more .slot.h-opts { display: block; }
+  .studio-head.more .h-pick .dd { width: 100% !important; }
+  .studio-head.more .release-lyrics { grid-column: 1 / -1; }
+  .studio-head.more .release-lyrics .btn { width: 100%; justify-content: flex-start; }
+  .studio-head.more .h-count { grid-column: 1; }
+  .studio-head.more .slot.h-opts { grid-column: 2 / 4; align-self: end; }
+  .studio-head.more .release-lyrics, .studio-head.more .h-pick, .studio-head.more .h-new, .studio-head.more .h-count, .studio-head.more .h-opts { animation: head-unfold .28s cubic-bezier(.2,.8,.2,1) backwards; }
+}
+@keyframes head-unfold { from { opacity: 0; translate: 0 -6px; } }

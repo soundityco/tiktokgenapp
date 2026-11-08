@@ -1032,6 +1032,8 @@ export default function VideoStudio({
   };
 
   const [clipDialog, setClipDialog] = useState<null | "rename" | "delete">(null);
+  // Phone: the tools of the head folded under "More" (the release, the status and the export stay out).
+  const [headMore, setHeadMore] = useState(false);
   /** Shown name of a video: the automatic "Video 2" in the interface language. */
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
   const renameClip = (name: string) => {
@@ -2316,42 +2318,43 @@ export default function VideoStudio({
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">
-      <div className="video-head studio-head">
+      <div className={"video-head studio-head" + (headMore ? " more" : "")}>
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
-          <label className="field" style={{ margin: 0 }}>{t("Video")}
+          <label className="field h-pick" style={{ margin: 0 }}>{t("Video")}
             <Select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
               {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
             </Select>
           </label>
-          <button className="btn icon" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
-          <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
+          <button className="btn icon h-new" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <div className="slot h-new"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
             {(closeMenu) => (<>
               <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
               <div className="sep" />
               <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
                 onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
             </>)}
-          </Menu>
+          </Menu></div>
           {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
           <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
           <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
           <div className="row nowrap head-actions">
-          <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+          <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
+          <span className={"badge video-status h-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
           {clips.length > 1 && !exporting && !batch ? (
-            <Menu trigger={(_, toggle) => (
-              <button className="btn primary" onClick={toggle} disabled={!audioBuf}><Icon name="download" />{t("Export")}<Icon name="chevron" size={14} /></button>
+            <div className="slot h-dl"><Menu trigger={(_, toggle) => (
+              <button className="btn primary" aria-label={t("Export")} onClick={toggle} disabled={!audioBuf}><Icon name="download" /><span className="lbl">{t("Export")}</span><Icon name="chevron" size={14} /></button>
             )}>
               {(closeMenu) => (<>
                 <button disabled={!videoBlob} onClick={() => { closeMenu(); void exportVideo(); }}>{t("This video (MP4)")}</button>
                 <button onClick={() => { closeMenu(); exportAll(); }}>{t("All the videos ({n})", { n: clips.length })}</button>
               </>)}
-            </Menu>
+            </Menu></div>
           ) : (
-          <button className={"btn primary" + (exporting ? " shine-box" : "")} onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
+          <button className={"btn primary h-dl" + (exporting ? " shine-box" : "")} aria-label={t("Export video (MP4)")} onClick={() => void exportVideo()} disabled={!audioBuf || !videoBlob || exporting}
             title={!audioBuf ? t("Import the release audio") : !videoBlob ? t("Import the video recorded with the camera") : t("Ready to export")}>
-            <Icon name="download" />{exporting ? t("Exporting…") : t("Export video (MP4)")}
+            <Icon name="download" /><span className="lbl">{exporting ? t("Exporting…") : t("Export video (MP4)")}</span>
           </button>
           )}
           </div>

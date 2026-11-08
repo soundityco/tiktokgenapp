@@ -7,6 +7,7 @@ export const FR: Record<string, string> = {
   "In your downloads and your gallery.": "Dans tes téléchargements et ta galerie.",
   "The phone refused: press and hold a picture above, then “Save”.": "Le téléphone a refusé : appuie longuement sur une image au-dessus, puis « Enregistrer ».",
   "Share…": "Partager…",
+  "More": "Plus",
   "Files": "Fichiers",
   "Install the app": "Installer l'app",
   "Tap Share at the bottom of Safari.": "Touche Partager en bas de Safari.",
