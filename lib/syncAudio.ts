@@ -417,22 +417,27 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
   const GAP = Math.round(1.5 * FPS);
   const minLen = Math.min(4 * FPS, Math.floor(clip.frames * 0.5));
   const found: Region[] = [];
+  const curves = new Map<Cluster, Float32Array>();
   for (const c of candidates) {
     const local = localCurve(Math.round(c.off * FPS));
     const sorted = Array.from(local).sort((x, y) => x - y);
     const thr = Math.max(0.1, (sorted[Math.floor(sorted.length * 0.97)] ?? 0) * 0.5);
-    const push = (a: number, b: number) => {
-      if (b - a < minLen) return;
-      let st = 0;
-      for (let i = a; i < b; i++) st += local[i];
-      found.push({ c, bs: a, be: b, strength: st, fit: focusFit(c.off, a, b) });
-    };
+    const spans: [number, number][] = [];
+    const push = (a: number, b: number) => { if (b - a >= minLen) spans.push([a, b]); };
     let s0 = -1, last = -1;
     for (let i = 0; i < clip.frames; i++) {
       if (local[i] >= thr) { if (s0 < 0) s0 = i; last = i; }
       else if (s0 >= 0 && i - last > GAP) { push(s0, last + 1); s0 = -1; }
     }
     if (s0 >= 0) push(s0, last + 1);
+    if (!spans.length) continue;
+    // Stretches at the same offset are one performance on one clock (the music only got covered for a
+    // moment: the artist singing loud, someone talking, a quiet bridge): a single take from the first to the last.
+    const a = spans[0][0], b = spans[spans.length - 1][1];
+    let st = 0;
+    for (const [x, y] of spans) for (let i = x; i < y; i++) st += local[i];
+    found.push({ c, bs: a, be: b, strength: st, fit: focusFit(c.off, a, b) });
+    curves.set(c, local);
   }
   // Keep the best explanation of each part of the clip. Covering the post's segment is a small bonus,
   // enough to settle identical repeats, not enough for a short repeated chorus to beat a whole take.
@@ -442,7 +447,12 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
   for (const r of found) {
     if (kept.length >= 6 || (kept.length && r.strength < 0.2 * kept[0].strength)) continue;
     const clash = kept.some((k) => overlap(k.bs, k.be, r.bs, r.be) > 0.3 * Math.min(k.be - k.bs, r.be - r.bs));
-    if (!clash) kept.push(r);
+    // A repeated part of the song (a second chorus, an outro played twice) also matches at another offset; it is
+    // no other take when a stronger take's own offset explains those frames about as well.
+    const mean = (l: Float32Array) => { let n = 0; for (let i = r.bs; i < r.be; i++) n += l[i]; return n / Math.max(1, r.be - r.bs); };
+    const own = mean(curves.get(r.c)!);
+    const echo = kept.some((k) => Math.abs(k.c.off - r.c.off) > 0.4 && mean(curves.get(k.c)!) >= 0.6 * own);
+    if (!clash && !echo) kept.push(r);
   }
 
   // Fine offset (±3 frames) measured on the music-only part of a take, capped at 30 s.

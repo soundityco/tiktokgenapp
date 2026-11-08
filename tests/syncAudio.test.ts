@@ -219,4 +219,18 @@ describe("syncAudio (camera recording on the official audio)", () => {
     const first = syncAudio(rec, SR, REF, SR, { from: 12, to: 20 });
     expect(Math.abs(first.offset - (10 - lead))).toBeLessThan(0.05);
   });
+
+  it("keeps one long take as one take when the music is covered for a few seconds (repeated chorus and outro)", () => {
+    // chorus 20-44 s comes back at 60-84 s, the outro 84-92 s is played twice
+    const ref = song(110, 32, { repeat: { from: 20, to: 44, copyAt: 60 } });
+    ref.set(ref.slice(84 * SR, 92 * SR), 92 * SR);
+    const rec = phone(ref.slice(50 * SR, 101 * SR), 1, 33);
+    const r0 = rng(32);
+    // the artist sings loud over the music twice, 3 s each
+    for (const at of [20, 34]) for (let i = at * SR; i < (at + 3) * SR; i++) rec[i] += 0.6 * Math.sin((2 * Math.PI * 220 * i) / SR) * (r0() + 0.5);
+    const r = syncAudio(rec, SR, ref, SR, { from: 60, to: 75 });
+    expect(r.takes.length).toBe(1);
+    expect(Math.abs(r.offset - 49)).toBeLessThan(0.05);
+    expect(r.musicEnd! - r.musicStart!).toBeGreaterThan(45);
+  });
 });

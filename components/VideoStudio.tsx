@@ -1565,6 +1565,21 @@ export default function VideoStudio({
     return { start: round2(clamp(start, lo, Math.max(lo, hi - d))), duration: round2(d) };
   };
 
+  // Takes saved by an older sync could be one performance cut in two (same offset): joined back into one.
+  useEffect(() => {
+    const ks = settings.takes;
+    if (!ks || ks.length < 2) return;
+    const joined: VideoTake[] = [];
+    for (const k of [...ks].sort((p, q) => p.musicStart - q.musicStart)) {
+      const same = joined.find((j) => Math.abs(j.offset - k.offset) < 0.15);
+      if (same) { same.musicStart = Math.min(same.musicStart, k.musicStart); same.musicEnd = Math.max(same.musicEnd, k.musicEnd); }
+      else joined.push({ ...k });
+    }
+    if (joined.length === ks.length) return;
+    const used = joined.find((j) => Math.abs(j.offset - settings.offset) < 0.15);
+    setV({ takes: joined.length > 1 ? joined : undefined, ...(used ? { musicStart: used.musicStart, musicEnd: used.musicEnd } : {}) });
+  }, [settings.takes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Use one take of the video: audio and video get linked on it, and the segment moves inside it if needed. */
   const applyTake = (k: VideoTake, takes = settingsRef.current.takes) => {
     const cur = settingsRef.current;
