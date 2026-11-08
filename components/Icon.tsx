@@ -33,7 +33,15 @@ const P: Record<string, string> = {
   pause: "M8.5 5v14M15.5 5v14",
 };
 
-export default function Icon({ name, size = 16 }: { name: keyof typeof P | "more"; size?: number }) {
+export default function Icon({ name, size = 16 }: { name: keyof typeof P | "more" | "tiktok"; size?: number }) {
+  if (name === "tiktok") {
+    // TikTok's note, filled (the import of hooks from TikTok).
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M16.6 5.82A4.28 4.28 0 0 1 15.56 3h-3.09v12.4a2.59 2.59 0 1 1-2.59-2.59c.27 0 .53.04.77.12V9.77a5.68 5.68 0 0 0-.77-.05 5.68 5.68 0 1 0 5.68 5.68V9.01a7.33 7.33 0 0 0 4.28 1.37V7.29a4.28 4.28 0 0 1-3.26-1.47z" />
+      </svg>
+    );
+  }
   if (name === "more") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

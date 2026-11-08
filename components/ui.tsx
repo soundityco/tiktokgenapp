@@ -112,7 +112,7 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" |
       <ScopeSelect value={scope} onChange={setScope} />
       <div className="modal-foot">
         {p.kind === "text" && kind === "hooks" && p.onCreateImport && (
-          <button className="btn source left" onClick={() => p.onCreateImport!(name.trim(), scope)} title={t("From TikTok screenshots or your TikTok account")}><Icon name="list" size={14} />{t("Create and import hooks…")}</button>
+          <button className="btn primary left" onClick={() => p.onCreateImport!(name.trim(), scope)} title={t("From TikTok screenshots or your TikTok account")}><Icon name="tiktok" size={15} />{t("Import hooks from TikTok")}</button>
         )}
         <button className="btn" onClick={p.onClose}>{t("Cancel")}</button>
         <button className="btn primary" onClick={go} disabled={!name.trim()}>{t("Create")}</button>
