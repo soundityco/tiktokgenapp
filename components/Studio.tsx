@@ -96,7 +96,10 @@ export default function Studio({ userName }: { userName: string }) {
     place(true);
     const el = switchRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => place(false));
+    // Only a real change of size re-places it at once (the observer also calls back right away: that one must not
+    // cut the slide that just started).
+    let width = el.offsetWidth;
+    const ro = new ResizeObserver(() => { if (el.offsetWidth !== width) { width = el.offsetWidth; place(false); } });
     ro.observe(el);
     return () => ro.disconnect();
   }, [studio, lang, ws]);
@@ -1296,9 +1299,10 @@ export default function Studio({ userName }: { userName: string }) {
             {lyricsRow}
           </section>
           {textGroups(["hooks", "texts", "captions"])}
-          <Family id="photos" icon="image" title={t("Photos")} count={t("{n} lists", { n: vPics.length })}
-            action={<button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button>}>
+          <Family id="photos" icon="image" title={t("Photos")} count={t("{n} lists", { n: vPics.length })}>
             {vPics.length ? listRows("photos") : <p className="muted xs group-empty">{t("No list yet.")}</p>}
+            {/* Under the lists (the head keeps only its fold arrow, aligned with the texts'). */}
+            <button className="lib-add" onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} />{t("New photo list")}</button>
           </Family>
         </aside>
 
