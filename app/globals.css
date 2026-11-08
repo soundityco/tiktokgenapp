@@ -1208,3 +1208,14 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 /* The account button: the same rounded square on a computer too. */
 .top .me { border-radius: 8px; }
 @media (max-width: 640px) { .mobile-tabs > .dock-studio { margin: 1px 0 1px 1px; } .mobile-tabs .me { margin: 0 1px 0 0; } }
+
+/* Phone header: the full logo again (the studio switch moved to the dock), on a fade from the app's background
+   at the top to nothing at the bottom: no hairline, the page slides away under it. */
+@media (max-width: 640px) {
+  .top { border-bottom: 0; background: linear-gradient(180deg, var(--bg) 0%, var(--bg) 45%, color-mix(in srgb, var(--bg) 70%, transparent) 72%, transparent 100%);
+    backdrop-filter: none; -webkit-backdrop-filter: none; padding-bottom: calc(var(--s3) + 14px); margin-bottom: -14px; } /* the fade overhangs the page, it takes no room */
+  .top .brand-full { display: inline-flex; }
+  .top .brand-full .version { display: none; }
+  .top .brand-icon { display: none; }
+  .top .brand svg { height: 17px; width: auto; }
+}
