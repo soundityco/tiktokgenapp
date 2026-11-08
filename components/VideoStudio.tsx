@@ -2383,6 +2383,7 @@ export default function VideoStudio({
     all: ':scope > [data-sec="video-render"], :scope > .sheet-text, :scope > #video-color',
     first: "framing",
     active: active && stylePage,
+    swap: tab,
   });
   const pickVPart = (p: VPart) => { if (p === "lyrics" || p === "hook") setTab(p); vStyle.pick(p); };
   // The lyrics / hook part follows the tabs (a hook picked in the Video page shows its style here).

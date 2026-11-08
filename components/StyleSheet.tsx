@@ -20,6 +20,8 @@ export function useStyleParts<P extends string>(opts: {
   all: string;
   first: P;
   active: boolean;
+  /** Something that swaps the column's content (the video's lyrics / hook tab): the parts are applied again. */
+  swap?: unknown;
 }) {
   const [part, setPart] = useState<P>(opts.first);
   const [phone, setPhone] = useState(false);
@@ -46,12 +48,9 @@ export function useStyleParts<P extends string>(opts: {
     const all = [...col.querySelectorAll<HTMLElement>(o.current.all)];
     if (!on) { all.forEach((e) => e.classList.remove("sheet-hide")); return; }
     const want = o.current.parts[part];
-    // The panels coming back would replay their unfolding (a black band sliding off their top): not on a switch.
-    col.classList.add("part-switch");
-    window.setTimeout(() => col.classList.remove("part-switch"), 450);
     for (const e of all) e.classList.toggle("sheet-hide", !e.matches(want));
     col.querySelectorAll<HTMLDetailsElement>(want).forEach((d) => { if (d.tagName === "DETAILS") d.open = true; });
-  }, [part, on]);
+  }, [part, on, opts.swap]);
 
   // Where the preview ends (it holds still under the header): the parts' control sticks right under it.
   useEffect(() => {
@@ -80,7 +79,11 @@ export function useStyleParts<P extends string>(opts: {
     ro.observe(centre);
     if (col) ro.observe(col);
     window.addEventListener("resize", set);
-    return () => { ro.disconnect(); window.removeEventListener("resize", set); if (col) col.style.minHeight = ""; };
+    // The preview holds still: scrolling up or down over it (wheel, trackpad) does not scroll the settings below.
+    // Sideways stays free (the carousel's slides), and the preview's own wheel (zoom, text size) still works.
+    const wheel = (e: WheelEvent) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.preventDefault(); };
+    centre.addEventListener("wheel", wheel, { passive: false });
+    return () => { ro.disconnect(); window.removeEventListener("resize", set); centre.removeEventListener("wheel", wheel); if (col) col.style.minHeight = ""; };
   }, [on, part]);
 
   return {

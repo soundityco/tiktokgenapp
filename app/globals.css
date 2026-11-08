@@ -1722,5 +1722,12 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 1000px) {
   .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] { background-image: none; }
 }
-/* Style page: switching parts shows the panels at once (their unfolding is for a tap on their title). */
-.part-switch details.sec > .body { animation: none !important; }
+/* Style page (phone): panels show at once, never with the unfolding (it replayed on every part shown again, a black
+   band sliding off their top). */
+@media (max-width: 1000px) { .main[data-mobile-tab="style"] details.sec > .body { animation: none !important; } }
+@media (max-width: 1000px) {
+  /* Style page, both studios alike: the preview's block never scrolls the page under a finger (sideways stays
+     free for the slides), and its columns do not replay their entrance on arriving (the video's never did). */
+  .main[data-mobile-tab="style"] .col.center { touch-action: pan-x; overscroll-behavior: contain; }
+  .main[data-mobile-tab="style"] > .col, .main[data-mobile-tab="style"] .video-shell, .main[data-mobile-tab="style"] .video-shell > .col { animation: none !important; }
+}
