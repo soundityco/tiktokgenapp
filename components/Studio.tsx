@@ -1048,7 +1048,7 @@ export default function Studio({ userName }: { userName: string }) {
 
   // A list of the library at a glance: a photo list shows its first photos, a text list its first text.
   const listRows = (kind: "text" | "photos", only?: (p: TextPool) => boolean) =>
-    (kind === "text" ? (only ? vText.filter(only) : vText) : vPics).map((p, n) => {
+    (kind === "text" ? (only ? vText.filter(only) : vText) : vPics).map((p) => {
       const pics = "pics" in p;
       const first = pics ? "" : (textItems(p)[0] ?? "").replace(/\|/g, " ").replace(/\s+/g, " ").trim();
       const count = pics ? p.pics.length : textItems(p).length;
@@ -1056,7 +1056,7 @@ export default function Studio({ userName }: { userName: string }) {
         <div key={p.id} className={"item lib-item" + (pics ? " is-pics" : "")} role="button" tabIndex={0} onClick={() => setEditor({ k: kind, id: p.id })}
           title={p.scope === "shared" ? t("all projects") : t("this project")}
           onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setEditor({ k: kind, id: p.id }); } }}>
-          {pics ? <PicStack ids={p.pics.slice(0, 3).map((x) => x.id)} /> : <span className="idx">{String(n + 1).padStart(2, "0")}</span>}
+          {pics && <PicStack ids={p.pics.slice(0, 3).map((x) => x.id)} />}
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="lib-item-top"><span className="truncate item-name">{p.name}</span>{!pics && <span className="lib-count">{count}</span>}</div>
             <div className="xs truncate lib-preview">
