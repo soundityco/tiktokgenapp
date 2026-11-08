@@ -14,6 +14,8 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#09090c",
     theme_color: "#09090c",
     categories: ["music", "productivity", "photo"],
+    // Lets the site know when it is installed (navigator.getInstalledRelatedApps).
+    related_applications: [{ platform: "webapp", url: "/manifest.webmanifest" }],
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

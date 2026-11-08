@@ -7,6 +7,8 @@ export const FR: Record<string, string> = {
   "In your downloads and your gallery.": "Dans tes téléchargements et ta galerie.",
   "The phone refused: press and hold a picture above, then “Save”.": "Le téléphone a refusé : appuie longuement sur une image au-dessus, puis « Enregistrer ».",
   "Share…": "Partager…",
+  "App installed": "App installée",
+  "Open it from your dock or home screen.": "Ouvre-la depuis ton dock ou ton écran d'accueil.",
   "Other slides": "Autres slides",
   "{n} lists": "{n} listes",
   "Empty list": "Liste vide",

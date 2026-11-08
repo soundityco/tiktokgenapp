@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 /** Chrome's install prompt, kept from the moment it comes (often before the studio shows). */
 type Prompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 let deferred: Prompt | null = null;
+/** The app was installed on this device (seen from the browser: same storage as the installed app, except on iPhone). */
+const INSTALLED = "tktgen-installed";
+const markInstalled = () => { try { localStorage.setItem(INSTALLED, "1"); } catch { /* private mode */ } };
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((f) => f());
 
@@ -25,7 +28,9 @@ export default function InstallApp() {
   }, []);
   useEffect(() => {
     const keep = (e: Event) => { e.preventDefault(); deferred = e as Prompt; changed(); };
-    const done = () => { deferred = null; changed(); };
+    const done = () => { deferred = null; markInstalled(); changed(); };
+    // Opened as the installed app: say so for the browser too (it shares this storage).
+    if (standalone()) markInstalled();
     window.addEventListener("beforeinstallprompt", keep);
     window.addEventListener("appinstalled", done);
     if ("serviceWorker" in navigator && location.hostname !== "localhost") {
@@ -41,16 +46,29 @@ export function useInstall() {
   const [, tick] = useState(0);
   const [iosHelp, setIosHelp] = useState(false);
   const [onIos, setOnIos] = useState(false);
+  const [inApp, setInApp] = useState(false);
+  const [installed, setInstalled] = useState(false);
   useEffect(() => {
     const f = () => tick((n) => n + 1);
     listeners.add(f);
     setOnIos(ios() && !standalone());
+    setInApp(standalone());
+    let seen = false;
+    try { seen = localStorage.getItem(INSTALLED) === "1"; } catch { /* private mode */ }
+    setInstalled(seen);
+    // Chrome can also tell, through the manifest's related_applications (itself).
+    const nav = navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> };
+    nav.getInstalledRelatedApps?.().then((a) => { if (a.length) { markInstalled(); setInstalled(true); } }).catch(() => {});
     return () => { listeners.delete(f); };
   }, []);
-  const canInstall = !!deferred || onIos;
+  // A prompt means it is not installed (any more): it was uninstalled since.
+  if (deferred && installed) { try { localStorage.removeItem(INSTALLED); } catch { /* private mode */ } }
+  const isInstalled = installed && !deferred;
+  /** Nothing to show inside the installed app; "installed" in the browser; else the install. */
+  const canInstall = !inApp && !isInstalled && (!!deferred || onIos);
   const install = async () => {
     if (deferred) { const d = deferred; await d.prompt(); await d.userChoice.catch(() => null); deferred = null; changed(); return; }
     if (onIos) setIosHelp(true);
   };
-  return { canInstall, install, iosHelp, closeIosHelp: () => setIosHelp(false) };
+  return { canInstall, installed: !inApp && isInstalled, install, iosHelp, closeIosHelp: () => setIosHelp(false) };
 }

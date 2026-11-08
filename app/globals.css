@@ -1148,3 +1148,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .lib-item:hover .pic-stack .pic-mini:nth-child(3) { transform: rotate(11deg) translateX(2px); }
 .pic-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @media (prefers-reduced-motion: reduce) { .pic-stack .pic-mini { transition: none; } }
+
+/* Account menu: the install stands out like the main buttons; once installed, a quiet note instead. */
+.menu .menu-primary { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.menu .menu-primary:hover { background: var(--accent-hi); }
+.menu .menu-note { display: flex; gap: var(--s2); align-items: flex-start; padding: 8px 10px; color: var(--ok); }
+.menu .menu-note > svg { flex: none; margin-top: 2px; }
+.menu .menu-note span { display: grid; gap: 2px; font-weight: 600; }
+.menu .menu-note small { font-weight: 400; color: var(--muted); font-size: var(--fs-sm); }

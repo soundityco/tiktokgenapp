@@ -118,7 +118,7 @@ export default function Studio({ userName }: { userName: string }) {
   /** "Send to my phone" (QR code) for the open carousel. */
   const [shareOpen, setShareOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
-  const { canInstall, install, iosHelp, closeIosHelp } = useInstall();
+  const { canInstall, installed, install, iosHelp, closeIosHelp } = useInstall();
   // Phone: the tools of the studio head folded under "More" (the release, share, download and generate stay out).
   const [headMore, setHeadMore] = useState(false);
   // Phone: the slides are a deck swiped sideways; the one in the middle is the selected one (and the other way round).
@@ -1134,7 +1134,9 @@ export default function Studio({ userName }: { userName: string }) {
             <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
             <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
             <button onClick={() => { close(); setVersionsOpen(true); }}>{t("Version history")}</button>
-            {canInstall && <><div className="sep" /><button onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
+            {/* The installed app: nothing here. The browser: installed, or the install, standing out. */}
+            {canInstall && <><div className="sep" /><button className="menu-primary" onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
+            {installed && <><div className="sep" /><div className="menu-note"><Icon name="check" size={14} /><span>{t("App installed")}<small>{t("Open it from your dock or home screen.")}</small></span></div></>}
             <div className="sep" />
             <div className="label cap truncate">{userName}</div>
             <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>
