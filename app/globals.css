@@ -1343,3 +1343,12 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .storage-list .label { margin-bottom: 6px; }
 .storage-row { display: flex; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .storage-row:last-child { border-bottom: 0; }
+/* A background job in the top bar: a ring that fills, the job's name and its percentage. */
+.bg-job { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px 0 6px; border: 1px solid color-mix(in srgb, var(--video) 45%, var(--line-2));
+  border-radius: 13px; background: color-mix(in srgb, var(--video) 10%, transparent); color: var(--text); font-size: var(--fs-xs); cursor: pointer; white-space: nowrap;
+  transition: border-color .15s, background .15s; }
+.bg-job:hover { border-color: var(--video); background: color-mix(in srgb, var(--video) 18%, transparent); }
+.bg-ring { width: 14px; height: 14px; border-radius: 50%; flex: none;
+  background: conic-gradient(var(--video) calc(var(--p, 0) * 360deg), color-mix(in srgb, var(--video) 22%, transparent) 0);
+  -webkit-mask: radial-gradient(circle, transparent 4px, #000 4.5px); mask: radial-gradient(circle, transparent 4px, #000 4.5px); }
+@media (max-width: 640px) { .bg-job .bg-label { display: none; } .bg-job { padding: 0 8px 0 5px; gap: 5px; } }

@@ -29,7 +29,7 @@ import { withPreset } from "./TextControls";
 import SlidePreview from "./SlidePreview";
 import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
-import VideoStudio from "./VideoStudio";
+import VideoStudio, { type CopyJob } from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
 import PicStack from "./PicStack";
@@ -114,6 +114,8 @@ export default function Studio({ userName }: { userName: string }) {
   const [preview, setPreview] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
+  /** A working copy of a take on its way to the Drive (shown in the top bar, whatever is open). */
+  const [copyJob, setCopyJob] = useState<CopyJob | null>(null);
   const [fonts, setFonts] = useState<string[]>([]);
   /** Fonts saved before their family and style were read from the files: the texts using them follow. */
   const [renamedFonts, setRenamedFonts] = useState<Record<string, FaceInfo>>({});
@@ -1242,6 +1244,17 @@ export default function Studio({ userName }: { userName: string }) {
           </button>
         </div>
         <span className="grow" />
+        {/* A background job (a take's copy for the other devices): its progress, wherever the user is; a click opens
+            that video. */}
+        {copyJob && (
+          <button className="bg-job" style={{ "--p": copyJob.p } as CSSProperties}
+            title={`${copyJob.step === "make" ? t("Making the copy of {video} for your other devices", { video: copyJob.label }) : t("Sending the copy of {video} to your Drive", { video: copyJob.label })} · ${t("keep this page open")}`}
+            onClick={() => { upd((w) => ({ ...w, currentProjectId: copyJob.project, projects: w.projects.map((p) => (p.id === copyJob.project ? { ...p, videoId: copyJob.clip } : p)) })); switchStudio("video"); }}>
+            <span className="bg-ring" aria-hidden />
+            <span className="bg-label">{t("Drive copy")}</span>
+            <span className="mono">{Math.round(copyJob.p * 100)}%</span>
+          </button>
+        )}
         {/* Undo / redo: the whole release's history, the same for both studios, always here. */}
         <button className="btn icon quiet top-hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
         <button className="btn icon quiet top-hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
@@ -1292,6 +1305,7 @@ export default function Studio({ userName }: { userName: string }) {
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
+            onCopyJob={setCopyJob}
             library={textGroups(["hooks", "captions"])}
             lyricsRow={lyricsRow}
             captionPools={captionPools}
