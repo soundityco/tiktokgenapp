@@ -1588,3 +1588,15 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* The part that slides: its hairline on top (the studio-coloured glow was tried, the line kept). */
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs { border-top: 1px solid rgba(255,255,255,.1); box-shadow: none; }
 }
+@media (max-width: 1000px) {
+  /* No scrollbars on a phone or a tablet, anywhere (the content still scrolls). */
+  * { scrollbar-width: none; }
+  *::-webkit-scrollbar { display: none; }
+  /* Style page: the header is solid (its fade would let the settings show through above the preview). */
+  .app:has(.main[data-mobile-tab="style"]) > .top { background: var(--bg); }
+  /* The part that slides: its rounded black panel is drawn inside a square of the board's colour, so nothing
+     scrolling under it shows in its corners. */
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { background: var(--bg); border-top: 0; border-radius: 0; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs::before { content: ""; position: absolute; inset: 0; z-index: -1;
+    background: #000; border-top: 1px solid rgba(255,255,255,.1); border-radius: 26px 26px 0 0; }
+}
