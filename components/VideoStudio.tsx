@@ -2398,6 +2398,7 @@ export default function VideoStudio({
     return () => mq.removeEventListener("change", pick);
   }, [active]);
   const dockDrag = useRef<{ was: boolean } | null>(null);
+  const [aidsOpen, setAidsOpen] = useState(false);
   // The film strip of the dock's timeline: a few small pictures of the take along the segment, made in the
   // background from the file already open (a hidden player of its own, never the one on screen).
   const [strip, setStrip] = useState<string[]>([]);
@@ -2746,7 +2747,28 @@ export default function VideoStudio({
                 }} />
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
-              onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
+              onPointerDown={(e) => { setAidsOpen(false); cvDown(e); }} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
+            {/* Phone: the preview's aids (TikTok zones, alignment guides) on the picture itself, on both pages. */}
+            {videoBlob && (
+              <>
+                <button className={"adjust-open video-aids" + (aids.zones || aids.guides ? " set" : "")} aria-label={t("Guides on the preview")} aria-expanded={aidsOpen}
+                  onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAidsOpen((v) => !v); }}>
+                  <Icon name={aids.zones || aids.guides ? "eye" : "eye-off"} size={15} />
+                </button>
+                {aidsOpen && (
+                  <div className="aids-pop" onPointerDown={(e) => e.stopPropagation()}>
+                    <label className="check xs">
+                      <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
+                      {t("TikTok zones")}
+                    </label>
+                    <label className="check xs">
+                      <input type="checkbox" checked={aids.guides} onChange={(e) => setAids({ guides: e.target.checked })} />
+                      {t("Alignment guides")}
+                    </label>
+                  </div>
+                )}
+              </>
+            )}
           </div>
           {/* What the video shows (not what is edited: that is the tabs beside): eyes, on or off. */}
           <div className="row shown-on">
@@ -3202,7 +3224,7 @@ export default function VideoStudio({
               <option value="fit-black">{t("Fit whole, black bars")}</option>
             </Select>
           </div>
-          <div className="row">
+          <div className="row aids-row">
             <label className="check xs">
               <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
               {t("TikTok zones")}

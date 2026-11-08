@@ -1661,3 +1661,18 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-mobile-tab="style"] .video-col-r > details.sec[data-sec="video-render"] > .body > .style-only + *,
   .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec="slide-presets"] > .body > :first-child { margin-top: -4px; }
 }
+/* Video preview, phone: the aids (TikTok zones, guides) behind a small glass button on the picture, like the
+   carousel's photo adjustments; the computer keeps its two boxes in Framing. */
+.video-aids, .aids-pop { display: none !important; }
+@media (max-width: 1000px) {
+  .video-aids { display: grid !important; opacity: 1; }
+  .aids-pop { display: grid !important; gap: 10px; position: absolute; right: 8px; bottom: 48px; z-index: 3; padding: 12px 14px; border-radius: 12px;
+    background: rgba(8,8,10,.78); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.14);
+    box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: dp-in .2s cubic-bezier(.2,.9,.25,1) backwards; }
+  .aids-pop .check { color: #fff; white-space: nowrap; }
+  .aids-row { display: none !important; }
+}
+@media (max-width: 1000px) {
+  /* The aids' bubble may be wider than a small preview: it can go past the picture's edge. */
+  .video-stage .cv-wrap { overflow: visible; }
+}

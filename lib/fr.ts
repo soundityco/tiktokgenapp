@@ -663,6 +663,7 @@ export const FR: Record<string, string> = {
   "{n} takes found in the video": "{n} prises trouvées dans la vidéo",
   "Takes found in the video (pick the one to use):": "Prises trouvées dans la vidéo (choisis celle à utiliser) :",
   "Take {n}": "Prise {n}",
+  "Guides on the preview": "Repères sur l'aperçu",
   "The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.": "Le rendu de toute la vidéo : un LUT pour les images en log, puis exposition, contraste et couleur, pareil sur l'aperçu et l'export.",
   "The shape of the post and how the camera picture fills it. On the preview, drag the picture to reframe it and pinch to zoom.": "La forme du post et la façon dont l'image de la caméra le remplit. Sur l'aperçu, fais glisser l'image pour la recadrer et pince pour zoomer.",
   "Presets": "Presets",
