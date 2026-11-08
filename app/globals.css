@@ -1200,8 +1200,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 /* Phone dock: the corners of the desktop studio switch (8px around, 5px for each button, the studio tile and the
    account included), concentric with the dock's 5px padding. */
 @media (max-width: 640px) {
-  .mobile-tabs { border-radius: 10px; }
-  .mobile-tabs > button, .mobile-tabs > .dock-studio, .mobile-tabs .me { border-radius: 5px; }
+  .mobile-tabs { border-radius: 15px; }
+  .mobile-tabs > button, .mobile-tabs > .dock-studio, .mobile-tabs .me { border-radius: 10px; }
+  /* Room on both sides of the two separators (studio | panels | account). */
+  .mobile-tabs > .mobile-tabs-sep, .mobile-tabs > .mobile-tabs-sep:first-of-type { margin: 11px 7px; }
 }
 /* The account button: the same rounded square on a computer too. */
-.top .me { border-radius: 5px; }
+.top .me { border-radius: 8px; }
+@media (max-width: 640px) { .mobile-tabs > .dock-studio { margin: 1px 0 1px 1px; } .mobile-tabs .me { margin: 0 1px 0 0; } }
