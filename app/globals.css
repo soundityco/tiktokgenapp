@@ -1676,3 +1676,21 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* The aids' bubble may be wider than a small preview: it can go past the picture's edge. */
   .video-stage .cv-wrap { overflow: visible; }
 }
+@media (max-width: 1000px) {
+  /* Sliders on a touch screen: only the knob takes the finger (a finger on the bar scrolls the page and never jumps
+     the value), and only sideways (a swipe up or down that starts on the knob scrolls the page too). */
+  input[type=range] { pointer-events: none; touch-action: pan-y; }
+  input[type=range]::-webkit-slider-thumb { pointer-events: auto; }
+  input[type=range]::-moz-range-thumb { pointer-events: auto; }
+  /* The preview's aids button: a little smaller. */
+  .video-aids.adjust-open { width: 26px; height: 26px; right: 7px; bottom: 7px; }
+  .video-aids.adjust-open svg { width: 13px; height: 13px; }
+  .video-aids.adjust-open.set::after { top: 2px; right: 2px; width: 6px; height: 6px; }
+  .aids-pop { bottom: 40px; right: 7px; }
+}
+@media (max-width: 1000px) {
+  /* The knob alone takes the finger: big enough to land on it. */
+  input[type=range] { height: 28px; }
+  input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -10px; }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; }
+}

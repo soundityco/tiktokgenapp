@@ -72,7 +72,7 @@ export function useStyleParts<P extends string>(opts: {
       const col = o.current.column();
       const pvBottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pv-bottom") || "0");
       if (col && pvBottom) {
-        const goal = window.scrollY + col.getBoundingClientRect().top - pvBottom + 8;
+        const goal = window.scrollY + col.getBoundingClientRect().top - pvBottom;
         if (window.scrollY > goal) requestAnimationFrame(() => window.scrollTo({ top: Math.max(0, goal), behavior: "instant" }));
       }
     },
