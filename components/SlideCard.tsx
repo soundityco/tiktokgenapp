@@ -130,18 +130,23 @@ export default function SlideCard(p: Props) {
     const pic = fit(cfg.pic);
     drag.current = { kind: isText ? "text" : "pic", sx: e.clientX, sy: e.clientY, ox: isText ? cfg.style.x : pic.ox, oy: isText ? cfg.style.y : pic.oy, k: c.k };
   };
+  /** The text moved by (dx, dy) canvas pixels from (ox, oy) %, snapped to the middle lines (the guides show). */
+  const placeText = (ox: number, oy: number, dx: number, dy: number, snap: number, size?: number) => {
+    const W = cv.current!.width, H = cv.current!.height;
+    let x = clamp(ox + (dx / W) * 100, 0, 100), y = clamp(oy + (dy / H) * 100, 0, 100);
+    const sv = Math.abs(x - 50) < snap, sh = Math.abs(y - 50) < snap;
+    if (sv) x = 50;
+    if (sh) y = 50;
+    setGuides({ v: sv, h: sh });
+    p.onCfg((c) => ({ ...c, style: { ...c.style, x, y, ...(size !== undefined ? { size } : {}) } }));
+  };
   const move = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d || !cv.current) return;
     const W = cv.current.width, H = cv.current.height;
     const dx = (e.clientX - d.sx) * d.k, dy = (e.clientY - d.sy) * d.k;
     if (d.kind === "text") {
-      let x = clamp(d.ox + (dx / W) * 100, 0, 100), y = clamp(d.oy + (dy / H) * 100, 0, 100);
-      const sv = Math.abs(x - 50) < 1.5, sh = Math.abs(y - 50) < 1.5;
-      if (sv) x = 50;
-      if (sh) y = 50;
-      setGuides({ v: sv, h: sh });
-      p.onCfg((c) => ({ ...c, style: { ...c.style, x, y } }));
+      placeText(d.ox, d.oy, dx, dy, 1.5);
     } else {
       p.onCfg((c) => ({ ...c, pic: fit({ ...c.pic, ox: d.ox + dx / W, oy: d.oy + dy / H }) }));
     }
@@ -166,33 +171,81 @@ export default function SlideCard(p: Props) {
     return () => el.removeEventListener("wheel", h);
   }, []);
 
-  // Touch: two fingers pinch to zoom and move together to frame the photo; started on the text, they size and
-  // move the text. One finger is left to the page (scroll, swipe between slides).
-  const pinch = useRef<{ d: number; mx: number; my: number; text: boolean; pic: SlideCfg["pic"]; size: number; x: number; y: number; k: number } | null>(null);
+  // Touch. One finger is the page's (scroll, swipe between slides). Two fingers frame the photo: pinch to zoom,
+  // move together to move it. The text: press and hold it (a short buzz), then drag it with one finger (it snaps to
+  // the middle lines); a second finger meanwhile pinches its size.
+  type Touchy = { mode: "wait" | "text" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number; d: number; size: number; pic: SlideCfg["pic"]; mx: number; my: number };
+  const touch = useRef<Touchy | null>(null);
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopHold = () => { if (hold.current) { clearTimeout(hold.current); hold.current = null; } };
   const touchRef = useRef<(e: TouchEvent) => void>(() => {});
   touchRef.current = (e) => {
     const c = cv.current;
     if (!c || p.locked) return;
-    if (e.type === "touchend" || e.type === "touchcancel") { if (e.touches.length < 2) pinch.current = null; return; }
-    if (e.touches.length !== 2) return;
-    e.preventDefault();
+    const g = touch.current;
     const [a, b] = [e.touches[0], e.touches[1]];
-    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
-    const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
-    if (e.type === "touchstart" || !pinch.current) {
-      p.onSelect();
-      const m = toCanvas({ clientX: mx, clientY: my });
-      pinch.current = { d, mx, my, text: inText(m.x, m.y), pic: fit(cfg.pic), size: cfg.style.size, x: cfg.style.x, y: cfg.style.y, k: m.k };
+    if (e.type === "touchend" || e.type === "touchcancel") {
+      stopHold();
+      if (e.touches.length === 0) { touch.current = null; setGuides({ v: false, h: false }); }
+      else if (g?.mode === "pic" && e.touches.length < 2) touch.current = null;
+      else if (g?.mode === "text" && e.touches.length === 1) {
+        // Back to one finger: the drag goes on from where the text is now.
+        const m = toCanvas(a);
+        touch.current = { ...g, sx: a.clientX, sy: a.clientY, ox: cfg.style.x, oy: cfg.style.y, k: m.k, d: 0 };
+      }
       return;
     }
-    const g = pinch.current;
+    if (e.type === "touchstart") {
+      if (e.touches.length === 1) {
+        const m = toCanvas(a);
+        if (!inText(m.x, m.y)) return;
+        touch.current = { mode: "wait", sx: a.clientX, sy: a.clientY, ox: cfg.style.x, oy: cfg.style.y, k: m.k, d: 0, size: cfg.style.size, pic: cfg.pic, mx: 0, my: 0 };
+        stopHold();
+        hold.current = setTimeout(() => {
+          hold.current = null;
+          if (touch.current?.mode !== "wait") return;
+          touch.current.mode = "text";
+          p.onSelect();
+          try { navigator.vibrate?.(12); } catch { /* not on this phone */ }
+        }, 320);
+        return;
+      }
+      if (e.touches.length === 2) {
+        stopHold();
+        e.preventDefault();
+        const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+        const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
+        const m = toCanvas({ clientX: mx, clientY: my });
+        p.onSelect();
+        if (g?.mode === "text") touch.current = { ...g, d, size: cfg.style.size, sx: mx, sy: my, ox: cfg.style.x, oy: cfg.style.y, k: m.k };
+        else touch.current = { mode: "pic", sx: mx, sy: my, ox: 0, oy: 0, k: m.k, d, size: 0, pic: fit(cfg.pic), mx, my };
+      }
+      return;
+    }
+    // touchmove
+    if (!g) return;
+    if (g.mode === "wait") {
+      // Moving before the hold: it is a scroll or a swipe, not the text.
+      if (Math.hypot(a.clientX - g.sx, a.clientY - g.sy) > 8) { stopHold(); touch.current = null; }
+      return;
+    }
+    e.preventDefault();
     const W = c.width, H = c.height;
-    const dx = (mx - g.mx) * g.k, dy = (my - g.my) * g.k;
-    if (g.text) {
-      p.onCfg((s) => ({ ...s, style: { ...s.style, size: clamp(Math.round(g.size * (d / g.d)), 18, 200), x: clamp(g.x + (dx / W) * 100, 0, 100), y: clamp(g.y + (dy / H) * 100, 0, 100) } }));
-    } else {
+    if (g.mode === "text") {
+      if (e.touches.length >= 2 && g.d) {
+        const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+        const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
+        placeText(g.ox, g.oy, (mx - g.sx) * g.k, (my - g.sy) * g.k, 2.5, clamp(Math.round(g.size * (d / g.d)), 18, 200));
+      } else {
+        placeText(g.ox, g.oy, (a.clientX - g.sx) * g.k, (a.clientY - g.sy) * g.k, 2.5);
+      }
+      return;
+    }
+    if (g.mode === "pic" && b) {
+      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+      const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
       const z = zoomPic(g.pic, clamp(+(g.pic.zoom * (d / g.d)).toFixed(3), 0.5, 4));
-      p.onCfg((s) => ({ ...s, pic: fit({ ...z, ox: z.ox + dx / W, oy: z.oy + dy / H }) }));
+      p.onCfg((s) => ({ ...s, pic: fit({ ...z, ox: z.ox + ((mx - g.mx) * g.k) / W, oy: z.oy + ((my - g.my) * g.k) / H }) }));
     }
   };
   useEffect(() => {
@@ -202,9 +255,12 @@ export default function SlideCard(p: Props) {
     const stop = (e: Event) => e.preventDefault(); // Safari's own page zoom
     for (const ev of ["touchstart", "touchmove", "touchend", "touchcancel"]) el.addEventListener(ev, h as EventListener, { passive: false });
     el.addEventListener("gesturestart", stop);
+    // A held finger must not open the browser's menu (it would cancel the text drag).
+    el.addEventListener("contextmenu", stop);
     return () => {
       for (const ev of ["touchstart", "touchmove", "touchend", "touchcancel"]) el.removeEventListener(ev, h as EventListener);
       el.removeEventListener("gesturestart", stop);
+      el.removeEventListener("contextmenu", stop);
     };
   }, []);
 

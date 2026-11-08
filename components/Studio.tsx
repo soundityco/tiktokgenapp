@@ -30,6 +30,7 @@ import SlidePreview from "./SlidePreview";
 import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
 import VideoStudio from "./VideoStudio";
+import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
 import { ConfirmDialog, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
@@ -86,9 +87,17 @@ export default function Studio({ userName }: { userName: string }) {
   const switchRef = useRef<HTMLDivElement>(null);
   const [thumb, setThumb] = useState<CSSProperties | null>(null);
   useLayoutEffect(() => {
-    const on = switchRef.current?.querySelector<HTMLElement>("button.on");
-    // The first time it is placed without moving; afterwards it slides.
-    if (on) setThumb((cur) => ({ transform: `translateX(${on.offsetLeft}px)`, width: on.offsetWidth, ...(cur ? {} : { transition: "none" }) }));
+    const place = (slide: boolean) => {
+      const on = switchRef.current?.querySelector<HTMLElement>("button.on");
+      // The first time (and when the window changes size) it is placed without moving; otherwise it slides.
+      if (on) setThumb((cur) => ({ transform: `translateX(${on.offsetLeft}px)`, width: on.offsetWidth, ...(cur && slide ? {} : { transition: "none" }) }));
+    };
+    place(true);
+    const el = switchRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => place(false));
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [studio, lang, ws]);
   useEffect(() => { if (studio === "video") setVideoSeen(true); }, [studio]);
   // The studio in use survives a reload (read after mount: the server render has no localStorage).
@@ -1041,10 +1050,26 @@ export default function Studio({ userName }: { userName: string }) {
     </div>
   </>);
 
+  // Settings and account: in the top bar on a computer, at the end of the tab bar on a phone.
+  const settingsMenu = (close: () => void) => (<>
+            <button className="mobile-only" onClick={() => { close(); setOverlay({ k: "import", poolId: null }); }}><Icon name="list" size={14} />{t("Import hooks")}</button>
+            <div className="sep mobile-only" />
+            <div className="label cap">{t("Language")}</div>
+            <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
+            <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
+            <div className="sep" />
+            <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
+            <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
+            <button onClick={() => { close(); setVersionsOpen(true); }}>{t("Version history")}</button>
+            {canInstall && <><div className="sep" /><button onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
+            <div className="sep" />
+            <div className="label cap truncate">{userName}</div>
+            <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>
+          </>);
   return (
     <div className="app">
       <header className="top">
-        <div className="brand"><Wordmark height={18} /> <small className="version">{VERSION}</small></div>
+        <div className="brand"><span className="brand-full"><Wordmark height={18} /> <small className="version">{VERSION}</small></span><span className="brand-icon"><Logo size={26} /></span></div>
         <div className="studio-switch" role="group" aria-label={t("Studio")} ref={switchRef}>
           {/* The white pill under the chosen studio: it slides from one to the other. */}
           <span className="studio-thumb" aria-hidden style={thumb ?? { opacity: 0 }} />
@@ -1062,23 +1087,11 @@ export default function Studio({ userName }: { userName: string }) {
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
         <button className="btn top-import" aria-label={t("Import hooks")} onClick={() => setOverlay({ k: "import", poolId: null })}><Icon name="list" /><span>{t("Import hooks")}</span></button>
-        <Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}><Icon name="sliders" /></button>}>
-          {(close) => (<>
-            <button className="mobile-only" onClick={() => { close(); setOverlay({ k: "import", poolId: null }); }}><Icon name="list" size={14} />{t("Import hooks")}</button>
-            <div className="sep mobile-only" />
-            <div className="label cap">{t("Language")}</div>
-            <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
-            <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
-            <div className="sep" />
-            <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
-            <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
-            <button onClick={() => { close(); setVersionsOpen(true); }}>{t("Version history")}</button>
-            {canInstall && <><div className="sep" /><button onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
-            <div className="sep" />
-            <div className="label cap truncate">{userName}</div>
-            <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>
-          </>)}
-        </Menu>
+        <button className="btn icon quiet top-hist" aria-label={t("Undo")} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
+        <button className="btn icon quiet top-hist" aria-label={t("Redo")} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
+        <div className="top-settings"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Settings and account")} title={userName} onClick={toggle}><Icon name="sliders" /></button>}>
+          {settingsMenu}
+        </Menu></div>
         <input ref={restoreInput} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) restore(f); e.target.value = ""; }} />
       </header>
 
@@ -1173,8 +1186,8 @@ export default function Studio({ userName }: { userName: string }) {
                   <button className="btn quiet icon sm" aria-label={t("Add a slide after this one")} title={t("Add a slide after this one")} onClick={addSlide} disabled={nSlides >= MAX_SLIDES}><Icon name="plus" size={14} /></button>
                 </div>
               </div>
-              <button className="btn icon quiet" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
-              <button className="btn icon quiet" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
+              <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
+              <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
               <div className="row nowrap head-actions">
               {exportProgress && <span className="badge" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
@@ -1280,6 +1293,10 @@ export default function Studio({ userName }: { userName: string }) {
         <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name={studio === "video" ? "film" : "image"} size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
         <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name={studio === "video" ? "folder" : "list"} size={18} /><span className="tab-name">{studio === "video" ? t("Files") : t("Lists")}</span></button>
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
+        <span className="mobile-tabs-sep" aria-hidden />
+        <Menu trigger={(_, toggle) => <button className="mobile-me" aria-label={t("Settings and account")} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
+          {settingsMenu}
+        </Menu>
       </nav>
 
       {edText && (
