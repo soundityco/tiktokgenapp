@@ -1197,3 +1197,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 @keyframes ds-turn { from { opacity: 0; transform: rotate(-120deg) scale(.5); } }
 @media (prefers-reduced-motion: reduce) { .dock-studio .ds-icon { animation: none; } .dock-studio::before, .dock-studio::after { transition: none; } }
+/* Phone dock: the corners of the desktop studio switch (8px around, 5px for each button, the studio tile and the
+   account included), concentric with the dock's 5px padding. */
+@media (max-width: 640px) {
+  .mobile-tabs { border-radius: 10px; }
+  .mobile-tabs > button, .mobile-tabs > .dock-studio, .mobile-tabs .me { border-radius: 5px; }
+}
+/* The account button: the same rounded square on a computer too. */
+.top .me { border-radius: 5px; }
