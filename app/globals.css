@@ -1694,3 +1694,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -10px; }
   input[type=range]::-moz-range-thumb { width: 22px; height: 22px; }
 }
+@media (max-width: 1000px) {
+  /* A short part (Framing, Colour…) cannot be scrolled under the control: the column is at least the room left
+     between the control and the page's end, so the page stops scrolling with its first setting 16px under it. */
+  .main[data-mobile-tab="style"] .col.side.r { min-height: calc(100dvh - var(--pv-bottom, 400px) - 84px - env(safe-area-inset-bottom)); }
+  .app:has(.dock-player:not(:empty)) .main[data-mobile-tab="style"] .col.side.r { min-height: calc(100dvh - var(--pv-bottom, 400px) - 150px - env(safe-area-inset-bottom)); }
+}
