@@ -19,6 +19,11 @@
   --video: #a184ff; --music: #4fffb0;
   /* The lyrics' own colour, a light gold (the library's lyrics tile). */
   --lyrics: #d8b56a;
+  /* The two studios' colours: orange for the carousel, violet for the video (the dock's tile, the switch, the release picked). */
+  --grad-carousel: linear-gradient(140deg, #ffd27a 0%, #ffa24d 48%, #ff7b3a 100%);
+  --grad-video: linear-gradient(140deg, #dcc4ff 0%, #a184ff 50%, #6a55ff 100%);
+  --glow-carousel: color-mix(in srgb, #ff8a3d 40%, transparent);
+  --glow-video: color-mix(in srgb, #a184ff 50%, transparent);
   --ok: #7ad9a1; --warn: #f0c35c; --danger: #ff6b80;
 
   --sans: "TikTok Sans Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -808,7 +813,6 @@ html:has(.ov) { overflow: hidden; }
   .ov > .modal, .ov > .modal.wide { width: 100%; max-height: 90dvh; border-radius: 16px 16px 0 0; border-bottom: 0;
     padding: 28px var(--s4) calc(var(--s4) + env(safe-area-inset-bottom)); position: relative; animation: sheet-up .36s cubic-bezier(.2,.9,.2,1); }
   .ov > .modal::before { content: ""; position: absolute; top: 10px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-2); }
-  .modal-foot { position: sticky; bottom: calc(-1 * (var(--s4) + env(safe-area-inset-bottom))); margin: 0 calc(-1 * var(--s4)); padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom)); background: var(--panel); }
   .modal-foot .btn { flex: 1; } .modal-foot .btn.left { flex: 1 1 100%; margin-right: 0; }
   /* Bigger targets for a thumb: one height for every control, so a button and a select line up. */
   :root { --h: 40px; --h-sm: 32px; }
@@ -1188,8 +1192,8 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
     margin: 1px 2px 1px 1px; border: 0; border-radius: 15px; overflow: hidden; isolation: isolate; color: #fff;
     box-shadow: 0 6px 18px color-mix(in srgb, #ff8a3d 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35); transition: box-shadow .5s, scale .12s; }
   .dock-studio::before, .dock-studio::after { content: ""; position: absolute; inset: 0; z-index: -1; transition: opacity .5s cubic-bezier(.4,0,.2,1); }
-  .dock-studio::before { background: linear-gradient(140deg, #ffd27a 0%, #ffa24d 48%, #ff7b3a 100%); }
-  .dock-studio::after { background: linear-gradient(140deg, #dcc4ff 0%, #a184ff 50%, #6a55ff 100%); opacity: 0; }
+  .dock-studio::before { background: var(--grad-carousel); }
+  .dock-studio::after { background: var(--grad-video); opacity: 0; }
   .dock-studio.video::after { opacity: 1; }
   .dock-studio.video { box-shadow: 0 6px 18px color-mix(in srgb, var(--video) 50%, transparent), inset 0 1px 0 rgba(255,255,255,.35); }
   .dock-studio .ds-icon { display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); animation: ds-turn .45s cubic-bezier(.3,1.3,.5,1); }
@@ -1247,3 +1251,45 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @media (hover: none) { .lib-item .del { display: none; } .lib-item:hover .lib-count { opacity: 1; } }
 /* The first text of a list stops before the right edge's count / trash. */
 .lib-item .lib-preview { padding-right: 30px; }
+
+/* =====================================================================
+   Windows. A head (its name in the panels' serif, a close button), a body that scrolls by itself, and the buttons
+   kept in view on a bar at the bottom. Softer corners, a deeper backdrop.
+   ===================================================================== */
+.ov { background: rgba(4,4,6,.66); backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2); }
+.modal { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; border-radius: 14px; border-color: #2a2a33;
+  background: linear-gradient(180deg, #111115, var(--panel) 120px); box-shadow: 0 40px 100px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.04); }
+.modal-head { display: flex; align-items: center; gap: var(--s3); padding: 20px 16px 4px 24px; flex: none; }
+.modal-title { flex: 1; min-width: 0; margin: 0; font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1.1; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-x { flex: none; color: var(--muted); }
+.modal-x:hover { color: var(--text); }
+.modal-body { display: grid; gap: var(--s4); padding: var(--s4) 24px 24px; overflow-y: auto; min-height: 0; }
+.modal-body > .modal-foot { position: sticky; bottom: -24px; z-index: 2; margin: var(--s2) -24px -24px; padding: 14px 24px; background: var(--panel);
+  border-top: 1px solid var(--line); }
+.modal-text { color: #c9c7c0; line-height: 1.55; }
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #1a0509; font-weight: 600; }
+.btn.danger-solid:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 85%, #fff); border-color: transparent; }
+@media (max-width: 640px) {
+  .ov > .modal, .ov > .modal.wide { padding: 0; border-radius: 18px 18px 0 0; }
+  .modal-head { padding: 26px 10px 2px var(--s4); }
+  .modal-title { font-size: 24px; }
+  .modal-body { padding: var(--s3) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom)); }
+  .modal-body > .modal-foot { bottom: calc(-1 * (var(--s4) + env(safe-area-inset-bottom))); margin: var(--s2) calc(-1 * var(--s4)) calc(-1 * (var(--s4) + env(safe-area-inset-bottom)));
+    padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom)); }
+}
+
+/* Desktop studio switch: its sliding thumb wears the open studio's gradient (cross-fading as it slides), like the
+   dock's tile on a phone. */
+.studio-thumb { background: none; overflow: hidden; box-shadow: 0 2px 10px var(--glow-carousel); transition: transform .38s cubic-bezier(.3,1.2,.5,1), width .38s cubic-bezier(.3,1.2,.5,1), box-shadow .45s; }
+.studio-thumb::before, .studio-thumb::after { content: ""; position: absolute; inset: 0; transition: opacity .45s cubic-bezier(.4,0,.2,1); }
+.studio-thumb::before { background: var(--grad-carousel); }
+.studio-thumb::after { background: var(--grad-video); opacity: 0; }
+.studio-switch[data-studio="video"] .studio-thumb { box-shadow: 0 2px 10px var(--glow-video); }
+.studio-switch[data-studio="video"] .studio-thumb::after { opacity: 1; }
+.studio-switch button.on { color: #1a1020; }
+/* The release picked, in the releases menu: the open studio's gradient, lightly. */
+.release-list button.on { position: relative; font-weight: 600; background: linear-gradient(90deg, color-mix(in srgb, #ffa24d 20%, transparent), transparent 85%); }
+.release-list button.on::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--grad-carousel); }
+.main[data-studio="video"] .release-list button.on { background: linear-gradient(90deg, color-mix(in srgb, #a184ff 24%, transparent), transparent 85%); }
+.main[data-studio="video"] .release-list button.on::before { background: var(--grad-video); }

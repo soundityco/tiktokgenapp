@@ -7,6 +7,7 @@ import Icon from "./Icon";
 const stack: symbol[] = [];
 
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+  const { t } = useT();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -21,7 +22,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       ) ?? []).filter((el) => el.offsetParent !== null);
     // On a phone, no keyboard popping up over the window as it opens.
-    const first = matchMedia("(pointer: coarse)").matches ? undefined : focusables()[0];
+    const first = matchMedia("(pointer: coarse)").matches ? undefined : focusables().find((el) => !el.classList.contains("modal-x"));
     (first ?? dialog)?.focus();
     const k = (e: KeyboardEvent) => {
       if (e.key === "Escape" && stack[stack.length - 1] === token) {
@@ -48,21 +49,28 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
   return (
     <div className="ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={dialogRef} tabIndex={-1} className={"modal" + (wide ? " wide" : "")} role="dialog" aria-modal="true" aria-label={title}>
-        <h2 className="title">{title}</h2>
-        {children}
+        {/* Its name (the serif of the panels' titles) and a close button; then what it holds, which scrolls by
+            itself, its buttons kept in view at the bottom. */}
+        <div className="modal-head">
+          <h2 className="modal-title">{title}</h2>
+          <button type="button" className="btn icon quiet sm modal-x" aria-label={t("Close")} onClick={() => closeRef.current()}><Icon name="x" size={16} /></button>
+        </div>
+        <div className="modal-body">{children}</div>
       </div>
     </div>
   );
 }
 
-export function ConfirmDialog(p: { title: string; message: string; confirmLabel: string; onConfirm: () => void; onClose: () => void }) {
+export function ConfirmDialog(p: { title: string; message: string; confirmLabel: string; onConfirm: () => void; onClose: () => void;
+  /** Deleting / replacing: the confirm button in the danger red. */
+  danger?: boolean }) {
   const { t } = useT();
   return (
     <Modal title={p.title} onClose={p.onClose}>
-      <p>{p.message}</p>
+      <p className="modal-text">{p.message}</p>
       <div className="modal-foot">
         <button className="btn" onClick={p.onClose}>{t("Cancel")}</button>
-        <button className="btn primary" onClick={() => { p.onConfirm(); p.onClose(); }}>{p.confirmLabel}</button>
+        <button className={"btn " + (p.danger ? "danger-solid" : "primary")} onClick={() => { p.onConfirm(); p.onClose(); }}>{p.confirmLabel}</button>
       </div>
     </Modal>
   );

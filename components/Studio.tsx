@@ -124,6 +124,19 @@ export default function Studio({ userName }: { userName: string }) {
   const { canInstall, installed, install, iosHelp, closeIosHelp } = useInstall();
   // Phone: the tools of the studio head folded under "More" (the release, share, download and generate stay out).
   const [headMore, setHeadMore] = useState(false);
+  // The TikTok zones: on a computer the Style setting (saved with the data); on a phone the deck's own switch, kept
+  // on this device only, so hiding them on the phone leaves the computer's as they were.
+  const [isPhone, setIsPhone] = useState(false);
+  const [phoneZones, setPhoneZones] = useState(true);
+  useEffect(() => {
+    const m = matchMedia("(max-width: 640px)");
+    const f = () => setIsPhone(m.matches);
+    f();
+    m.addEventListener("change", f);
+    try { if (localStorage.getItem("tktgen-phone-zones") === "0") setPhoneZones(false); } catch { /* private mode */ }
+    return () => m.removeEventListener("change", f);
+  }, []);
+  const togglePhoneZones = () => setPhoneZones((v) => { try { localStorage.setItem("tktgen-phone-zones", v ? "0" : "1"); } catch { /* private mode */ } return !v; });
   // Phone: the slides are a deck swiped sideways; the one in the middle is the selected one (and the other way round).
   const deckRef = useRef<HTMLDivElement>(null);
   const deckWrapRef = useRef<HTMLDivElement>(null);
@@ -1138,9 +1151,9 @@ export default function Studio({ userName }: { userName: string }) {
             onClick={() => updProject((p) => ({ ...p, selectedSlide: i }))} />
         ))}
       </div>
-      <button className={"deck-zones" + (ws.zones ? " on" : "")} aria-pressed={ws.zones} onClick={() => upd((w) => ({ ...w, zones: !w.zones }))}
+      <button className={"deck-zones" + (phoneZones ? " on" : "")} aria-pressed={phoneZones} onClick={togglePhoneZones}
         title={t("TikTok's interface zones on the slides")}>
-        <Icon name={ws.zones ? "eye" : "eye-off"} size={15} />{t("Zones")}
+        <Icon name={phoneZones ? "eye" : "eye-off"} size={15} />{t("Zones")}
       </button>
     </div>
   );
@@ -1156,7 +1169,7 @@ export default function Studio({ userName }: { userName: string }) {
           <div className="label cap">{t("Releases")}</div>
           <div className="release-list">
             {ws.projects.map((p) => (
-              <button key={p.id} onClick={() => { close(); if (p.id !== project.id) upd((w) => ({ ...w, currentProjectId: p.id })); }}>
+              <button key={p.id} className={p.id === project.id ? "on" : undefined} onClick={() => { close(); if (p.id !== project.id) upd((w) => ({ ...w, currentProjectId: p.id })); }}>
                 {p.id === project.id ? <Icon name="check" size={14} /> : <span style={{ width: 14, flex: "none" }} />}<span className="truncate">{p.name}</span>
               </button>
             ))}
@@ -1175,7 +1188,7 @@ export default function Studio({ userName }: { userName: string }) {
   // One slide card (the deck's, or on a phone the selected slide's fields under the deck).
   const cardFor = (cfg: SlideCfg, i: number, part?: "fields") => (
               <SlideCard key={(part ?? "") + cfg.id} part={part} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={slideTexts} picPools={vPics} zones={ws.zones} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
+                textPools={slideTexts} picPools={vPics} zones={isPhone ? phoneZones : ws.zones} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
                 lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
@@ -1215,7 +1228,7 @@ export default function Studio({ userName }: { userName: string }) {
     <div className="app">
       <header className="top">
         <div className="brand"><span className="brand-full"><Wordmark height={18} /> <small className="version">{VERSION}</small></span><span className="brand-icon"><Logo size={26} /></span></div>
-        <div className="studio-switch" role="group" aria-label={t("Studio")} ref={switchRef}>
+        <div className="studio-switch" data-studio={studio} role="group" aria-label={t("Studio")} ref={switchRef}>
           {/* The white pill under the chosen studio: it slides from one to the other. */}
           <span className="studio-thumb" aria-hidden style={thumb ?? { opacity: 0 }} />
           <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
@@ -1538,7 +1551,7 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {overlay?.k === "renameCarousel" && <PromptDialog title={t("Rename carousel")} label={t("Name")} initial={carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!)} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => renameCarousel(p, n))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => ({ ...p, name: n }))} onClose={() => setOverlay(null)} />}
-      {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} />}
+      {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} danger />}
       {overlay?.k === "lyrics" && (
         <LyricsEditor name={project.name} lyrics={project.lyrics} song={project.lyricsLinked ? undefined : project.songLyrics} synced={!!project.lyricsLinked && !!project.lyricWords?.length} onChange={setLyrics} onClose={() => setOverlay(null)} />
       )}

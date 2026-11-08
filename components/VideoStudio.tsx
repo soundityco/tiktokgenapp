@@ -2896,7 +2896,7 @@ export default function VideoStudio({
           onSubmit={renameClip} onClose={() => setClipDialog(null)} />
       )}
       {clipDialog === "delete" && (
-        <ConfirmDialog title={t("Delete this video")} confirmLabel={t("Delete")}
+        <ConfirmDialog danger title={t("Delete this video")} confirmLabel={t("Delete")}
           message={t("“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.", { name: clipName(clip) })}
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
       )}
