@@ -29,7 +29,9 @@ Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app
 - Sauvegardes d'UI : tags git `ui-video-v1`, `ui-video-v2`, `ui-red-accent`.
 
 ## État et à faire
-- Fait récemment : carrousels multiples, export par lot (carrousels en zip, vidéos à la suite), légende + hashtags, paroles uniques reliées carrousel ↔ vidéo, thèmes locaux, menus maison, presets de style vidéo, verrouillage de slide.
-- À faire / idées : version live sans audio officiel (le son de la prise comme référence), correction mot par mot sur la timeline, vérifier l'interface sur mobile.
+- Fait récemment : carrousels multiples, export par lot, légende + hashtags, paroles uniques reliées carrousel ↔ vidéo, thèmes locaux, menus maison, presets vidéo, verrouillage de slide.
+- « Envoyer sur mon téléphone » (QR code) : les fichiers passent par un pont temporaire dans Neon (`share_chunks`, morceaux de 2 Mo, effacés à la réception ou après 10 min ; `lib/shareP2P.ts`, `app/api/share/*`, page `app/share/[code]`). Au-delà de 150 Mo : lien direct WebRTC puis Drive. Le Wi-Fi d'Andy isole les appareils (P2P et accès au serveur de dev depuis le téléphone impossibles) : tester le téléphone sur le site en ligne.
+- Mobile en vraie app (PWA installable, page hors ligne `public/offline.html`) : header fixe, dock d'onglets en capsule, fenêtres en feuilles, carrousel en pile à glisser. Desktop : en-tête des studios sur deux lignes, animations d'ouverture.
+- À faire / idées : version live sans audio officiel (le son de la prise comme référence), correction mot par mot sur la timeline, aperçu vidéo plus compact sur téléphone, bouton d'action flottant (Générer / Exporter) sur mobile.
 - Google : vérification du branding en cours (balise Search Console posée), puis publier l'app (sinon accès Drive coupé tous les 7 jours). Pour ouvrir à d'autres artistes : remplacer `drive.readonly` par le sélecteur de fichiers Google.
 - Import TikTok : en attente de la validation de l'app par TikTok.
