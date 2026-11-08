@@ -3252,6 +3252,8 @@ export default function VideoStudio({
                       onFonts={onFonts}
                       onReset={() => setV({ hookStyle: undefined })}
                     />
+                    {/* Phone's Style page: the reset at the end (the head that holds it is not shown there). */}
+                    <div className="reset-m"><button className="btn sm quiet" onClick={() => setV({ hookStyle: undefined })} disabled={!settings.hookStyle}>{t("Reset")}</button></div>
                 </>
               )}
                         </div>
@@ -3303,6 +3305,7 @@ export default function VideoStudio({
                   onFonts={onFonts}
                   onReset={() => setV({ captionStyle: undefined })}
                 />
+                <div className="reset-m"><button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button></div>
                         </div>
           )}
           <div id="video-color" className="stack">

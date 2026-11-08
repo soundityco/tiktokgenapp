@@ -1641,3 +1641,23 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* The fade under the control: shorter, it no longer dims the first lines before they scroll. */
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { height: 8px; }
 }
+/* Style page (phone), fourth pass: no title over each part (the control above already names it), the first
+   setting right under it, the same distance in both studios; the lyrics / hook reset moves to the part's end. */
+.reset-m { display: none; }
+@media (max-width: 1000px) {
+  .main[data-mobile-tab="style"] .video-col-r > .sheet-text > .col-head,
+  .main[data-mobile-tab="style"] .video-col-r > #video-color > .col-head,
+  .main[data-mobile-tab="style"] .video-col-r .style-only,
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary { display: none !important; }
+  .main[data-mobile-tab="style"] .reset-m { display: flex; justify-content: center; padding-top: var(--s2); }
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > .body { padding-top: 0 !important; }
+}
+@media (max-width: 1000px) {
+  /* The carousel's column is not a grid like the video's: the same 16px under the control, set here. */
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.side.r > .style-tabs { margin-bottom: var(--s4); }
+}
+@media (max-width: 1000px) {
+  /* Framing and presets start 4px lower (their panel's own spacing): the same 16px as the rest. */
+  .main[data-mobile-tab="style"] .video-col-r > details.sec[data-sec="video-render"] > .body > .style-only + *,
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec="slide-presets"] > .body > :first-child { margin-top: -4px; }
+}
