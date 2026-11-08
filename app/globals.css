@@ -1050,3 +1050,6 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .carousel-head { margin-bottom: 32px; }
   .video-center > .video-head { margin-bottom: 16px; }
 }
+/* The slide's own text: its name over it, like the sources under it, and room between it and the picture. */
+.card .slide-text { margin-top: var(--s3); }
+.card .slide-text textarea { width: 100%; }

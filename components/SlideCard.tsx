@@ -371,7 +371,9 @@ export default function SlideCard(p: Props) {
             title={t("CC BY: put this credit in the TikTok caption")}>{t("copy the credit")}</button></>}
         </p>
       )}
-      <textarea className="input" rows={3} aria-label={t("Caption")} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
+      <label className="field slide-text">{t("Text on the slide")}
+        <textarea className="input" rows={3} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
+      </label>
       {cfg.textSource.kind === "lyrics" && p.gen?.edited && !p.locked && (
         <p className="muted xs row" style={{ gap: 6 }}>
           {t("Retouched on this slide: the lyrics of the release are not changed.")}
