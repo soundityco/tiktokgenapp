@@ -1514,7 +1514,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 @media (max-width: 1000px) {
   /* On the Style page, the control names the part: its panel's own title would say it twice. */
-  .main[data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary, .main[data-mobile-tab="style"] .video-col-r > details.sec[data-sec="video-render"] > summary { display: none; }
+  .main[data-mobile-tab="style"] .video-col-r > details.sec[data-sec="video-render"] > summary { display: none; }
 }
 /* Video timeline block: the phone makes it the segment's (title, sync state, passage, length, lock, sync); the
    computer keeps play and time in it. */
@@ -1599,4 +1599,30 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs { background: var(--bg); border-top: 0; border-radius: 0; }
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs::before { content: ""; position: absolute; inset: 0; z-index: -1;
     background: #000; border-top: 1px solid rgba(255,255,255,.1); border-radius: 26px 26px 0 0; }
+}
+@media (max-width: 1000px) {
+  /* Style page, carousel: each part opens on its title like the video's (Text, Format & photo…): the panel's own
+     title, shown as the video's heads are (same type, same height, same distance under the control), not foldable. */
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary {
+    display: flex; align-items: center; min-height: var(--h-sm); margin: 0; padding: 0; border: 0; pointer-events: none;
+    font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary::after,
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary::before { display: none; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] { border: 0; margin: 0 !important; padding: 0 !important; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary { margin-top: 16px; }
+  /* …and the same 16px between the title and what follows (the video's stack gap). */
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > .body { padding-top: var(--s4) !important; }
+}
+@media (max-width: 1000px) {
+  /* Style page, the panel that slides: "Style" up near its top (the grip just above it, no black gap). */
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { padding-top: 16px; }
+  .main[data-mobile-tab="style"] .style-grip { top: 6px; }
+  /* Hierarchy: each part's title (Text, Format, Lyrics style, Colour…) is a heading, in the app's serif like the
+     other titles; the panels inside stay in mono capitals, the fields' names in muted mono below them. */
+  .main[data-mobile-tab="style"] .video-col-r > .sheet-text > .col-head > .label,
+  .main[data-mobile-tab="style"] .video-col-r > #video-color > .col-head > .label,
+  .main[data-mobile-tab="style"] .video-col-r .style-only > .label,
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary {
+    font-family: var(--serif); font-size: 22px; line-height: 1.1; letter-spacing: -.01em; text-transform: none; color: var(--text); font-weight: 400; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary .sec-sub { font-family: var(--sans); font-size: 13px; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
 }
