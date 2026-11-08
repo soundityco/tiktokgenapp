@@ -158,11 +158,16 @@ export default function Studio({ userName }: { userName: string }) {
     if (live >= 0) setDeckLive((cur) => (cur === live ? cur : live));
     if (deckTimer.current) clearTimeout(deckTimer.current);
     setDeckSwiping(true);
-    deckTimer.current = setTimeout(() => {
-      setDeckSwiping(false);
-      const i = deckCentre();
-      if (i >= 0) updProject((p) => (p.selectedSlide === i ? p : { ...p, selectedSlide: i }));
-    }, 90);
+    // The end of the move: the browser's scrollend when it has it (right away), else a short pause.
+    deckTimer.current = setTimeout(deckSettle, "onscrollend" in window ? 400 : 70);
+  };
+  const deckSettle = () => {
+    if (deckTimer.current) { clearTimeout(deckTimer.current); deckTimer.current = null; }
+    if (scrub.current) return;
+    setDeckSwiping(false);
+    setDeckLive(null); // at rest, the selected slide is the one in the middle
+    const i = deckCentre();
+    if (i >= 0) updProject((p) => (p.selectedSlide === i ? p : { ...p, selectedSlide: i }));
   };
   // A new panel starts at its top (each panel is the whole page on a phone).
   const pickMobileTab = (tab: MobileTab) => {
@@ -1384,7 +1389,7 @@ export default function Studio({ userName }: { userName: string }) {
             </div>
           )}
           <div className="deck-wrap" ref={deckWrapRef}>
-          <div ref={deckRef} onScroll={onDeckScroll} className={"slides" + (boardDrag ? " drag-in" : "")}>
+          <div ref={deckRef} onScroll={onDeckScroll} onScrollEnd={() => { if (deckOn()) deckSettle(); }} className={"slides" + (boardDrag ? " drag-in" : "")}>
             {project.slides.map((cfg, i) => cardFor(cfg, i))}
           </div>
           {/* Phone: the bar stays put while the slides swipe under it, over the room kept under the middle picture. */}
@@ -1392,9 +1397,14 @@ export default function Studio({ userName }: { userName: string }) {
           </div>
           {/* Phone: the selected slide's text and sources, once, under the deck: they fade out while swiping and fade
               back in for the next slide, instead of sliding sideways with the cards. */}
-          {deckTop !== null && project.slides[sel] && (
-            <div className={"deck-fields" + (deckSwiping ? " leaving" : "")}>{cardFor(project.slides[sel], sel, "fields")}</div>
-          )}
+          {deckTop !== null && (() => {
+            // The slide in the middle right now: its fields come as soon as it gets there, mid-swipe; before that
+            // the current ones fade out.
+            const shown = deckLive !== null && project.slides[deckLive] ? deckLive : sel;
+            return project.slides[shown] && (
+              <div className={"deck-fields" + (deckSwiping && shown === sel ? " leaving" : "")}>{cardFor(project.slides[shown], shown, "fields")}</div>
+            );
+          })()}
           <section className="post-box">
             <h3 className="label">{t("Caption and hashtags")}</h3>
             <PostCaption auto value={project.caption ?? ""} poolId={project.captionPoolId} pools={captionPools}

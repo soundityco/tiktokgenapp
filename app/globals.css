@@ -1226,9 +1226,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .deck-fields { display: none; }
 @media (max-width: 640px) {
   .col.center .slides > .card > .cv-wrap ~ *:not(.deck-spacer) { display: none; }
-  .deck-fields { display: block; margin-top: 10px; transition: opacity .18s ease-out, translate .22s ease-out; } /* + the deck's 14px: 24px under the bar */
+  .deck-fields { display: block; margin-top: 10px; transition: opacity .14s ease-out, translate .16s ease-out; } /* + the deck's 14px: 24px under the bar */
   .deck-fields.leaving { opacity: 0; translate: 0 8px; }
-  .deck-fields > .card-fields { display: grid; gap: var(--s3); animation: fields-in .34s cubic-bezier(.2,.8,.2,1); }
+  .deck-fields > .card-fields { display: grid; gap: var(--s3); animation: fields-in .24s cubic-bezier(.2,.8,.2,1); }
   .deck-fields .slide-text { margin-top: 0; }
 }
 @keyframes fields-in { from { opacity: 0; translate: 0 10px; } }
