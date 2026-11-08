@@ -15,6 +15,15 @@ const ios = () => typeof navigator !== "undefined"
 /** Registers the service worker, so the browser offers to install Rollout as an app (its icon, its own window). */
 export default function InstallApp() {
   useEffect(() => {
+    // The width a scrollbar takes here (0 with the Mac's floating scrollbars): the scrolling columns take it off
+    // their right padding, so their two sides stay even (see --sbw in globals.css).
+    const d = document.createElement("div");
+    d.style.cssText = "position:absolute;top:-999px;width:100px;height:100px;overflow:scroll";
+    document.body.appendChild(d);
+    document.documentElement.style.setProperty("--sbw", `${d.offsetWidth - d.clientWidth}px`);
+    d.remove();
+  }, []);
+  useEffect(() => {
     const keep = (e: Event) => { e.preventDefault(); deferred = e as Prompt; changed(); };
     const done = () => { deferred = null; changed(); };
     window.addEventListener("beforeinstallprompt", keep);

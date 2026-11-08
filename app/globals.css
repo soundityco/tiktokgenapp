@@ -1026,3 +1026,20 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
 }
 .studio-head .h-gen .btn { font-family: var(--sans); font-size: var(--fs); letter-spacing: normal; text-transform: none; }
 .studio-head .h-count, .studio-head .h-pick { justify-self: start; }
+
+/* Scrolling columns (computer): the scrollbar's room is always kept and taken off the right padding, so the
+   board and the panels have even sides whether a scrollbar shows or not (--sbw is measured at load). */
+@media (min-width: 1001px) {
+  .main > .col { scrollbar-gutter: stable; }
+  .main > .col.center { padding-right: max(4px, calc(var(--s5) - var(--sbw, 0px))); }
+  .main > .col.side { padding-right: max(4px, calc(var(--s4) - var(--sbw, 0px))); }
+}
+@media (min-width: 1280px) {
+  .video-shell > .col { scrollbar-gutter: stable; }
+  .video-shell > .col.center { padding-right: max(4px, calc(var(--s5) - var(--sbw, 0px))); }
+  .video-shell > .col.side { padding-right: max(4px, calc(var(--s4) - var(--sbw, 0px))); }
+}
+/* The carousel's lists (texts, photos): hairlines only between two lists, none under the group's title nor
+   after its last list. */
+.col.side.l .group > .group-head { border-bottom: 0; margin-bottom: 0; }
+.col.side.l .group > .item:last-child { border-bottom: 0; }
