@@ -7,11 +7,15 @@ export const PHONE_QUERY = "(max-width: 1000px)";
 
 export interface SheetPart<P extends string> { id: P; label: string }
 
+const OPEN_MS = 380;
+const CLOSE_MS = 260;
+
 /**
- * On a phone, the style of what is on screen opens in a sheet over the bottom half, the preview kept in sight above
- * it (scrolled under the header, made a little smaller if it would not fit), and changed live while you adjust.
+ * On a phone, the style of what is on screen opens in a sheet over everything (the dock too), from the bottom; the
+ * preview glides up under the header (a little smaller if it would not fit), so it stays in sight and changes live.
  *
- * - `parts`: the chips (Text, Photo… / Framing, Lyrics…) and, for each, the selector of what the sheet then shows;
+ * - `parts`: the parts shown in the sheet's head (Text, Photo… / Framing, Lyrics…) and, for each, the selector of
+ *   what the sheet then shows;
  * - `all`: every top-level part of the column (the ones not chosen are hidden while the sheet is open).
  */
 export function useStyleSheet<P extends string>(opts: {
@@ -19,36 +23,44 @@ export function useStyleSheet<P extends string>(opts: {
   sheet: () => HTMLElement | null;
   parts: Record<P, string>;
   all: string;
+  first: P;
 }) {
   const [part, setPart] = useState<P | null>(null);
   const [tall, setTall] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const last = useRef<P>(opts.first);
   const o = useRef(opts);
   o.current = opts;
   const open = part !== null;
 
-  // Opening: the preview goes under the header, and the sheet starts right below it (half the screen at most).
+  // Opening: the page glides so the preview sits under the header; the sheet starts below it (half the screen at most).
   useLayoutEffect(() => {
     if (!open) return;
     const root = document.documentElement;
     const el = o.current.preview();
     const headBottom = (document.querySelector(".top") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 56;
-    const H = window.innerHeight;
-    const maxTop = Math.round(H * 0.5);
+    const maxTop = Math.round(window.innerHeight * 0.52);
     let top = maxTop;
     root.classList.add("sheet-room");
+    let lockTimer = 0;
     if (el) {
       const r = el.getBoundingClientRect();
-      window.scrollTo({ top: Math.max(0, window.scrollY + r.top - headBottom - 6), behavior: "instant" });
-      const r2 = el.getBoundingClientRect();
-      const scale = Math.max(0.55, Math.min(1, (maxTop - 6 - r2.top) / Math.max(1, r2.height)));
-      if (scale < 0.999) { el.style.transformOrigin = "50% 0"; el.style.scale = String(scale); }
-      top = Math.min(maxTop, Math.round(r2.top + r2.height * scale + 8));
+      // Where the preview will be once the page has glided (the room added below lets it go that far).
+      const goal = headBottom + 6;
+      const scale = Math.max(0.5, Math.min(1, (maxTop - 8 - goal) / Math.max(1, r.height)));
+      el.classList.add("sheet-preview");
+      el.style.transformOrigin = "50% 0";
+      el.style.scale = scale < 0.999 ? String(scale) : "";
+      top = Math.min(maxTop, Math.round(goal + r.height * scale + 8));
+      window.scrollTo({ top: Math.max(0, window.scrollY + r.top - goal), behavior: "smooth" });
     }
     root.style.setProperty("--sheet-top", `${Math.max(headBottom + 40, top)}px`);
     root.style.setProperty("--sheet-tall", `${Math.round(headBottom + 8)}px`);
-    root.classList.add("sheet-lock");
+    // The page stops scrolling under the sheet once it got there.
+    lockTimer = window.setTimeout(() => root.classList.add("sheet-lock"), OPEN_MS);
     return () => {
-      if (el) el.style.scale = "";
+      clearTimeout(lockTimer);
+      if (el) { el.style.scale = ""; window.setTimeout(() => el.classList.remove("sheet-preview"), OPEN_MS); }
       root.classList.remove("sheet-lock", "sheet-room");
     };
   }, [open]);
@@ -61,46 +73,71 @@ export function useStyleSheet<P extends string>(opts: {
     if (part === null) { all.forEach((e) => e.classList.remove("sheet-hide")); return; }
     const want = o.current.parts[part];
     for (const e of all) e.classList.toggle("sheet-hide", !e.matches(want));
-    sheet.querySelectorAll<HTMLDetailsElement>(`${want}`).forEach((d) => { if (d.tagName === "DETAILS") d.open = true; });
+    sheet.querySelectorAll<HTMLDetailsElement>(want).forEach((d) => { if (d.tagName === "DETAILS") d.open = true; });
     sheet.scrollTop = 0;
   }, [part]);
 
-  const close = useCallback(() => { setPart(null); setTall(false); }, []);
+  /** Slides down, then goes. */
+  const close = useCallback(() => {
+    setClosing(true);
+    window.setTimeout(() => { setPart(null); setTall(false); setClosing(false); }, CLOSE_MS);
+  }, []);
   // Escape, and leaving the phone layout (a turned tablet, a wider window), close it.
   useEffect(() => {
     if (!open) return;
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     const mq = matchMedia(PHONE_QUERY);
-    const wide = () => { if (!mq.matches) close(); };
+    const wide = () => { if (!mq.matches) { setPart(null); setTall(false); } };
     window.addEventListener("keydown", key);
     mq.addEventListener("change", wide);
     return () => { window.removeEventListener("keydown", key); mq.removeEventListener("change", wide); };
   }, [open, close]);
 
+  const openPart = (p: P) => { last.current = p; setClosing(false); setPart(p); try { navigator.vibrate?.(6); } catch { /* not on this phone */ } };
   return {
-    part, tall, close,
-    openPart: (p: P) => { setPart(p); try { navigator.vibrate?.(6); } catch { /* not on this phone */ } },
+    part, tall, close, openPart,
+    /** The part used last time (the first one at the start). */
+    lastPart: () => last.current,
     toggleTall: () => setTall((v) => !v),
     /** Class and data for the column that becomes the sheet. */
-    sheetProps: { className: open ? " sheet-open" + (tall ? " tall" : "") : "", "data-part": part ?? undefined },
+    sheetProps: { className: open ? " sheet-open" + (tall ? " tall" : "") + (closing ? " closing" : "") : "", "data-part": part ?? undefined },
   };
 }
 
-/** The sheet's top: a grip (a tap makes it tall or half, a pull down closes it), the parts, and a close button. */
+/** The sheet's top: a grip (pull it down to close, up or a tap to make it tall), the parts, and a close button. */
 export function SheetHead<P extends string>({ parts, part, onPart, onClose, onTall, closeLabel }: {
   parts: SheetPart<P>[]; part: P | null; onPart: (p: P) => void; onClose: () => void; onTall: () => void; closeLabel: string;
 }) {
-  const y0 = useRef<number | null>(null);
+  const drag = useRef<{ y: number; sheet: HTMLElement } | null>(null);
+  const end = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    const dy = e.clientY - d.y;
+    d.sheet.classList.remove("dragging");
+    // Let go far enough down: it goes on from where the finger left it.
+    if (dy > 90) { onClose(); window.setTimeout(() => { d.sheet.style.translate = ""; }, CLOSE_MS + 40); return; }
+    d.sheet.style.translate = "";
+    if (dy < -30 || Math.abs(dy) < 6) onTall();
+  };
   return (
     <div className="sheet-head"
-      onPointerDown={(e) => { if ((e.target as HTMLElement).closest("button")) return; y0.current = e.clientY; }}
-      onPointerUp={(e) => {
-        if (y0.current === null) return;
-        const dy = e.clientY - y0.current;
-        y0.current = null;
-        if (dy > 50) onClose(); else if (dy < -30 || Math.abs(dy) < 6) onTall();
+      onPointerDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        const sheet = e.currentTarget.parentElement;
+        if (!sheet) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { y: e.clientY, sheet };
       }}
-      onPointerCancel={() => { y0.current = null; }}>
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        // The sheet follows the finger down (up, it only stretches a little).
+        const dy = e.clientY - d.y;
+        d.sheet.classList.add("dragging");
+        d.sheet.style.translate = `0 ${dy > 0 ? dy : dy / 4}px`;
+      }}
+      onPointerUp={end} onPointerCancel={end}>
       <span className="sheet-grip" aria-hidden />
       <div className="row nowrap sheet-parts">
         {parts.map((p) => (
@@ -109,18 +146,6 @@ export function SheetHead<P extends string>({ parts, part, onPart, onClose, onTa
         <span className="grow" />
         <button className="btn icon quiet sm" aria-label={closeLabel} onClick={onClose}><Icon name="x" size={16} /></button>
       </div>
-    </div>
-  );
-}
-
-/** Under the preview, on a phone: the style's parts, each opening the sheet on it. */
-export function SheetChips<P extends string>({ label, parts, part, onPart }: { label: string; parts: SheetPart<P>[]; part: P | null; onPart: (p: P) => void }) {
-  return (
-    <div className="row nowrap sheet-chips">
-      <span className="label">{label}</span>
-      {parts.map((p) => (
-        <button key={p.id} className={"btn sm" + (part === p.id ? " on" : "")} aria-pressed={part === p.id} onClick={() => onPart(p.id)}>{p.label}</button>
-      ))}
     </div>
   );
 }

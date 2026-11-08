@@ -29,7 +29,7 @@ import { withPreset } from "./TextControls";
 import SlidePreview from "./SlidePreview";
 import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
-import { SheetChips, SheetHead, useStyleSheet, type SheetPart } from "./StyleSheet";
+import { SheetHead, useStyleSheet, type SheetPart } from "./StyleSheet";
 import VideoStudio, { type CopyJob } from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
@@ -160,7 +160,11 @@ export default function Studio({ userName }: { userName: string }) {
     sheet: () => rightColRef.current,
     parts: { text: '[data-sec="slide-text"]', photo: '[data-sec="slide-format"]', position: '[data-sec="slide-position"]', presets: '[data-sec="slide-presets"]' },
     all: '[data-sec^="slide-"], .insp-help',
+    first: "text",
   });
+  // The dock's Style button: the carousel's sheet here, the video studio's there (it opens its own).
+  const [videoStyle, setVideoStyle] = useState(0);
+  const openStyle = () => { if (studio === "video") setVideoStyle((n) => n + 1); else carSheet.openPart(carSheet.lastPart()); };
   /** The slide in the middle right now (while swiping or scrubbing), before it becomes the selected one. */
   const [deckLive, setDeckLive] = useState<number | null>(null);
   /** The deck is moving (a swipe, a scrub, a jump to a dot): the fields under it fade out meanwhile. */
@@ -1386,6 +1390,7 @@ export default function Studio({ userName }: { userName: string }) {
           <div style={{ display: studio === "video" ? "contents" : "none" }}>
           <VideoStudio
             active={studio === "video"}
+            openStyle={videoStyle}
             canUndo={!!history.past} canRedo={!!history.future} onUndo={undo} onRedo={redo}
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
@@ -1535,8 +1540,6 @@ export default function Studio({ userName }: { userName: string }) {
           {/* Phone: the bar stays put while the slides swipe under it, over the room kept under the middle picture. */}
           {deckTop !== null && <div className="deck-float" style={{ top: deckTop }}>{deckBar}</div>}
           </div>
-          {/* Phone: the style of the slide in the middle, part by part, in a sheet under it. */}
-          <SheetChips label={t("Style")} parts={carParts} part={carSheet.part} onPart={carSheet.openPart} />
           {/* Phone: the selected slide's text and sources, once, under the deck: they fade out while swiping and fade
               back in for the next slide, instead of sliding sideways with the cards. */}
           {deckTop !== null && (() => {
@@ -1580,6 +1583,8 @@ export default function Studio({ userName }: { userName: string }) {
         <span className="mobile-tabs-sep" aria-hidden />
         <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{studio === "video" ? t("Video") : t("Slides")}</span></button>
         <button className={mobileTab === "lists" ? "on" : ""} aria-pressed={mobileTab === "lists"} onClick={() => pickMobileTab("lists")}><Icon name="library" size={18} /><span className="tab-name">{t("Library")}</span></button>
+        {/* The style of what is on screen, in a sheet over the page (the preview kept in sight above it). */}
+        <button aria-label={t("Style")} onClick={() => { if (mobileTab !== "slides") pickMobileTab("slides"); openStyle(); }}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <span className="mobile-tabs-sep" aria-hidden />
         <Menu trigger={(open, toggle) => <button className={"me mobile-me" + (open ? " open" : "")} aria-label={t("Settings and account")} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}

@@ -29,7 +29,7 @@ import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select } from "./ui";
 import { createPortal } from "react-dom";
-import { PHONE_QUERY, SheetChips, SheetHead, useStyleSheet, type SheetPart } from "./StyleSheet";
+import { PHONE_QUERY, SheetHead, useStyleSheet, type SheetPart } from "./StyleSheet";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -287,6 +287,7 @@ export default function VideoStudio({
   onCopyJob,
   onToast,
   active = true,
+  openStyle = 0,
   captionPools,
   onDrawCaption,
   onNewCaptionList,
@@ -321,6 +322,8 @@ export default function VideoStudio({
   lyricsRow?: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
   active?: boolean;
+  /** Bumped by the dock's Style button (phone): opens the style sheet. */
+  openStyle?: number;
   /** The captions lists of the release, and drawing one of their captions for this video's post. */
   captionPools: TextPool[];
   onDrawCaption: (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => void;
@@ -2376,9 +2379,16 @@ export default function VideoStudio({
     sheet: () => rightColRef.current,
     parts: { framing: '[data-sec="video-render"]', lyrics: ".sheet-text", hook: ".sheet-text", color: "#video-color" },
     all: ':scope > [data-sec="video-render"], :scope > .sheet-text, :scope > #video-color',
+    first: "framing",
   });
   const openVPart = (p: VPart) => { if (p === "lyrics" || p === "hook") setTab(p); vSheet.openPart(p); };
   useEffect(() => { if (!active) vSheet.close(); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The dock's Style button: the part used last (lyrics or hook: the one the tabs are on).
+  useEffect(() => {
+    if (!openStyle) return;
+    const p = vSheet.lastPart();
+    openVPart(p === "lyrics" || p === "hook" ? (tab === "hook" ? "hook" : "lyrics") : p);
+  }, [openStyle]); // eslint-disable-line react-hooks/exhaustive-deps
   // Phone: the player sits on top of the dock (Studio's slot), always at hand.
   const [dockSlot, setDockSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -2390,6 +2400,9 @@ export default function VideoStudio({
     return () => mq.removeEventListener("change", pick);
   }, [active]);
   const dockDrag = useRef<{ was: boolean } | null>(null);
+  // The film strip of the dock's timeline: a few small pictures of the take along the segment, made in the
+  // background from the file already open (a hidden player of its own, never the one on screen).
+  const [strip, setStrip] = useState<string[]>([]);
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
     !audioBlob ? { text: t("Audio missing"), tone: "warn" }
@@ -2398,6 +2411,33 @@ export default function VideoStudio({
     : settings.score === undefined ? { text: t("Not synced yet"), tone: "warn" }
     : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };
   const segLen = Math.max(0.1, end - settings.crop.start);
+  useEffect(() => {
+    if (!dockSlot || !videoUrl) { setStrip([]); return; }
+    let off = false;
+    const from = settings.crop.start, len = segLen, offset = settings.offset;
+    const timer = window.setTimeout(async () => {
+      const v = document.createElement("video");
+      v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = videoUrl;
+      try {
+        await new Promise<void>((ok, ko) => { v.onloadeddata = () => ok(); v.onerror = () => ko(new Error("load")); });
+        const N = 9, H = 72;
+        const cv = document.createElement("canvas");
+        const out: string[] = [];
+        for (let i = 0; i < N && !off; i++) {
+          // Song time → camera time (the take is that far into the song).
+          v.currentTime = clamp(from + ((i + 0.5) / N) * len - offset, 0, Math.max(0, v.duration - 0.05));
+          await new Promise<void>((ok) => { v.onseeked = () => ok(); window.setTimeout(ok, 2000); });
+          if (!v.videoWidth) break;
+          cv.width = Math.round((H * v.videoWidth) / v.videoHeight); cv.height = H;
+          cv.getContext("2d")!.drawImage(v, 0, 0, cv.width, cv.height);
+          out.push(cv.toDataURL("image/jpeg", 0.62));
+        }
+        if (!off && out.length) setStrip(out);
+      } catch { if (!off) setStrip([]); }
+      finally { v.removeAttribute("src"); v.load(); }
+    }, 600);
+    return () => { off = true; clearTimeout(timer); };
+  }, [dockSlot, videoUrl, settings.crop.start, segLen, settings.offset]);
   const placed = (project.lyricWords?.length ?? 0) > 0;
   /** Nothing synced yet: one button does both. Afterwards each has its own, so changing the video never touches the lyrics. */
   const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
@@ -2718,8 +2758,6 @@ export default function VideoStudio({
             <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
               onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
           </div>
-          {/* Phone: the style of the video, part by part, in a sheet under the preview. */}
-          <SheetChips label={t("Style")} parts={vParts} part={vSheet.part} onPart={openVPart} />
           {/* Where the Drive copy of this video stands, right where the passage is changed (the library says the same). */}
           {copyState && <div className="copy-line">{copyStatusEl()}</div>}
           {lookErr && grade?.lut && (
@@ -3291,13 +3329,12 @@ export default function VideoStudio({
             }}
             onPointerUp={() => { const was = dockDrag.current?.was; dockDrag.current = null; if (was) setTimeout(() => void playRef.current(), 0); }}
             onPointerCancel={() => { dockDrag.current = null; }}>
-            <span className="dp-rail">
-              {cues.filter((c) => c.start > settings.crop.start && c.start < settings.crop.start + segLen).map((c, i) => (
-                <i key={i} className="dp-tick" style={{ left: `${((c.start - settings.crop.start) / segLen) * 100}%` }} />
-              ))}
-              <span className="dp-fill" style={{ width: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
+            {/* A film strip of the segment (pictures of the take along it), or a plain rail without a take. */}
+            <span className={"dp-strip" + (strip.length ? " on" : "")}>
+              {strip.map((src, i) => <img key={i} src={src} alt="" draggable={false} />)}
+              <span className="dp-played" style={{ width: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
             </span>
-            <span className="dp-knob" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
+            <span className="dp-head" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
           </div>
           <span className="dp-time mono">{fmtTime(Math.max(0, head - settings.crop.start))}<span className="muted"> / {fmtTime(segLen)}</span></span>
         </div>,

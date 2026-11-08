@@ -1411,50 +1411,56 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 /* The scrolling columns scroll up and down only: nothing in them can nudge them sideways. */
 .col.side { overflow-x: hidden; overflow-y: auto; }
 
-/* ---------- Phone: the style in a sheet (no Style tab), the video's player on the dock ---------- */
-.sheet-head, .sheet-chips { display: none; }
+/* ---------- Phone: the style in a sheet over everything, the video's player on the dock ---------- */
+.sheet-head { display: none; }
 .dock-player:empty { display: none; }
 @keyframes sheet-rise { from { translate: 0 100%; } }
+@keyframes sheet-fall { to { translate: 0 100%; } }
 @keyframes dp-in { from { opacity: 0; translate: 0 8px; } }
 @media (max-width: 1000px) {
-  /* Under the preview: the parts of the style, as chips (the label at the left, like "Shown"). */
-  .sheet-chips { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-  .sheet-chips::-webkit-scrollbar { display: none; }
-  .sheet-chips > * { flex: none; }
-  .sheet-chips .label { margin-right: 4px; }
-  .carousel-head ~ .sheet-chips { margin-top: var(--s2); }
-  /* The style column is no page of its own any more: it rises as a sheet over the bottom of the screen, the preview
-     above it, the dock floating over its end. */
+  /* The style column is no page of its own: it rises as a sheet over the bottom of the screen (over the dock and
+     its player too), the preview glided up above it. */
   .main .col.side.r:not(.sheet-open) { display: none !important; }
   .main .col.side.r.sheet-open { display: grid !important; align-content: start; gap: var(--s4); position: fixed; left: 0; right: 0; bottom: 0; top: var(--sheet-top);
-    z-index: 39; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: 0;
-    padding: 0 var(--s4) calc(var(--dock-room, 100px) + env(safe-area-inset-bottom));
-    background: var(--panel); border: 0; border-top: 1px solid var(--line-2); border-radius: 18px 18px 0 0; box-shadow: 0 -20px 50px rgba(0,0,0,.55);
-    animation: sheet-rise .34s cubic-bezier(.2,.9,.25,1) backwards; transition: top .3s cubic-bezier(.2,.9,.25,1); }
+    z-index: 60; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: 0;
+    padding: 0 var(--s4) calc(var(--s6) + env(safe-area-inset-bottom));
+    background: var(--panel); border: 0; border-top: 1px solid var(--line-2); border-radius: 18px 18px 0 0; box-shadow: 0 -20px 60px rgba(0,0,0,.6);
+    animation: sheet-rise .38s cubic-bezier(.2,.9,.25,1) backwards; transition: top .34s cubic-bezier(.2,.9,.25,1), translate .3s cubic-bezier(.2,.9,.25,1); }
   .main .col.side.r.sheet-open.tall { top: var(--sheet-tall); }
+  .main .col.side.r.sheet-open.dragging { transition: none; }
+  .main .col.side.r.sheet-open.closing { animation: sheet-fall .26s cubic-bezier(.4,0,.8,.4) forwards; pointer-events: none; }
   .sheet-open > .sheet-head { display: block; position: sticky; top: 0; z-index: 3; margin: 0 calc(-1 * var(--s4)); padding: 20px var(--s4) 10px;
     background: var(--panel); border-bottom: 1px solid var(--line); touch-action: none; cursor: grab; }
   .sheet-grip { position: absolute; top: 8px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-2); }
   .sheet-parts { gap: 6px; }
   .sheet-hide { display: none !important; }
+  /* The preview shrinks and grows with the sheet, smoothly. */
+  .sheet-preview { transition: scale .38s cubic-bezier(.2,.9,.25,1); }
   html.sheet-room .main { padding-bottom: 100vh; }
   html.sheet-lock { overflow: hidden; }
 
-  /* The video's player on top of the dock: play at the left, above the studio button, then the segment to scrub. */
-  .mobile-tabs:has(.dock-player:not(:empty)) { flex-wrap: wrap; width: min(430px, calc(100vw - 20px)); border-radius: 26px; row-gap: 2px; }
+  /* The video's player on top of the dock: a square play button above the studio's, then the segment as a film
+     strip with a rounded playhead, the time at the end. */
+  .mobile-tabs:has(.dock-player:not(:empty)) { flex-wrap: wrap; width: min(430px, calc(100vw - 20px)); row-gap: 5px; }
   .mobile-tabs:has(.dock-player:not(:empty)) > .mobile-tabs-sep { margin-left: auto; margin-right: auto; }
   .dock-player { flex: 0 0 100%; min-width: 0; }
-  .dp { display: flex; align-items: center; gap: 12px; padding: 0 10px 0 0; animation: dp-in .4s cubic-bezier(.2,.9,.25,1) backwards; }
-  .dp-play { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: scale .12s; }
+  .dp { display: flex; align-items: center; gap: 10px; padding: 0 8px 0 1px; animation: dp-in .4s cubic-bezier(.2,.9,.25,1) backwards; }
+  .dp-play { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: scale .12s; }
   .dp-play:active { scale: .94; } .dp-play:disabled { opacity: .5; }
-  .dp-track { position: relative; flex: 1; min-width: 0; height: 36px; display: flex; align-items: center; touch-action: none; cursor: pointer; }
-  .dp-rail { position: relative; display: block; width: 100%; height: 4px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; }
-  .dp-fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--grad-video); }
-  .dp-tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(255,255,255,.3); }
-  .dp-knob { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); pointer-events: none; }
-  .dp-time { flex: none; font-size: 11px; text-align: right; }
+  .dp-track { position: relative; flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; touch-action: none; cursor: pointer; }
+  .dp-strip { position: relative; display: flex; width: 100%; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.14);
+    transition: height .3s cubic-bezier(.2,.9,.25,1), border-radius .3s; }
+  .dp-strip.on { height: 38px; border-radius: 8px; background: #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+  .dp-strip img { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; pointer-events: none; animation: dp-in .3s backwards; }
+  /* What is already played: the plain rail fills in white (the strip has the head alone). */
+  .dp-played { position: absolute; top: 0; bottom: 0; left: 0; background: var(--text); }
+  .dp-strip.on .dp-played { display: none; }
+  .dp-strip.on::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); pointer-events: none; }
+  .dp-head { position: absolute; top: 50%; width: 6px; height: 46px; margin: -23px 0 0 -3px; border-radius: 3px; background: #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.5); pointer-events: none; }
+  .dp-strip:not(.on) + .dp-head { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 3px; }
+  .dp-time { flex: none; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
   .app:has(.dock-player:not(:empty)) .main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
-  .app:has(.dock-player:not(:empty)) .main .col.side.r.sheet-open { --dock-room: 150px; }
   .app:has(.dock-player:not(:empty)) .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 1000px) {
