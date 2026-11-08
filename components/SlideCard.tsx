@@ -9,6 +9,7 @@ import { poolThemes, textItems } from "@/lib/generate";
 import { themeGroups, themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { Wheel } from "./ui";
+import { isLineList } from "@/lib/defaults";
 import ImageFinder from "./ImageFinder";
 import type { FoundImage } from "@/lib/imageSearch";
 
@@ -275,7 +276,7 @@ export default function SlideCard(p: Props) {
   const listPool = cfg.textSource.kind === "pool" ? p.textPools.find((x) => cfg.textSource.kind === "pool" && x.id === cfg.textSource.poolId) : undefined;
   // A hooks list sorted by theme: the slide may draw from one theme only.
   const allItems = listPool ? textItems(listPool) : [];
-  const itemThemes = listPool?.kind === "hooks" ? poolThemes(listPool) : [];
+  const itemThemes = listPool && isLineList(listPool) ? poolThemes(listPool) : [];
   const groups = themeGroups(itemThemes);
   const theme = cfg.textSource.kind === "pool" ? cfg.textSource.theme : undefined;
   const listItems = theme !== undefined && itemThemes.includes(theme) ? allItems.filter((_, i) => itemThemes[i] === theme) : allItems;

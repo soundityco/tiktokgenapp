@@ -2,7 +2,7 @@
 import JSZip from "jszip";
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { defaultVideo, defaultWorkspace, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
+import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
 import { canWriteDrive, findSamePicture, keepPicture, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
@@ -502,7 +502,7 @@ export default function Studio({ userName }: { userName: string }) {
     if (photoSlides > photoIds.size) out.push({ key: "Only {n} unique photos for {m} slides: some photos will repeat.", params: { n: photoIds.size, m: photoSlides } });
     poolUses.forEach((count, id) => {
       const pool = ws.textPools.find((p) => p.id === id);
-      if (pool?.kind !== "hooks") return;
+      if (!pool || !isLineList(pool)) return;
       const available = textItems(pool).length;
       if (available < count) out.push({ key: "The list “{name}” has {n} texts for {m} slides: some texts will repeat.", params: { name: pool.name, n: available, m: count } });
     });
@@ -1017,8 +1017,8 @@ export default function Studio({ userName }: { userName: string }) {
   };
   const deletePreset = (id: string) => upd((w) => ({ ...w, presets: (w.presets ?? []).filter((x) => x.id !== id) }));
 
-  const listRows = (kind: "text" | "photos") =>
-    (kind === "text" ? vText : vPics).map((p, n) => (
+  const listRows = (kind: "text" | "photos", only?: (p: TextPool) => boolean) =>
+    (kind === "text" ? (only ? vText.filter(only) : vText) : vPics).map((p, n) => (
       <div key={p.id} className="item" role="button" tabIndex={0} onClick={() => setEditor({ k: kind, id: p.id })}
         onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setEditor({ k: kind, id: p.id }); } }}>
         <span className="idx">{String(n + 1).padStart(2, "0")}</span>
@@ -1050,12 +1050,18 @@ export default function Studio({ userName }: { userName: string }) {
       {project.lyrics.length > 0 && <div className="media-meta"><span>{t("{n} sung lines", { n: sungCount })}</span></div>}
     </button>
   );
-  const textGroup = (
-    <section className="group">
-      <div className="group-head"><h3 className="label">{t("Texts")}</h3><button className="btn quiet icon sm" aria-label={t("New text list")} title={t("New text list")} onClick={() => setOverlay({ k: "newPool", kind: "text" })}><Icon name="plus" size={14} /></button></div>
-      {listRows("text")}
-    </section>
-  );
+  // The text lists by role, each group always there (empty, its "+" makes the first list). The carousel shows the
+  // three; the video only hooks and captions (it has no slides after the first).
+  const ROLES = { hooks: t("Hooks"), texts: t("Texts"), captions: t("Captions") } as const;
+  const textGroups = (roles: (keyof typeof ROLES)[]) => roles.map((role) => {
+    const of = (p: TextPool) => (role === "texts" ? p.kind === "texts" || p.kind === "block" : p.kind === role);
+    return (
+      <section key={role} className="group">
+        <div className="group-head"><h3 className="label">{ROLES[role]}</h3><button className="btn quiet icon sm" aria-label={t("New list: {role}", { role: ROLES[role] })} title={t("New list: {role}", { role: ROLES[role] })} onClick={() => setOverlay({ k: "newPool", kind: "text", textKind: role })}><Icon name="plus" size={14} /></button></div>
+        {vText.some(of) ? listRows("text", of) : <p className="muted xs group-empty">{t("No list yet.")}</p>}
+      </section>
+    );
+  });
 
   // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
   // its lyrics right next to it, at the same place in both studios.
@@ -1185,7 +1191,7 @@ export default function Studio({ userName }: { userName: string }) {
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
-            library={textGroup}
+            library={textGroups(["hooks", "captions"])}
             lyricsRow={lyricsRow}
             captionPools={captionPools}
             onDrawCaption={drawCaptionFrom}
@@ -1207,7 +1213,7 @@ export default function Studio({ userName }: { userName: string }) {
             <div className="group-head"><h3 className="label">{t("Release")}</h3></div>
             {lyricsRow}
           </section>
-          {textGroup}
+          {textGroups(["hooks", "texts", "captions"])}
           <section className="group">
             <div className="group-head"><h3 className="label">{t("Photos")}</h3><button className="btn quiet icon sm" aria-label={t("New photo list")} title={t("New photo list")} onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} /></button></div>
             {listRows("photos")}

@@ -63,7 +63,8 @@ export function newSlide(n: number, textPoolId: string | null, picPoolId: string
 
 export function slidePools(n: number): { text: TextPool; pics: PicPool } {
   return {
-    text: { id: uid(), name: `Slide ${n} text`, scope: "shared", kind: "hooks", text: "" },
+    // The first slide opens the post with a hook; the next ones carry the other texts.
+    text: { id: uid(), name: `Slide ${n} text`, scope: "shared", kind: n === 1 ? "hooks" : "texts", text: "" },
     pics: { id: uid(), name: `Slide ${n} photos`, scope: "shared", pics: [] },
   };
 }
@@ -82,9 +83,23 @@ export function newProject(name: string, textPools: TextPool[], picPools: PicPoo
 }
 
 /** Old workspaces had one `project.video`; turn it into the first clip of the release. */
+/** A list of one text per line (a hook list or a texts list): the same editor, themes and draws. */
+export const isLineList = (p: Pick<TextPool, "kind">) => p.kind === "hooks" || p.kind === "texts";
+
+/** Once: the lists made before the roles were all "hooks". Those named like transitions, and the default lists of
+ *  the slides after the first ("Slide 2 text"…), become texts; the artist changes the others in the list's editor. */
+export function textRoles(pools: TextPool[]): TextPool[] {
+  return pools.map((p) => {
+    if (p.kind !== "hooks") return p;
+    const slide = /^slide\s*(\d+)\s*text$/i.exec(p.name.trim());
+    return /transition/i.test(p.name) || (slide && Number(slide[1]) > 1) ? { ...p, kind: "texts" } : p;
+  });
+}
+
 export function normalizeWorkspace(w: Workspace): Workspace {
   return {
     ...w,
+    ...(w.textRolesV1 ? {} : { textPools: textRoles(w.textPools), textRolesV1: true }),
     projects: w.projects.map((p) => {
       const videos: VideoSetup[] = p.videos?.length
         ? p.videos
@@ -116,5 +131,6 @@ export function defaultWorkspace(): Workspace {
     bags: {},
     exportFormat: "jpg",
     zones: false,
+    textRolesV1: true,
   };
 }

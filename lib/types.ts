@@ -95,8 +95,10 @@ export interface TextPool {
   name: string;
   scope: "shared" | "project";
   projectId?: string;
-  /** hooks: one text per line; block: the whole text on one slide; captions: post captions (with their hashtags), separated by an empty line. */
-  kind: "hooks" | "block" | "captions";
+  /** Its role. hooks: the opening line of a post (slide 1, the videos), one per line; texts: the other slides'
+   *  texts (transitions…), one per line; captions: post captions with their hashtags; block (old): the whole text
+   *  on one slide. The video studio only shows hooks and captions. */
+  kind: "hooks" | "texts" | "block" | "captions";
   text: string;
   /** Theme of a text set by hand (hookKey of the text -> theme id, "group:<word>", a name typed, or "" other). The others are found by lib/themes. */
   themes?: Record<string, string>;
@@ -362,6 +364,8 @@ export interface Workspace {
   projects: Project[];
   currentProjectId: string;
   textPools: TextPool[];
+  /** The text lists got their roles (hooks / texts / captions): done once, see normalizeWorkspace. */
+  textRolesV1?: boolean;
   picPools: PicPool[];
   noRepeat: boolean;
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag

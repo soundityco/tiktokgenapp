@@ -1,4 +1,5 @@
 "use client";
+import { isLineList } from "@/lib/defaults";
 import { useEffect, useRef, useState } from "react";
 import { hookKey, joinCaptions, poolThemes, splitCaptions, textItems } from "@/lib/generate";
 import { THEMES, themeGroups, themeLabel } from "@/lib/themes";
@@ -173,28 +174,29 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <label className="field">{t("Name")}<input className="input" value={pool.name} onChange={(e) => p.onChange((x) => ({ ...x, name: e.target.value }))} /></label>
         <ScopeSelect value={pool.scope} onChange={(v) => p.onChange((x) => ({ ...x, scope: v }))} />
       </div>
-      <label className="field">{t("Type")}
+      <label className="field">{t("Role")}
         <Select className="input" value={pool.kind} onChange={(e) => p.onChange((x) => ({ ...x, kind: e.target.value as TextPool["kind"] }))}>
-          <option value="hooks">{t("One text per line")}</option>
+          <option value="hooks">{t("Hooks · the opening of a post (slide 1, the videos)")}</option>
+          <option value="texts">{t("Texts · the other slides (transitions…)")}</option>
           {/* Lyrics now live in the release (Lyrics button): an older block list keeps its type, no new one. */}
           {pool.kind === "block" && <option value="block">{t("Lyrics block")}</option>}
-          <option value="captions">{t("Post captions (with hashtags)")}</option>
+          <option value="captions">{t("Captions · the post's text, with its hashtags")}</option>
         </Select>
       </label>
-      {pool.kind === "hooks" && n > 1 && (
+      {isLineList(pool) && n > 1 && (
         <div className="row seg-tabs" role="tablist">
           <button role="tab" aria-selected={view === "text"} className={"btn sm" + (view === "text" ? " on" : "")} onClick={() => setView("text")}>{t("Texts")}</button>
           <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By theme")}</button>
 
         </div>
       )}
-      {pool.kind === "hooks" && view === "themes" && n > 1 ? (
+      {isLineList(pool) && view === "themes" && n > 1 ? (
         <ThemesView pool={pool} onChange={p.onChange} />
       ) : pool.kind === "captions" ? (
         <CaptionsEditor key={`${pool.id}:${imports}`} text={pool.text} onText={(text) => p.onChange((x) => ({ ...x, text }))} />
       ) : (
         <textarea className="input" rows={12} aria-label={t("Texts")} value={pool.text} onChange={(e) => p.onChange((x) => ({ ...x, text: e.target.value }))}
-          placeholder={pool.kind === "hooks" ? t("One text per line. Use | to force a line break on the slide.")
+          placeholder={isLineList(pool) ? t("One text per line. Use | to force a line break on the slide.")
             : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
       )}
       {perf.length > 0 && (
@@ -211,7 +213,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         </details>
       )}
       <div className="row">
-        <span className="muted grow">{pool.kind === "hooks" ? t("{n} texts", { n }) : pool.kind === "captions" ? t("{n} captions", { n }) : n ? t("1 block") : t("Empty")}</span>
+        <span className="muted grow">{isLineList(pool) ? t("{n} texts", { n }) : pool.kind === "captions" ? t("{n} captions", { n }) : n ? t("1 block") : t("Empty")}</span>
         <input ref={file} type="file" accept=".txt,text/plain" hidden onChange={async (e) => {
           const f = e.target.files?.[0];
           if (f) { const txt = await f.text(); p.onChange((x) => ({ ...x, text: x.kind === "captions" ? joinCaptions([...splitCaptions(x.text), ...splitCaptions(txt)])

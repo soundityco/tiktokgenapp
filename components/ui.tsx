@@ -86,11 +86,11 @@ export function PromptDialog(p: { title: string; label: string; initial?: string
   );
 }
 
-export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" | "block" | "captions"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "block" | "captions") => void; onClose: () => void }) {
+export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" | "texts" | "block" | "captions"; onCreate: (name: string, scope: "shared" | "project", kind: "hooks" | "texts" | "block" | "captions") => void; onClose: () => void }) {
   const { t } = useT();
   const [name, setName] = useState("");
   const [scope, setScope] = useState<"shared" | "project">("shared");
-  const [kind, setKind] = useState<"hooks" | "block" | "captions">(p.textKind ?? "hooks");
+  const [kind, setKind] = useState<"hooks" | "texts" | "block" | "captions">(p.textKind ?? "hooks");
   const go = () => { if (name.trim()) { p.onCreate(name.trim(), scope, kind); p.onClose(); } };
   return (
     <Modal title={p.kind === "text" ? t("New text list") : t("New photo list")} onClose={p.onClose}>
@@ -98,10 +98,11 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" |
         <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
       </label>
       {p.kind === "text" && (
-        <label className="field">{t("Type")}
-          <Select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "block" | "captions")}>
-            <option value="hooks">{t("One text per line")}</option>
-            <option value="captions">{t("Post captions (with hashtags)")}</option>
+        <label className="field">{t("Role")}
+          <Select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "texts" | "block" | "captions")}>
+            <option value="hooks">{t("Hooks · the opening of a post (slide 1, the videos)")}</option>
+            <option value="texts">{t("Texts · the other slides (transitions…)")}</option>
+            <option value="captions">{t("Captions · the post's text, with its hashtags")}</option>
           </Select>
         </label>
       )}

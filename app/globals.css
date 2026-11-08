@@ -1105,3 +1105,4 @@ button.media.warn .media-name { color: var(--warn); }
 button.media.m-lyrics:hover { border-color: color-mix(in srgb, var(--kind) 75%, transparent); }
 button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last-child { color: var(--lyrics); }
 .media.m-music.warn, .media.m-film.warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.group-empty { padding: 6px 0 2px; color: var(--faint); }
