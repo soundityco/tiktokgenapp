@@ -32,6 +32,7 @@ import SlideCard from "./SlideCard";
 import VideoStudio, { type CopyJob } from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
+import { merge3 } from "@/lib/merge";
 import PicStack from "./PicStack";
 import StorageDialog from "./StorageDialog";
 import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
@@ -201,6 +202,9 @@ export default function Studio({ userName }: { userName: string }) {
   const [online, setOnline] = useState(true);
   const [history, setHistory] = useState({ past: 0, future: 0 });
   const loaded = useRef(false);
+  /** The data as last loaded from or saved to the server: what a merge starts from (see lib/merge). */
+  const baseRef = useRef<unknown>(null);
+  const merges = useRef(0);
   const rev = useRef(0);
   const conflict = useRef(false);
   const tooBig = useRef(false);
@@ -310,6 +314,7 @@ export default function Studio({ userName }: { userName: string }) {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? "Could not load your data");
         rev.current = j.data?.rev ?? 0;
+        baseRef.current = j.data ?? null;
         // Saved data this version cannot read must never be replaced by an empty workspace (the next
         // autosave would overwrite it): stop with an error instead.
         if (j.data && (j.data.v !== 1 || !Array.isArray(j.data.projects))) throw new Error("Your saved data could not be read by this version of the app. Nothing was changed.");
@@ -339,8 +344,25 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       const r = await fetch("/api/workspace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, baseRev: rev.current }) });
       const j = await r.json().catch(() => ({}));
-      if (r.ok) { rev.current = j.rev; retries.current = 0; setSaveState("saved"); return; }
-      if (r.status === 409) { rev.current = j.rev; conflict.current = true; setSaveState("conflict"); return; }
+      if (r.ok) { rev.current = j.rev; retries.current = 0; baseRef.current = data; merges.current = 0; setSaveState("saved"); return; }
+      if (r.status === 409) {
+        // Another device saved meanwhile: its changes and this one's are merged (lib/merge), then saved.
+        if (baseRef.current && merges.current < 3) {
+          merges.current++;
+          const g = await fetch("/api/workspace", { cache: "no-store" });
+          const gj = g.ok ? await g.json() : null;
+          if (gj?.data && gj.data.v === 1 && Array.isArray(gj.data.projects)) {
+            const merged = merge3(baseRef.current, wsRef.current ?? data, gj.data) as Workspace;
+            rev.current = gj.data.rev ?? j.rev;
+            baseRef.current = gj.data;
+            wsRef.current = merged;
+            setWs(merged); // saved by the autosave, on the other device's revision
+            say(t("Merged with your changes from another device"));
+            return;
+          }
+        }
+        rev.current = j.rev; conflict.current = true; setSaveState("conflict"); return;
+      }
       // Too big to save: retrying would fail the same way, say it once.
       if (r.status === 413) { setSaveState("error"); if (!tooBig.current) { tooBig.current = true; say(t("Your data is too big to be saved. Delete old releases or lists, then edit something to save again.")); } return; }
       tooBig.current = false;
@@ -378,6 +400,43 @@ export default function Studio({ userName }: { userName: string }) {
     const timer = setTimeout(() => { void flushSave(); }, 1000);
     return () => clearTimeout(timer);
   }, [ws, resume, flushSave]);
+
+  // Changes made on another device (the phone extended a passage, its copy was made again…): read again when
+  // this page comes back to the front, and every 30 s while it is shown, if nothing here is waiting to be saved.
+  const saveStateRef = useRef(saveState);
+  saveStateRef.current = saveState;
+  const haveWs = !!ws;
+  useEffect(() => {
+    if (!haveWs) return;
+    let busy = false;
+    const pull = async () => {
+      if (busy || document.visibilityState !== "visible" || saveStateRef.current !== "saved" || saveBusy.current || conflict.current) return;
+      busy = true;
+      try {
+        const r = await fetch("/api/workspace", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        const srv = j.data?.rev ?? 0;
+        if (!j.data || srv <= rev.current || saveStateRef.current !== "saved" || saveBusy.current) return;
+        if (j.data.v !== 1 || !Array.isArray(j.data.projects)) return;
+        rev.current = srv;
+        baseRef.current = j.data;
+        const next = linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(j.data as Workspace), (n) => t("Part {n}", { n }), t("Chorus"))));
+        loaded.current = false; // the saved data itself: not saved back
+        // The undo steps were of the old data: undoing would put it back over the other device's changes.
+        past.current = []; future.current = []; lastHistory.current = 0;
+        wsRef.current = next;
+        setWs(next);
+        syncHistory();
+        say(t("Updated with your changes from another device"));
+      } catch { /* offline: next time */ } finally { busy = false; }
+    };
+    const h = () => void pull();
+    document.addEventListener("visibilitychange", h);
+    window.addEventListener("focus", h);
+    const id = window.setInterval(h, 30_000);
+    return () => { document.removeEventListener("visibilitychange", h); window.removeEventListener("focus", h); clearInterval(id); };
+  }, [haveWs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wasOffline = useRef(false);
   useEffect(() => {

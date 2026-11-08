@@ -362,6 +362,8 @@ export default function VideoStudio({
   const copyFailed = useRef<string | null>(null);
   /** The copy of the open video will be made again in a few seconds (its passage changed). */
   const [copyDue, setCopyDue] = useState(false);
+  /** Drive id of the copy open here: another one in the data (made again elsewhere, longer) is fetched instead. */
+  const copyShown = useRef<string | null>(null);
   const [driveErr, setDriveErr] = useState<string | null>(null);
   const driveAc = useRef<AbortController | null>(null);
   const [audioBuf, setAudioBuf] = useState<AudioBuffer | null>(null);
@@ -773,7 +775,7 @@ export default function VideoStudio({
                 if (!off) setErr(t("The Drive copy of this video could not be fetched. Check your connection, or pick the camera file."));
               } finally { if (!off) setDriveJob(null); }
             }
-            if (cb && !off && token === ioRef.current) { fileClip.current = clip.id; setOnCopy(true); setVideoBlob(cb); }
+            if (cb && !off && token === ioRef.current) { fileClip.current = clip.id; copyShown.current = cp.id; setOnCopy(true); setVideoBlob(cb); }
           }
         }
         setLoadedClip(clip.id);
@@ -973,10 +975,20 @@ export default function VideoStudio({
           if (!off) setErr(t("The Drive copy of this video could not be fetched. Check your connection, or pick the camera file."));
         } finally { setDriveJob(null); }
       }
-      if (cb && !off && openClip.current === clip.id) { fileClip.current = clip.id; setOnCopy(true); setVideoBlob(cb); }
+      if (cb && !off && openClip.current === clip.id) { fileClip.current = clip.id; copyShown.current = cp.id; setOnCopy(true); setVideoBlob(cb); }
     })();
     return () => { off = true; };
   }, [videoBlob, onCopy, loadedClip, clip.id, clip.drive?.copy?.id, settings.videoName]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The copy was made again on the device that has the camera file (a longer passage): this one gets the new copy.
+  useEffect(() => {
+    const id = settings.drive?.copy?.id;
+    if (!onCopy || !id || !copyShown.current || copyShown.current === id) return;
+    copyShown.current = null;
+    void delMedia(`copy:${clip.id}`).catch(() => {});
+    setOnCopy(false);
+    setVideoBlob(null); // the copy finder above fetches the new one
+  }, [onCopy, settings.drive?.copy?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The shell shows the copy's progress wherever the user is.
   useEffect(() => { onCopyJob?.(copyJob); }, [copyJob]); // eslint-disable-line react-hooks/exhaustive-deps

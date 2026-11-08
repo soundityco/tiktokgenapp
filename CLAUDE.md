@@ -4,7 +4,7 @@ Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app
 
 ## Stack
 - Next.js 15 (App Router), TypeScript 5 (ne pas passer à 7 ; pas de `baseUrl` dans tsconfig), Auth.js (next-auth beta) avec login Google + `drive.readonly` + `drive.file`. Session JWT d'un an, renouvelée à chaque visite.
-- Données : Neon Postgres (table `workspaces`, un JSON par email, compare-and-swap sur `rev`). Sans `DATABASE_URL`, repli sur `.data/workspaces.json` (badge « Local file »).
+- Données : Neon Postgres (table `workspaces`, un JSON par email, compare-and-swap sur `rev`). Sans `DATABASE_URL`, repli sur `.data/workspaces.json` (badge « Local file »). Plusieurs appareils : l'app relit les données au retour sur la page et toutes les 30 s (si rien n'attend d'être enregistré), et un conflit d'enregistrement est fusionné (`lib/merge.ts`, fusion à trois sur la dernière version chargée / enregistrée).
 - Déploiement : GitHub + Netlify (`@netlify/plugin-nextjs`, `publish = ".next"` dans netlify.toml, ne pas définir de Base directory). Ne jamais coder le domaine en dur (origine déduite par requête, AUTH_URL dans Netlify).
 - Tests : `npm test` (vitest, fichiers dans `tests/`). Typecheck : `npm run typecheck`.
 - Ne jamais lire ni afficher `.env.local`.

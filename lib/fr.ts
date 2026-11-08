@@ -7,6 +7,8 @@ export const FR: Record<string, string> = {
   "In your downloads and your gallery.": "Dans tes téléchargements et ta galerie.",
   "The phone refused: press and hold a picture above, then “Save”.": "Le téléphone a refusé : appuie longuement sur une image au-dessus, puis « Enregistrer ».",
   "Share…": "Partager…",
+  "Merged with your changes from another device": "Fusionné avec tes changements faits sur un autre appareil",
+  "Updated with your changes from another device": "Mis à jour avec tes changements faits sur un autre appareil",
   "You work on the Drive copy ({from} → {to})": "Tu travailles sur la copie Drive ({from} → {to})",
   "The passage changed: the Drive copy is updated in a few seconds": "Le passage a changé : la copie Drive est mise à jour dans quelques secondes",
   "The Drive copy is made in a few seconds": "La copie Drive se fait dans quelques secondes",
