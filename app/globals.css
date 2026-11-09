@@ -1881,13 +1881,26 @@ details.sec:first-of-type { background-image: none; }
   .carousel-head.more .h-pick { grid-column: 1 / 2; }
   .carousel-head.more .h-count { grid-column: 1 / 2; }
   .carousel-head.more .slot.h-opts { grid-column: 2 / -1; }
-  .main[data-mobile-tab="slides"] .carousel-head .h-gen { position: fixed; z-index: 41; right: max(16px, env(safe-area-inset-right));
-    bottom: calc(92px + env(safe-area-inset-bottom)); margin: 0; }
-  .main[data-mobile-tab="slides"] .carousel-head .h-gen .gen-row { flex-direction: row-reverse; gap: 8px; }
-  .main[data-mobile-tab="slides"] .carousel-head .h-gen .btn.primary { height: 50px; padding: 0 22px; border-radius: 15px; font-size: 15px;
-    box-shadow: 0 12px 30px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); }
-  .main[data-mobile-tab="slides"] .carousel-head .h-gen .warn-badge { height: 40px; border-radius: 12px; background: rgba(14,14,18,.88);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 22px rgba(0,0,0,.5); }
+  .carousel-head .h-gen { display: none !important; } /* (floats over the dock: .gen-fab) */
   /* Room for it at the end of the page. */
   .main[data-studio="carousel"][data-mobile-tab="slides"] { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
 }
+/* Generate, floating over the dock (phone, carousel's Create page): above everything at the bottom, in an
+   iridescent "oil slick" gradient that slowly drifts; its warnings badge beside it. */
+:root { --grad-oil: linear-gradient(115deg, #3a1d6e 0%, #6a3df0 18%, #1fb6c9 36%, #b8f0a8 50%, #ffcf6e 62%, #ff5fa2 78%, #6a3df0 92%, #3a1d6e 100%); }
+.gen-fab { display: none; }
+@media (max-width: 640px) {
+  .gen-fab { display: block; position: fixed; z-index: 42; right: max(16px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .gen-fab .gen-row { flex-direction: row-reverse; gap: 8px; align-items: center; }
+  .gen-fab .btn.primary { height: 50px; padding: 0 22px; border: 0; border-radius: 15px; font-size: 15px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.35);
+    background: var(--grad-oil); background-size: 260% 100%; animation: oil-drift 9s ease-in-out infinite alternate;
+    box-shadow: 0 12px 30px rgba(0,0,0,.6), 0 4px 22px rgba(106,61,240,.35), inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(0,0,0,.25); }
+  .gen-fab .btn.primary svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  .gen-fab .btn.primary:active { scale: .96; }
+  .gen-fab .warn-badge { height: 40px; border-radius: 12px; background: rgba(14,14,18,.88); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 22px rgba(0,0,0,.5); }
+  /* The carousel head: a little less room under it. */
+  .carousel-head.studio-head { margin-bottom: calc(-1 * var(--s2)); }
+}
+@keyframes oil-drift { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+@media (prefers-reduced-motion: reduce) { .gen-fab .btn.primary { animation: none; } }

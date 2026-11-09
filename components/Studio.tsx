@@ -1304,6 +1304,27 @@ export default function Studio({ userName }: { userName: string }) {
       <button className="lib-add" onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} />{t("New photo list")}</button>
     </Family>
   );
+  /** Generate and its warnings badge: in the carousel's head on a computer; floating over the dock on a phone. */
+  const genRow = project && (
+                <div className="row nowrap gen-row">
+                  <button className="btn primary" onClick={generate} title={t("Draws the texts and photos of every slide again. Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+                  {/* What to check before generating: a small badge beside it, the list on a click. */}
+                  {warnings.length > 0 && (
+                    <Menu float left trigger={(open, toggle) => (
+                      <button className={"btn warn-badge" + (open ? " open" : "")} onClick={toggle} aria-label={t("{n} points to check before generating", { n: warnings.length })} title={t("{n} points to check before generating", { n: warnings.length })}>
+                        <Icon name="alert" size={14} />{warnings.length}
+                      </button>
+                    )}>
+                      {() => (
+                        <div className="preflight-pop">
+                          <div className="label cap">{t("{n} points to check before generating", { n: warnings.length })}</div>
+                          <ul className="xs">{warnings.map((w, i) => <li key={i}>{t(w.key, w.params)}</li>)}</ul>
+                        </div>
+                      )}
+                    </Menu>
+                  )}
+                </div>
+  );
   // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
   // its lyrics right next to it, at the same place in both studios.
   // Phone: where we are in the deck (a tap goes there) and the TikTok zones on / off (the clean preview, like
@@ -1544,24 +1565,7 @@ export default function Studio({ userName }: { userName: string }) {
                 </>)}
               </Menu></div>
               <div className="field h-gen"><span className="field-k">{t("Draw")}</span>
-                <div className="row nowrap gen-row">
-                  <button className="btn primary" onClick={generate} title={t("Draws the texts and photos of every slide again. Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
-                  {/* What to check before generating: a small badge beside it, the list on a click. */}
-                  {warnings.length > 0 && (
-                    <Menu float left trigger={(open, toggle) => (
-                      <button className={"btn warn-badge" + (open ? " open" : "")} onClick={toggle} aria-label={t("{n} points to check before generating", { n: warnings.length })} title={t("{n} points to check before generating", { n: warnings.length })}>
-                        <Icon name="alert" size={14} />{warnings.length}
-                      </button>
-                    )}>
-                      {() => (
-                        <div className="preflight-pop">
-                          <div className="label cap">{t("{n} points to check before generating", { n: warnings.length })}</div>
-                          <ul className="xs">{warnings.map((w, i) => <li key={i}>{t(w.key, w.params)}</li>)}</ul>
-                        </div>
-                      )}
-                    </Menu>
-                  )}
-                </div>
+                {genRow}
               </div>
               {/* Phone: the rest of the tools fold under this button. */}
               <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
@@ -1656,6 +1660,8 @@ export default function Studio({ userName }: { userName: string }) {
       </div>
 
       {/* Phone: one panel at a time, like an app (the centre, the files / lists on the left, the style on the right). */}
+      {/* Phone, carousel: Generate floating just above the dock (above its fade too), under the thumb. */}
+      {studio === "carousel" && mobileTab === "slides" && <div className="gen-fab">{genRow}</div>}
       {/* Phone: the page fades to black behind the dock, like under the header. */}
       <div className="dock-fade" aria-hidden />
       <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab} ref={dockRef}>
