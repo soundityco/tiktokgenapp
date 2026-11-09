@@ -111,7 +111,6 @@ export default function Inspector({
             <button className="btn sm" onClick={() => setS({ x: 50 })}>{t("Center horizontally")}</button>
             <button className="btn sm" onClick={() => setS({ y: 50 })}>{t("Center vertically")}</button>
           </div>
-          <label className="check"><input type="checkbox" checked={zones} onChange={(e) => onZones(e.target.checked)} />{t("Show TikTok interface zones")}</label>
           <div><button className="btn sm quiet" onClick={() => onApplyAll("position")} title={t("Copy this slide's text position to every slide")}>{t("Apply to all slides")}</button></div>
         </Section>
       </div>

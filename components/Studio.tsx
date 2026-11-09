@@ -1581,7 +1581,11 @@ export default function Studio({ userName }: { userName: string }) {
               <div className="row nowrap head-actions">
               {exportProgress && <span className="badge h-progress" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn h-cancel" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
-              <div className="slot h-opts"><Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
+              <div className="slot h-opts"><div className="row nowrap opts-row">
+                {/* Computer: TikTok's zones on the slides, at hand next to the options (a phone has the deck's own). */}
+                <button className={"head-zones" + (ws.zones ? " on" : "")} aria-pressed={ws.zones} onClick={() => upd((w) => ({ ...w, zones: !w.zones }))}
+                  title={t("TikTok's interface zones on the slides")}><Icon name={ws.zones ? "eye" : "eye-off"} size={15} />{t("Zones")}</button>
+                <Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
                 {() => (
                   <div className="stack" style={{ padding: "var(--s2) var(--s3)", minWidth: 270 }}>
                     <label className="check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
@@ -1593,7 +1597,7 @@ export default function Studio({ userName }: { userName: string }) {
                     </label>
                   </div>
                 )}
-              </Menu></div>
+              </Menu></div></div>
               <button className="btn icon h-share" aria-label={t("Send to my phone")} title={t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
               {carouselsOf(project).length > 1 && !busy ? (
                 <div className="slot h-dl"><Menu trigger={(_, toggle) => (
