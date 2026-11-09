@@ -1904,3 +1904,17 @@ details.sec:first-of-type { background-image: none; }
 }
 @keyframes oil-drift { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
 @media (prefers-reduced-motion: reduce) { .gen-fab .btn.primary { animation: none; } }
+/* Generate (phone), second pass: a pastel holographic gradient (lavender, periwinkle, mint, pale yellow, peach)
+   melting into white at the bottom, dark text; the band drifts slowly. */
+:root { --grad-holo: linear-gradient(90deg, #dcc3f6 0%, #c7cdf8 22%, #c2e9f0 42%, #d3f1c8 60%, #f1edbf 78%, #f7d9bd 100%); }
+@media (max-width: 640px) {
+  .gen-fab .btn.primary { color: var(--on-accent); text-shadow: none;
+    background: radial-gradient(120% 90% at 50% 125%, #fff 0%, rgba(255,255,255,.92) 38%, rgba(255,255,255,0) 72%), var(--grad-holo);
+    background-size: 100% 100%, 220% 100%; background-position: 50% 50%, 0% 50%; animation: holo-drift 10s ease-in-out infinite alternate;
+    box-shadow: 0 12px 30px rgba(0,0,0,.55), 0 6px 26px rgba(199,205,248,.28), inset 0 1px 0 rgba(255,255,255,.7); }
+  .gen-fab .btn.primary svg { filter: none; }
+  /* Under the carousel head: 20px (it was 24, then 16). */
+  .carousel-head.studio-head { margin-bottom: -4px; }
+}
+@keyframes holo-drift { from { background-position: 50% 50%, 0% 50%; } to { background-position: 50% 50%, 100% 50%; } }
+@media (prefers-reduced-motion: reduce) { .gen-fab .btn.primary { animation: none; } }
