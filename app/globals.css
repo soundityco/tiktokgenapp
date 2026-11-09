@@ -2032,3 +2032,20 @@ details.sec:first-of-type { background-image: none; }
 .pic-saved { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); }
 .pic-saved svg { flex: none; color: var(--ok, #6fcf97); }
 .pic-saved.local svg { color: var(--warn); }
+/* The video board, at the root: none of its columns can be widened by what is in it (a long hook, file name, lyric
+   line or status). Every level is a track that may shrink, every child may shrink; long words wrap or end with "…".
+   (Before, one long text anywhere stretched the whole board under the right column.) */
+.video-center { grid-template-columns: minmax(0, 1fr); }
+.video-center > *, .video-grid > *, .video-side, .video-side > *, .video-side .timeline > *, .video-side .tab-body > *, .video-stage > * { min-width: 0; max-width: 100%; }
+.video-side .row > * { min-width: 0; }
+.video-side, .video-stage { overflow-wrap: break-word; }
+/* Times and their − / + (Starts, Ends, a hook's From / To…) always on one line, never squeezed. */
+.video-side .nudge, .video-side .nudge * , .video-side .mono, .video-side .cue-legend > span:not(.grow) { white-space: nowrap; overflow-wrap: normal; }
+.video-side .row > .nudge, .video-side .cue-row > .nudge, .video-side .cue-legend > span:not(.grow) { flex: none; min-width: max-content; }
+.video-center .badge, .video-center .truncate, .video-center .dd-value { overflow: hidden; text-overflow: ellipsis; }
+/* The Drive copy's state: its ✓ (or its progress ring) and its text always side by side; a long text wraps beside
+   it, never under it. */
+.copy-status { flex-wrap: nowrap; align-items: flex-start; }
+.copy-status > svg, .copy-status > .bg-ring { flex: none; margin-top: 2px; }
+.copy-status > span:not(.bg-ring):not(.pill-copy) { min-width: 0; }
+.copy-status .copy-act, .copy-status .hint { flex: none; }
