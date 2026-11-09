@@ -1950,5 +1950,7 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 640px) {
   .head-zones { display: none; }
   /* The deck under the carousel head: 16px to the slide's own head line. */
-  .carousel-head + .board-empty + .deck-wrap, .carousel-head + .deck-wrap { margin-top: 12px; }
+  .main[data-mobile-tab="slides"] .carousel-head + .board-empty + .deck-wrap, .main[data-mobile-tab="slides"] .carousel-head + .deck-wrap { margin-top: 12px; }
 }
+/* Zones, on: like every active toggle of the app (white outline and text), so its state reads at a glance. */
+.deck-zones.on, .video-bar .deck-zones.on, .head-zones.on { color: var(--text); border-color: var(--text); background: var(--raised); }

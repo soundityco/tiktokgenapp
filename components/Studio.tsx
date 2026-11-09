@@ -1360,7 +1360,7 @@ export default function Studio({ userName }: { userName: string }) {
       </div>
       <button className={"deck-zones" + (phoneZones ? " on" : "")} aria-pressed={phoneZones} onClick={togglePhoneZones}
         title={t("TikTok's interface zones on the slides")}>
-        <Icon name={phoneZones ? "eye" : "eye-off"} size={15} />{t("Zones")}
+        <Icon name={phoneZones ? "eye-off" : "eye"} size={15} />{t("Zones")}
       </button>
     </div>
   );
@@ -1584,7 +1584,7 @@ export default function Studio({ userName }: { userName: string }) {
               <div className="slot h-opts"><div className="row nowrap opts-row">
                 {/* Computer: TikTok's zones on the slides, at hand next to the options (a phone has the deck's own). */}
                 <button className={"head-zones" + (ws.zones ? " on" : "")} aria-pressed={ws.zones} onClick={() => upd((w) => ({ ...w, zones: !w.zones }))}
-                  title={t("TikTok's interface zones on the slides")}><Icon name={ws.zones ? "eye" : "eye-off"} size={15} />{t("Zones")}</button>
+                  title={t("TikTok's interface zones on the slides")}><Icon name={ws.zones ? "eye-off" : "eye"} size={15} />{t("Zones")}</button>
                 <Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
                 {() => (
                   <div className="stack" style={{ padding: "var(--s2) var(--s3)", minWidth: 270 }}>

@@ -2805,7 +2805,7 @@ export default function VideoStudio({
               <span /><span />
               <button className={"deck-zones" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
                 onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
-                <Icon name={aids.zones && settings.format !== "16:9" ? "eye" : "eye-off"} size={15} />{t("Zones")}
+                <Icon name={aids.zones && settings.format !== "16:9" ? "eye-off" : "eye"} size={15} />{t("Zones")}
               </button>
             </div>
           )}
