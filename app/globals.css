@@ -2185,3 +2185,21 @@ details.sec:first-of-type { background-image: none; }
   .takes-row .btn { height: 28px; min-height: 0; padding: 0 10px; font-size: 12px; }
 }
 @media (max-width: 1000px) { .video-stage > .video-bar { grid-template-columns: auto 1fr; } }
+
+@media (max-width: 1000px) {
+  /* Under the picture: no line between the shown / Zones row and the format line (the same gap). */
+  .video-stage > .stage-meta { background-image: none; }
+  /* The segment's block, top to bottom: its title and the sync, the takes, the tracks (waveform, hook, lyrics),
+     then the tools that act on them (range, length, lock, sync; versions and zoom), then the rest. */
+  .video-side .timeline > * { order: 8; }
+  .video-side .timeline > .seg-top { order: 1; }
+  .video-side .timeline > .takes-row { order: 2; }
+  .video-side .timeline > .wave-wrap { order: 3; }
+  .video-side .timeline > .hook-track { order: 4; }
+  .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
+  .video-side .timeline > .transport { order: 6; margin-top: 4px; }
+  .video-side .timeline > .seg-versions { order: 7; }
+  /* The sync's quality: plain text with its dot, on the line of the "Segment" title (no pill). */
+  .seg-top .video-status { border: 0; padding: 0; background: none; min-height: 0; height: auto; }
+  .app .video-center .seg-top { align-items: center !important; }
+}
