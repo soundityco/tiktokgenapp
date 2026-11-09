@@ -1645,9 +1645,13 @@ export default function Studio({ userName }: { userName: string }) {
           <span key={studio} className="ds-icon"><Icon name={studio === "video" ? "reel" : "deck"} size={22} /></span>
         </button>
         <span className="mobile-tabs-sep" aria-hidden />
-        <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{/* One word in both studios: the dock keeps its exact layout when switching. */}{t("Create")}</span></button>
-        {/* The style of what is on screen, in a sheet over the page (the preview kept in sight above it). */}
-        <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} aria-label={t("Style")} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
+        {/* Create and Style share one white pill that slides from one to the other (the desktop studio switch's
+            move: a transform only, same time and curve, the labels' colour along); off on the library. */}
+        <div className="dock-pair" data-on={mobileTab === "slides" ? "0" : mobileTab === "style" ? "1" : "none"}>
+          <span className="dock-pair-thumb" aria-hidden />
+          <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{/* One word in both studios: the dock keeps its exact layout when switching. */}{t("Create")}</span></button>
+          <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} aria-label={t("Style")} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
+        </div>
         <span className="mobile-tabs-sep" aria-hidden />
         {/* The library, a page apart (the release's material, whatever the studio); the account is in the header. */}
         <button className={"dock-lib" + (mobileTab === "lists" ? " on" : "")} aria-pressed={mobileTab === "lists"} aria-label={t("Library")} onClick={() => pickMobileTab("lists")}><Icon name="library" size={20} /><span className="tab-name">{t("Library")}</span></button>

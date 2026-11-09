@@ -1817,3 +1817,20 @@ details.sec:first-of-type { background-image: none; }
   .mobile-tabs > .dock-lib .tab-name, .mobile-tabs > .dock-lib.on .tab-name { display: none; }
   .mobile-tabs > .dock-lib.on { width: 46px; gap: 0; padding: 0; }
 }
+/* Phone dock: Create and Style on one sliding white pill (the desktop studio switch's move). */
+.dock-pair { display: none; }
+@media (max-width: 1000px) {
+  .mobile-tabs > .dock-pair { position: relative; display: grid; grid-template-columns: 1fr 1fr; flex: 1 1 0; min-width: 0; height: 46px; align-self: center; }
+  .dock-pair-thumb { position: absolute; top: 0; bottom: 0; left: 0; width: 50%; border-radius: 10px; background: var(--accent);
+    transition: translate .42s cubic-bezier(.65,0,.35,1), opacity .25s; will-change: translate; }
+  .dock-pair[data-on="1"] .dock-pair-thumb { translate: 100% 0; }
+  .dock-pair[data-on="none"] .dock-pair-thumb { opacity: 0; }
+  .dock-pair > button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; height: 46px; padding: 0 8px;
+    border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px/1 var(--sans); cursor: pointer;
+    transition: color .42s cubic-bezier(.65,0,.35,1), scale .12s; }
+  .dock-pair > button.on { color: var(--on-accent); }
+  .dock-pair > button:active { scale: .97; }
+  .dock-pair > button .tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dock-pair > button svg { flex: none; }
+}
+@media (prefers-reduced-motion: reduce) { .dock-pair-thumb, .dock-pair > button { transition: none; } }
