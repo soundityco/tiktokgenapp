@@ -722,7 +722,7 @@ export default function VideoStudio({
       sourceRef.current.disconnect();
       sourceRef.current = null;
     }
-    videoRef.current?.pause();
+    if (videoRef.current) { videoRef.current.pause(); videoRef.current.playbackRate = 1; }
     setPlaying(false);
   }, []);
 
@@ -1399,14 +1399,28 @@ export default function VideoStudio({
     const mine = ++playToken.current;
     const cfg = settingsRef.current;
     const until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
-    const from = head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
+    let from = head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
+    const cfgStart = cfg.crop.start;
+    // The sound is heard this much after it is played (the phone's output, Bluetooth headphones…): the picture shows
+    // what is heard, not what was just sent.
+    const ac = ctx as AudioContext & { outputLatency?: number };
+    const lat = Math.min(0.5, Math.max(0, (ac.outputLatency ?? 0) + (ac.baseLatency ?? 0)));
     // No camera file: only the sound plays, at once.
     const el = videoUrl && fileClip.current === clip.id ? videoRef.current : null;
     if (el) {
       el.muted = true;
+      el.playbackRate = 1;
       await whenReady(el);
       if (mine !== playToken.current) return;
+      // The picture first (placed, then started: a phone takes a moment), the sound then starts from where the
+      // picture really is, so they leave together instead of the picture catching up.
       el.currentTime = Math.max(0, from - cfg.offset);
+      await new Promise<void>((ok) => { if (!el.seeking) ok(); else { el.addEventListener("seeked", () => ok(), { once: true }); window.setTimeout(ok, 1500); } });
+      if (mine !== playToken.current) return;
+      // (A browser may keep play() pending: never wait more than a moment, the sound starts anyway.)
+      await Promise.race([el.play().catch(() => undefined), new Promise((ok) => window.setTimeout(ok, 700))]);
+      if (mine !== playToken.current) { el.pause(); return; }
+      if (!el.paused) from = Math.min(until - 0.05, Math.max(cfg.crop.start, el.currentTime + cfg.offset + lat));
     }
     const src = ctx.createBufferSource();
     src.buffer = audioBuf;
@@ -1414,23 +1428,29 @@ export default function VideoStudio({
     originRef.current = ctx.currentTime;
     src.start(0, from, until - from);
     sourceRef.current = src;
-    if (el) void el.play().catch(() => {});
+    if (el && el.paused) void el.play().catch(() => {});
     setPlaying(true);
     const tick = () => {
       const now = from + (ctx.currentTime - originRef.current);
       if (now >= until) { setHead(until); stop(); return; }
-      setHead(now);
+      // The playhead and the lyrics follow what is heard (the sound sent, minus the output's delay).
+      const heard = Math.max(cfgStart, now - lat);
+      setHead(heard);
       if (el) {
-        const target = Math.max(0, now - settingsRef.current.offset);
-        if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+        // What is heard right now, in the camera file's time.
+        const target = Math.max(0, heard - settingsRef.current.offset);
+        const diff = target - el.currentTime; // + : the picture is behind
+        // A big gap: jump there. A small one: the picture runs a little faster or slower until it is caught up
+        // (no visible jumps).
+        if (Math.abs(diff) > 0.4) { el.currentTime = target; el.playbackRate = 1; }
+        else el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
       }
-      drawAt(now);
+      drawAt(heard);
       // Measure of the sync while playing (console, debug level): video behind (+) or ahead (−) of the sound.
       if (el && performance.now() - lastLog > 1000) {
         lastLog = performance.now();
-        const target = now - settingsRef.current.offset;
-        const ac = ctx as AudioContext & { outputLatency?: number };
-        console.debug(`[sync] video ${((target - el.currentTime) * 1000).toFixed(0)} ms behind · readyState ${el.readyState} · audio output delay ${Math.round(((ac.outputLatency ?? 0) + ac.baseLatency) * 1000)} ms`);
+        const target = heard - settingsRef.current.offset;
+        console.debug(`[sync] video ${((target - el.currentTime) * 1000).toFixed(0)} ms behind · rate ${el.playbackRate.toFixed(3)} · readyState ${el.readyState} · audio output delay ${Math.round(lat * 1000)} ms`);
       }
       rafRef.current = requestAnimationFrame(tick);
     };
