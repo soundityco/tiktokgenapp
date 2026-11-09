@@ -2008,3 +2008,11 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 640px) {
   .video-head.more .slot.h-opts { display: block; grid-column: 1 / -1; justify-self: end; }
 }
+/* Video head, computer: the release's state as a titled field (like the carousel's Slides), right after the video
+   picker and its buttons, the badge centred on the controls' line. */
+.h-status.field { display: grid; grid-template-rows: auto var(--h); align-items: center; gap: 6px; }
+.h-status.field .badge { justify-self: start; }
+@media (min-width: 641px) {
+  .video-head .h-status { grid-column: 5; grid-row: 2; justify-self: start; align-self: end; margin: 0 0 0 var(--s4); }
+}
+.h-status.field .badge { text-transform: none; letter-spacing: normal; }

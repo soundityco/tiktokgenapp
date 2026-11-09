@@ -663,6 +663,7 @@ export const FR: Record<string, string> = {
   "{n} takes found in the video": "{n} prises trouvées dans la vidéo",
   "Takes found in the video (pick the one to use):": "Prises trouvées dans la vidéo (choisis celle à utiliser) :",
   "Take {n}": "Prise {n}",
+  "Sync status": "Synchro",
   "Preview": "Aperçu",
   "TikTok's interface zones on the video": "Les zones de l'interface TikTok sur la vidéo",
   "1 video": "1 vidéo",

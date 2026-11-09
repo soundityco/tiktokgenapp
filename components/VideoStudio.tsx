@@ -2778,7 +2778,10 @@ export default function VideoStudio({
             )}
           </Menu></div>
           <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
-          <span className={"badge video-status h-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+          {/* Where the release stands (sync, lyrics…), titled like the carousel's Slides, right after the video picker. */}
+          <div className="field h-status"><span className="field-k">{t("Sync status")}</span>
+            <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+          </div>
           {clips.length > 1 && !exporting && !batch ? (
             <div className="slot h-dl"><Menu trigger={(_, toggle) => (
               <button className="btn primary" aria-label={t("Export")} onClick={toggle} disabled={!audioBuf}><Icon name="download" /><span className="lbl">{t("Export")}</span><Icon name="chevron" size={14} /></button>
