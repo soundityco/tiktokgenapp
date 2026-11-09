@@ -96,7 +96,9 @@ export class VideoSource {
   /** Why the last `open` gave up (shown in the export window and the console). */
   static lastReason = "";
 
-  static async open(blob: Blob, from: number, to: number, onProgress?: (p: number) => void, signal?: AbortSignal): Promise<VideoSource | null> {
+  static async open(blob: Blob, from: number, to: number, onProgress?: (p: number) => void, signal?: AbortSignal,
+    /** Tried first (the GPU grade wants frames whose planes can be read: software ones). */
+    first?: HardwareAcceleration): Promise<VideoSource | null> {
     const fail = (why: string) => { VideoSource.lastReason = why; console.warn("[export] direct decoding not used:", why); return null; };
     if (typeof VideoDecoder === "undefined") return fail("no WebCodecs");
     // Keep the media data: phone videos put their index (moov) AFTER the data, which would
@@ -158,7 +160,8 @@ export class VideoSource {
     };
     // Some browsers only take pro formats (4:2:2, 10 bits) on one path: hardware or software.
     let config: VideoDecoderConfig | null = null;
-    for (const hardwareAcceleration of ["no-preference", "prefer-hardware", "prefer-software"] as const) {
+    const order: HardwareAcceleration[] = ["no-preference", "prefer-hardware", "prefer-software"];
+    for (const hardwareAcceleration of first ? [first, ...order.filter((x) => x !== first)] : order) {
       try {
         const r = await VideoDecoder.isConfigSupported({ ...base, hardwareAcceleration });
         if (r.supported) { config = { ...base, hardwareAcceleration }; break; }
@@ -188,6 +191,13 @@ export class VideoSource {
 
   /** Frame shown at video time `t` (seconds). Calls must go forward in time. */
   async frameAt(t: number): Promise<Picture | null> {
+    const f = await this.rawAt(t);
+    return f ? this.picture(f) : null;
+  }
+
+  /** The decoded frame itself at video time `t` (not turned upright, its own pixel format: 10 bits kept).
+   *  It stays valid until the next call. Calls must go forward in time. */
+  async rawAt(t: number): Promise<VideoFrame | null> {
     const target = (t + this.shift) * 1e6;
     for (;;) {
       if (this.failure) throw this.failure;
@@ -216,7 +226,7 @@ export class VideoSource {
       await this.dec.flush(); // last frames held back for reordering
       this.flushed = true;
     }
-    return this.cur ? this.picture(this.cur) : null;
+    return this.cur;
   }
 
   private picture(f: VideoFrame): Picture {

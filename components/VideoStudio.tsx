@@ -17,6 +17,7 @@ import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
 import { fastWorkCopy } from "@/lib/fastCopy";
+import { gpuGradedSource } from "@/lib/grade10";
 import { convertSegment, copyPlanFor, cropFor, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
@@ -2147,7 +2148,7 @@ export default function VideoStudio({
     setErr(null); setNote(null); setExporting(true); setExpMode(null); setExp({ p: 0, step: "audio" });
     const [W, H] = OUT_SIZE(cfg.format);
     const name = `${project.name || "Rollout"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
-    let source: VideoSource | null = null;
+    let source: { frameAt: (t: number) => Promise<Picture | null>; close: () => void; codec: string } | null = null;
     let stopPlayer = () => {};
     const el = document.createElement("video");
     el.src = videoUrl;
@@ -2173,6 +2174,19 @@ export default function VideoStudio({
         let part: ConvertCrop | undefined;
         const ow = el.videoWidth, oh = el.videoHeight;
         let detail = source?.codec ?? "";
+        // Log / HDR graded: on the GPU from the decoded 10-bit frames (seconds), else by ffmpeg below (minutes).
+        if (bake && videoBlob && ow && oh && cfg.grade && !ac.signal.aborted) {
+          const crop = cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1);
+          const lut = buildGradeLut(cfg.grade, cfg.grade.lut ? look : null, 65);
+          const t0 = performance.now();
+          const gpu = await gpuGradedSource(videoBlob, Math.max(0, from - cfg.offset), until - cfg.offset, crop, ow, oh, lut, 65,
+            (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal).catch((e) => { console.info("[grade10] not used:", e); return null; });
+          if (gpu) {
+            source = gpu; part = crop; graded = true;
+            detail = t("colour grade applied on the graphics card (10-bit)");
+            console.info(`[grade10] ready in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+          }
+        }
         if (!source && videoBlob && !ac.signal.aborted) {
           // A format the browser cannot decode (4:2:2 10-bit, ProRes…): ffmpeg converts the segment first.
           const why = bake ? "" : VideoSource.lastReason;

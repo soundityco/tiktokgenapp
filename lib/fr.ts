@@ -18,6 +18,7 @@ export const FR: Record<string, string> = {
   "Demo: a brand-new account, nothing is saved (a reload starts again). Click to go back to your account.": "Démo : un compte tout neuf, rien n'est enregistré (recharger repart de zéro). Clique pour revenir à ton compte.",
   "Drive copy updated: {video} (made in {make} s by {how}, sent in {send} s, {size} MB)": "Copie Drive mise à jour : {video} (faite en {make} s par {how}, envoyée en {send} s, {size} Mo)",
   "the video chip": "la puce vidéo",
+  "colour grade applied on the graphics card (10-bit)": "étalonnage appliqué par la carte graphique (10 bits)",
   "Drive tidied: {n} duplicates removed (in the Drive's bin for 30 days)": "Drive rangé : {n} doublons retirés (dans la corbeille du Drive pendant 30 jours)",
   "Import the audio": "Importer l'audio",
   "Replace the audio": "Remplacer l'audio",
