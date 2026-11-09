@@ -59,6 +59,32 @@ export interface AlignResult {
  * `minCoverage`: share of the heard words that must match. A whole track has intros, ad-libs and
  * misheard stretches, so it is aligned with a lower bar than a short segment.
  */
+/** Shortest time a word the model did not hear stays on screen (word by word it would flash unseen otherwise). */
+const MIN_MISSED = 0.15;
+/**
+ * Words the model did not hear, placed between the last placed word and the next heard one, shared by length.
+ * When there is no room (the model ran the neighbours together), the previous word gives some of its time,
+ * keeping 0.1 s itself: every written word is seen.
+ */
+function placeMissed(out: LyricWord[], words: { w: string; line: number }[], nextS: number) {
+  const prev = out[out.length - 1];
+  const need = MIN_MISSED * words.length;
+  let a = prev.e;
+  if (nextS - a < need) {
+    const a2 = Math.max(prev.s + 0.1, nextS - need);
+    if (a2 < a) { prev.e = a2; a = a2; }
+  }
+  const b = Math.max(nextS, a + 0.05 * words.length);
+  const weights = words.map((x) => norm(x.w).length + 1);
+  const total = weights.reduce((x, y) => x + y, 0);
+  let at = a;
+  words.forEach((x, q) => {
+    const d = ((b - a) * weights[q]) / total;
+    out.push({ w: x.w, s: at, e: at + d, line: x.line });
+    at += d;
+  });
+}
+
 export function alignLyrics(text: string, heard: LyricWord[], minCoverage = 0.35): AlignResult | null {
   const lyr = splitWords(text);
   const hrd = heard.filter((h) => norm(h.w));
@@ -107,17 +133,7 @@ export function alignLyrics(text: string, heard: LyricWord[], minCoverage = 0.35
     // A run of words the model did not hear: share the gap between the neighbours by word length.
     let run = k;
     while (run <= last && !pair.has(run)) run++;
-    const prev = out[out.length - 1];
-    const next = hrd[pair.get(run)!];
-    const a = prev.e, b = Math.max(next.s, a + 0.05 * (run - k));
-    const weights = lyr.slice(k, run).map((x) => norm(x.w).length + 1);
-    const total = weights.reduce((x, y) => x + y, 0);
-    let at = a;
-    for (let q = k; q < run; q++) {
-      const d = ((b - a) * weights[q - k]) / total;
-      out.push({ w: lyr[q].w, s: at, e: at + d, line: lyr[q].line });
-      at += d;
-    }
+    placeMissed(out, lyr.slice(k, run), hrd[pair.get(run)!].s);
     k = run;
   }
   return { words: out, coverage };
@@ -249,17 +265,7 @@ export function alignSong(text: string, heard: LyricWord[]): AlignResult | null 
     }
     let run = k;
     while (run <= last && !pair.has(run)) run++;
-    const prev = out[out.length - 1];
-    const next = hrd[pair.get(run)!];
-    const a = prev.e, b = Math.max(next.s, a + 0.05 * (run - k));
-    const weights = lyr.slice(k, run).map((x) => norm(x.w).length + 1);
-    const total = weights.reduce((x, y) => x + y, 0);
-    let at = a;
-    for (let q = k; q < run; q++) {
-      const d = ((b - a) * weights[q - k]) / total;
-      out.push({ w: lyr[q].w, s: at, e: at + d, line: lyr[q].line });
-      at += d;
-    }
+    placeMissed(out, lyr.slice(k, run), hrd[pair.get(run)!].s);
     k = run;
   }
   const end = out[out.length - 1].e;
@@ -543,7 +549,7 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
   for (let i = 0, j = 0; i < n && j < m;) {
     if (ka[i] === kb[j]) {
       const o = a[i];
-      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true };
+      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true, ...(o.split ? { line: o.line, split: true } : {}) };
       // The word-by-word retouches stay too.
       if (o.ws !== undefined || o.we !== undefined || o.wu !== undefined) out[j] = { ...out[j], ws: o.ws, we: o.we, wu: o.wu };
       i++; j++;
@@ -563,4 +569,40 @@ export function activeCue(cues: Cue[], time: number): Cue | null {
     else break;
   }
   return found && time < found.end ? found : null;
+}
+
+/**
+ * A caption's text written again by hand (a word the model missed, a typo): its words are replaced, keeping their
+ * times when there are as many, else spread over the caption by syllables. Marked as retouched.
+ */
+export function rewriteCue(all: LyricWord[], cue: Cue, text: string): LyricWord[] {
+  const ws = text.split(/\s+/).filter(Boolean);
+  if (!ws.length) return all;
+  const old = new Set(cue.words);
+  const line = cue.words[0]?.line;
+  const S = cue.words[0].s, E = Math.max(cue.words[cue.words.length - 1].e, S + 0.05 * ws.length);
+  let fresh: LyricWord[];
+  if (ws.length === cue.words.length) fresh = cue.words.map((x, i) => ({ ...x, w: ws[i], manual: true }));
+  else {
+    const total = ws.reduce((n, w) => n + syllables(w), 0);
+    let at = S;
+    fresh = ws.map((w) => {
+      const d = ((E - S) * syllables(w)) / total;
+      const x: LyricWord = { w, s: r3(at), e: r3(at + d), manual: true, ...(line === undefined ? {} : { line }) };
+      at += d;
+      return x;
+    });
+    const until = cue.words[cue.words.length - 1].until;
+    if (until !== undefined) fresh[fresh.length - 1].until = until;
+  }
+  return [...all.filter((x) => !old.has(x)), ...fresh].sort((a, b) => a.s - b.s);
+}
+
+/** A caption cut in two before its word `k`: the second part becomes a caption of its own (a line of its own). */
+export function splitCue(all: LyricWord[], cue: Cue, k: number): LyricWord[] {
+  if (k <= 0 || k >= cue.words.length) return all;
+  const second = new Set(cue.words.slice(k));
+  const first = new Set(cue.words.slice(0, k));
+  const line = (cue.words[0].line ?? 0) + 0.5;
+  return all.map((x) => (second.has(x) ? { ...x, line, split: true, manual: true } : first.has(x) ? { ...x, manual: true } : x));
 }

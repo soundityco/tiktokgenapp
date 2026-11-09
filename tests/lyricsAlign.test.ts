@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, keepManual, repairOrder, retimeCue, setCueEnd, shiftCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, norm, parseLyrics, partHeader, keepManual, repairOrder, retimeCue, rewriteCue, setCueEnd, shiftCue, splitCue } from "@/lib/lyricsAlign";
 import type { LyricWord } from "@/lib/types";
 
 const w = (text: string, s: number, e: number, line?: number): LyricWord => ({ w: text, s, e, ...(line === undefined ? {} : { line }) });
@@ -242,5 +242,39 @@ describe("alignSong (whole song on the whole track)", () => {
   it("does not invent a placement for unrelated lyrics", () => {
     const heard = "the quick brown fox jumps over the lazy dog again and again".split(" ").map((x, i) => w(x, i, i + 0.4));
     expect(alignSong("je marche seul dans la nuit\nles étoiles me regardent", heard)).toBeNull();
+  });
+});
+
+describe("words the model did not hear", () => {
+  it("are kept and stay on screen long enough, even with no room between their neighbours", () => {
+    const heard = ["tu", "as", "fait", "le", "vide", "tout", "ce", "mal"].map((w, i) => ({ w, s: i * 0.3, e: i * 0.3 + 0.3 }));
+    const r = alignSong("Tu as fait le vide de tout ce mal", heard)!;
+    expect(r.words.map((x) => x.w).join(" ")).toBe("Tu as fait le vide de tout ce mal");
+    const de = r.words.find((x) => x.w === "de")!;
+    expect(de.e - de.s).toBeGreaterThanOrEqual(0.149);
+    const vide = r.words.find((x) => x.w === "vide")!;
+    expect(vide.e).toBeLessThanOrEqual(de.s + 1e-9);
+  });
+});
+
+describe("captions retouched by hand", () => {
+  const words = ["tu", "as", "fait", "le", "vide", "tout", "ce", "mal"].map((w, i) => ({ w, s: i * 0.3, e: i * 0.3 + 0.28, line: 3 }));
+  const cue = buildCues(words, "phrase", { lineChars: 40 })[0];
+  it("a line written again gets its missing word, spread over the caption", () => {
+    const out = rewriteCue(words, cue, "tu as fait le vide de tout ce mal");
+    expect(out.map((x) => x.w).join(" ")).toBe("tu as fait le vide de tout ce mal");
+    expect(out.every((x) => x.manual && x.line === 3)).toBe(true);
+    expect(out[0].s).toBe(0);
+  });
+  it("a line cut in two becomes two captions", () => {
+    const out = splitCue(words, cue, 5);
+    const cues = buildCues(out, "phrase", { lineChars: 40 });
+    expect(cues.map((c) => c.text)).toEqual(["tu as fait le vide", "tout ce mal"]);
+  });
+  it("the cut stays when the lyrics are placed again", () => {
+    const cut = splitCue(words, cue, 5);
+    const again = words.map((x) => ({ ...x }));
+    const kept = keepManual(cut, again);
+    expect(buildCues(kept, "phrase", { lineChars: 40 }).length).toBe(2);
   });
 });

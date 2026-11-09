@@ -2304,3 +2304,10 @@ details.sec:first-of-type { background-image: none; }
   .video-side .transport .tr-zoom .lbl-long { display: none; }
   .video-side .transport .tr-zoom .lbl-short { display: inline; }
 }
+
+/* A lyrics line being edited: its text, "Cut here" and OK, in the row (the times stay on each side). */
+.cue-edit { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cue-edit .input { flex: 1; min-width: 0; height: 30px; font-size: 12px; }
+.cue-edit .btn { height: 30px; min-height: 30px; flex: none; font-size: 12px; }
+.cue-pen { flex: none; width: 26px; height: 26px; min-height: 26px; padding: 0; justify-content: center; color: var(--muted); opacity: .6; }
+.cue-row:hover .cue-pen, .cue-row.on .cue-pen { opacity: 1; }

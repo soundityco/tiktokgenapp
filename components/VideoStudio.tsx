@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
@@ -2823,6 +2823,32 @@ export default function VideoStudio({
     if (ws?.length && repairOrder(ws) !== ws) onProject((p) => ({ ...p, lyricWords: repairOrder(p.lyricWords ?? []) }));
   }, [project.lyricWords]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- a caption's text written again (a word the model missed), or cut in two at the cursor ----
+  const [editCue, setEditCue] = useState<{ i: number; text: string } | null>(null);
+  const cueInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { setEditCue(null); }, [mode, settings.crop.start, settings.crop.duration]);
+  /** The edited text put in the words; with `cutAt` (characters), the caption is also cut there in two. */
+  const saveCue = (cutAt?: number) => {
+    const ed = editCue;
+    const c = ed && cues[ed.i];
+    if (!ed || !c) { setEditCue(null); return; }
+    const all = project.lyricWords ?? [];
+    const text = ed.text.trim().replace(/\s+/g, " ");
+    const same = text === c.words.map((x) => x.w).join(" ");
+    let out = all, words = c.words;
+    if (text && !same) {
+      const before = new Set(all);
+      out = rewriteCue(all, c, text);
+      words = out.filter((x) => !before.has(x)).sort((a, b) => a.s - b.s);
+    }
+    if (cutAt !== undefined) {
+      const k = ed.text.slice(0, cutAt).trim().split(/\s+/).filter(Boolean).length;
+      out = splitCue(out, { ...c, words }, k);
+    }
+    setEditCue(null);
+    if (out !== all) { onProject((p) => ({ ...p, lyricWords: out })); onSaveNow(); }
+  };
+
   const retime = (i: number, what: "start" | "end", dir: 1 | -1) => {
     const c = cues[i];
     // Word by word: that mode's own timing (the phrases never move from it).
@@ -3470,9 +3496,24 @@ export default function VideoStudio({
                           <span className="mono xs">{fmtTime(c.start)}</span>
                           <button className="btn sm quiet" aria-label={t("Later")} title={t("Show this line later (+0.1 s)")} onClick={() => retime(i, "start", 1)}>+</button>
                         </span>
-                        <button className="cue-text grow truncate xs" onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
-                          {c.text.replace(/\n/g, " ⏎ ")}
-                        </button>
+                        {editCue?.i === i ? (
+                          <span className="cue-edit grow">
+                            <input ref={cueInput} className="input sm" autoFocus value={editCue.text} aria-label={t("Text of the line")}
+                              onChange={(e) => setEditCue({ i, text: e.target.value })}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveCue(); if (e.key === "Escape") setEditCue(null); }} />
+                            {mode === "phrase" && c.words.length > 1 && (
+                              <button className="btn sm" title={t("Cut the line in two where the cursor is: the rest becomes a line of its own")}
+                                onMouseDown={(e) => e.preventDefault()} onClick={() => saveCue(cueInput.current?.selectionStart ?? undefined)}>{t("Cut here")}</button>
+                            )}
+                            <button className="btn sm primary" onMouseDown={(e) => e.preventDefault()} onClick={() => saveCue()}>{t("OK")}</button>
+                          </span>
+                        ) : (<>
+                          <button className="cue-text grow truncate xs" onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
+                            {c.text.replace(/\n/g, " ⏎ ")}
+                          </button>
+                          <button className="btn icon sm quiet cue-pen" aria-label={t("Edit the line")} title={t("Edit the line: a missing word, or cut it in two")}
+                            onClick={() => { stop(); setEditCue({ i, text: c.words.map((x) => x.w).join(" ") }); }}><Icon name="pencil" size={11} /></button>
+                        </>)}
                         <span className="nudge">
                           <button className="btn sm quiet" aria-label={t("Shorter")} title={t("Hide this line earlier (−0.1 s)")} onClick={() => retime(i, "end", -1)}>−</button>
                           <span className="mono xs">{fmtTime(c.end)}</span>
