@@ -1870,3 +1870,24 @@ details.sec:first-of-type { background-image: none; }
     padding-left: calc(52vw - min(37vw, var(--pv-h, 40dvh) * .28125 + 2px));
     padding-right: calc(52vw - min(37vw, var(--pv-h, 40dvh) * .28125 + 2px)); }
 }
+/* Phone, carousel: one line on top like the video's (the release, More, share, download); Generate floats at the
+   bottom right just above the dock, under the thumb, its warnings badge beside it. */
+@media (max-width: 640px) {
+  .carousel-head.studio-head { grid-template-columns: minmax(0, 1fr) max-content var(--h) var(--h); }
+  .carousel-head .release-title { grid-column: 1; grid-row: 1; }
+  .carousel-head .h-more { grid-column: 2; grid-row: 1; }
+  .carousel-head .h-share { grid-column: 3; grid-row: 1; }
+  .carousel-head .h-dl, .carousel-head .slot.h-dl { grid-column: 4; grid-row: 1; }
+  .carousel-head.more .h-pick { grid-column: 1 / 2; }
+  .carousel-head.more .h-count { grid-column: 1 / 2; }
+  .carousel-head.more .slot.h-opts { grid-column: 2 / -1; }
+  .main[data-mobile-tab="slides"] .carousel-head .h-gen { position: fixed; z-index: 41; right: max(16px, env(safe-area-inset-right));
+    bottom: calc(92px + env(safe-area-inset-bottom)); margin: 0; }
+  .main[data-mobile-tab="slides"] .carousel-head .h-gen .gen-row { flex-direction: row-reverse; gap: 8px; }
+  .main[data-mobile-tab="slides"] .carousel-head .h-gen .btn.primary { height: 50px; padding: 0 22px; border-radius: 15px; font-size: 15px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); }
+  .main[data-mobile-tab="slides"] .carousel-head .h-gen .warn-badge { height: 40px; border-radius: 12px; background: rgba(14,14,18,.88);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 22px rgba(0,0,0,.5); }
+  /* Room for it at the end of the page. */
+  .main[data-studio="carousel"][data-mobile-tab="slides"] { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+}
