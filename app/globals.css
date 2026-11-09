@@ -2127,7 +2127,7 @@ details.sec:first-of-type { background-image: none; }
 .ver-pick { gap: 8px; white-space: nowrap; }
 .ver-pick .ver-k { color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
 .ver-list { display: grid; gap: 2px; min-width: 260px; }
-.ver-line { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+.ver-line { display: flex; align-items: center; gap: 4px; }
 
 .ver-line .ver-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap; }
 .ver-line .ver-main svg { opacity: 0; flex: none; }
@@ -2144,9 +2144,14 @@ details.sec:first-of-type { background-image: none; }
 .wave-zoom .btn.icon { width: 24px; padding: 0; }
 .menu .ver-line .btn.icon { width: 30px; min-height: 30px; height: 30px; flex: none; justify-content: center; padding: 0; }
 .menu .ver-line .ver-main { width: auto; padding: 0 8px; }
-.menu .ver-line:hover, .menu .ver-line .ver-main:hover { background: #1d1d23; }
 
 /* The splash's progress: a thin bar under the logo, its percentage beside it. */
 .boot-bar { width: 160px; height: 2px; border-radius: 2px; background: var(--line-2); overflow: hidden; margin-top: 2px; }
 .boot-bar > span { display: block; height: 100%; background: var(--text); border-radius: 2px; transition: width .35s ease; }
 .boot-pct { font-size: 10px; letter-spacing: .08em; color: var(--muted); }
+/* Each part of a version's line has its own hover: the name, then the two square buttons (no shared grey band). */
+.menu .ver-line .ver-main { border-radius: var(--r); }
+.menu .ver-line .ver-main:hover { background: #1d1d23; }
+.menu .ver-line .btn.icon { border: 0; background: none; border-radius: var(--r); }
+.menu .ver-line .btn.icon:hover { background: #1d1d23; }
+.menu .ver-line.on .ver-main { background: #18181d; }

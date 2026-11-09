@@ -1770,8 +1770,10 @@ export default function VideoStudio({
   const fitView = () => {
     const dur = audioBuf?.duration ?? 0, c = settingsRef.current.crop;
     if (!dur) return;
+    // Zoomed (by any means): the button reads "Whole track", and does that.
+    if (viewRef.current) { setView(null); return; }
     const d = Math.min(dur, c.duration * 1.4 + 2);
-    if (d >= dur - 1e-3 || (view && Math.abs(view.d - d) < 0.05)) { setView(null); return; }
+    if (d >= dur - 1e-3) return;
     setView({ s: clamp(c.start + c.duration / 2 - d / 2, 0, dur - d), d });
   };
   // A segment moved out of sight (another version, a take): the view follows it.
