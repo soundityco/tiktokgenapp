@@ -2313,3 +2313,7 @@ details.sec:first-of-type { background-image: none; }
 .cue-pen { flex: none; width: 26px; height: 26px; min-height: 26px; padding: 0; justify-content: center; color: var(--muted); opacity: 0; pointer-events: none; transition: opacity .15s; }
 .cue-row.on .cue-pen { opacity: 1; pointer-events: auto; }
 @media (hover: hover) { .cue-row:hover .cue-pen { opacity: 1; pointer-events: auto; } }
+
+/* The video picker of the studio's head: one button (its name), its list like the versions'. */
+.clip-pick-btn { height: var(--h-sm, 36px); gap: 8px; padding: 0 12px; background: none; border: 1px solid var(--line-2); white-space: nowrap; max-width: 220px; }
+.clip-pick-btn .clip-k { display: inline; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }

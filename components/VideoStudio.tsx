@@ -3082,20 +3082,32 @@ export default function VideoStudio({
       <div className={"video-head studio-head" + (headMore ? " more" : "")}>
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
-          <label className="field h-pick" style={{ margin: 0 }}>{t("Video")}
-            <Select className="input" style={{ width: 150 }} value={clip.id}
-              onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
-              {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
-            </Select>
-          </label>
-          <button className="btn icon h-new" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
-          <div className="slot h-new"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
-            {(closeMenu) => (<>
-              <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
+          {/* The video of the release, as the versions are picked: its list shows one, renames it (pencil), deletes it
+              (bin), and adds a new one at the end. */}
+          <div className="slot h-pick clip-pick"><Menu float left trigger={(open, toggle) => (
+            <button className={"btn ver-pick clip-pick-btn" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+              <span className="ver-k clip-k">{t("Video")}</span>{clipName(clip)}<Icon name="chevron" size={12} />
+            </button>
+          )}>
+            {(close) => (<div className="ver-list">
+              {clips.map((c) => {
+                const on = c.id === clip.id;
+                const show = () => { if (!on) { onProject((p) => ({ ...p, videoId: c.id })); onSaveNow(); } };
+                return (
+                  <div key={c.id} className={"ver-line" + (on ? " on" : "")}>
+                    <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); show(); }}>
+                      <Icon name="check" size={12} />{clipName(c)}
+                    </button>
+                    <button className="btn icon sm quiet" aria-label={t("Rename")} title={t("Rename")} onClick={() => { close(); show(); setClipDialog("rename"); }}><Icon name="pencil" size={12} /></button>
+                    {clips.length > 1 && <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { close(); show(); setClipDialog("delete"); }}><Icon name="trash" size={12} /></button>}
+                  </div>
+                );
+              })}
               <div className="sep" />
-              <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
-                onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
-            </>)}
+              <button className="ver-new" title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => { close(); void addVideo(); }}>
+                <Icon name="plus" size={12} />{t("New video")}
+              </button>
+            </div>)}
           </Menu></div>
           {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
           <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
