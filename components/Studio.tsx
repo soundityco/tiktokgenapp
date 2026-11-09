@@ -87,6 +87,10 @@ export default function Studio({ userName }: { userName: string }) {
   /** The splash stays over the app until what the screen shows is ready (the first slides' photos, the video's
    *  picture), 2.5 s at most, then fades: no half-empty screen filling in after it. */
   const [boot, setBoot] = useState<"hold" | "fade" | "gone">("hold");
+  /** How far the start is (0-1), shown under the logo: the app running, the data, then the pictures on screen. */
+  const [bootP, setBootP] = useState(0.08);
+  const bootTo = (p: number) => setBootP((x) => Math.max(x, Math.min(1, p)));
+  useEffect(() => { bootTo(0.22); }, []);
   // Once opened, the video studio stays mounted (hidden on the carousel): coming back is instant, nothing is read again.
   const [videoSeen, setVideoSeen] = useState(false);
   // Where the pill of the studio switch sits: measured on the chosen button (their widths follow the language).
@@ -282,16 +286,22 @@ export default function Studio({ userName }: { userName: string }) {
     if (!ws || boot !== "hold") return;
     const p = ws.projects.find((x) => x.id === ws.currentProjectId) ?? ws.projects[0];
     const ids = (p?.generated ?? []).slice(0, 3).map((g) => g?.picId).filter((x): x is string => !!x);
+    // The pictures arriving fill the rest of the bar.
+    let got = 0;
+    const one = () => bootTo(0.5 + (0.45 * ++got) / Math.max(1, ids.length));
+    const file = () => bootTo(0.75);
+    window.addEventListener("rollout:video-file", file, { once: true });
     const shown = studio === "video"
       ? new Promise<void>((r) => window.addEventListener("rollout:video-ready", () => r(), { once: true }))
-      : Promise.all(ids.map((id) => loadDriveImage(id).catch(() => null))).then(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
+      : Promise.all(ids.map((id) => loadDriveImage(id).catch(() => null).finally(one))).then(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
     let off = false;
     void Promise.race([shown, new Promise((r) => setTimeout(r, 2500))]).then(() => {
       if (off) return;
+      bootTo(1);
       setBoot("fade");
       setTimeout(() => setBoot("gone"), 320);
     });
-    return () => { off = true; };
+    return () => { off = true; window.removeEventListener("rollout:video-file", file); };
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // Google connected: the Rollout tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
   useEffect(() => {
@@ -520,7 +530,9 @@ export default function Studio({ userName }: { userName: string }) {
     }
     fetch("/api/workspace")
       .then(async (r) => {
+        bootTo(0.35);
         const j = await r.json();
+        bootTo(0.5);
         if (!r.ok) throw new Error(j.error ?? "Could not load your data");
         rev.current = j.data?.rev ?? 0;
         baseRef.current = j.data ?? null;
@@ -1329,6 +1341,9 @@ export default function Studio({ userName }: { userName: string }) {
           </div>
         ))}
       </div>
+      {/* How far it is: the app, the data, then the pictures of the screen. */}
+      <div className="boot-bar" aria-hidden><span style={{ width: `${Math.round(bootP * 100)}%` }} /></div>
+      <span className="boot-pct mono">{Math.round(bootP * 100)} %</span>
     </div>
   );
   if (!ws || !project) return bootEl();

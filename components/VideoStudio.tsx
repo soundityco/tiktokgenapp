@@ -698,6 +698,8 @@ export default function VideoStudio({
     if (!shownOnce.current && (pic || posterRef.current)) { shownOnce.current = true; window.dispatchEvent(new Event("rollout:video-ready")); }
   }, [drawScene]);
   const shownOnce = useRef(false);
+  // The camera file is read from this device: the splash's bar moves on.
+  useEffect(() => { if (videoBlob) window.dispatchEvent(new Event("rollout:video-file")); }, [!!videoBlob]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Draw the paused picture now, and again a little later: right after a load or a seek, the frame of the
@@ -1748,8 +1750,41 @@ export default function VideoStudio({
     setV({ crop: fitCrop(cfg.crop.start, v, boundsOf(cfg)) });
   };
 
-  /** "press": down inside the segment, not moved yet: a click places the playhead, a drag moves the segment. */
-  const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset" | "head" | "press"; x: number; px: number; start: number; duration: number }>(null);
+  // ---- the waveform's view: the whole track, or a zoomed part of it (pinch, ctrl + wheel, the − / + buttons) ----
+  const [view, setView] = useState<{ s: number; d: number } | null>(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const viewOf = () => viewRef.current ?? { s: 0, d: audioBuf?.duration ?? 1 };
+  useEffect(() => { setView(null); }, [audioBuf]);
+  /** Zoom to `d` seconds shown, `around` (seconds) staying where it is on screen. */
+  const zoomTo = (d: number, around: number) => {
+    const dur = audioBuf?.duration ?? 0;
+    if (!dur) return;
+    d = clamp(d, Math.min(2, dur), dur);
+    if (d >= dur - 1e-3) { setView(null); return; }
+    const cur = viewOf();
+    const k = clamp((around - cur.s) / cur.d, 0, 1);
+    setView({ s: clamp(around - k * d, 0, dur - d), d });
+  };
+  /** The segment filling most of the view (or the whole track when it is already shown so). */
+  const fitView = () => {
+    const dur = audioBuf?.duration ?? 0, c = settingsRef.current.crop;
+    if (!dur) return;
+    const d = Math.min(dur, c.duration * 1.4 + 2);
+    if (d >= dur - 1e-3 || (view && Math.abs(view.d - d) < 0.05)) { setView(null); return; }
+    setView({ s: clamp(c.start + c.duration / 2 - d / 2, 0, dur - d), d });
+  };
+  // A segment moved out of sight (another version, a take): the view follows it.
+  useEffect(() => {
+    const v = viewRef.current, c = settings.crop;
+    if (!v || !audioBuf) return;
+    if (c.start + c.duration < v.s || c.start > v.s + v.d) setView({ s: clamp(c.start + c.duration / 2 - v.d / 2, 0, audioBuf.duration - v.d), d: v.d });
+  }, [settings.crop.start, settings.crop.duration]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** "press": down inside the segment, not moved yet: a click places the playhead, a drag moves the segment.
+   *  "pan": down outside it, zoomed: a drag slides the view (a click does nothing: the segment never jumps). */
+  const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset" | "head" | "press" | "pan" | "none" | "pinch"; x: number; px: number; start: number; duration: number; vs: number; vd: number; dist?: number; mid?: number }>(null);
+  const pointers = useRef(new Map<number, number>());
   const wavePos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return clamp((e.clientX - r.left) / r.width, 0, 1);
@@ -1758,35 +1793,36 @@ export default function VideoStudio({
     if (!audioBuf) return;
     stop();
     e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, e.clientX);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const v = viewOf();
+    // Two fingers: pinch to zoom, around the middle of the fingers.
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      dragWave.current = { mode: "pinch", x: 0, px: 0, start: 0, duration: 0, vs: v.s, vd: v.d, dist: Math.max(10, Math.abs(a - b)), mid: v.s + (((a + b) / 2 - rect.left) / rect.width) * v.d };
+      return;
+    }
     const f = wavePos(e);
     const cfg = settingsRef.current;
-    // Top strip of the blue "video available" band: slide it to move the sync by hand.
-    const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX;
-    const near = (t: number) => Math.abs(e.clientX - (rect.left + (t / audioBuf.duration) * rect.width)) <= 6;
-    if (!cfg.linked && videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2) {
-      const o0 = cfg.offset / audioBuf.duration, o1 = (cfg.offset + videoDur) / audioBuf.duration;
-      if (f >= o0 && f <= o1) {
-        dragWave.current = { mode: "offset", x: f, px, start: cfg.offset, duration: 0 };
-        return;
-      }
+    const xOf = (t: number) => rect.left + ((t - v.s) / v.d) * rect.width;
+    const near = (t: number, r = 6) => Math.abs(e.clientX - xOf(t)) <= r;
+    const t = v.s + f * v.d;
+    const base = { x: f, px, vs: v.s, vd: v.d };
+    // Top strip of the violet "video available" band: slide it to move the sync by hand.
+    if (!cfg.linked && videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2 && t >= cfg.offset && t <= cfg.offset + videoDur) {
+      dragWave.current = { mode: "offset", ...base, start: cfg.offset, duration: 0 };
+      return;
     }
-    const x0 = cfg.crop.start / audioBuf.duration;
-    const x1 = (cfg.crop.start + cfg.crop.duration) / audioBuf.duration;
-    const seg = { x: f, px, start: cfg.crop.start, duration: cfg.crop.duration };
-    // The playhead first (a thin line inside the segment), then the edges, then the segment itself.
-    if (near(head) && head > cfg.crop.start + 0.05 && head < cfg.crop.start + cfg.crop.duration - 0.05) dragWave.current = { mode: "head", ...seg };
-    else if (Math.abs(f - x0) < 0.02) dragWave.current = { mode: "start", ...seg };
-    else if (Math.abs(f - x1) < 0.02) dragWave.current = { mode: "end", ...seg };
-    else if (f > x0 && f < x1) dragWave.current = { mode: "press", ...seg };
-    else {
-      const crop = fitCrop(f * audioBuf.duration, cfg.crop.duration, boundsOf(cfg));
-      setV({ crop });
-      setHead(crop.start);
-      dragWave.current = { mode: "move", x: f, px, start: crop.start, duration: crop.duration };
-    }
-  };
-  /**
+    const seg = { ...base, start: cfg.crop.start, duration: cfg.crop.duration };
+    const end = cfg.crop.start + cfg.crop.duration;
+    // The playhead first (a thin line inside the segment), then the edges (each one crops its side), then the segment.
+    if (near(head) && head > cfg.crop.start + 0.05 && head < end - 0.05) dragWave.current = { mode: "head", ...seg };
+    else if (near(cfg.crop.start, 9) && (!near(end, 9) || Math.abs(e.clientX - xOf(cfg.crop.start)) <= Math.abs(e.clientX - xOf(end)))) dragWave.current = { mode: "start", ...seg };
+    else if (near(end, 9)) dragWave.current = { mode: "end", ...seg };
+    else if (t > cfg.crop.start && t < end) dragWave.current = { mode: "press", ...seg };
+    else dragWave.current = { mode: viewRef.current ? "pan" : "none", ...seg };
+  };  /**
    * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
    * a click elsewhere puts the playhead there. `onCue`: also called for a click on a caption.
    */
@@ -1823,24 +1859,43 @@ export default function VideoStudio({
   };
   /** Time under the pointer, kept inside the segment (where the playhead lives). */
   const headAt = (f: number) => {
-    const cfg = settingsRef.current;
-    return round2(clamp(f * (audioBuf?.duration ?? 0), cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05));
+    const cfg = settingsRef.current, v = viewOf();
+    return round2(clamp(v.s + f * v.d, cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05));
   };
   const waveMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, e.clientX);
     const d = dragWave.current;
     if (!d || !audioBuf) return;
+    const dur = audioBuf.duration;
+    if (d.mode === "pinch") {
+      if (pointers.current.size < 2) return;
+      const [a, b] = [...pointers.current.values()];
+      const span = clamp(d.vd * (d.dist! / Math.max(10, Math.abs(a - b))), Math.min(2, dur), dur);
+      if (span >= dur - 1e-3) { setView(null); return; }
+      const k = (d.mid! - d.vs) / d.vd;
+      setView({ s: clamp(d.mid! - k * span, 0, dur - span), d: span });
+      return;
+    }
     const f = wavePos(e);
+    if (d.mode === "none") return;
     if (d.mode === "head") { setHead(headAt(f)); return; }
     if (d.mode === "press") {
       if (Math.abs(e.clientX - d.px) < 4) return;
       d.mode = "move"; // it is a drag: the segment moves
     }
-    const delta = (f - d.x) * audioBuf.duration;
+    const delta = (f - d.x) * d.vd;
+    if (d.mode === "pan") { setView({ s: clamp(d.vs - delta, 0, dur - d.vd), d: d.vd }); return; }
     const bounds = boundsOf(settingsRef.current);
     // The preview follows the edge being dragged: the picture shown is the one under that edge.
     if (d.mode === "offset") {
       // The video may start before the song (negative offset) or end after it.
-      setV({ offset: round2(clamp(d.start + delta, 1 - videoDur, Math.max(0, audioBuf.duration - 1))) });
+      setV({ offset: round2(clamp(d.start + delta, 1 - videoDur, Math.max(0, dur - 1))) });
+    } else if (d.mode === "start") {
+      // The left edge crops the start: the end stays where it is.
+      const endT = d.start + d.duration;
+      const start = round2(clamp(d.start + delta, bounds[0], endT - 1));
+      setV({ crop: { start, duration: round2(endT - start) } });
+      setHead(start);
     } else if (d.mode === "end") {
       const duration = clamp(d.duration + delta, 1, Math.max(1, bounds[1] - d.start));
       setV({ crop: { start: d.start, duration: round2(duration) } });
@@ -1852,11 +1907,40 @@ export default function VideoStudio({
     }
   };
   const waveUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    pointers.current.delete(e.pointerId);
     const d = dragWave.current;
+    if (d?.mode === "pinch" && pointers.current.size) return; // one finger still down: the pinch ends with it
     dragWave.current = null;
     if (d?.mode === "press") setHead(headAt(wavePos(e))); // a click inside the segment: the playhead goes there
   };
+  // Trackpad: pinch (ctrl + wheel) zooms around the pointer, a sideways swipe slides the view. A plain vertical
+  // wheel scrolls the page, as anywhere else.
+  useEffect(() => {
+    const c = waveRef.current;
+    if (!c || !audioBuf) return;
+    const h = (e: WheelEvent) => {
+      const r = c.getBoundingClientRect();
+      const v = viewOf();
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        zoomTo(v.d * Math.exp(e.deltaY * 0.012), v.s + clamp((e.clientX - r.left) / r.width, 0, 1) * v.d);
+      } else if (viewRef.current && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault();
+        setView({ s: clamp(v.s + (e.deltaX / r.width) * v.d, 0, audioBuf.duration - v.d), d: v.d });
+      }
+    };
+    c.addEventListener("wheel", h, { passive: false });
+    return () => c.removeEventListener("wheel", h);
+  }, [audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** The loudest sample of the track: the zoomed waveform is drawn on the same scale as the overview. */
+  const peakMax = useMemo(() => {
+    if (!audioBuf) return 1;
+    const ch = audioBuf.getChannelData(0);
+    let m = 1e-9;
+    for (let i = 0; i < ch.length; i += 2) { const x = Math.abs(ch[i]); if (x > m) m = x; }
+    return m;
+  }, [audioBuf]);
   // The waveform is drawn at the size it is shown, in screen pixels (Retina included): never stretched, always sharp.
   const [waveBox, setWaveBox] = useState({ w: 0, dpr: 1 });
   useEffect(() => {
@@ -1882,20 +1966,22 @@ export default function VideoStudio({
     const mus = css.getPropertyValue("--music").trim() || "#4fffb0";
     g.fillStyle = "#16161c";
     g.fillRect(0, 0, W, H);
-    const x0 = (settings.crop.start / dur) * W;
-    const x1 = (Math.min(dur, settings.crop.start + settings.crop.duration) / dur) * W;
+    const v = view ?? { s: 0, d: dur };
+    const X = (t: number) => ((t - v.s) / v.d) * W;
+    const x0 = X(settings.crop.start);
+    const x1 = X(Math.min(dur, settings.crop.start + settings.crop.duration));
     // Where the camera video exists on the official track.
     if (videoBlob && videoDur > 0) {
-      const v0 = clamp(settings.offset / dur, 0, 1) * W;
-      const v1 = clamp((settings.offset + videoDur) / dur, 0, 1) * W;
+      const v0 = clamp(X(settings.offset), 0, W);
+      const v1 = clamp(X(settings.offset + videoDur), 0, W);
       g.fillStyle = vid;
       g.globalAlpha = 0.14;
       g.fillRect(v0, 0, Math.max(0, v1 - v0), H);
       g.globalAlpha = 1;
       g.fillRect(v0, 0, Math.max(0, v1 - v0), 15);
       if (settings.musicStart != null && settings.musicEnd != null) {
-        const m0 = clamp((settings.offset + settings.musicStart) / dur, 0, 1) * W;
-        const m1 = clamp((settings.offset + settings.musicEnd) / dur, 0, 1) * W;
+        const m0 = clamp(X(settings.offset + settings.musicStart), 0, W);
+        const m1 = clamp(X(settings.offset + settings.musicEnd), 0, W);
         g.fillStyle = mus;
         g.fillRect(m0, H - 4, Math.max(0, m1 - m0), 4);
       }
@@ -1904,41 +1990,54 @@ export default function VideoStudio({
     g.globalAlpha = 0.09;
     g.fillRect(x0, 0, Math.max(0, x1 - x0), H);
     g.globalAlpha = 1;
-    // One bar per 3 px of screen (peaks merged by their max), snapped to whole pixels: crisp at any width.
+    // One bar per 3 px of screen, snapped to whole pixels: crisp at any width. Zoomed in, read from the samples
+    // themselves (the overview's 600 points would only give blocks).
     g.fillStyle = "#6f6e78";
     const step = 3, n = Math.max(1, Math.floor(W / step));
+    const fine = !!view && v.d / dur < 0.5;
+    const ch = fine ? audioBuf.getChannelData(0) : null;
+    const sr = audioBuf.sampleRate;
     for (let i = 0; i < n; i++) {
-      const a = Math.floor((i / n) * peaks.length), b = Math.max(a + 1, Math.floor(((i + 1) / n) * peaks.length));
-      let v = 0;
-      for (let k = a; k < b && k < peaks.length; k++) v = Math.max(v, peaks[k]);
-      const h = Math.max(1, Math.round(v * (H - 18)));
+      let val = 0;
+      if (ch) {
+        const a = Math.floor((v.s + (i / n) * v.d) * sr), b = Math.min(ch.length, Math.max(a + 1, Math.floor((v.s + ((i + 1) / n) * v.d) * sr)));
+        for (let k = a; k < b; k += 4) { const x = Math.abs(ch[k]); if (x > val) val = x; }
+        val /= peakMax;
+      } else {
+        const a = Math.floor(((v.s + (i / n) * v.d) / dur) * peaks.length), b = Math.max(a + 1, Math.floor(((v.s + ((i + 1) / n) * v.d) / dur) * peaks.length));
+        for (let k = a; k < b && k < peaks.length; k++) val = Math.max(val, peaks[k]);
+      }
+      const h = Math.max(1, Math.round(Math.min(1, val) * (H - 18)));
       g.fillRect(i * step, Math.round((H - h) / 2), 2, h);
     }
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
     if (range) {
       g.fillStyle = "rgba(10,10,14,.62)";
-      g.fillRect(0, 0, (range[0] / dur) * W, H);
-      g.fillRect((range[1] / dur) * W, 0, W - (range[1] / dur) * W, H);
+      const r0 = clamp(X(range[0]), 0, W), r1 = clamp(X(range[1]), 0, W);
+      g.fillRect(0, 0, r0, H);
+      g.fillRect(r1, 0, W - r1, H);
     }
-    // Edges of the segment: the accent, dimmed; the playhead: the bright accent. Never mistaken for each other.
+    // Edges of the segment: the accent, dimmed, with a grip; the playhead: the bright accent. Never mistaken.
     g.fillStyle = accent;
     g.globalAlpha = 0.6;
     g.fillRect(x0 - 1, 0, 3, H);
     g.fillRect(x1 - 2, 0, 3, H);
     g.globalAlpha = 1;
+    g.fillRect(x0 - 3, H / 2 - 10, 5, 20);
+    g.fillRect(x1 - 2, H / 2 - 10, 5, 20);
     g.fillStyle = head0;
-    g.fillRect((head / dur) * W - 1, 0, 2, H);
+    g.fillRect(X(head) - 1, 0, 2, H);
     if (videoBlob && videoDur > 0) {
-      const v0 = clamp(settings.offset / dur, 0, 1) * W;
-      if ((clamp((settings.offset + videoDur) / dur, 0, 1) * W) - v0 > 56) {
+      const v0 = clamp(X(settings.offset), 0, W);
+      if (clamp(X(settings.offset + videoDur), 0, W) - v0 > 56) {
         g.fillStyle = "#0c0c0e";
         g.font = "600 10px ui-monospace, 'JetBrains Mono', monospace";
         g.textBaseline = "middle";
         g.fillText("VIDEO", Math.round(v0 + 6), 8);
       }
     }
-  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur, waveBox]);
+  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur, waveBox, view, peakMax]);
 
   // ---- lyrics timing ----
 
@@ -3128,38 +3227,56 @@ export default function VideoStudio({
                     </>
                   )}
                 </div>
-                {/* Versions of this video to compare (A/B): a click shows one; each keeps its segment, hooks and lyrics. */}
+                {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
+                    beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
-                  {versions.length > 0 && <span className="label">{t("Versions")}</span>}
-                  {versions.map((v, i) => {
-                    const on = v.id === settings.activeVersion;
-                    const crop = on ? settings.crop : v.v.crop;
-                    if (renaming === v.id) return (
-                      <input key={v.id} className="input sm ver-name" autoFocus defaultValue={v.name ?? ""} placeholder={versionName(v, i)} aria-label={t("Rename")}
-                        onBlur={(e) => { renameVersion(v.id, e.target.value); setRenaming(null); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setRenaming(null); }} />
-                    );
+                  {versions.length > 0 && (() => {
+                    const at = Math.max(0, versions.findIndex((v) => v.id === settings.activeVersion));
+                    const shown = versions[at];
                     return (
-                      <span key={v.id} className={"ver-chip" + (on ? " on" : "")}>
-                        <button className="ver-main" aria-pressed={on} onClick={() => switchVersion(v.id)} onDoubleClick={() => setRenaming(v.id)}>
-                          {versionName(v, i)}{crop && <span className="mono xs">{mmss(crop.start)}–{mmss(crop.start + crop.duration)}</span>}
+                      <Menu float left trigger={(open, toggle) => (
+                        <button className={"btn sm ver-pick" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={() => { setRenaming(null); toggle(); }}>
+                          <span className="ver-k">{t("Version")}</span>{versionName(shown, at)}
+                          <span className="mono xs muted">{mmss(settings.crop.start)}–{mmss(settings.crop.start + settings.crop.duration)}</span>
+                          <Icon name="chevron" size={12} />
                         </button>
-                        <Menu float trigger={(_, toggle) => (
-                          <button className="ver-more" aria-label={t("Version options")} aria-haspopup="menu" onClick={toggle}><Icon name="chevron" size={12} /></button>
-                        )}>
-                          {(close) => (<>
-                            <button onClick={() => { close(); setRenaming(v.id); }}>{t("Rename")}</button>
-                            <div className="sep" />
-                            <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); removeVersion(v.id); }}>{t("Delete")}</button>
-                          </>)}
-                        </Menu>
-                      </span>
+                      )}>
+                        {(close) => (<div className="ver-list">
+                          {versions.map((v, i) => {
+                            const on = v.id === settings.activeVersion;
+                            const crop = on ? settings.crop : v.v.crop;
+                            return (
+                              <div key={v.id} className={"ver-line" + (on ? " on" : "")}>
+                                {renaming === v.id ? (
+                                  <input className="input sm ver-name" autoFocus defaultValue={v.name ?? ""} placeholder={versionName(v, i)} aria-label={t("Rename")}
+                                    onBlur={(e) => { renameVersion(v.id, e.target.value); setRenaming(null); }}
+                                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setRenaming(null); }} />
+                                ) : (
+                                  <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); switchVersion(v.id); }}>
+                                    <Icon name="check" size={12} />{versionName(v, i)}
+                                    {crop && <span className="mono xs">{mmss(crop.start)}–{mmss(crop.start + crop.duration)}</span>}
+                                  </button>
+                                )}
+                                <button className="btn icon sm quiet" aria-label={t("Rename")} title={t("Rename")} onClick={() => setRenaming(renaming === v.id ? null : v.id)}><Icon name="pencil" size={12} /></button>
+                                <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { removeVersion(v.id); if (versions.length <= 2) close(); }}><Icon name="trash" size={12} /></button>
+                              </div>
+                            );
+                          })}
+                        </div>)}
+                      </Menu>
                     );
-                  })}
+                  })()}
                   <button className="btn sm quiet ver-add" onClick={addVersion}
                     title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
                     <Icon name="plus" size={12} />{versions.length ? t("New version") : t("Make a version B")}
                   </button>
+                  <span className="grow" />
+                  {/* Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */}
+                  <div className="wave-zoom" role="group" aria-label={t("Zoom of the waveform")}>
+                    <button className="btn icon sm" aria-label={t("Zoom out")} disabled={!view} onClick={() => { const v = viewOf(); zoomTo(v.d * 2, v.s + v.d / 2); }}><Icon name="minus" size={12} /></button>
+                    <button className="btn icon sm" aria-label={t("Zoom in")} onClick={() => { const v = viewOf(), c = settingsRef.current.crop; const mid = view ? v.s + v.d / 2 : c.start + c.duration / 2; zoomTo(v.d / 2, mid); }}><Icon name="plus" size={12} /></button>
+                    <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}>{view ? t("Whole track") : t("Fit segment")}</button>
+                  </div>
                 </div>
                 {settings.takes && settings.takes.length > 1 && (
                   <div className="row">
@@ -3174,8 +3291,11 @@ export default function VideoStudio({
                     ))}
                   </div>
                 )}
-                <canvas ref={waveRef} className="wave"
-                  onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp} onPointerCancel={() => { dragWave.current = null; }} />
+                <div className="wave-wrap">
+                  <canvas ref={waveRef} className="wave"
+                    onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
+                    onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
+                </div>
                 {hooks.length > 0 && (
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     {hooks.map((h, i) => (

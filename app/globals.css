@@ -2122,15 +2122,31 @@ details.sec:first-of-type { background-image: none; }
 .boot.boot-over { position: fixed; inset: 0; z-index: 400; min-height: 0; transition: opacity .3s ease; }
 .boot.boot-over.out { opacity: 0; pointer-events: none; }
 
-/* Versions of a video (A/B): chips under the transport, the shown one on white. */
+/* Versions of a video (A/B): one selector, each line with rename and delete; "New version" beside it. */
 .seg-versions { gap: 6px; flex-wrap: wrap; align-items: center; }
-.seg-versions > .label { margin-right: 2px; }
-.ver-chip { display: inline-flex; align-items: stretch; height: 28px; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; background: var(--raised); }
-.ver-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.ver-chip button { border: 0; background: none; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
-.ver-main { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; white-space: nowrap; }
-.ver-main .mono { opacity: .65; }
-.ver-more { padding: 0 6px; display: grid; place-items: center; opacity: .7; }
-.ver-more:hover { opacity: 1; }
-.ver-chip > .menu-wrap, .ver-chip > div { display: flex; }
-.ver-name { width: 140px; height: 28px; }
+.ver-pick { gap: 8px; white-space: nowrap; }
+.ver-pick .ver-k { color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.ver-list { display: grid; gap: 2px; min-width: 260px; }
+.ver-line { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+
+.ver-line .ver-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap; }
+.ver-line .ver-main svg { opacity: 0; flex: none; }
+.ver-line.on .ver-main svg { opacity: 1; }
+.ver-line .ver-main .mono { color: var(--muted); margin-left: auto; }
+.ver-line .btn.icon { color: var(--muted); }
+.ver-line .btn.icon:hover { color: var(--text); }
+.ver-line .ver-del:hover { color: var(--danger); }
+.ver-name { flex: 1; min-width: 0; height: 30px; }
+/* The waveform's zoom: small buttons at the end of the versions' row. */
+.wave-wrap { position: relative; }
+.wave-zoom { display: flex; gap: 4px; }
+.wave-zoom .btn { height: 26px; min-height: 0; padding: 0 8px; font-size: 11px; }
+.wave-zoom .btn.icon { width: 24px; padding: 0; }
+.menu .ver-line .btn.icon { width: 30px; min-height: 30px; height: 30px; flex: none; justify-content: center; padding: 0; }
+.menu .ver-line .ver-main { width: auto; padding: 0 8px; }
+.menu .ver-line:hover, .menu .ver-line .ver-main:hover { background: #1d1d23; }
+
+/* The splash's progress: a thin bar under the logo, its percentage beside it. */
+.boot-bar { width: 160px; height: 2px; border-radius: 2px; background: var(--line-2); overflow: hidden; margin-top: 2px; }
+.boot-bar > span { display: block; height: 100%; background: var(--text); border-radius: 2px; transition: width .35s ease; }
+.boot-pct { font-size: 10px; letter-spacing: .08em; color: var(--muted); }
