@@ -84,6 +84,9 @@ export default function Studio({ userName }: { userName: string }) {
   const [editor, setEditor] = useState<Editor>(null);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [studio, setStudio] = useState<"carousel" | "video">("carousel");
+  /** The splash stays over the app until what the screen shows is ready (the first slides' photos, the video's
+   *  picture), 2.5 s at most, then fades: no half-empty screen filling in after it. */
+  const [boot, setBoot] = useState<"hold" | "fade" | "gone">("hold");
   // Once opened, the video studio stays mounted (hidden on the carousel): coming back is instant, nothing is read again.
   const [videoSeen, setVideoSeen] = useState(false);
   // Where the pill of the studio switch sits: measured on the chosen button (their widths follow the language).
@@ -275,6 +278,21 @@ export default function Studio({ userName }: { userName: string }) {
     // A note beside the edit, not an edit of its own: no undo step.
     apply({ ...cur, picEdits: next }, false);
   }, [ws]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!ws || boot !== "hold") return;
+    const p = ws.projects.find((x) => x.id === ws.currentProjectId) ?? ws.projects[0];
+    const ids = (p?.generated ?? []).slice(0, 3).map((g) => g?.picId).filter((x): x is string => !!x);
+    const shown = studio === "video"
+      ? new Promise<void>((r) => window.addEventListener("rollout:video-ready", () => r(), { once: true }))
+      : Promise.all(ids.map((id) => loadDriveImage(id).catch(() => null))).then(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
+    let off = false;
+    void Promise.race([shown, new Promise((r) => setTimeout(r, 2500))]).then(() => {
+      if (off) return;
+      setBoot("fade");
+      setTimeout(() => setBoot("gone"), 320);
+    });
+    return () => { off = true; };
+  }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // Google connected: the Rollout tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
   useEffect(() => {
     if (!ws || isDemo()) return;
@@ -1288,8 +1306,8 @@ export default function Studio({ userName }: { userName: string }) {
   };
 
   if (loadErr) return <div className="login"><div className="login-card"><h2 className="title">{t("Could not load your data")}</h2><p className="muted">{loadErr}</p><button className="btn primary" onClick={() => location.reload()}>{t("Try again")}</button></div></div>;
-  if (!ws || !project) return (
-    <div className="boot" aria-busy="true" role="status" aria-label={t("Loading…")}>
+  const bootEl = (over?: "on" | "out") => (
+    <div className={"boot" + (over ? " boot-over" + (over === "out" ? " out" : "") : "")} aria-busy="true" role="status" aria-label={t("Loading…")}>
       {/* The same logo and text twice: a dim one, and a glowing copy shown only under a slanted band sweeping left to right. */}
       <div className="boot-mark" aria-hidden>
         {["base", "shine"].map((k) => (
@@ -1313,6 +1331,7 @@ export default function Studio({ userName }: { userName: string }) {
       </div>
     </div>
   );
+  if (!ws || !project) return bootEl();
 
   const sel = Math.min(project.selectedSlide, project.slides.length - 1);
 
@@ -1879,6 +1898,7 @@ export default function Studio({ userName }: { userName: string }) {
         <LyricsEditor name={project.name} lyrics={project.lyrics} song={project.lyricsLinked ? undefined : project.songLyrics} synced={!!project.lyricsLinked && !!project.lyricWords?.length} onChange={setLyrics} onClose={() => setOverlay(null)} />
       )}
       <Toast msg={toast} />
+      {boot !== "gone" && bootEl(boot === "fade" ? "out" : "on")}
     </div>
   );
 }

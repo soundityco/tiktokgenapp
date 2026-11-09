@@ -2117,3 +2117,7 @@ details.sec:first-of-type { background-image: none; }
 .switch:not(:disabled):active .switch-knob { scale: .9; }
 /* Under the video (phone): at the left of the bar, across from Zones. */
 .video-bar > .switch { justify-self: start; }
+
+/* The splash kept over the app while its first pictures arrive, then fading out. */
+.boot.boot-over { position: fixed; inset: 0; z-index: 400; min-height: 0; transition: opacity .3s ease; }
+.boot.boot-over.out { opacity: 0; pointer-events: none; }

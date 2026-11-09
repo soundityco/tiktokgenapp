@@ -684,11 +684,15 @@ export default function VideoStudio({
     if (!c || !g) return;
     const el = videoRef.current;
     const keep = !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
-    const boxes = drawScene(g, c.width, c.height, pictureOf(el, time), time, { raw: rawRef.current, keep });
+    const pic = pictureOf(el, time);
+    const boxes = drawScene(g, c.width, c.height, pic, time, { raw: rawRef.current, keep });
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
     drawHelpers(g, c.width, c.height, aidsRef.current);
+    // The first picture of the video (or its last picture kept from before) is on screen: the splash can go.
+    if (!shownOnce.current && (pic || posterRef.current)) { shownOnce.current = true; window.dispatchEvent(new Event("rollout:video-ready")); }
   }, [drawScene]);
+  const shownOnce = useRef(false);
 
   /**
    * Draw the paused picture now, and again a little later: right after a load or a seek, the frame of the
