@@ -1807,3 +1807,13 @@ details.sec:first-of-type { background-image: none; }
   .video-stage > .shown-on, .video-stage > .stage-fmt { grid-row: 3; }
   .main[data-studio="video"][data-mobile-tab="style"] .video-stage > .video-bar { margin-top: 14px; }
 }
+@media (max-width: 1000px) {
+  /* The dock, balanced: the studio's square | Create and Style, named, sharing the middle | the library's square
+     (white when open). Nothing floats in the middle any more. */
+  .mobile-tabs > .mobile-tabs-sep, .mobile-tabs > .mobile-tabs-sep:first-of-type { margin: 11px 7px !important; }
+  .mobile-tabs > button:not(.dock-studio):not(.dock-lib) { flex: 1 1 0; min-width: 0; justify-content: center; gap: 7px; padding: 0 10px; }
+  .mobile-tabs > button:not(.dock-studio):not(.dock-lib) .tab-name { max-width: none; opacity: 1; overflow: hidden; text-overflow: ellipsis; }
+  .mobile-tabs > button.on:not(.dock-studio):not(.dock-lib) { padding: 0 10px; }
+  .mobile-tabs > .dock-lib .tab-name, .mobile-tabs > .dock-lib.on .tab-name { display: none; }
+  .mobile-tabs > .dock-lib.on { width: 46px; gap: 0; padding: 0; }
+}
