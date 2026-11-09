@@ -2446,7 +2446,7 @@ export default function VideoStudio({
     : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };
   const segLen = Math.max(0.1, end - settings.crop.start);
   useEffect(() => {
-    if (!dockSlot || !videoUrl) { if (!videoUrl) setStrip([]); return; }
+    if (!active || !videoUrl) { if (!videoUrl) setStrip([]); return; }
     let off = false;
     const from = settings.crop.start, len = segLen, offset = settings.offset;
     // Already made for this file and this passage: at once.
@@ -2480,7 +2480,7 @@ export default function VideoStudio({
       finally { v.removeAttribute("src"); v.load(); }
     }, wait);
     return () => { off = true; clearTimeout(timer); };
-  }, [dockSlot, videoUrl, settings.crop.start, segLen, settings.offset]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, videoUrl, settings.crop.start, segLen, settings.offset]); // eslint-disable-line react-hooks/exhaustive-deps
   const placed = (project.lyricWords?.length ?? 0) > 0;
   /** Nothing synced yet: one button does both. Afterwards each has its own, so changing the video never touches the lyrics. */
   const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
@@ -2647,6 +2647,45 @@ export default function VideoStudio({
         <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
       </label>
     </div>
+  );
+
+  /** The player (play, the segment's film strip to scrub, the time): one element, on the phone's dock or floating
+   *  over the computer's board. */
+  const playerEl = (
+        <div className="dp">
+          <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
+            onClick={() => (playing ? stop() : void play())}>
+            {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden />
+              : playing
+                // Solid: two thick bars, a full triangle (the dock's big button, read at a glance).
+                ? <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden><rect x="5.5" y="4" width="4.5" height="16" rx="1.4" fill="currentColor" /><rect x="14" y="4" width="4.5" height="16" rx="1.4" fill="currentColor" /></svg>
+                : <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden><path d="M7.5 4.6c0-1 1.1-1.6 2-1.1l10.3 6.4c.8.5.8 1.7 0 2.2L9.5 18.5c-.9.5-2-.1-2-1.1z" fill="currentColor" /></svg>}
+          </button>
+          {/* The segment: drag along it to move in the video (playing goes on from there once let go). */}
+          <div className="dp-track" role="slider" aria-label={t("Position in the segment")} aria-valuemin={0} aria-valuemax={Math.round(segLen)} aria-valuenow={Math.round(head - settings.crop.start)}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              dockDrag.current = { was: playing };
+              if (playing) stop();
+              const r = e.currentTarget.getBoundingClientRect();
+              setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
+            }}
+            onPointerMove={(e) => {
+              if (!dockDrag.current) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
+            }}
+            onPointerUp={() => { const was = dockDrag.current?.was; dockDrag.current = null; if (was) setTimeout(() => void playRef.current(), 0); }}
+            onPointerCancel={() => { dockDrag.current = null; }}>
+            {/* A film strip of the segment (pictures of the take along it), or a plain rail without a take. */}
+            <span className={"dp-strip" + (videoUrl ? " on" : "")}>
+              {videoUrl ? Array.from({ length: 9 }, (_, i) => strip[i] ? <img key={i} src={strip[i]} alt="" draggable={false} /> : <i key={i} className="dp-slot" />) : null}
+              <span className="dp-played" style={{ width: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
+            </span>
+            <span className="dp-head" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
+          </div>
+          <span className="dp-time mono">{mmss(head - settings.crop.start)}<span className="muted"> / {mmss(segLen)}</span></span>
+        </div>
   );
 
   return (
@@ -3287,6 +3326,7 @@ export default function VideoStudio({
 
         </div>
       </div>
+          {!dockSlot && audioBuf && <div className="board-player">{playerEl}</div>}
         </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")} ref={rightColRef}>
@@ -3416,43 +3456,8 @@ export default function VideoStudio({
                 onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
                       </div>
         </aside>
-      {dockSlot && audioBuf && !libraryPage && createPortal(
-        <div className="dp">
-          <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
-            onClick={() => (playing ? stop() : void play())}>
-            {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden />
-              : playing
-                // Solid: two thick bars, a full triangle (the dock's big button, read at a glance).
-                ? <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden><rect x="5.5" y="4" width="4.5" height="16" rx="1.4" fill="currentColor" /><rect x="14" y="4" width="4.5" height="16" rx="1.4" fill="currentColor" /></svg>
-                : <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden><path d="M7.5 4.6c0-1 1.1-1.6 2-1.1l10.3 6.4c.8.5.8 1.7 0 2.2L9.5 18.5c-.9.5-2-.1-2-1.1z" fill="currentColor" /></svg>}
-          </button>
-          {/* The segment: drag along it to move in the video (playing goes on from there once let go). */}
-          <div className="dp-track" role="slider" aria-label={t("Position in the segment")} aria-valuemin={0} aria-valuemax={Math.round(segLen)} aria-valuenow={Math.round(head - settings.crop.start)}
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              dockDrag.current = { was: playing };
-              if (playing) stop();
-              const r = e.currentTarget.getBoundingClientRect();
-              setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
-            }}
-            onPointerMove={(e) => {
-              if (!dockDrag.current) return;
-              const r = e.currentTarget.getBoundingClientRect();
-              setHead(round2(settings.crop.start + clamp((e.clientX - r.left) / r.width, 0, 1) * segLen));
-            }}
-            onPointerUp={() => { const was = dockDrag.current?.was; dockDrag.current = null; if (was) setTimeout(() => void playRef.current(), 0); }}
-            onPointerCancel={() => { dockDrag.current = null; }}>
-            {/* A film strip of the segment (pictures of the take along it), or a plain rail without a take. */}
-            <span className={"dp-strip" + (videoUrl ? " on" : "")}>
-              {videoUrl ? Array.from({ length: 9 }, (_, i) => strip[i] ? <img key={i} src={strip[i]} alt="" draggable={false} /> : <i key={i} className="dp-slot" />) : null}
-              <span className="dp-played" style={{ width: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
-            </span>
-            <span className="dp-head" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
-          </div>
-          <span className="dp-time mono">{mmss(head - settings.crop.start)}<span className="muted"> / {mmss(segLen)}</span></span>
-        </div>,
-        dockSlot,
-      )}
+      {/* The player: on the phone's dock; on a computer floating at the bottom of the board (the same one). */}
+      {dockSlot && audioBuf && !libraryPage && createPortal(playerEl, dockSlot)}
       {clipDialog === "rename" && (
         <PromptDialog title={t("Rename the video")} label={t("Name")} initial={clipName(clip)} confirmLabel={t("Rename")}
           onSubmit={renameClip} onClose={() => setClipDialog(null)} />
