@@ -195,6 +195,8 @@ async function findOrMakeFolder(): Promise<string> {
 export const DRIVE_PATHS = {
   photos: ["Photos"],
   photoList: (list: string) => ["Photos", list],
+  /** A photo list of one release only: inside its release. */
+  releasePhotos: (release: string, list: string) => ["Releases", release, "Photos", list],
   releases: ["Releases"],
   audios: (release: string) => ["Releases", release, "Audios"],
   videos: (release: string) => ["Releases", release, "Videos"],
@@ -309,6 +311,35 @@ export async function tidyDriveRoot(place: (f: AppFile) => string[] | null): Pro
     try { localStorage.setItem(KEY, "1"); } catch { /* private mode */ }
   } catch (e) { console.warn("[drive] tidy", e); }
   return moved;
+}
+
+/**
+ * A folder of the tree goes to another place (a photo list made shared or kept to one release) and/or takes another
+ * name: moved, what is in it with it. Nothing to do if it was never made. Never throws.
+ */
+export async function moveDriveFolder(from: string[], to: string[]): Promise<void> {
+  if (isDemo()) return;
+  const a = from.map(folderName), b = to.map(folderName);
+  const ka = a.join("/"), kb = b.join("/");
+  if (ka === kb) return;
+  const id = readTree()[ka];
+  if (!id) return;
+  try {
+    const oldParent = a.length > 1 ? await driveFolder(a.slice(0, -1)) : await appFolder();
+    const newParent = b.length > 1 ? await driveFolder(b.slice(0, -1)) : await appFolder();
+    const params = new URLSearchParams({ fields: "id" });
+    if (oldParent !== newParent) { params.set("addParents", newParent); params.set("removeParents", oldParent); }
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?${params}`, {
+      method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: b[b.length - 1] }),
+    });
+    if (!r.ok) return;
+    const tree = readTree();
+    const next: Record<string, string> = {};
+    for (const [k, v] of Object.entries(tree)) next[k === ka || k.startsWith(ka + "/") ? kb + k.slice(ka.length) : k] = v;
+    writeTree(next);
+    checked.clear();
+  } catch { /* stays where it was: found again by its id */ }
 }
 
 /** Move a file the app made into a folder of the tree (from wherever it is). */
@@ -577,9 +608,8 @@ export async function findSamePicture(blob: Blob, ids: string[]): Promise<string
 }
 
 /** Put a picture in the Rollout folder of the user's Drive; returns its Drive id (a photo of any list). */
-export async function sendPictureToDrive(blob: Blob, name: string, list?: string): Promise<string> {
-  return uploadToDrive(blob, name, () => {}, new AbortController().signal, blob.type || "image/jpeg", { tktgen: "photo" },
-    list ? DRIVE_PATHS.photoList(list) : DRIVE_PATHS.photos);
+export async function sendPictureToDrive(blob: Blob, name: string, path?: string[]): Promise<string> {
+  return uploadToDrive(blob, name, () => {}, new AbortController().signal, blob.type || "image/jpeg", { tktgen: "photo" }, path ?? DRIVE_PATHS.photos);
 }
 
 export function loadDriveImage(id: string): Promise<Img> {

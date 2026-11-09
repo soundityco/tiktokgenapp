@@ -4,7 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
@@ -806,8 +806,8 @@ export default function Studio({ userName }: { userName: string }) {
       // In the Drive (the slide shows it on every device), else on this device only.
       // The same picture already in the Drive: that file; else a new one in the Rollout folder (or this device only).
       // Its folder: Rollout / Photos / <the list it goes to> (Photos itself when it goes to no list).
-      const listName = c.list === "new" ? (c.newName || "Pinterest") : c.list ? wsRef.current?.picPools.find((p) => p.id === c.list)?.name : undefined;
-      const id = c.reuse ?? (driveWrite ? await sendPictureToDrive(blob, `photo - ${name}`, listName) : `local:${uid()}`);
+      const target = c.list === "new" ? { name: c.newName || "Pinterest", scope: "shared" } : c.list ? wsRef.current?.picPools.find((p) => p.id === c.list) : undefined;
+      const id = c.reuse ?? (driveWrite ? await sendPictureToDrive(blob, `photo - ${name}`, target ? listPath(target) : undefined) : `local:${uid()}`);
       await keepPicture(id, blob);
       setGen(i, { picId: id, picName: name, picCredit: undefined });
       if (c.list) {
@@ -1021,10 +1021,19 @@ export default function Studio({ userName }: { userName: string }) {
       if (forPost) setEditor({ k: "text", id }); // straight to writing its captions
     }
     else {
-      // Its folder in the Drive right away: Rollout / Photos / <name>.
-      if (driveWrite) void driveFolder(DRIVE_PATHS.photoList(name)).catch(() => {});
-      upd((w) => ({ ...w, picPools: [...w.picPools, { id: uid(), name, scope, projectId, pics: [] }] }));
+      // Its folder in the Drive right away (Rollout / Photos / <name>, or in its release), and its window open to
+      // drop the photos in.
+      if (driveWrite) void driveFolder(listPath({ name, scope, projectId })).catch(() => {});
+      const id = uid();
+      upd((w) => ({ ...w, picPools: [...w.picPools, { id, name, scope, projectId, pics: [] }] }));
+      setEditor({ k: "photos", id });
     }
+  };
+  /** Where a photo list's photos are in the Drive: Rollout / Photos / <list>, or inside its release when it is
+   *  kept to one release (Releases / <release> / Photos / <list>). */
+  const listPath = (pool: { name: string; scope: string; projectId?: string }) => {
+    const rel = pool.scope === "project" ? wsRef.current?.projects.find((p) => p.id === pool.projectId)?.name : undefined;
+    return rel ? DRIVE_PATHS.releasePhotos(rel || "Release", pool.name) : DRIVE_PATHS.photoList(pool.name);
   };
   // Photos added to a list from this device: each one sent to the list's folder in the Drive (Rollout / Photos /
   // <list>), kept on this device too, and added to the list as it arrives. Without Drive access: this device only.
@@ -1036,7 +1045,7 @@ export default function Studio({ userName }: { userName: string }) {
     let done = 0, failed = 0;
     for (const file of files) {
       try {
-        const id = driveWrite ? await sendPictureToDrive(file, file.name, pool.name) : `local:${uid()}`;
+        const id = driveWrite ? await sendPictureToDrive(file, file.name, listPath(pool)) : `local:${uid()}`;
         await keepPicture(id, file);
         setPicPool(poolId, (x) => (x.pics.some((y) => y.id === id) ? x : { ...x, pics: [...x.pics, { id, name: file.name }] }));
       } catch (e) { failed++; console.warn("[photos] upload", e); }
@@ -1770,7 +1779,8 @@ export default function Studio({ userName }: { userName: string }) {
           onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))} onBrowse={() => setOverlay({ k: "drive", poolId: edPics.id })}
           onSync={(manual) => void syncDrive(edPics.id, manual)}
           onUpload={(files) => void uploadToList(edPics.id, files)} uploading={picUpload?.pool === edPics.id ? picUpload : null}
-          onRenamed={(from, to) => void renameDriveFolder(["Photos", from], to)} />
+          onMoved={(from, to) => void moveDriveFolder(listPath(from), listPath(to))}
+          savedIn={driveWrite ? listPath(edPics).join(" / ") : null} />
       )}
 
       {overlay?.k === "drive" && (

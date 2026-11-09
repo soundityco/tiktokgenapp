@@ -241,12 +241,18 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   onUpload: (files: File[]) => void;
   /** Photos being sent (done / total), while it lasts. */
   uploading?: { done: number; total: number } | null;
-  /** The list was renamed (its Drive folder follows). */
-  onRenamed?: (from: string, to: string) => void }) {
+  /** The list was renamed or its scope changed (its Drive folder follows). */
+  onMoved?: (from: { name: string; scope: string; projectId?: string }, to: { name: string; scope: string; projectId?: string }) => void;
+  /** Where its photos are kept in the Drive ("Rollout / Photos / …"), null when only on this device. */
+  savedIn?: string | null }) {
   const { t } = useT();
   const { pool } = p;
-  const startName = useRef(pool.name);
-  const close = () => { if (pool.name.trim() && pool.name !== startName.current) p.onRenamed?.(startName.current, pool.name); p.onClose(); };
+  const start = useRef({ name: pool.name, scope: pool.scope, projectId: pool.projectId });
+  const close = () => {
+    const s = start.current;
+    if (pool.name.trim() && (pool.name !== s.name || pool.scope !== s.scope || pool.projectId !== s.projectId)) p.onMoved?.(s, { name: pool.name, scope: pool.scope, projectId: pool.projectId });
+    p.onClose();
+  };
   const pick = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const images = (list: FileList | null) => [...(list ?? [])].filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|avif)$/i.test(f.name));
@@ -278,23 +284,15 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
         {/* Photos from this device (or dropped on the window): they go to the list's own folder in the Drive. */}
         <input ref={pick} type="file" accept="image/*" multiple hidden onChange={(e) => { const f = images(e.target.files); e.target.value = ""; if (f.length) p.onUpload(f); }} />
         <button className="btn primary" onClick={() => pick.current?.click()} disabled={!!p.uploading}><Icon name="plus" />{t("Add photos")}</button>
-        <button className="btn" onClick={p.onBrowse}><Icon name="folder" />{t("From a Drive folder")}</button>
-        <span className="muted grow">{p.uploading ? <span className="shine">{t("Sending to your Drive… {n}/{total}", { n: p.uploading.done, total: p.uploading.total })}</span> : t("{n} photos (they stay in your Drive)", { n: pool.pics.length })}</span>
+        <span className="muted grow">{p.uploading ? <span className="shine">{t("Sending to your Drive… {n}/{total}", { n: p.uploading.done, total: p.uploading.total })}</span> : (pool.pics.length === 1 ? t("1 photo") : t("{n} photos", { n: pool.pics.length }))}</span>
         <button className="btn sm" disabled={!pool.pics.length} onClick={() => p.onChange((x) => ({ ...x, pics: [], folders: [], excluded: [] }))}>{t("Remove all")}</button>
       </div>
-      {folders.length > 0 && (
-        <div className="row">
-          <span className="muted xs">{t("Linked folders:")}</span>
-          {folders.map((f) => (
-            <span key={f.id} className="row nowrap" style={{ gap: 2 }}>
-              <Icon name="folder" size={13} /><span className="xs">{f.name}</span>
-              <button className="btn sm quiet icon" aria-label={t("Remove the folder {name} and its photos", { name: f.name })} title={t("Remove the folder {name} and its photos", { name: f.name })} onClick={() => unlink(f.id)}><Icon name="x" size={11} /></button>
-            </span>
-          ))}
-          <button className="btn sm" onClick={() => p.onSync(true)}>{t("Sync with Drive")}</button>
-        </div>
-      )}
-      {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them: they go to your Drive, in Rollout / Photos / {name}.", { name: pool.name || t("Photos") })}</p>}
+      {/* Where the photos are: the user's own Drive, nowhere else. */}
+      <p className={"pic-saved xs" + (p.savedIn ? "" : " local")}>
+        <Icon name={p.savedIn ? "check" : "alert"} size={13} />
+        {p.savedIn ? t("Saved in your own Drive: {path}. Rollout keeps none of your photos.", { path: p.savedIn }) : t("Kept on this device only (no Google Drive access).")}
+      </p>
+      {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them.")}</p>}
       <div className="thumbs" style={{ maxHeight: "46dvh", overflow: "auto" }}>
         {pool.pics.map((pic) => (
           <div key={pic.id} className="thumb-wrap">

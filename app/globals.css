@@ -2029,3 +2029,6 @@ details.sec:first-of-type { background-image: none; }
 .pic-drop.over::after { content: ""; position: absolute; inset: -6px; border: 1.5px dashed var(--muted); border-radius: var(--r-lg); pointer-events: none; }
 .pic-drop-hint { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8,8,10,.72); border-radius: var(--r-lg);
   color: var(--text); font-size: var(--fs-sm); pointer-events: none; }
+.pic-saved { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); }
+.pic-saved svg { flex: none; color: var(--ok, #6fcf97); }
+.pic-saved.local svg { color: var(--warn); }
