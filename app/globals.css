@@ -1988,3 +1988,8 @@ details.sec:first-of-type { background-image: none; }
   .main[data-studio="video"][data-mobile-tab="slides"] .video-grid { margin-top: -16px; }
   .main[data-studio="video"][data-mobile-tab="slides"] .video-stage > .video-bar { margin-top: 14px; }
 }
+/* The video's tabs (lyrics, hook, caption) never grow past the board: their one column can shrink, so a long hook in
+   "Pick from the list" ends with "…" instead of pushing the timeline under the right column. */
+.video-side .tab-body, .video-side .timeline { grid-template-columns: minmax(0, 1fr); }
+.video-side .tab-body > *, .hook-item > *, .hook-item .row > *, .hook-pick > * { min-width: 0; }
+.hook-item .row .dd, .hook-pick .dd { max-width: 100%; }

@@ -2520,8 +2520,8 @@ export default function VideoStudio({
     setHead(round2(settings.crop.start + (edge === "from" ? clamp(h.from + d, 0, to - 0.3) : Math.max(h.from, clamp(to + d, h.from + 0.3, segLen) - 0.3))));
   };
   const current = activeCue(cues, head);
-  // Phone: a word picked on the timeline (or the timeline let go) brings its line of the lyrics list to the middle of
-  // the screen (to its bottom near the end), once the finger is off, never while playing.
+  // A word picked on the timeline (or the timeline let go) brings its line of the lyrics list to the middle of the
+  // part of the list on screen (its bottom near the end), once the finger or the mouse is off, never while playing.
   const followList = useRef(false);
   useEffect(() => {
     const down = (e: PointerEvent) => { if ((e.target as HTMLElement).closest?.(".wave, .lyric-track, .hook-track, .dp-track")) followList.current = true; };
@@ -2530,7 +2530,7 @@ export default function VideoStudio({
   }, []);
   const currentIdx = current ? cues.indexOf(current) : -1;
   useEffect(() => {
-    if (!followList.current || playing || currentIdx < 0 || !matchMedia(PHONE_QUERY).matches) return;
+    if (!followList.current || playing || currentIdx < 0) return;
     let timer = 0;
     const go = () => {
       // Still dragging: later.
@@ -2543,7 +2543,8 @@ export default function VideoStudio({
       // screen (between the header and the dock); the list's own ends stop it.
       const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
       const top = Math.max(l.top, (document.querySelector(".app > .top") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 0);
-      const bottom = Math.min(l.bottom, (document.querySelector(".mobile-tabs") as HTMLElement | null)?.getBoundingClientRect().top ?? window.innerHeight);
+      const dock = document.querySelector<HTMLElement>(".mobile-tabs");
+      const bottom = Math.min(l.bottom, dock?.offsetParent ? dock.getBoundingClientRect().top : window.innerHeight);
       const aim = bottom > top ? (top + bottom) / 2 : l.top + l.height / 2;
       list.scrollBy({ top: r.top + r.height / 2 - aim, behavior: "smooth" });
     };
