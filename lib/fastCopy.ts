@@ -1,8 +1,8 @@
-import { createFile, DataStream, Endianness, MP4BoxBuffer, type Sample, type Track } from "mp4box";
+import { createFile, DataStream, Endianness, type Sample, type Track } from "mp4box";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { ffmpegAlone, type CopyPlan } from "./convert";
 import { aacConfig } from "./exportVideo";
-import { rotationOf } from "./videoSource";
+import { readIndex, readSamples, rotationOf } from "./videoSource";
 
 /**
  * The working copy of a take made by the device's own video chip (WebCodecs): the pictures are decoded and
@@ -23,23 +23,6 @@ const aborted = () => new DOMException("aborted", "AbortError");
 const AVC = ["avc1.640033", "avc1.640034", "avc1.4d0033", "avc1.640028"];
 /** 10 bits: HEVC Main 10 (Safari, the video chip), else VP9 profile 2 (Chrome, its own fast encoder). */
 const TEN = ["hvc1.2.4.L153.B0", "hvc1.2.4.L156.B0", "hvc1.2.4.L150.B0", "hvc1.2.4.L123.B0", "vp09.02.51.10", "vp09.02.41.10"];
-
-/** Where the top-level boxes of the file are (ftyp, moov…): the index is read alone, the pictures one by one. */
-async function topBoxes(blob: Blob) {
-  const boxes: { type: string; start: number; size: number }[] = [];
-  let at = 0;
-  while (at + 8 <= blob.size && boxes.length < 64) {
-    const h = new DataView(await blob.slice(at, at + 16).arrayBuffer());
-    let size = h.getUint32(0);
-    const type = String.fromCharCode(h.getUint8(4), h.getUint8(5), h.getUint8(6), h.getUint8(7));
-    if (size === 1) size = Number(h.getBigUint64(8));
-    else if (size === 0) size = blob.size - at;
-    if (size < 8) break;
-    boxes.push({ type, start: at, size });
-    at += size;
-  }
-  return boxes;
-}
 
 /** avcC / hvcC box of the track: the decoder's `description`. */
 function describe(file: ReturnType<typeof createFile>, track: Track): Uint8Array | undefined {
@@ -68,27 +51,9 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
   if (typeof VideoDecoder === "undefined" || typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") return null;
 
   // ---- the index (moov) only, wherever it is in the file
-  const boxes = await topBoxes(file);
-  const moov = boxes.find((b) => b.type === "moov");
-  if (!moov || moov.size > 400 * 1024 * 1024) return null;
-  const mp4 = createFile();
-  let info: Parameters<NonNullable<typeof mp4.onReady>>[0] | null = null;
-  mp4.onReady = (i) => { info = i; };
-  // Read one after the other as if they were side by side (the pictures' places are written in the index itself).
-  const head = await new Blob(boxes.filter((x) => x.type === "ftyp" || x.type === "moov").map((b) => file.slice(b.start, b.start + b.size))).arrayBuffer();
-  mp4.appendBuffer(MP4BoxBuffer.fromArrayBuffer(head, 0), true);
-  mp4.flush();
-  const ready = info as Parameters<NonNullable<typeof mp4.onReady>>[0] | null;
-  const track = ready?.videoTracks?.[0];
-  if (!ready || !track) return null;
-  const samples = (mp4.getTrackById(track.id) as unknown as { samples?: Sample[] }).samples ?? [];
-  if (!samples.length || samples.some((s) => !(s.size > 0))) return null;
-  const scale = track.timescale;
-  let shift = 0; // edit list, as in lib/videoSource
-  for (const e of (track.edits ?? []) as { media_time: number; segment_duration: number }[]) {
-    if (e.media_time === -1) shift -= e.segment_duration / (ready.timescale || 1);
-    else { shift += e.media_time / scale; break; }
-  }
+  const idx = await readIndex(file);
+  if (!idx) return null;
+  const { file: mp4, track, samples, scale, shift } = idx;
   const timeOf = (s: Sample) => s.cts / scale - shift;
 
   // ---- the decoder
@@ -195,12 +160,7 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
   const nap = (ms: number) => new Promise<void>((r) => { const t = setTimeout(() => { wake = null; r(); }, ms); wake = () => { clearTimeout(t); r(); }; });
 
   // The data of the next pictures, read ahead in batches (the file's pictures are interleaved with its sound).
-  const read = (i: number, n: number) => {
-    const batch = work.slice(i, i + n);
-    const lo = batch[0].offset, hi = Math.max(...batch.map((s) => s.offset + s.size));
-    if (hi - lo > 96 * 1024 * 1024) return Promise.all(batch.map((s) => file.slice(s.offset, s.offset + s.size).arrayBuffer().then((b) => new Uint8Array(b))));
-    return file.slice(lo, hi).arrayBuffer().then((buf) => batch.map((s) => new Uint8Array(buf, s.offset - lo, s.size)));
-  };
+  const read = (i: number, n: number) => readSamples(file, work.slice(i, i + n));
   const BATCH = 12;
   let ready_: Uint8Array[] = [], readyAt = 0;
   let next: Promise<Uint8Array[]> | null = read(0, BATCH);
