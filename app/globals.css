@@ -2252,3 +2252,5 @@ details.sec:first-of-type { background-image: none; }
 /* The segment's tools, everywhere: lock, length, then the passage. */
 .video-side .transport .tr-lock { order: -2; }
 .video-side .transport .seg-len { order: -1; }
+/* The version selector shows the version's name only (no "Version" title), everywhere. */
+.ver-pick .ver-k { display: none; }
