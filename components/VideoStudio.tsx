@@ -290,6 +290,7 @@ export default function VideoStudio({
   releaseTitle,
   library,
   libraryPhone,
+  drawOptions,
   lyricsRow,
   onCopyJob,
   onToast,
@@ -328,6 +329,8 @@ export default function VideoStudio({
   library?: ReactNode;
   /** The same on a phone, where the library holds everything of the release (the carousel's lists too). */
   libraryPhone?: ReactNode;
+  /** The draw's options of the Options menu (shared with the carousel's). */
+  drawOptions?: ReactNode;
   /** The release's lyrics, as a row of the library (next to the official audio). */
   lyricsRow?: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
@@ -2758,6 +2761,22 @@ export default function VideoStudio({
           <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
           <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
           <div className="row nowrap head-actions">
+          <div className="slot h-opts"><Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
+            {() => (
+              <div className="stack opts-pop">
+                {drawOptions}
+                {/* Computer: TikTok's zones on the video (a phone has its own button under the picture). */}
+                <div className="stack opts-part desk-only-1000"><span className="label">{t("Preview")}</span>
+                  <label className="check"><input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />{t("Show TikTok interface zones")}</label>
+                </div>
+                <div className="stack opts-part"><span className="label">{t("Export format")}</span>
+                  <label className="field">
+                    <Select className="input" value="mp4" onChange={() => {}}><option value="mp4">MP4</option></Select>
+                  </label>
+                </div>
+              </div>
+            )}
+          </Menu></div>
           <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
           <span className={"badge video-status h-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
           {clips.length > 1 && !exporting && !batch ? (
@@ -3263,12 +3282,6 @@ export default function VideoStudio({
               <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
               <option value="fit-black">{t("Fit whole, black bars")}</option>
             </Select>
-          </div>
-          <div className="row aids-row">
-            <label className="check xs">
-              <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
-              {t("TikTok zones")}
-            </label>
           </div>
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
             onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}

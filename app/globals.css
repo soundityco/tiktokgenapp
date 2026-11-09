@@ -1993,3 +1993,18 @@ details.sec:first-of-type { background-image: none; }
 .video-side .tab-body, .video-side .timeline { grid-template-columns: minmax(0, 1fr); }
 .video-side .tab-body > *, .hook-item > *, .hook-item .row > *, .hook-pick > * { min-width: 0; }
 .hook-item .row .dd, .hook-pick .dd { max-width: 100%; }
+/* The Options menu (both studios): titled parts (Draw, Preview, Export format). */
+.opts-pop { padding: var(--s2) var(--s3); min-width: 280px; gap: var(--s3); }
+.opts-part { gap: 8px; }
+.opts-part + .opts-part { padding-top: var(--s3); background-image: var(--soft-line); background-size: 100% 1px; background-repeat: no-repeat; background-position: top; }
+.head-zones { display: none !important; }
+@media (max-width: 640px) { .desk-only-640 { display: none !important; } }
+@media (max-width: 1000px) { .desk-only-1000 { display: none !important; } }
+/* Video head: the status, then Options at the end of the second line (computer); in "More" on a phone. */
+@media (min-width: 641px) {
+  .video-head .h-status { grid-column: 6 / 9; }
+  .video-head .slot.h-opts { grid-column: 9; grid-row: 2; justify-self: end; }
+}
+@media (max-width: 640px) {
+  .video-head.more .slot.h-opts { display: block; grid-column: 1 / -1; justify-self: end; }
+}
