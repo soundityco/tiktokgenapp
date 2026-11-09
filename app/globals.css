@@ -1858,3 +1858,8 @@ details.sec:first-of-type { background-image: none; }
   .mobile-tabs > .dock-lib { transition: color .42s cubic-bezier(.65,0,.35,1), border-color .2s .34s, scale .12s; }
   .mobile-tabs > .dock-lib.on { transition: color .42s cubic-bezier(.65,0,.35,1), border-color 0s, scale .12s; }
 }
+@media (max-width: 1000px) {
+  /* The library's square keeps the same box open or not (an older tab rule padded it on the right once open,
+     nudging its icon): only its colours change. */
+  .mobile-tabs > button.dock-lib, .mobile-tabs > button.dock-lib.on { padding: 0 !important; gap: 0 !important; }
+}
