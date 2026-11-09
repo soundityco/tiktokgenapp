@@ -71,7 +71,12 @@ function placeMissed(out: LyricWord[], words: { w: string; line: number }[], nex
   const need = MIN_MISSED * words.length;
   let a = prev.e;
   if (nextS - a < need) {
-    const a2 = Math.max(prev.s + 0.1, nextS - need);
+    // No room: the model heard the previous word and these as one ("vide de" heard "vide"). Its time is shared
+    // by syllables ("vi-de" two shares, "de" one), each word keeping at least 0.1 s.
+    const span = Math.max(prev.e, nextS) - prev.s;
+    const sp = syllables(prev.w), sw = words.reduce((n, x) => n + syllables(x.w), 0);
+    const share = Math.max(prev.s + 0.1, Math.min(nextS - need, prev.s + (span * sp) / (sp + sw)));
+    const a2 = Math.max(prev.s + 0.1, Math.min(share, nextS - 0.1 * words.length));
     if (a2 < a) { prev.e = a2; a = a2; }
   }
   const b = Math.max(nextS, a + 0.05 * words.length);

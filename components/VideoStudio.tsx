@@ -68,7 +68,7 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
 };
 
 /** The way the lyrics are placed on the audio: raised when it changes, so lyrics placed before are placed again once. */
-const LYRICS_ALIGN_V = 2;
+const LYRICS_ALIGN_V = 3;
 
 /** What each version of a video keeps for itself (the rest is the video's: camera file, sync, framing, grade). */
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "hooks", "hookTheme", "hookPoolId", "showHooks", "hookStyle",

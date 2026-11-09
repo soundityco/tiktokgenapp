@@ -292,3 +292,15 @@ describe("a line retimed by hand, placed again with a word it did not have", () 
     expect(buildCues(out, "phrase", { lineChars: 60 }).map((c) => c.text)).toEqual(["tu as fait le vide de tout ce mal"]);
   });
 });
+
+describe("two written words heard as one", () => {
+  it("“vide de” heard as one long “vide”: its time is shared by syllables", () => {
+    const heard = [w("tu", 0, 0.3), w("as", 0.3, 0.6), w("fait", 0.6, 0.9), w("le", 0.9, 1.2), w("vide", 1.2, 2.1), w("tout", 2.1, 2.4), w("ce", 2.4, 2.7), w("mal", 2.7, 3)];
+    const r = alignSong("Tu as fait le vide de tout ce mal", heard)!;
+    const vide = r.words.find((x) => x.w === "vide")!, de = r.words.find((x) => x.w === "de")!;
+    expect(r.words.map((x) => x.w).join(" ")).toBe("Tu as fait le vide de tout ce mal");
+    expect(vide.e).toBeCloseTo(1.8, 2);
+    expect(de.s).toBeCloseTo(1.8, 2);
+    expect(de.e).toBeCloseTo(2.1, 2);
+  });
+});
