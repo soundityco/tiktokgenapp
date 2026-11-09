@@ -262,7 +262,8 @@ export default function Studio({ userName }: { userName: string }) {
    */
   const adoptOutsideFiles = async () => {
     const cur = wsRef.current;
-    if (!cur || cur.driveFilesV1 || isDemo() || !(await canWriteDrive())) return;
+    if (!cur || cur.driveFilesV1 || isDemo()) { console.info("[drive] adopt: nothing to do", cur?.driveFilesV1 ? "(done before)" : ""); return; }
+    if (!(await canWriteDrive())) { console.info("[drive] adopt: no write access to the Drive"); return; }
     const todo = new Map<string, { name: string; path: string[]; kind: string }>();
     const isDriveId = (id?: string) => !!id && /^[\w-]{20,}$/.test(id);
     for (const pool of cur.picPools) for (const pic of pool.pics) if (isDriveId(pic.id) && !todo.has(pic.id)) todo.set(pic.id, { name: pic.name, path: listPath(pool), kind: "photo" });
@@ -355,7 +356,7 @@ export default function Studio({ userName }: { userName: string }) {
         if (!release) return null;
         return kind === "audio" || f.mimeType.startsWith("audio/") ? DRIVE_PATHS.audios(release) : DRIVE_PATHS.videos(release);
       });
-    }).then((n) => { if (n) console.info(`[drive] ${n} files tidied into the Rollout tree`); })
+    }).then((n) => { console.info(`[drive] tree ready${n ? `, ${n} files tidied` : ""}`); })
       .then(() => adoptLinkedFolders())
       .then(() => adoptOutsideFiles())
       .catch((e) => console.warn("[drive] tree", e));
