@@ -677,7 +677,8 @@ export default function VideoStudio({
   });
   const [snap, setSnap] = useState({ v: false, h: false });
   const aidsRef = useRef({ zones: false, guideV: false, guideH: false });
-  aidsRef.current = { zones: aids.zones && settings.format !== "16:9", guideV: aids.guides && snap.v, guideH: aids.guides && snap.h };
+  // The alignment guides always show while dragging (as on every social app): only the zones can be turned off.
+  aidsRef.current = { zones: aids.zones && settings.format !== "16:9", guideV: snap.v, guideH: snap.h };
   const drawAt = useCallback((time: number) => {
     const c = canvasRef.current;
     const g = c?.getContext("2d");
@@ -2405,7 +2406,6 @@ export default function VideoStudio({
     return () => mq.removeEventListener("change", pick);
   }, [active]);
   const dockDrag = useRef<{ was: boolean } | null>(null);
-  const [aidsOpen, setAidsOpen] = useState(false);
   // The film strip of the dock's timeline: a few small pictures of the take along the segment, made in the
   // background from the file already open (a hidden player of its own, never the one on screen).
   const [strip, setStrip] = useState<string[]>([]);
@@ -2755,29 +2755,18 @@ export default function VideoStudio({
                 }} />
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
-              onPointerDown={(e) => { setAidsOpen(false); cvDown(e); }} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
-            {/* Phone: the preview's aids (TikTok zones, alignment guides) on the picture itself, on both pages. */}
-            {videoBlob && (
-              <>
-                <button className={"adjust-open video-aids" + (aids.zones || aids.guides ? " set" : "")} aria-label={t("Guides on the preview")} aria-expanded={aidsOpen}
-                  onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAidsOpen((v) => !v); }}>
-                  <Icon name={aids.zones || aids.guides ? "eye" : "eye-off"} size={15} />
-                </button>
-                {aidsOpen && (
-                  <div className="aids-pop" onPointerDown={(e) => e.stopPropagation()}>
-                    <label className="check xs">
-                      <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
-                      {t("TikTok zones")}
-                    </label>
-                    <label className="check xs">
-                      <input type="checkbox" checked={aids.guides} onChange={(e) => setAids({ guides: e.target.checked })} />
-                      {t("Alignment guides")}
-                    </label>
-                  </div>
-                )}
-              </>
-            )}
+              onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
           </div>
+          {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
+          {videoBlob && (
+            <div className="deck-bar video-bar">
+              <span /><span />
+              <button className={"deck-zones" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
+                onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
+                <Icon name={aids.zones && settings.format !== "16:9" ? "eye" : "eye-off"} size={15} />{t("Zones")}
+              </button>
+            </div>
+          )}
           {/* What the video shows (not what is edited: that is the tabs beside): eyes, on or off. */}
           <div className="row shown-on">
             <span className="label">{t("Shown")}</span>
@@ -3236,10 +3225,6 @@ export default function VideoStudio({
             <label className="check xs">
               <input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />
               {t("TikTok zones")}
-            </label>
-            <label className="check xs">
-              <input type="checkbox" checked={aids.guides} onChange={(e) => setAids({ guides: e.target.checked })} />
-              {t("Alignment guides")}
             </label>
           </div>
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
