@@ -2277,3 +2277,30 @@ details.sec:first-of-type { background-image: none; }
   .app .desk-tool { display: none !important; }
   .video-side .timeline > .transport { margin-top: 0; }
 }
+/* The lock and the zoom's −, + and Fit: one format wherever they are (32 px, thin border, no fill). */
+.video-side .tr-lock, .video-side .wave-zoom .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); border-radius: var(--r); }
+.video-side .tr-lock, .video-side .wave-zoom .btn.icon { width: 32px; padding: 0; justify-content: center; }
+.video-side .tr-lock.on { border-color: var(--text); color: var(--text); }
+.video-side .wave-zoom .btn:disabled { opacity: .4; }
+/* "New version", the last line of the versions' list. */
+.menu .ver-new { color: var(--text); }
+.tr-sync { display: inline-flex; align-items: center; gap: 6px; }
+/* Computer: the segment's settings above the tracks — lock, sync, length, passage — and the zoom on the right;
+   then the tracks, then version · take. */
+@media (min-width: 1001px) {
+  .video-side .timeline > .transport { order: 2; margin-top: 0; }
+  .video-side .timeline > .seg-versions { order: 6; margin-top: 12px; }
+  .video-side .transport .tr-lock { order: -5; }
+  .video-side .transport .tr-sync { order: -4; }
+  .video-side .transport .seg-len { order: -3; }
+  .video-side .transport .tr-range, .video-side .transport .tr-time { order: -2; }
+  .video-side .transport .grow { order: 5; }
+  .video-side .transport .tr-zoom { order: 10; }
+}
+@media (min-width: 1001px) {
+  /* One line: the sync as its icon (its menu says what it does), the zoom's short label. */
+  .video-side .transport { flex-wrap: nowrap; }
+  .video-side .transport .tr-sync-lbl { display: none; }
+  .video-side .transport .tr-zoom .lbl-long { display: none; }
+  .video-side .transport .tr-zoom .lbl-short { display: inline; }
+}

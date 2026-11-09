@@ -3218,6 +3218,7 @@ export default function VideoStudio({
                   </Select>
                   {lockEl("desk-tool")}
                   <span className="grow" />
+                  <span className="tr-sync">
                   {!syncBusy && !genBusy && firstSync ? (
                     <button className="btn sm primary" onClick={() => void syncAll()}>
                       <Icon name="refresh" size={14} />{t("Sync lyrics and video")}
@@ -3253,54 +3254,54 @@ export default function VideoStudio({
                       {genBusy && <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>}
                     </>
                   )}
+                  </span>
+                  {zoomEl("desk-tool tr-zoom")}
                 </div>
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
-                  {/* One version only: it is shown the same way (Version A, its passage), a click names it (nothing to pick). */}
-                  {versions.length < 2 && (renaming === "solo" ? (
-                    <input className="input sm ver-name ver-solo" autoFocus defaultValue={versions[0]?.name ?? ""} placeholder={t("Version {x}", { x: "A" })} aria-label={t("Rename")}
-                      onBlur={(e) => nameSolo(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") nameSolo(e.currentTarget.value); if (e.key === "Escape") setRenaming(null); }} />
-                  ) : (
-                    <button className="btn sm ver-pick" onClick={() => setRenaming("solo")} title={t("Rename")}>
-                      {versions[0] ? versionName(versions[0], 0) : t("Version {x}", { x: "A" })}
-                      <span className="mono xs muted">{mmss(settings.crop.start)}–{mmss(settings.crop.start + settings.crop.duration)}</span>
-                      <Icon name="pencil" size={11} />
-                    </button>
-                  ))}
-                  {versions.length > 1 && (() => {
+                  {/* The version shown, and its list: show one, rename (pencil), delete (bin), and a new one at the end.
+                      With no versions yet, the video is "Version A". */}
+                  {(() => {
+                    const lines: { v: VideoVersion | null; i: number }[] = versions.length ? versions.map((v, i) => ({ v, i })) : [{ v: null, i: 0 }];
                     const at = Math.max(0, versions.findIndex((v) => v.id === settings.activeVersion));
                     const shown = versions[at];
                     return (
                       <Menu float left trigger={(open, toggle) => (
                         <button className={"btn sm ver-pick" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={() => { setRenaming(null); toggle(); }}>
-                          <span className="ver-k">{t("Version")}</span>{versionName(shown, at)}
+                          {shown ? versionName(shown, at) : t("Version {x}", { x: "A" })}
                           <span className="mono xs muted">{mmss(settings.crop.start)}–{mmss(settings.crop.start + settings.crop.duration)}</span>
                           <Icon name="chevron" size={12} />
                         </button>
                       )}>
                         {(close) => (<div className="ver-list">
-                          {versions.map((v, i) => {
-                            const on = v.id === settings.activeVersion;
-                            const crop = on ? settings.crop : v.v.crop;
+                          {lines.map(({ v, i }) => {
+                            const id = v?.id ?? "solo";
+                            const on = !v || v.id === settings.activeVersion;
+                            const crop = on ? settings.crop : v?.v.crop;
+                            const label = v ? versionName(v, i) : t("Version {x}", { x: "A" });
                             return (
-                              <div key={v.id} className={"ver-line" + (on ? " on" : "")}>
-                                {renaming === v.id ? (
-                                  <input className="input sm ver-name" autoFocus defaultValue={v.name ?? ""} placeholder={versionName(v, i)} aria-label={t("Rename")}
-                                    onBlur={(e) => { renameVersion(v.id, e.target.value); setRenaming(null); }}
-                                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setRenaming(null); }} />
+                              <div key={id} className={"ver-line" + (on ? " on" : "")}>
+                                {renaming === id ? (
+                                  <input className="input sm ver-name" autoFocus defaultValue={v?.name ?? ""} placeholder={label} aria-label={t("Rename")}
+                                    onBlur={(e) => (v ? (renameVersion(v.id, e.target.value), setRenaming(null)) : nameSolo(e.target.value))}
+                                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") { if (v) { renameVersion(v.id, e.currentTarget.value); setRenaming(null); } else nameSolo(e.currentTarget.value); } if (e.key === "Escape") setRenaming(null); }} />
                                 ) : (
-                                  <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); switchVersion(v.id); }}>
-                                    <Icon name="check" size={12} />{versionName(v, i)}
+                                  <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); if (v) switchVersion(v.id); }}>
+                                    <Icon name="check" size={12} />{label}
                                     {crop && <span className="mono xs">{mmss(crop.start)}–{mmss(crop.start + crop.duration)}</span>}
                                   </button>
                                 )}
-                                <button className="btn icon sm quiet" aria-label={t("Rename")} title={t("Rename")} onClick={() => setRenaming(renaming === v.id ? null : v.id)}><Icon name="pencil" size={12} /></button>
-                                <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { removeVersion(v.id); if (versions.length <= 2) close(); }}><Icon name="trash" size={12} /></button>
+                                <button className="btn icon sm quiet" aria-label={t("Rename")} title={t("Rename")} onClick={() => setRenaming(renaming === id ? null : id)}><Icon name="pencil" size={12} /></button>
+                                {versions.length > 1 && <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { removeVersion(id); if (versions.length <= 2) close(); }}><Icon name="trash" size={12} /></button>}
                               </div>
                             );
                           })}
+                          <div className="sep" />
+                          <button className="ver-new" onClick={() => { close(); addVersion(); }}
+                            title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
+                            <Icon name="plus" size={12} />{t("New version")}
+                          </button>
                         </div>)}
                       </Menu>
                     );
@@ -3338,12 +3339,6 @@ export default function VideoStudio({
                       </span>
                     );
                   })()}
-                  <button className="btn sm quiet ver-add" onClick={addVersion} aria-label={t("New version")}
-                    title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
-                    <Icon name="plus" size={12} /><span className="ver-add-l">{t("New version")}</span>
-                  </button>
-                  <span className="grow" />
-                  {zoomEl("desk-tool")}
                 </div>
                 {/* Phone: the lock and the zoom above the tracks they act on. */}
                 <div className="row seg-tools">
