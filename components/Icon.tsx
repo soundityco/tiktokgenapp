@@ -18,6 +18,8 @@ const P: Record<string, string> = {
   folder: "M3 7.5A2 2 0 015 5.5h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z",
   list: "M4 6.5h16M4 12h10M4 17.5h13",
   sparkle: "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM18.5 16l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z",
+  // A pencil (the Create page: making the post).
+  pencil: "M15.2 4.8a2 2 0 012.8 0l1.2 1.2a2 2 0 010 2.8L9 19l-4.5 1 1-4.5zM13.5 6.5l4 4",
   sliders: "M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M9 14.5v5",
   type: "M5 6.5V4.5h14v2M12 4.5v15M9 19.5h6",
   // Same frame as "film" (the two studios side by side): a photo, a sun and a hill.
@@ -42,6 +44,14 @@ export default function Icon({ name, size = 16 }: { name: keyof typeof P | "more
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M16.6 5.82A4.28 4.28 0 0 1 15.56 3h-3.09v12.4a2.59 2.59 0 1 1-2.59-2.59c.27 0 .53.04.77.12V9.77a5.68 5.68 0 0 0-.77-.05 5.68 5.68 0 1 0 5.68 5.68V9.01a7.33 7.33 0 0 0 4.28 1.37V7.29a4.28 4.28 0 0 1-3.26-1.47z" />
+      </svg>
+    );
+  }
+  if (name === "sparkle-fill") {
+    // The Generate button's stars, solid (the outline one stays for the rest).
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM18.5 16l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
       </svg>
     );
   }

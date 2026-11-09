@@ -1307,7 +1307,7 @@ export default function Studio({ userName }: { userName: string }) {
   /** Generate and its warnings badge: in the carousel's head on a computer; floating over the dock on a phone. */
   const genRow = project && (
                 <div className="row nowrap gen-row">
-                  <button className="btn primary" onClick={generate} title={t("Draws the texts and photos of every slide again. Shortcut: G")}><Icon name="sparkle" />{t("Generate")}</button>
+                  <button className="btn primary gen-btn" onClick={generate} title={t("Draws the texts and photos of every slide again. Shortcut: G")}><Icon name="sparkle-fill" />{t("Generate")}</button>
                   {/* What to check before generating: a small badge beside it, the list on a click. */}
                   {warnings.length > 0 && (
                     <Menu float left trigger={(open, toggle) => (
@@ -1678,7 +1678,7 @@ export default function Studio({ userName }: { userName: string }) {
         {/* Create and Style share one white pill that slides from one to the other (the desktop studio switch's
             move: a transform only, same time and curve, the labels' colour along); off on the library. */}
         <div className="dock-pair" data-on={mobileTab === "slides" ? "0" : mobileTab === "style" ? "1" : "none"}>
-          <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{/* One word in both studios: the dock keeps its exact layout when switching. */}{t("Create")}</span></button>
+          <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="pencil" size={18} /><span className="tab-name">{/* One word in both studios: the dock keeps its exact layout when switching. */}{t("Create")}</span></button>
           <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} aria-label={t("Style")} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         </div>
         <span className="mobile-tabs-sep" aria-hidden />

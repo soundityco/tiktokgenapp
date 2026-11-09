@@ -1918,3 +1918,17 @@ details.sec:first-of-type { background-image: none; }
 }
 @keyframes holo-drift { from { background-position: 50% 50%, 0% 50%; } to { background-position: 50% 50%, 100% 50%; } }
 @media (prefers-reduced-motion: reduce) { .gen-fab .btn.primary { animation: none; } }
+/* The video studio's side columns never grow past their width (a long list or file name ends with "…"), at every
+   size: their one track can shrink, and the library's shared lists (inside display: contents wrappers) too. */
+.video-shell > .col.side { grid-template-columns: minmax(0, 1fr); }
+.lib-phone > *, .lib-desk > * { min-width: 0; max-width: 100%; }
+.video-col-l .item, .video-col-l .item-name { min-width: 0; }
+.video-col-l .item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Generate is the same everywhere (phone and computer): the pastel holographic button, dark text, solid stars. */
+.btn.primary.gen-btn { color: var(--on-accent); border: 0; text-shadow: none;
+  background: radial-gradient(120% 90% at 50% 125%, #fff 0%, rgba(255,255,255,.92) 38%, rgba(255,255,255,0) 72%), var(--grad-holo);
+  background-size: 100% 100%, 220% 100%; background-position: 50% 50%, 0% 50%; animation: holo-drift 10s ease-in-out infinite alternate;
+  box-shadow: 0 6px 20px rgba(199,205,248,.18), inset 0 1px 0 rgba(255,255,255,.7); }
+.btn.primary.gen-btn:hover:not(:disabled) { filter: brightness(1.04); }
+.btn.primary.gen-btn::after { display: none; }
+@media (prefers-reduced-motion: reduce) { .btn.primary.gen-btn { animation: none; } }
