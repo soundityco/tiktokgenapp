@@ -17,6 +17,7 @@ import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
+import { fastWorkCopy } from "@/lib/fastCopy";
 import { convertSegment, copyPlanFor, cropFor, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
@@ -945,7 +946,19 @@ export default function VideoStudio({
     try {
       const plan = copyPlanFor(cur.source);
       const name = driveName(t("copy"));
-      const copy = await makeWorkCopy(blob, plan, from, to, (p) => setCopyJob({ step: "make", p, ...job }), ac.signal);
+      // The device's video chip first (seconds), ffmpeg when it cannot (minutes).
+      const t0 = performance.now();
+      const onP = (p: number) => setCopyJob({ step: "make", p, ...job });
+      let copy: Blob | null = null, chip = false;
+      try {
+        const fast = await fastWorkCopy(blob, plan, from, to, onP, ac.signal);
+        if (fast) { copy = fast.blob; chip = true; }
+      } catch (e) {
+        if (ac.signal.aborted) throw e;
+        console.warn("[copy] video chip failed, ffmpeg instead", e);
+      }
+      copy ??= await makeWorkCopy(blob, plan, from, to, onP, ac.signal);
+      const tMade = performance.now();
       setCopyJob({ step: "send", p: 0, ...job });
       const id = await uploadToDrive(copy, name, (p) => setCopyJob({ step: "send", p, ...job }), ac.signal, "video/mp4",
         { tktgen: "copy", clip: clipId, project: project.id, from: from.toFixed(3), to: to.toFixed(3), of: String(blob.size), bits: plan.tenBit ? "10" : "8" },
@@ -961,7 +974,11 @@ export default function VideoStudio({
       onSaveNow();
       if (old && old !== id) void deleteDriveFile(old);
       setCopyErr(null);
-      onToast?.(t("Drive copy updated: {video}", { video: job.label }));
+      const secs = (ms: number) => String(Math.max(1, Math.round(ms / 1000)));
+      onToast?.(t("Drive copy updated: {video} (made in {make} s by {how}, sent in {send} s, {size} MB)", {
+        video: job.label, make: secs(tMade - t0), send: secs(performance.now() - tMade),
+        how: chip ? t("the video chip") : "ffmpeg", size: String(Math.round(copy.size / 1e6)),
+      }));
     } catch (e) {
       if (!ac.signal.aborted) {
         console.warn("[copy] not made", e);

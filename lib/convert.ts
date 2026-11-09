@@ -209,6 +209,15 @@ export function copyArgs(plan: CopyPlan, from: number, to: number): string[] {
  * of its own, so the preview's pictures and an export never wait behind it; that engine goes when it is done.
  */
 export function makeWorkCopy(file: Blob, plan: CopyPlan, from: number, to: number, onProgress: (p: number) => void, signal: AbortSignal): Promise<Blob> {
+  return ffmpegAlone(file, copyArgs(plan, from, to), "copy.mp4", Math.max(0.1, to), onProgress, signal)
+    .then((data) => new Blob([data as BlobPart], { type: "video/mp4" }));
+}
+
+/**
+ * One ffmpeg job on an engine of its own (the preview's pictures and an export never wait behind it); that engine
+ * goes when it is done. Resolves with the bytes of `output`; `onProgress` from 0 to 1 over `duration` seconds.
+ */
+export function ffmpegAlone(file: Blob, args: string[], output: string, duration: number, onProgress: (p: number) => void, signal: AbortSignal): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
     const w = new Worker("/ffmpeg/worker.js", { type: "module" });
@@ -216,15 +225,15 @@ export function makeWorkCopy(file: Blob, plan: CopyPlan, from: number, to: numbe
     const id = 1;
     const onMsg = (e: MessageEvent) => {
       const m = e.data;
-      if (m.type === "progress") onProgress(m.p);
-      else if (m.type === "done") { cleanup(); onProgress(1); resolve(new Blob([m.data], { type: "video/mp4" })); }
-      else if (m.type === "error") { cleanup(); console.warn("[copy] ffmpeg log:\n" + (m.log ?? []).join("\n")); reject(new Error(m.message)); }
+      if (m.type === "progress" && m.step === "convert") onProgress(m.p);
+      else if (m.type === "done") { cleanup(); onProgress(1); resolve(m.data); }
+      else if (m.type === "error") { cleanup(); console.warn(`[ffmpeg] ${output}:\n` + (m.log ?? []).join("\n")); reject(new Error(m.message)); }
     };
     const onErr = (e: ErrorEvent) => { cleanup(); reject(new Error(e.message || "converter could not start")); };
     const onAbort = () => { cleanup(); reject(new DOMException("aborted", "AbortError")); };
     w.addEventListener("message", onMsg);
     w.addEventListener("error", onErr);
     signal.addEventListener("abort", onAbort, { once: true });
-    w.postMessage({ type: "convert", id, file, files: [], duration: Math.max(0.1, to), args: copyArgs(plan, from, to), output: "copy.mp4" });
+    w.postMessage({ type: "convert", id, file, files: [], duration, args, output });
   });
 }
