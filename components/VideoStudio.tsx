@@ -2520,6 +2520,28 @@ export default function VideoStudio({
     setHead(round2(settings.crop.start + (edge === "from" ? clamp(h.from + d, 0, to - 0.3) : Math.max(h.from, clamp(to + d, h.from + 0.3, segLen) - 0.3))));
   };
   const current = activeCue(cues, head);
+  // Phone: a word picked on the timeline (or the timeline let go) brings its line of the lyrics list to the middle of
+  // the screen (to its bottom near the end), once the finger is off, never while playing.
+  const followList = useRef(false);
+  useEffect(() => {
+    const down = (e: PointerEvent) => { if ((e.target as HTMLElement).closest?.(".wave, .lyric-track, .hook-track, .dp-track")) followList.current = true; };
+    document.addEventListener("pointerdown", down, true);
+    return () => document.removeEventListener("pointerdown", down, true);
+  }, []);
+  const currentIdx = current ? cues.indexOf(current) : -1;
+  useEffect(() => {
+    if (!followList.current || playing || currentIdx < 0 || !matchMedia(PHONE_QUERY).matches) return;
+    let timer = 0;
+    const go = () => {
+      // Still dragging: later.
+      if (scrubRef.current || dragWave.current || dockDrag.current) { timer = window.setTimeout(go, 200); return; }
+      followList.current = false;
+      const row = document.querySelectorAll<HTMLElement>(".lyric-timing .cue-row")[currentIdx];
+      if (row?.offsetParent) row.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
+    timer = window.setTimeout(go, 250);
+    return () => clearTimeout(timer);
+  }, [currentIdx, head, playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Retime one caption by 0.1 s: "start" moves the whole line, "end" only when it leaves the screen. Never over its neighbours. */
   // Lyrics saved out of order by an older version of the ± buttons: put back in the order of the text, once.
