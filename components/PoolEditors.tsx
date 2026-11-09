@@ -236,7 +236,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   );
 }
 
-export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void; onBrowse: () => void; onSync: (manual: boolean) => void;
+export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void; onSync: (manual: boolean) => void;
   /** Photos dropped or picked: sent to the list's Drive folder (Rollout / Photos / <list>) and added. */
   onUpload: (files: File[]) => void;
   /** Photos being sent (done / total), while it lasts. */

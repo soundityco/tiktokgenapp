@@ -443,6 +443,99 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
   folderPath?: string[]): Promise<string> {
   if (isDemo()) throw new Error("Demo mode: nothing is saved to your Drive.");
   const folder = folderPath ? await driveFolder(folderPath) : await appFolder();
+  // Already in this folder (the same bytes)? That file is used: never a twin of a photo, an audio, a LUT…
+  const sum = blob.size <= SUM_LIMIT ? (await import("./md5")).md5(new Uint8Array(await blob.arrayBuffer())) : null;
+  const same = await sameInFolder(folder, blob, name, sum);
+  if (same) { onProgress(1); return same; }
+  const id = await sendFile(blob, name, onProgress, signal, mime, appProperties, folder);
+  void filesIn(folder).then((l) => l.push({ id, name, md5Checksum: sum ?? undefined, size: String(blob.size) })).catch(() => {});
+  return id;
+}
+
+/** Up to this size the bytes are compared (MD5, as Drive keeps it); above (camera files), the name and the size. */
+const SUM_LIMIT = 160 * 1024 * 1024;
+type Listed = { id: string; name: string; md5Checksum?: string; size?: string };
+const folderFiles = new Map<string, { at: number; files: Promise<Listed[]> }>();
+/** The files of a folder of the tree (kept for a few minutes: a batch of photos asks once). */
+function filesIn(folder: string): Promise<Listed[]> {
+  const known = folderFiles.get(folder);
+  if (known && Date.now() - known.at < 5 * 60_000) return known.files;
+  const files = (async () => {
+    const out: Listed[] = [];
+    let page: string | undefined;
+    do {
+      const params = new URLSearchParams({ q: `'${folder}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`, fields: "nextPageToken, files(id,name,md5Checksum,size)", pageSize: "1000" });
+      if (page) params.set("pageToken", page);
+      const j = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
+      out.push(...(j.files ?? []));
+      page = j.nextPageToken;
+    } while (page);
+    return out;
+  })();
+  files.catch(() => folderFiles.delete(folder));
+  folderFiles.set(folder, { at: Date.now(), files });
+  return files;
+}
+async function sameInFolder(folder: string, blob: Blob, name: string, sum: string | null): Promise<string | null> {
+  try {
+    const files = await filesIn(folder);
+    const hit = sum ? files.find((f) => f.md5Checksum === sum) : files.find((f) => f.name === name && Number(f.size) === blob.size);
+    return hit?.id ?? null;
+  } catch { return null; }
+}
+
+/** Put a file in the bin of the user's Drive (it can be taken back for 30 days). Never throws. */
+export async function trashDriveFile(id: string): Promise<void> {
+  if (isDemo()) return;
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=id`, {
+      method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }),
+    });
+  } catch (e) { console.warn("[drive] trash failed", e); }
+}
+
+/**
+ * Twins in the Rollout tree: folders of the same name side by side are merged (at every level), and files with the
+ * same bytes in the same folder are found. For each group of files, the one to keep (one the workspace uses, else
+ * the oldest) and the others, to point to the kept one then put in the bin (by the caller).
+ */
+export async function findDriveTwins(isUsed: (id: string) => boolean): Promise<{ merged: number; twins: { keep: string; drop: string[] }[] }> {
+  const twins: { keep: string; drop: string[] }[] = [];
+  let merged = 0;
+  if (isDemo()) return { merged, twins };
+  const folders = [await appFolder()];
+  for (let i = 0; i < folders.length && i < 800; i++) {
+    const kids: (Listed & { mimeType: string })[] = [];
+    let page: string | undefined;
+    do {
+      const params = new URLSearchParams({ q: `'${folders[i]}' in parents and trashed = false`, fields: "nextPageToken, files(id,name,mimeType,md5Checksum,size)", orderBy: "createdTime", pageSize: "1000" });
+      if (page) params.set("pageToken", page);
+      const j = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
+      kids.push(...(j.files ?? []));
+      page = j.nextPageToken;
+    } while (page);
+    const byName = new Map<string, string[]>();
+    for (const k of kids) if (k.mimeType === "application/vnd.google-apps.folder") byName.set(k.name, [...(byName.get(k.name) ?? []), k.id]);
+    for (const ids of byName.values()) {
+      if (ids.length > 1 && await mergeFolders(ids[0], ids.slice(1))) merged += ids.length - 1;
+      folders.push(ids[0]);
+    }
+    // A merge just moved files into a kept folder: it is listed after, with them.
+    const bySum = new Map<string, Listed[]>();
+    for (const k of kids) if (k.mimeType !== "application/vnd.google-apps.folder" && k.md5Checksum) {
+      const key = `${k.md5Checksum}:${k.size}`;
+      bySum.set(key, [...(bySum.get(key) ?? []), k]);
+    }
+    for (const g of bySum.values()) if (g.length > 1) {
+      const keep = g.find((f) => isUsed(f.id)) ?? g[0];
+      twins.push({ keep: keep.id, drop: g.filter((f) => f !== keep).map((f) => f.id) });
+    }
+  }
+  return { merged, twins };
+}
+
+async function sendFile(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal, mime: string | undefined,
+  appProperties: Record<string, string> | undefined, folder: string): Promise<string> {
   const type = mime || blob.type || "video/mp4";
   const start = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
     method: "POST",

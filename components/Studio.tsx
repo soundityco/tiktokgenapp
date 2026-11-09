@@ -4,7 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, copyToDriveFolder, isAppFile, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, copyToDriveFolder, findDriveTwins, isAppFile, trashDriveFile, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
@@ -19,7 +19,6 @@ import LyricsEditor from "./LyricsEditor";
 import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf, sungOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
 import type { GenSlide, PicEdit, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
-import DriveBrowser from "./DriveBrowser";
 import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
 import Inspector from "./Inspector";
@@ -57,7 +56,6 @@ type CarPart = "text" | "photo" | "position" | "presets";
 type PreflightItem = { key: string; params?: Record<string, string | number> };
 type Overlay =
   | null
-  | { k: "drive"; poolId: string }
   | { k: "import"; poolId: string | null; source?: "tiktok" }
   | { k: "lyrics" }
   | { k: "newPool"; kind: "text" | "photos"; textKind?: TextPool["kind"] }
@@ -301,6 +299,39 @@ export default function Studio({ userName }: { userName: string }) {
     if (map.size) say(t("{n} files from your Drive copied into Rollout", { n: map.size }));
     console.info(`[drive] adopt: ${ids.length} checked, ${map.size} copied, ${failed} failed`);
   };
+  /**
+   * Twins in the Rollout tree (two devices, an older version of the app…), looked for once a day on this device:
+   * folders of the same name merged, files with the same bytes in one folder kept once (the workspace then points
+   * to the one kept, the others go to the Drive's bin, where they can be taken back for 30 days).
+   */
+  const tidyTwins = async () => {
+    const KEY = "tktgen-drive-twins";
+    let last = 0;
+    try { last = Number(localStorage.getItem(KEY) ?? 0); } catch { /* private mode */ }
+    if (!wsRef.current || isDemo() || Date.now() - last < 24 * 3600_000 || !(await canWriteDrive())) return;
+    const used = JSON.stringify(wsRef.current);
+    const { merged, twins } = await findDriveTwins((id) => used.includes(`"${id}"`));
+    const drops = twins.reduce((n, g) => n + g.drop.length, 0);
+    if (drops) {
+      const now = wsRef.current;
+      if (!now) return;
+      let json = JSON.stringify(now);
+      for (const g of twins) for (const d of g.drop) json = json.split(`"${d}"`).join(`"${g.keep}"`);
+      const next: Workspace = JSON.parse(json);
+      // A list that held two twins now holds the same photo twice: once.
+      next.picPools = next.picPools.map((p) => {
+        const seen = new Set<string>();
+        const pics = p.pics.filter((x) => (seen.has(x.id) ? false : (seen.add(x.id), true)));
+        return pics.length === p.pics.length ? p : { ...p, pics };
+      });
+      apply(next, false);
+      await flushSave();
+      for (const g of twins) for (const d of g.drop) await trashDriveFile(d);
+    }
+    try { localStorage.setItem(KEY, String(Date.now())); } catch { /* private mode */ }
+    console.info(`[drive] twins: ${merged} folders merged, ${drops} files in double put in the bin`);
+    if (merged || drops) say(t("Drive tidied: {n} duplicates removed (in the Drive's bin for 30 days)", { n: merged + drops }));
+  };
   // Each photo keeps its own edits (colour, framing): whatever is changed on a slide is remembered for its photo.
   useEffect(() => {
     const cur = wsRef.current;
@@ -359,6 +390,7 @@ export default function Studio({ userName }: { userName: string }) {
     }).then((n) => { console.info(`[drive] tree ready${n ? `, ${n} files tidied` : ""}`); })
       .then(() => adoptLinkedFolders())
       .then(() => adoptOutsideFiles())
+      .then(() => tidyTwins())
       .catch((e) => console.warn("[drive] tree", e));
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // The header's height (phone: the Style page holds the preview right under it).
@@ -1717,6 +1749,7 @@ export default function Studio({ userName }: { userName: string }) {
               return hook;
             }}
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
+            audioUsedElsewhere={(id) => !!wsRef.current?.projects.some((p) => p.id !== project.id && p.audioDriveId === id)}
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
             onCopyJob={setCopyJob}
@@ -1905,7 +1938,7 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {edPics && (
         <PicPoolEditor pool={edPics} onClose={() => setEditor(null)} onDelete={() => askDeletePool("photos", edPics.id)}
-          onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))} onBrowse={() => setOverlay({ k: "drive", poolId: edPics.id })}
+          onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))}
           onSync={(manual) => void syncDrive(edPics.id, manual)}
           onUpload={(files) => void uploadToList(edPics.id, files)} uploading={picUpload?.pool === edPics.id ? picUpload : null}
           onMoved={(from, to) => void moveDriveFolder(listPath(from), listPath(to))}
@@ -1914,21 +1947,6 @@ export default function Studio({ userName }: { userName: string }) {
           linkedFolders={(edPics.folders ?? []).map((f) => ({ name: f.name, href: `https://drive.google.com/drive/folders/${f.id}` }))} />
       )}
 
-      {overlay?.k === "drive" && (
-        <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[], toAll: boolean) => {
-          const ids = new Set<string>([overlay.poolId]);
-          if (toAll) project.slides.forEach((s) => s.picPoolId && ids.add(s.picPoolId));
-          upd((w) => ({
-            ...w,
-            picPools: w.picPools.map((x) => {
-              if (!ids.has(x.id)) return x;
-              const have = new Set(x.pics.map((y) => y.id));
-              return { ...x, pics: [...x.pics, ...pics.filter((y) => !have.has(y.id))] };
-            }),
-          }));
-          say(ids.size > 1 ? t("{n} photos added to {m} lists", { n: pics.length, m: ids.size }) : t("{n} photos added", { n: pics.length }));
-        }} />
-      )}
       {overlay?.k === "import" && (
         <HooksExtract pools={vText} initialPoolId={overlay.poolId} initialSource={overlay.source} onClose={() => setOverlay(null)} onAdd={(id, hooks: NewHook[]) => {
           if (id === NEW_IMPORT_POOL) {

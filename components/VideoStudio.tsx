@@ -4,8 +4,7 @@ import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, listAppFiles, uploadToDrive } from "@/lib/drive";
-import DriveBrowser from "./DriveBrowser";
+import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
@@ -287,6 +286,7 @@ export default function VideoStudio({
   hookPools,
   onDrawHook,
   onProject,
+  audioUsedElsewhere,
   onSaveNow,
   releaseTitle,
   library,
@@ -319,6 +319,8 @@ export default function VideoStudio({
   /** Draw a hook from a list (shared shuffle bag with the carousel); `exclude`: hooks already on this video. */
   onDrawHook: (poolId: string, exclude: string[], theme?: string) => string | null;
   onProject: (fn: (p: Project) => Project) => void;
+  /** Another release uses this Drive file as its official audio (it is then kept when this one is replaced). */
+  audioUsedElsewhere?: (driveId: string) => boolean;
   onSaveNow: () => void;
   /** The release's name, and the menu to change it: the title of both studios. */
   releaseTitle: ReactNode;
@@ -450,19 +452,6 @@ export default function VideoStudio({
   /** The pasted text, unfolded (it folds into one line once the lyrics are placed). */
   const [pasteOpen, setPasteOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [driveOpen, setDriveOpen] = useState(false);
-  const [driveBusy, setDriveBusy] = useState(false);
-  const pickFromDrive = async (f: DriveItem) => {
-    setDriveBusy(true); setErr(null);
-    try {
-      const blob = await downloadDriveFile(f.id);
-      await pickAudio(new File([blob], f.name, { type: blob.type || f.mimeType }), f.id);
-    } catch {
-      setErr(t("The official audio could not be fetched from Google Drive. Check it is still there, or import it again."));
-    } finally {
-      setDriveBusy(false);
-    }
-  };
   /** One official audio per release, shared by all its videos. */
   const projectAudioKey = `audio:project:${project.id}`;
   // Another release (the studio stays mounted behind the carousel): its own lyrics, its own source of lyrics,
@@ -1198,6 +1187,10 @@ export default function VideoStudio({
     // Same file again (lost from this device, or another computer): the lyrics timing and the sync stay.
     // Another file: its timings are void; the pasted lyrics stay.
     const same = project.audioSize === f.size && project.audioName === f.name;
+    // Another audio replaces this one: the previous file of the release goes to the Drive's bin (if no other
+    // release uses it), so its Audios folder never piles up versions.
+    const old = !same && !driveId ? project.audioDriveId : undefined;
+    if (old && !audioUsedElsewhere?.(old)) void trashDriveFile(old);
     onProject((p) => (same
       ? { ...p, audioName: f.name, audioDriveId: driveId ?? p.audioDriveId }
       : { ...p, audioName: f.name, audioSize: f.size, audioDriveId: driveId, heardWords: undefined, lyricWords: undefined }));
@@ -2673,11 +2666,8 @@ export default function VideoStudio({
 
   const audioPick = (
     <div className="row">
-      <button className={"btn sm primary" + (driveBusy ? " shine-box" : "")} onClick={() => setDriveOpen(true)} disabled={driveBusy}>
-        <Icon name="folder" size={14} />{driveBusy ? t("Downloading…") : t("From Google Drive")}
-      </button>
-      <label className="btn sm">
-        {t("From this computer")}
+      <label className="btn sm primary">
+        {t("Import the audio")}
         <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
       </label>
     </div>
@@ -2737,17 +2727,16 @@ export default function VideoStudio({
               <span className="label">{t("Release")}</span>
             </div>
             {lyricsRow}
-            <MediaTile icon="music" label={t("Official audio")} loading={(!!audioBlob && !audioBuf) || driveBusy}
+            <MediaTile icon="music" label={t("Official audio")} loading={!!audioBlob && !audioBuf}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
               meta={audioBlob && (<>
                 {audioBuf ? <span className="mono">{fmtTime(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
                 {clips.length > 1 && <span>{t("For its {n} videos", { n: clips.length })}</span>}
                 {project.audioDriveId ? <span>Drive</span>
-                  : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer. Pick it from Google Drive so the release keeps it on any device.")} /></span>}
+                  : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer for now: it goes to your Drive by itself as soon as Google Drive can be written to.")} /></span>}
               </>)}
               menu={audioBlob && ((close) => (<>
-                <button onClick={() => { close(); setDriveOpen(true); }}>{t("Replace from Google Drive")}</button>
-                <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}>{t("Replace from this computer")}</button>
+                <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}>{t("Replace the audio")}</button>
                 <div className="sep" />
                 <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setConfirmRemove(true); }}>{t("Remove audio")}</button>
               </>))}>
@@ -3515,7 +3504,6 @@ export default function VideoStudio({
             : lastFiles.current.filter((f) => f.caption).map((f) => `${f.name.replace(/ clip\.\w+$/, "")}\n${f.caption}`).join("\n\n———\n\n") || undefined}
           build={async () => lastFiles.current.map((f) => ({ name: f.name, blob: f.blob }))} />
       )}
-      {driveOpen && <DriveBrowser onPick={(f) => void pickFromDrive(f)} onClose={() => setDriveOpen(false)} />}
       {(exp || batch) && (
         <Modal title={batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
           <div className="stack">
