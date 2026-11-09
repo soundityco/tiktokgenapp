@@ -69,14 +69,24 @@ export function useStyleParts<P extends string>(opts: {
       const min = Math.max(0, Math.floor(window.innerHeight - pvBottom - below));
       if (col.style.minHeight !== `${min}px`) col.style.minHeight = `${min}px`;
     };
+    // The release's head sits above the preview: it scrolls away under the app's header while the preview holds
+    // (the block sticks that much higher), so --style-head is its height and the gap after it.
+    const head = centre.querySelector<HTMLElement>(".studio-head");
     const set = () => {
-      pvBottom = Math.ceil(parseFloat(getComputedStyle(root).getPropertyValue("--top-h") || "60") + centre.getBoundingClientRect().height);
+      // Measured on the picture itself (the slide or the video): held, it sits 12px under the app's header in both
+      // studios, as before the head was there.
+      const pic = centre.querySelector<HTMLElement>(".video-stage .cv-wrap, .card.sel .cv-wrap");
+      const c = centre.getBoundingClientRect();
+      const headH = head?.offsetParent && pic ? Math.max(0, Math.round(pic.getBoundingClientRect().top - c.top - 12)) : 0;
+      root.style.setProperty("--style-head", `${headH}px`);
+      pvBottom = Math.ceil(parseFloat(getComputedStyle(root).getPropertyValue("--top-h") || "60") + c.height - headH);
       root.style.setProperty("--pv-bottom", `${pvBottom}px`);
       fit();
     };
     set();
     const ro = new ResizeObserver(set);
     ro.observe(centre);
+    if (head) ro.observe(head);
     if (col) ro.observe(col);
     window.addEventListener("resize", set);
     // The preview holds still: scrolling up or down over it (wheel, trackpad) does not scroll the settings below.

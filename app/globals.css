@@ -1954,3 +1954,18 @@ details.sec:first-of-type { background-image: none; }
 }
 /* Zones, on: like every active toggle of the app (white outline and text), so its state reads at a glance. */
 .deck-zones.on, .video-bar .deck-zones.on, .head-zones.on { color: var(--text); border-color: var(--text); background: var(--raised); }
+/* Style page (phone): the same release head as the Create page, in both studios. It scrolls away under the app's
+   header (the block sticks --style-head higher) while the preview and the control hold still. */
+@media (max-width: 1000px) {
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center > .carousel-head,
+  .main[data-studio="video"][data-mobile-tab="style"] .video-center > .video-head { display: grid !important; }
+  .main[data-mobile-tab="style"] .col.center,
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center {
+    top: calc(var(--top-h, 60px) - var(--style-head, 0px));
+    height: calc(var(--pv-h, 40dvh) + 76px + var(--style-head, 0px)) !important; }
+  .main[data-studio="video"][data-mobile-tab="style"] .video-center { display: grid !important; }
+}
+@media (max-width: 1000px) {
+  /* Style page, carousel: the slide starts 16px under the head, like the video. */
+  .main[data-studio="carousel"][data-mobile-tab="style"] .carousel-head ~ .deck-wrap { margin-top: 12px; }
+}
