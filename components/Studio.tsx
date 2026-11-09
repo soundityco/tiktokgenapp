@@ -4,7 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
@@ -223,7 +223,34 @@ export default function Studio({ userName }: { userName: string }) {
   // Google connected: the Rollout tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
   useEffect(() => {
     if (!ws || isDemo()) return;
-    void ensureDriveTree().catch((e) => console.warn("[drive] tree", e));
+    void ensureDriveTree().then(() => {
+      // What the app had put loose in Rollout before the tree: each file to its place (once per device).
+      const cur = wsRef.current;
+      if (!cur) return;
+      const photoList = new Map<string, string>();
+      for (const pool of cur.picPools) for (const pic of pool.pics) if (!photoList.has(pic.id)) photoList.set(pic.id, pool.name);
+      const releaseOf = new Map<string, string>();
+      for (const p of cur.projects) {
+        if (p.audioDriveId) releaseOf.set(p.audioDriveId, p.name);
+        for (const v of p.videos ?? []) {
+          if (v.drive?.originalId) releaseOf.set(v.drive.originalId, p.name);
+          if (v.drive?.copy?.id) releaseOf.set(v.drive.copy.id, p.name);
+          if (v.grade?.lut?.driveId) releaseOf.set(v.grade.lut.driveId, "\u0000lut");
+        }
+      }
+      const byProject = new Map(cur.projects.map((p) => [p.id, p.name]));
+      const byClip = new Map(cur.projects.flatMap((p) => (p.videos ?? []).map((v) => [v.id, p.name] as const)));
+      return tidyDriveRoot((f) => {
+        const kind = f.appProperties?.tktgen;
+        const known = releaseOf.get(f.id);
+        if (kind === "font" || /\.(ttf|otf|woff2?)$/i.test(f.name)) return DRIVE_PATHS.fonts;
+        if (kind === "lut" || known === "\u0000lut" || /\.cube$/i.test(f.name)) return DRIVE_PATHS.luts;
+        if (kind === "photo" || photoList.has(f.id)) return photoList.has(f.id) ? DRIVE_PATHS.photoList(photoList.get(f.id)!) : DRIVE_PATHS.photos;
+        const release = known ?? (f.appProperties?.project ? byProject.get(f.appProperties.project) : undefined) ?? (f.appProperties?.clip ? byClip.get(f.appProperties.clip) : undefined);
+        if (!release) return null;
+        return kind === "audio" || f.mimeType.startsWith("audio/") ? DRIVE_PATHS.audios(release) : DRIVE_PATHS.videos(release);
+      });
+    }).then((n) => { if (n) console.info(`[drive] ${n} files tidied into the Rollout tree`); }).catch((e) => console.warn("[drive] tree", e));
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // The header's height (phone: the Style page holds the preview right under it).
   useEffect(() => {

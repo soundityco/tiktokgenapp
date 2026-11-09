@@ -281,6 +281,36 @@ export async function renameDriveFolder(path: string[], newName: string): Promis
   } catch { /* keeps its old name: found again by its id */ }
 }
 
+/**
+ * The files the app put loose in the Rollout folder before the tree existed go to their folder: `place` says
+ * where each one belongs (null: left where it is). Once per device; never throws.
+ */
+export async function tidyDriveRoot(place: (f: AppFile) => string[] | null): Promise<number> {
+  const KEY = "tktgen-drive-tidy-v1";
+  if (isDemo() || !(await canWriteDrive())) return 0;
+  try { if (localStorage.getItem(KEY)) return 0; } catch { /* private mode */ }
+  let moved = 0;
+  try {
+    const root = await appFolder();
+    let page: string | undefined;
+    const loose: AppFile[] = [];
+    do {
+      const params = new URLSearchParams({ q: `'${root}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`, fields: "nextPageToken, files(id,name,mimeType,size,appProperties)", pageSize: "1000" });
+      if (page) params.set("pageToken", page);
+      const j = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
+      for (const f of j.files ?? []) loose.push({ id: f.id, name: f.name ?? "", mimeType: f.mimeType ?? "", size: Number(f.size ?? 0), appProperties: f.appProperties });
+      page = j.nextPageToken;
+    } while (page);
+    for (const f of loose) {
+      const path = place(f);
+      if (!path) continue;
+      try { await moveToDriveFolder(f.id, path, root); moved++; } catch (e) { console.warn("[drive] tidy", f.name, e); }
+    }
+    try { localStorage.setItem(KEY, "1"); } catch { /* private mode */ }
+  } catch (e) { console.warn("[drive] tidy", e); }
+  return moved;
+}
+
 /** Move a file the app made into a folder of the tree (from wherever it is). */
 export async function moveToDriveFolder(id: string, path: string[], from: string): Promise<void> {
   const to = await driveFolder(path);
