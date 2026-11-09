@@ -2556,6 +2556,22 @@ export default function VideoStudio({
     return () => document.removeEventListener("pointerdown", down, true);
   }, []);
   const currentIdx = current ? cues.indexOf(current) : -1;
+  /** The line `idx` of the lyrics list to the middle of the part of the list on screen (between the header and the
+   *  dock / the board's player); only the list scrolls, never the page; its own ends stop it. */
+  const centreLine = (idx: number) => {
+    const list = [...document.querySelectorAll<HTMLElement>(".lyric-timing")].find((e) => e.offsetParent);
+    const row = list?.querySelectorAll<HTMLElement>(".cue-row")[idx];
+    if (!list || !row) return;
+    const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
+    const top = Math.max(l.top, (document.querySelector(".app > .top") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 0);
+    const dock = document.querySelector<HTMLElement>(".mobile-tabs");
+    const board = [...document.querySelectorAll<HTMLElement>(".board-player")].find((e) => e.offsetParent);
+    let bottom = Math.min(l.bottom, dock?.offsetParent ? dock.getBoundingClientRect().top : window.innerHeight);
+    if (board) bottom = Math.min(bottom, board.getBoundingClientRect().top);
+    const aim = bottom > top ? (top + bottom) / 2 : l.top + l.height / 2;
+    list.scrollBy({ top: r.top + r.height / 2 - aim, behavior: "smooth" });
+  };
+  // Paused: a line picked (on the timeline, in the list) comes to the middle once the finger is off.
   useEffect(() => {
     if (!followList.current || playing || currentIdx < 0) return;
     let timer = 0;
@@ -2563,21 +2579,16 @@ export default function VideoStudio({
       // Still dragging: later.
       if (scrubRef.current || dragWave.current || dockDrag.current) { timer = window.setTimeout(go, 200); return; }
       followList.current = false;
-      const list = [...document.querySelectorAll<HTMLElement>(".lyric-timing")].find((e) => e.offsetParent);
-      const row = list?.querySelectorAll<HTMLElement>(".cue-row")[currentIdx];
-      if (!list || !row) return;
-      // Only the list scrolls (never the page): the line comes to the middle of the part of the list that is on
-      // screen (between the header and the dock); the list's own ends stop it.
-      const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
-      const top = Math.max(l.top, (document.querySelector(".app > .top") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 0);
-      const dock = document.querySelector<HTMLElement>(".mobile-tabs");
-      const bottom = Math.min(l.bottom, dock?.offsetParent ? dock.getBoundingClientRect().top : window.innerHeight);
-      const aim = bottom > top ? (top + bottom) / 2 : l.top + l.height / 2;
-      list.scrollBy({ top: r.top + r.height / 2 - aim, behavior: "smooth" });
+      centreLine(currentIdx);
     };
     timer = window.setTimeout(go, 250);
     return () => clearTimeout(timer);
   }, [currentIdx, head, playing]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Playing: the line being sung always in the middle, gliding from one to the next (like a music app's lyrics).
+  useEffect(() => {
+    if (!playing || currentIdx < 0) return;
+    centreLine(currentIdx);
+  }, [currentIdx, playing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Retime one caption by 0.1 s: "start" moves the whole line, "end" only when it leaves the screen. Never over its neighbours. */
   // Lyrics saved out of order by an older version of the ± buttons: put back in the order of the text, once.
