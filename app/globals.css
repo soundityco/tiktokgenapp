@@ -1745,3 +1745,14 @@ details.sec:first-of-type { background-image: none; }
     -webkit-mask-image: linear-gradient(180deg, #000 var(--dots-fade, 0px), transparent var(--dots-end, 0px));
     mask-image: linear-gradient(180deg, #000 var(--dots-fade, 0px), transparent var(--dots-end, 0px)); }
 }
+/* Phone dock, new order: the studio | Create · Style | the library, a page apart (a square like the studio's); the
+   account goes back to the header, top right, beside the save dot. */
+.dock-lib { display: none; }
+@media (max-width: 1000px) {
+  .top .top-settings { display: block !important; margin-left: 2px; }
+  .top .top-settings .me { width: 34px; height: 34px; border-radius: 10px; font-size: 14px; }
+  .mobile-tabs > .dock-lib { display: grid; place-items: center; flex: none; width: 46px; height: 46px; min-width: 0; padding: 0; margin: 1px 1px 1px 0;
+    border: 1px solid var(--line-2); border-radius: 10px; background: var(--raised); color: var(--muted); cursor: pointer; transition: background .25s, color .2s, scale .12s; }
+  .mobile-tabs > .dock-lib:active { scale: .94; }
+  .mobile-tabs > .dock-lib.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+}
