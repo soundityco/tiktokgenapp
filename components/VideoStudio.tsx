@@ -4,7 +4,7 @@ import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
-import { canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, listAppFiles, uploadToDrive } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, type DriveItem, findInAppFolder, listAppFiles, uploadToDrive } from "@/lib/drive";
 import DriveBrowser from "./DriveBrowser";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
@@ -851,7 +851,8 @@ export default function VideoStudio({
     setDriveErr(null);
     setDriveJob({ kind: "send", p: 0 });
     try {
-      const id = await uploadToDrive(blob, driveName(t("original")), (p) => setDriveJob({ kind: "send", p }), ac.signal);
+      const id = await uploadToDrive(blob, driveName(t("original")), (p) => setDriveJob({ kind: "send", p }), ac.signal, undefined,
+        { tktgen: "original", clip: clip.id, project: project.id }, DRIVE_PATHS.videos(project.name || "Release"));
       setDrive({ originalId: id });
       onSaveNow();
     } catch (e) {
@@ -874,7 +875,7 @@ export default function VideoStudio({
       const b = await getMedia(`lut:${lut.id}`);
       if (!b) return;
       try {
-        const driveId = await uploadToDrive(b, `${lut.name}.cube`, () => {}, new AbortController().signal, "application/octet-stream");
+        const driveId = await uploadToDrive(b, `${lut.name}.cube`, () => {}, new AbortController().signal, "application/octet-stream", { tktgen: "lut" }, DRIVE_PATHS.luts);
         // Every clip of the release using this LUT gets the link.
         onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.grade?.lut?.id === lut.id ? { ...c, grade: { ...c.grade, lut: { ...c.grade.lut, driveId } } } : c)) }));
         onSaveNow();
@@ -893,7 +894,7 @@ export default function VideoStudio({
     if (audioUp.current === key) return;
     audioUp.current = key;
     const name = `${project.name || "Rollout"} - ${t("official audio")} - ${project.audioName ?? "audio"}`.replace(/[\\/:*?"<>|]+/g, "-");
-    void uploadToDrive(audioBlob, name, () => {}, new AbortController().signal, audioBlob.type || "application/octet-stream", { tktgen: "audio", project: project.id })
+    void uploadToDrive(audioBlob, name, () => {}, new AbortController().signal, audioBlob.type || "application/octet-stream", { tktgen: "audio", project: project.id }, DRIVE_PATHS.audios(project.name || "Release"))
       .then((id) => {
         // Still the same file of the same release: remember where it is.
         onProject((p) => (p.id === project.id && p.audioSize === audioBlob.size && !p.audioDriveId ? { ...p, audioDriveId: id } : p));
@@ -947,7 +948,8 @@ export default function VideoStudio({
       const copy = await makeWorkCopy(blob, plan, from, to, (p) => setCopyJob({ step: "make", p, ...job }), ac.signal);
       setCopyJob({ step: "send", p: 0, ...job });
       const id = await uploadToDrive(copy, name, (p) => setCopyJob({ step: "send", p, ...job }), ac.signal, "video/mp4",
-        { tktgen: "copy", clip: clipId, from: from.toFixed(3), to: to.toFixed(3), of: String(blob.size), bits: plan.tenBit ? "10" : "8" });
+        { tktgen: "copy", clip: clipId, project: project.id, from: from.toFixed(3), to: to.toFixed(3), of: String(blob.size), bits: plan.tenBit ? "10" : "8" },
+        DRIVE_PATHS.videos(project.name || "Release"));
       if (ac.signal.aborted) { void deleteDriveFile(id); return; }
       // Saved on its own video, even if another one is open now.
       let old: string | undefined;

@@ -4,7 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { canWriteDrive, findSamePicture, keepPicture, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
@@ -220,6 +220,11 @@ export default function Studio({ userName }: { userName: string }) {
     window.addEventListener("resize", measure);
     return () => { clearTimeout(t); ro?.disconnect(); window.removeEventListener("resize", measure); };
   }, [mobileTab, studio, !!ws]);
+  // Google connected: the Rollout tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
+  useEffect(() => {
+    if (!ws || isDemo()) return;
+    void ensureDriveTree().catch((e) => console.warn("[drive] tree", e));
+  }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // The header's height (phone: the Style page holds the preview right under it).
   useEffect(() => {
     const top = document.querySelector<HTMLElement>(".app > .top");
@@ -773,7 +778,9 @@ export default function Studio({ userName }: { userName: string }) {
     try {
       // In the Drive (the slide shows it on every device), else on this device only.
       // The same picture already in the Drive: that file; else a new one in the Rollout folder (or this device only).
-      const id = c.reuse ?? (driveWrite ? await sendPictureToDrive(blob, `photo - ${name}`) : `local:${uid()}`);
+      // Its folder: Rollout / Photos / <the list it goes to> (Photos itself when it goes to no list).
+      const listName = c.list === "new" ? (c.newName || "Pinterest") : c.list ? wsRef.current?.picPools.find((p) => p.id === c.list)?.name : undefined;
+      const id = c.reuse ?? (driveWrite ? await sendPictureToDrive(blob, `photo - ${name}`, listName) : `local:${uid()}`);
       await keepPicture(id, blob);
       setGen(i, { picId: id, picName: name, picCredit: undefined });
       if (c.list) {
@@ -986,7 +993,31 @@ export default function Studio({ userName }: { userName: string }) {
       }));
       if (forPost) setEditor({ k: "text", id }); // straight to writing its captions
     }
-    else upd((w) => ({ ...w, picPools: [...w.picPools, { id: uid(), name, scope, projectId, pics: [] }] }));
+    else {
+      // Its folder in the Drive right away: Rollout / Photos / <name>.
+      if (driveWrite) void driveFolder(DRIVE_PATHS.photoList(name)).catch(() => {});
+      upd((w) => ({ ...w, picPools: [...w.picPools, { id: uid(), name, scope, projectId, pics: [] }] }));
+    }
+  };
+  // Photos added to a list from this device: each one sent to the list's folder in the Drive (Rollout / Photos /
+  // <list>), kept on this device too, and added to the list as it arrives. Without Drive access: this device only.
+  const [picUpload, setPicUpload] = useState<{ pool: string; done: number; total: number } | null>(null);
+  const uploadToList = async (poolId: string, files: File[]) => {
+    const pool = wsRef.current?.picPools.find((p) => p.id === poolId);
+    if (!pool || !files.length) return;
+    setPicUpload({ pool: poolId, done: 0, total: files.length });
+    let done = 0, failed = 0;
+    for (const file of files) {
+      try {
+        const id = driveWrite ? await sendPictureToDrive(file, file.name, pool.name) : `local:${uid()}`;
+        await keepPicture(id, file);
+        setPicPool(poolId, (x) => (x.pics.some((y) => y.id === id) ? x : { ...x, pics: [...x.pics, { id, name: file.name }] }));
+      } catch (e) { failed++; console.warn("[photos] upload", e); }
+      setPicUpload({ pool: poolId, done: ++done, total: files.length });
+    }
+    setPicUpload(null);
+    void flushSave();
+    say(failed ? t("{n} photos could not be sent to your Drive", { n: failed }) : t("{n} photos added", { n: files.length }));
   };
   const askDeletePool = (kind: "text" | "photos", id: string) => {
     const pool = kind === "text" ? ws!.textPools.find((p) => p.id === id) : ws!.picPools.find((p) => p.id === id);
@@ -1049,13 +1080,16 @@ export default function Studio({ userName }: { userName: string }) {
 
   // ---- projects ----
   const sharedPool = <T extends { name: string; scope: string }>(pools: T[], name: string) => pools.find((p) => p.scope === "shared" && p.name === name);
-  const createProject = (name: string) =>
+  const createProject = (name: string) => {
+    // Its folder in the Drive right away: Rollout / Releases / <name> / Audios, Videos.
+    if (driveWrite) { void driveFolder(DRIVE_PATHS.audios(name || "Release")).then(() => driveFolder(DRIVE_PATHS.videos(name || "Release"))).catch(() => {}); }
     upd((w) => {
       const tp = [1, 2, 3].map((n) => sharedPool(w.textPools, `Slide ${n} text`)).filter(Boolean) as TextPool[];
       const pp = [1, 2, 3].map((n) => w.picPools.find((x) => x.scope === "shared" && isSlidePhotoList(x.name, n))).filter(Boolean) as PicPool[];
       const p = newProject(name, tp, pp);
       return { ...w, projects: [...w.projects, p], currentProjectId: p.id };
     });
+  };
   const duplicateProject = () =>
     upd((w) => {
       const src = w.projects.find((x) => x.id === w.currentProjectId)!;
@@ -1707,7 +1741,9 @@ export default function Studio({ userName }: { userName: string }) {
       {edPics && (
         <PicPoolEditor pool={edPics} onClose={() => setEditor(null)} onDelete={() => askDeletePool("photos", edPics.id)}
           onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))} onBrowse={() => setOverlay({ k: "drive", poolId: edPics.id })}
-          onSync={(manual) => void syncDrive(edPics.id, manual)} />
+          onSync={(manual) => void syncDrive(edPics.id, manual)}
+          onUpload={(files) => void uploadToList(edPics.id, files)} uploading={picUpload?.pool === edPics.id ? picUpload : null}
+          onRenamed={(from, to) => void renameDriveFolder(["Photos", from], to)} />
       )}
 
       {overlay?.k === "drive" && (
@@ -1794,7 +1830,7 @@ export default function Studio({ userName }: { userName: string }) {
           build={async () => { cancelExport.current = false; return buildFiles(project); }} />
       )}
       {overlay?.k === "renameCarousel" && <PromptDialog title={t("Rename carousel")} label={t("Name")} initial={carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!)} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => renameCarousel(p, n))} onClose={() => setOverlay(null)} />}
-      {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => ({ ...p, name: n }))} onClose={() => setOverlay(null)} />}
+      {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => { void renameDriveFolder(["Releases", project.name || "Release"], n); updProject((p) => ({ ...p, name: n })); }} onClose={() => setOverlay(null)} />}
       {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} danger />}
       {overlay?.k === "lyrics" && (
         <LyricsEditor name={project.name} lyrics={project.lyrics} song={project.lyricsLinked ? undefined : project.songLyrics} synced={!!project.lyricsLinked && !!project.lyricWords?.length} onChange={setLyrics} onClose={() => setOverlay(null)} />

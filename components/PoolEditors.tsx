@@ -236,9 +236,20 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   );
 }
 
-export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void; onBrowse: () => void; onSync: (manual: boolean) => void }) {
+export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void; onBrowse: () => void; onSync: (manual: boolean) => void;
+  /** Photos dropped or picked: sent to the list's Drive folder (Rollout / Photos / <list>) and added. */
+  onUpload: (files: File[]) => void;
+  /** Photos being sent (done / total), while it lasts. */
+  uploading?: { done: number; total: number } | null;
+  /** The list was renamed (its Drive folder follows). */
+  onRenamed?: (from: string, to: string) => void }) {
   const { t } = useT();
   const { pool } = p;
+  const startName = useRef(pool.name);
+  const close = () => { if (pool.name.trim() && pool.name !== startName.current) p.onRenamed?.(startName.current, pool.name); p.onClose(); };
+  const pick = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const images = (list: FileList | null) => [...(list ?? [])].filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|avif)$/i.test(f.name));
   const folders = pool.folders ?? [];
   const onSync = useRef(p.onSync);
   useEffect(() => { onSync.current(false); }, [pool.id]); // fresh photos each time the list is opened
@@ -254,14 +265,21 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
     ...(pic.folder ? { excluded: [...(x.excluded ?? []), pic.id] } : {}),
   }));
   return (
-    <Modal title={t("Photo list")} onClose={p.onClose} wide>
+    <Modal title={t("Photo list")} onClose={close} wide>
+      <div className={"pic-drop" + (over ? " over" : "")}
+        onDragOver={(e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); setOver(true); } }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false); }}
+        onDrop={(e) => { e.preventDefault(); setOver(false); const f = images(e.dataTransfer.files); if (f.length) p.onUpload(f); }}>
       <div className="cols2">
         <label className="field">{t("Name")}<input className="input" value={pool.name} onChange={(e) => p.onChange((x) => ({ ...x, name: e.target.value }))} /></label>
         <ScopeSelect value={pool.scope} onChange={(v) => p.onChange((x) => ({ ...x, scope: v }))} />
       </div>
       <div className="row">
-        <button className="btn primary" onClick={p.onBrowse}><Icon name="folder" />{t("Add from Google Drive")}</button>
-        <span className="muted grow">{t("{n} photos (they stay in your Drive)", { n: pool.pics.length })}</span>
+        {/* Photos from this device (or dropped on the window): they go to the list's own folder in the Drive. */}
+        <input ref={pick} type="file" accept="image/*" multiple hidden onChange={(e) => { const f = images(e.target.files); e.target.value = ""; if (f.length) p.onUpload(f); }} />
+        <button className="btn primary" onClick={() => pick.current?.click()} disabled={!!p.uploading}><Icon name="plus" />{t("Add photos")}</button>
+        <button className="btn" onClick={p.onBrowse}><Icon name="folder" />{t("From a Drive folder")}</button>
+        <span className="muted grow">{p.uploading ? <span className="shine">{t("Sending to your Drive… {n}/{total}", { n: p.uploading.done, total: p.uploading.total })}</span> : t("{n} photos (they stay in your Drive)", { n: pool.pics.length })}</span>
         <button className="btn sm" disabled={!pool.pics.length} onClick={() => p.onChange((x) => ({ ...x, pics: [], folders: [], excluded: [] }))}>{t("Remove all")}</button>
       </div>
       {folders.length > 0 && (
@@ -276,7 +294,7 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
           <button className="btn sm" onClick={() => p.onSync(true)}>{t("Sync with Drive")}</button>
         </div>
       )}
-      {!pool.pics.length && <p className="muted">{t("Pick a folder in your Drive and add all its photos in one click.")}</p>}
+      {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them: they go to your Drive, in Rollout / Photos / {name}.", { name: pool.name || t("Photos") })}</p>}
       <div className="thumbs" style={{ maxHeight: "46dvh", overflow: "auto" }}>
         {pool.pics.map((pic) => (
           <div key={pic.id} className="thumb-wrap">
@@ -286,9 +304,11 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
           </div>
         ))}
       </div>
+      {over && <div className="pic-drop-hint">{t("Drop the photos: they go to your Drive")}</div>}
+      </div>
       <div className="modal-foot">
         <button className="btn quiet danger left" onClick={p.onDelete}>{t("Delete list")}</button>
-        <button className="btn primary" onClick={p.onClose}>{t("Done")}</button>
+        <button className="btn primary" onClick={close}>{t("Done")}</button>
       </div>
     </Modal>
   );

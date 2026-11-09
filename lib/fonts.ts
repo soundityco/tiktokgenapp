@@ -1,4 +1,4 @@
-import { canWriteDrive, downloadDriveFile, listAppFiles, uploadToDrive } from "./drive";
+import { DRIVE_PATHS, canWriteDrive, downloadDriveFile, listAppFiles, uploadToDrive } from "./drive";
 import { type FaceInfo, faceOf, sameFace } from "./fontInfo";
 import { delMedia, getMedia, listMedia, putMedia } from "./idb";
 
@@ -74,7 +74,7 @@ const labels = (f: FaceInfo): Record<string, string> => ({ tktgen: "font", famil
 
 async function sendToDrive(f: FaceInfo, blob: Blob, file: string) {
   try {
-    if (await canWriteDrive()) await uploadToDrive(blob, nameOnDrive(f, file), () => {}, new AbortController().signal, "application/octet-stream", labels(f));
+    if (await canWriteDrive()) await uploadToDrive(blob, nameOnDrive(f, file), () => {}, new AbortController().signal, "application/octet-stream", labels(f), DRIVE_PATHS.fonts);
   } catch (e) { console.warn("[fonts] could not be saved in Drive", e); }
 }
 
