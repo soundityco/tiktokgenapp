@@ -2213,3 +2213,5 @@ details.sec:first-of-type { background-image: none; }
   /* The segment's length: a plain control like the version and sync buttons (no filled field). */
   .video-side .transport .seg-len { height: 32px; min-height: 32px; background: none; padding: 0 10px; font-size: 12px; }
 }
+/* Phone: the lock first, then the passage and its length. */
+@media (max-width: 1000px) { .app:has(.dock-player:not(:empty)) .transport .tr-lock { order: -1; } }

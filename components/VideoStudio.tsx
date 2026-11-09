@@ -3192,7 +3192,7 @@ export default function VideoStudio({
                     )}
                   </Select>
                   {videoBlob && videoDur > 0 && (
-                    <button className={"btn sm icon" + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
+                    <button className={"btn sm icon tr-lock" + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
                       aria-label={linked ? t("Audio and video linked") : t("Link audio and video")}
                       title={(linked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}>
                       <Icon name={linked ? "lock" : "unlock"} size={13} />
