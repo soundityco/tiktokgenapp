@@ -4,7 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, copyToDriveFolder, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
@@ -220,6 +220,40 @@ export default function Studio({ userName }: { userName: string }) {
     window.addEventListener("resize", measure);
     return () => { clearTimeout(t); ro?.disconnect(); window.removeEventListener("resize", measure); };
   }, [mobileTab, studio, !!ws]);
+  /**
+   * Once for the account: the photo lists filled before from the user's own Drive folders get their photos copied
+   * into their Rollout folder (Rollout / Photos / <list>, or in their release), then point to the copies and are no
+   * longer linked to those folders (left untouched: the app may not move what it did not make).
+   */
+  const adoptLinkedFolders = async () => {
+    const cur = wsRef.current;
+    if (!cur || cur.drivePhotosV1 || isDemo() || !(await canWriteDrive())) return;
+    const lists = cur.picPools.filter((p) => (p.folders?.length ?? 0) > 0 || p.pics.some((x) => x.folder));
+    if (!lists.length) { upd((w) => ({ ...w, drivePhotosV1: true })); return; }
+    const total = lists.reduce((n, p) => n + p.pics.filter((x) => !x.id.includes(":")).length, 0);
+    say(t("Copying your photos into Rollout… {n} photos", { n: total }));
+    let copied = 0, failed = 0;
+    for (const pool of lists) {
+      const path = listPath(pool);
+      const map = new Map<string, string>();
+      const todo = pool.pics.filter((x) => !x.id.includes(":"));
+      for (let i = 0; i < todo.length; i += 3) {
+        await Promise.all(todo.slice(i, i + 3).map(async (pic) => {
+          try { map.set(pic.id, await copyToDriveFolder(pic.id, pic.name, path)); copied++; }
+          catch (e) { failed++; console.warn("[drive] copy", pic.name, e); }
+        }));
+      }
+      // The list now holds the copies (a photo that could not be copied stays as it was).
+      setPicPool(pool.id, (x) => ({
+        ...x,
+        pics: x.pics.map((y) => (map.has(y.id) ? { id: map.get(y.id)!, name: y.name } : y)),
+        ...(failed ? {} : { folders: [], excluded: [] }),
+      }));
+    }
+    if (!failed) upd((w) => ({ ...w, drivePhotosV1: true }));
+    void flushSave();
+    say(failed ? t("{n} photos copied into Rollout, {m} could not be (tried again next time)", { n: copied, m: failed }) : t("{n} photos copied into Rollout", { n: copied }));
+  };
   // Google connected: the Rollout tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
   useEffect(() => {
     if (!ws || isDemo()) return;
@@ -250,7 +284,9 @@ export default function Studio({ userName }: { userName: string }) {
         if (!release) return null;
         return kind === "audio" || f.mimeType.startsWith("audio/") ? DRIVE_PATHS.audios(release) : DRIVE_PATHS.videos(release);
       });
-    }).then((n) => { if (n) console.info(`[drive] ${n} files tidied into the Rollout tree`); }).catch((e) => console.warn("[drive] tree", e));
+    }).then((n) => { if (n) console.info(`[drive] ${n} files tidied into the Rollout tree`); })
+      .then(() => adoptLinkedFolders())
+      .catch((e) => console.warn("[drive] tree", e));
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // The header's height (phone: the Style page holds the preview right under it).
   useEffect(() => {

@@ -379,6 +379,8 @@ export interface Workspace {
   textPools: TextPool[];
   /** The text lists got their roles (hooks / texts / captions): done once, see normalizeWorkspace. */
   textRolesV1?: boolean;
+  /** The photo lists once filled from the user's own Drive folders were copied into Rollout / Photos (once). */
+  drivePhotosV1?: boolean;
   picPools: PicPool[];
   noRepeat: boolean;
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag

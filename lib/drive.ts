@@ -342,6 +342,19 @@ export async function moveDriveFolder(from: string[], to: string[]): Promise<voi
   } catch { /* stays where it was: found again by its id */ }
 }
 
+/** A copy of a Drive file (one the app may read) in a folder of the tree, labelled as the app's photo. */
+export async function copyToDriveFolder(id: string, name: string, path: string[]): Promise<string> {
+  if (isDemo()) throw new Error("Demo mode: nothing is saved to your Drive.");
+  const folder = await driveFolder(path);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}/copy?fields=id&supportsAllDrives=true`, {
+    method: "POST", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, parents: [folder], appProperties: { tktgen: "photo" } }),
+  });
+  if (r.status === 401) signalAuth();
+  if (!r.ok) throw new Error(`Google Drive error ${r.status}`);
+  return (await r.json()).id as string;
+}
+
 /** Move a file the app made into a folder of the tree (from wherever it is). */
 export async function moveToDriveFolder(id: string, path: string[], from: string): Promise<void> {
   const to = await driveFolder(path);
