@@ -3247,6 +3247,39 @@ export default function VideoStudio({
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
+                  {/* The takes found in the video (it holds the passage more than once): picked like a version. */}
+                  {settings.takes && settings.takes.length > 1 && (() => {
+                    const takes = settings.takes;
+                    const at = takes.findIndex((k) => Math.abs(k.offset - settings.offset) < 0.02);
+                    const cur = takes[at];
+                    return (
+                      <span className="take-slot">
+                        <Menu float left trigger={(open, toggle) => (
+                          <button className={"btn sm ver-pick take-pick" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+                            {at >= 0 ? t("Take {n}", { n: at + 1 }) : t("Takes")}
+                            {cur && <span className="mono xs muted take-range">{mmss(cur.musicStart)}–{mmss(cur.musicEnd)}</span>}
+                            <Icon name="chevron" size={12} />
+                          </button>
+                        )}>
+                          {(close) => (<div className="ver-list">
+                            {takes.map((k, i) => {
+                              const on = i === at;
+                              return (
+                                <div key={i} className={"ver-line" + (on ? " on" : "")}>
+                                  <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); applyTake(k, takes); }}
+                                    title={t("In the video {a}–{b} · in the song {c}–{d}", { a: fmtTime(k.musicStart), b: fmtTime(k.musicEnd), c: fmtTime(k.offset + k.musicStart), d: fmtTime(k.offset + k.musicEnd) })}>
+                                    <Icon name="check" size={12} />{t("Take {n}", { n: i + 1 })}
+                                    <span className="mono xs">{mmss(k.musicStart)}–{mmss(k.musicEnd)}</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>)}
+                        </Menu>
+                        <Hint text={t("The song plays more than once in this video (you sang it twice, or started over): each take is one of those passes. The first times are where it sits in the video, the second where it falls in the song. Pick the one to use; if you filmed only one pass, the other is a part of the song that sounds alike (a loop of the beat): keep the right one and ignore it.")} />
+                      </span>
+                    );
+                  })()}
                   {/* One version only: it is shown the same way (Version A, its passage), a click names it (nothing to pick). */}
                   {versions.length < 2 && (renaming === "solo" ? (
                     <input className="input sm ver-name ver-solo" autoFocus defaultValue={versions[0]?.name ?? ""} placeholder={t("Version {x}", { x: "A" })} aria-label={t("Rename")}
@@ -3307,19 +3340,6 @@ export default function VideoStudio({
                     <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("All") : t("Fit")}</span></button>
                   </div>
                 </div>
-                {settings.takes && settings.takes.length > 1 && (
-                  <div className="row takes-row">
-                    <span className="muted xs row takes-k" style={{ gap: 4 }}><span className="takes-long">{t("Takes found in the video (pick the one to use):")}</span><span className="takes-short label">{t("Takes")}</span>
-                      <Hint text={t("The song plays more than once in this video (you sang it twice, or started over): each take is one of those passes. The first times are where it sits in the video, the second where it falls in the song. Pick the one to use; if you filmed only one pass, the other is a part of the song that sounds alike (a loop of the beat): keep the right one and ignore it.")} /></span>
-                    {settings.takes.map((k, i) => (
-                      <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " on" : "")}
-                        aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}
-                        title={t("In the video {a}–{b} · in the song {c}–{d}", { a: fmtTime(k.musicStart), b: fmtTime(k.musicEnd), c: fmtTime(k.offset + k.musicStart), d: fmtTime(k.offset + k.musicEnd) })}>
-                        {t("Take {n}", { n: i + 1 })} <span className="mono xs"><span className="take-w">{t("video")} </span>{mmss(k.musicStart)}–{mmss(k.musicEnd)}<span className="take-w"> · {t("song")} {fmtTime(k.offset + k.musicStart)}–{fmtTime(k.offset + k.musicEnd)}</span></span>
-                      </button>
-                    ))}
-                  </div>
-                )}
                 <div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}

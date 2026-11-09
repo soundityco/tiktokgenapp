@@ -2254,3 +2254,15 @@ details.sec:first-of-type { background-image: none; }
 .video-side .transport .seg-len { order: -1; }
 /* The version selector shows the version's name only (no "Version" title), everywhere. */
 .ver-pick .ver-k { display: none; }
+/* The take selector, before the version's: its "i" right beside it. */
+.take-slot { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+@media (max-width: 1000px) {
+  /* Phone: the take by its number only (its times are in the list), so the row holds on one line. */
+  .take-pick .take-range { display: none; }
+}
+@media (max-width: 1000px) {
+  /* Take, version and "+" on a line; the zoom below them on the right when they do not all fit. */
+  .seg-versions { flex-wrap: wrap; row-gap: 8px; }
+  .seg-versions .ver-pick { flex: none; min-width: 0; overflow: visible; }
+  .seg-versions .wave-zoom { margin-left: auto; }
+}
