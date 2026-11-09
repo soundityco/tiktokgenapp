@@ -3351,7 +3351,11 @@ export default function VideoStudio({
         <div className="dp">
           <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
             onClick={() => (playing ? stop() : void play())}>
-            {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden /> : <Icon name={playing ? "pause" : "play"} size={18} />}
+            {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden />
+              : playing
+                // Solid: two thick bars, a full triangle (the dock's big button, read at a glance).
+                ? <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden><rect x="5.5" y="4" width="4.5" height="16" rx="1.4" fill="currentColor" /><rect x="14" y="4" width="4.5" height="16" rx="1.4" fill="currentColor" /></svg>
+                : <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden><path d="M7.5 4.6c0-1 1.1-1.6 2-1.1l10.3 6.4c.8.5.8 1.7 0 2.2L9.5 18.5c-.9.5-2-.1-2-1.1z" fill="currentColor" /></svg>}
           </button>
           {/* The segment: drag along it to move in the video (playing goes on from there once let go). */}
           <div className="dp-track" role="slider" aria-label={t("Position in the segment")} aria-valuemin={0} aria-valuemax={Math.round(segLen)} aria-valuenow={Math.round(head - settings.crop.start)}
