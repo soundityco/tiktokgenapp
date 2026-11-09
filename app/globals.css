@@ -2155,3 +2155,33 @@ details.sec:first-of-type { background-image: none; }
 .menu .ver-line .btn.icon { border: 0; background: none; border-radius: var(--r); }
 .menu .ver-line .btn.icon:hover { background: #1d1d23; }
 .menu .ver-line.on .ver-main { background: #18181d; }
+
+/* Versions: delete in the danger colour, with its own red ground on hover. */
+.menu .ver-line .ver-del { color: var(--danger); }
+.menu .ver-line .ver-del:hover { color: color-mix(in srgb, var(--danger) 80%, #fff); background: color-mix(in srgb, var(--danger) 16%, transparent); }
+/* Short labels for the phone only. */
+.lbl-short, .takes-short, .bar-shown { display: none; }
+
+@media (max-width: 1000px) {
+  /* Under the picture: Create shows what the video shows (lyrics, hook) next to Zones; Style keeps the Edits switch. */
+  .video-bar > .bar-shown { display: inline-flex; gap: 6px; justify-self: start; }
+  .main[data-mobile-tab="style"] .video-bar > .bar-shown,
+  .main:not([data-mobile-tab="style"]) .video-bar > .switch,
+  .main:not([data-mobile-tab="style"]) .video-bar > .bar-noswitch { display: none; }
+  /* Lyrics and Hook: exactly the Zones button (same class). */
+  .video-stage > .shown-on { display: none; }
+  /* Format and take: one quiet line, no titles. */
+  .video-stage > .stage-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding-top: 10px; font-size: var(--fs-xs); }
+  .video-stage > .stage-meta .meta-row { display: flex; min-height: 0; gap: 0; }
+  .video-stage > .stage-meta .meta-k { display: none; }
+  /* The segment's tools: one row (version, new version as an icon, zoom), short labels. */
+  .ver-pick .ver-k, .ver-add .ver-add-l, .wave-fit .lbl-long, .takes-long, .take-w { display: none; }
+  .wave-fit .lbl-short, .takes-short { display: inline; }
+  .seg-versions { flex-wrap: nowrap; }
+  .ver-pick { min-width: 0; overflow: hidden; }
+  .ver-add { width: 30px; padding: 0; justify-content: center; flex: none; }
+  .wave-zoom { flex: none; }
+  .takes-row { gap: 6px; flex-wrap: wrap; align-items: center; }
+  .takes-row .btn { height: 28px; min-height: 0; padding: 0 10px; font-size: 12px; }
+}
+@media (max-width: 1000px) { .video-stage > .video-bar { grid-template-columns: auto 1fr; } }

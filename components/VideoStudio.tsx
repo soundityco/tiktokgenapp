@@ -3098,8 +3098,14 @@ export default function VideoStudio({
           {videoBlob && (
             <div className="deck-bar video-bar">
               {/* Phone: before / after the grade in one tap, across from Zones. */}
-              {gradesColour(grade) ? <Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /> : <span />}
-              <span />
+              {gradesColour(grade) ? <Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /> : <span className="bar-noswitch" />}
+              {/* Phone, Create page: what the video shows, in the same row as Zones (the Edits switch is the Style page's). */}
+              <span className="bar-shown">
+                <button className={"deck-zones bar-eye" + (settings.captions ? " on" : "")} aria-pressed={settings.captions}
+                  onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={14} />{t("Lyrics")}</button>
+                <button className={"deck-zones bar-eye" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
+                  onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
+              </span>
               <button className={"deck-zones" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
                 onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
                 <Icon name={aids.zones && settings.format !== "16:9" ? "eye-off" : "eye"} size={15} />{t("Zones")}
@@ -3268,27 +3274,27 @@ export default function VideoStudio({
                       </Menu>
                     );
                   })()}
-                  <button className="btn sm quiet ver-add" onClick={addVersion}
+                  <button className="btn sm quiet ver-add" onClick={addVersion} aria-label={versions.length ? t("New version") : t("Make a version B")}
                     title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
-                    <Icon name="plus" size={12} />{versions.length ? t("New version") : t("Make a version B")}
+                    <Icon name="plus" size={12} /><span className="ver-add-l">{versions.length ? t("New version") : t("Make a version B")}</span>
                   </button>
                   <span className="grow" />
                   {/* Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */}
                   <div className="wave-zoom" role="group" aria-label={t("Zoom of the waveform")}>
                     <button className="btn icon sm" aria-label={t("Zoom out")} disabled={!view} onClick={() => { const v = viewOf(); zoomTo(v.d * 2, v.s + v.d / 2); }}><Icon name="minus" size={12} /></button>
                     <button className="btn icon sm" aria-label={t("Zoom in")} onClick={() => { const v = viewOf(), c = settingsRef.current.crop; const mid = view ? v.s + v.d / 2 : c.start + c.duration / 2; zoomTo(v.d / 2, mid); }}><Icon name="plus" size={12} /></button>
-                    <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}>{view ? t("Whole track") : t("Fit segment")}</button>
+                    <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("All") : t("Fit")}</span></button>
                   </div>
                 </div>
                 {settings.takes && settings.takes.length > 1 && (
-                  <div className="row">
-                    <span className="muted xs row" style={{ gap: 4 }}>{t("Takes found in the video (pick the one to use):")}
+                  <div className="row takes-row">
+                    <span className="muted xs row takes-k" style={{ gap: 4 }}><span className="takes-long">{t("Takes found in the video (pick the one to use):")}</span><span className="takes-short label">{t("Takes")}</span>
                       <Hint text={t("The song plays more than once in this video (you sang it twice, or started over): each take is one of those passes. The first times are where it sits in the video, the second where it falls in the song. Pick the one to use; if you filmed only one pass, the other is a part of the song that sounds alike (a loop of the beat): keep the right one and ignore it.")} /></span>
                     {settings.takes.map((k, i) => (
                       <button key={i} className={"btn sm" + (Math.abs(k.offset - settings.offset) < 0.02 ? " on" : "")}
                         aria-pressed={Math.abs(k.offset - settings.offset) < 0.02} onClick={() => applyTake(k, settings.takes)}
                         title={t("In the video {a}–{b} · in the song {c}–{d}", { a: fmtTime(k.musicStart), b: fmtTime(k.musicEnd), c: fmtTime(k.offset + k.musicStart), d: fmtTime(k.offset + k.musicEnd) })}>
-                        {t("Take {n}", { n: i + 1 })} <span className="mono xs">{t("video")} {fmtTime(k.musicStart)}–{fmtTime(k.musicEnd)} · {t("song")} {fmtTime(k.offset + k.musicStart)}–{fmtTime(k.offset + k.musicEnd)}</span>
+                        {t("Take {n}", { n: i + 1 })} <span className="mono xs"><span className="take-w">{t("video")} </span>{mmss(k.musicStart)}–{mmss(k.musicEnd)}<span className="take-w"> · {t("song")} {fmtTime(k.offset + k.musicStart)}–{fmtTime(k.offset + k.musicEnd)}</span></span>
                       </button>
                     ))}
                   </div>
