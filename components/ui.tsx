@@ -232,10 +232,12 @@ export function Section({ title, children, open = false, id }: { title: ReactNod
 
 /** A family of the library (texts, photos): its head folds it away (remembered on this device); its own buttons
  *  (a "+") stay usable. */
-export function Family({ id, icon, title, count, action, children }: { id: string; icon: string; title: string; count: string; action?: ReactNode; children: ReactNode }) {
+export function Family({ id, icon, title, count, action, children, defaultOpen = true }: { id: string; icon: string; title: string; count: string; action?: ReactNode; children: ReactNode;
+  /** Open the first time (then as left on this device). */
+  defaultOpen?: boolean }) {
   const key = `tktgen-fam:${id}`;
-  const [open, setOpen] = useState(true);
-  useEffect(() => { try { if (localStorage.getItem(key) === "0") setOpen(false); } catch { /* private mode */ } }, [key]);
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => { try { const v = localStorage.getItem(key); if (v === "0") setOpen(false); else if (v === "1") setOpen(true); } catch { /* private mode */ } }, [key]);
   const toggle = () => setOpen((v) => { try { localStorage.setItem(key, v ? "0" : "1"); } catch { /* private mode */ } return !v; });
   return (
     <section className={"lib-family" + (open ? " open" : "")}>

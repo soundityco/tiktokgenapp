@@ -286,6 +286,7 @@ export default function VideoStudio({
   onSaveNow,
   releaseTitle,
   library,
+  libraryPhone,
   lyricsRow,
   onCopyJob,
   onToast,
@@ -322,6 +323,8 @@ export default function VideoStudio({
   onToast?: (msg: string) => void;
   /** The library's shared part (the text lists, the same as the carousel's), under the release's files. */
   library?: ReactNode;
+  /** The same on a phone, where the library holds everything of the release (the carousel's lists too). */
+  libraryPhone?: ReactNode;
   /** The release's lyrics, as a row of the library (next to the official audio). */
   lyricsRow?: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
@@ -2685,7 +2688,8 @@ export default function VideoStudio({
             )}
             </div>
           </div>
-          {library}
+          <div className="lib-desk">{library}</div>
+          <div className="lib-phone">{libraryPhone}</div>
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">

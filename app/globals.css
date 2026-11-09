@@ -1756,3 +1756,13 @@ details.sec:first-of-type { background-image: none; }
   .mobile-tabs > .dock-lib:active { scale: .94; }
   .mobile-tabs > .dock-lib.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 }
+/* One library for the release on a phone (both studios show it all); a computer keeps each studio's own. */
+.lib-desk { display: contents; }
+.lib-phone { display: none; }
+@media (max-width: 1000px) {
+  .lib-desk { display: none; }
+  .lib-phone { display: contents; }
+}
+.lib-sum { display: grid; gap: 8px; padding: 2px 0 var(--s2); }
+.lib-sum-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--s3); align-items: baseline; font-size: var(--fs-sm); }
+.lib-sum-row .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

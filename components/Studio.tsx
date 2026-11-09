@@ -1259,6 +1259,31 @@ export default function Studio({ userName }: { userName: string }) {
     );
   };
 
+  /** The photo lists (the carousel's; on a phone, the video studio's library shows them too, folded at first). */
+  const photosFamily = (id = "photos", defaultOpen = true) => (
+    <Family id={id} defaultOpen={defaultOpen} icon="image" title={t("Photos")} count={(vPics.length === 1 ? t("1 list") : t("{n} lists", { n: vPics.length }))}>
+      {vPics.length ? listRows("photos") : <p className="muted xs group-empty">{t("No list yet.")}</p>}
+      {/* Under the lists (the head keeps only its fold arrow, aligned with the texts'). */}
+      <button className="lib-add" onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} />{t("New photo list")}</button>
+    </Family>
+  );
+  // Phone: one library for the whole release, whatever the studio. In the carousel, the video's files come last,
+  // folded (what they are, and a way to them: the video studio's library, where they are handled).
+  const videoFamily = project && (
+    <div className="lib-phone">
+      <Family id="video-in-carousel" defaultOpen={false} icon="film" title={t("Video")} count={project.videos.length === 1 ? t("1 video") : t("{n} videos", { n: project.videos.length })}>
+        <div className="lib-sum">
+          <div className="lib-sum-row"><span className="muted xs">{t("Official audio")}</span><span className="truncate">{project.audioName ?? t("Not imported yet")}</span></div>
+          {project.videos.map((v) => {
+            const m = /^Video (\d+)$/.exec(v.name);
+            return <div key={v.id} className="lib-sum-row"><span className="muted xs">{m ? t("Video {n}", { n: m[1] }) : v.name}</span><span className="truncate">{v.videoName ?? t("No camera take yet")}</span></div>;
+          })}
+        </div>
+        <button className="lib-add" onClick={() => switchStudio("video")}><Icon name="reel" size={14} />{t("Open in the video studio")}</button>
+      </Family>
+    </div>
+  );
+
   // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
   // its lyrics right next to it, at the same place in both studios.
   // Phone: where we are in the deck (a tap goes there) and the TikTok zones on / off (the clean preview, like
@@ -1450,6 +1475,7 @@ export default function Studio({ userName }: { userName: string }) {
             onCopyJob={setCopyJob}
             onToast={say}
             library={textGroups(["hooks", "captions"])}
+            libraryPhone={<>{textGroups(["hooks", "captions", "texts"])}{photosFamily("photos-in-video", false)}</>}
             lyricsRow={lyricsRow}
             captionPools={captionPools}
             onDrawCaption={drawCaptionFrom}
@@ -1472,11 +1498,8 @@ export default function Studio({ userName }: { userName: string }) {
             {lyricsRow}
           </section>
           {textGroups(["hooks", "texts", "captions"])}
-          <Family id="photos" icon="image" title={t("Photos")} count={(vPics.length === 1 ? t("1 list") : t("{n} lists", { n: vPics.length }))}>
-            {vPics.length ? listRows("photos") : <p className="muted xs group-empty">{t("No list yet.")}</p>}
-            {/* Under the lists (the head keeps only its fold arrow, aligned with the texts'). */}
-            <button className="lib-add" onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} />{t("New photo list")}</button>
-          </Family>
+          {photosFamily()}
+          {videoFamily}
         </aside>
 
         <main className="col center">
