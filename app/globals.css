@@ -2215,3 +2215,19 @@ details.sec:first-of-type { background-image: none; }
 }
 /* Phone: the lock first, then the passage and its length. */
 @media (max-width: 1000px) { .app:has(.dock-player:not(:empty)) .transport .tr-lock { order: -1; } }
+/* Phone: the zoom's −, + and Fit like the version and sync buttons (32 px, the same border, no fill). */
+@media (max-width: 1000px) {
+  .seg-versions .wave-zoom .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
+  .seg-versions .wave-zoom .btn.icon { width: 32px; padding: 0; }
+  .seg-versions .ver-add { height: 32px; min-height: 32px; width: 32px; }
+}
+/* The segment's controls, phone and computer alike: 32 px, the same thin border, no fill, 12 px text
+   (length, lock, sync, version, new version, zoom). The play button and a primary action keep their look. */
+.video-side .transport .seg-len,
+.video-side .transport .tr-lock,
+.video-side .transport .menu-wrap > .btn:not(.primary),
+.seg-versions .ver-pick,
+.seg-versions .wave-zoom .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
+.video-side .transport .tr-lock, .seg-versions .wave-zoom .btn.icon { width: 32px; padding: 0; justify-content: center; }
+.video-side .transport .tr-lock.on { border-color: var(--text); color: var(--text); }
+.seg-versions .ver-add { height: 32px; min-height: 32px; }
