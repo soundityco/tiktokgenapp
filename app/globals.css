@@ -2203,3 +2203,13 @@ details.sec:first-of-type { background-image: none; }
   .seg-top .video-status { border: 0; padding: 0; background: none; min-height: 0; height: auto; }
   .app .video-center .seg-top { align-items: center !important; }
 }
+
+@media (max-width: 1000px) {
+  /* "Segment" and the sync quality: their own text height (no taller row), so the block's top margin is its side one. */
+  .app:has(.dock-player:not(:empty)) .video-side .timeline > .seg-top { min-height: 0; line-height: 1.2; margin-bottom: 8px; }
+  .video-side .timeline > .seg-top .video-status { height: auto; line-height: 1.2; }
+  /* More room between the tracks and the tools below them. */
+  .video-side .timeline > .transport { margin-top: 12px; }
+  /* The segment's length: a plain control like the version and sync buttons (no filled field). */
+  .video-side .transport .seg-len { height: 32px; min-height: 32px; background: none; padding: 0 10px; font-size: 12px; }
+}
