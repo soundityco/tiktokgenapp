@@ -2016,3 +2016,11 @@ details.sec:first-of-type { background-image: none; }
   .video-head .h-status { grid-column: 5; grid-row: 2; justify-self: start; align-self: end; margin: 0 0 0 var(--s4); }
 }
 .h-status.field .badge { text-transform: none; letter-spacing: normal; }
+@media (max-width: 1000px) {
+  /* Create page, video: never smaller than its base size (40% of the screen's height); bigger if the Style page's
+     drag made it bigger. Between the two pages the picture glides to its size instead of jumping. */
+  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap:not(.landscape) { width: min(100%, calc(max(40dvh, var(--pv-h, 40dvh)) * 9 / 16)); }
+  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap.landscape { width: min(100%, calc(max(40dvh, var(--pv-h, 40dvh)) * 16 / 9)); }
+  .main[data-studio="video"] .video-grid .cv-wrap { transition: width .34s cubic-bezier(.3,1,.4,1); }
+  html.pv-dragging .main[data-studio="video"] .video-grid .cv-wrap { transition: none; }
+}
