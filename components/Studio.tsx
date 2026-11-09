@@ -155,6 +155,21 @@ export default function Studio({ userName }: { userName: string }) {
   const carParts: SheetPart<CarPart>[] = [
     { id: "text", label: t("Text") }, { id: "photo", label: t("Photo") }, { id: "position", label: t("Position") }, { id: "presets", label: t("Presets") },
   ];
+  // Phone: the Library is one page for the whole release, whatever the studio: the video studio's library column
+  // (the release's lyrics, audio and takes, with all they can do, then every text list and the photos) shows there
+  // in the carousel too, so nothing needs a studio switch.
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const mq = matchMedia("(max-width: 1000px)");
+    const f = () => setPhone(mq.matches);
+    f();
+    mq.addEventListener("change", f);
+    return () => mq.removeEventListener("change", f);
+  }, []);
+  const libHub = phone && mobileTab === "lists";
+  // Kept mounted once shown (its files stay read).
+  useEffect(() => { if (libHub) setVideoSeen(true); }, [libHub]);
+
   // Phone, the studio's own page: the board's dots run from the top down to the end of the preview's block (the
   // video's info lines / the slides' dots and Zones), fading out from the picture's bottom; below, plain black.
   useEffect(() => {
@@ -1267,23 +1282,6 @@ export default function Studio({ userName }: { userName: string }) {
       <button className="lib-add" onClick={() => setOverlay({ k: "newPool", kind: "photos" })}><Icon name="plus" size={14} />{t("New photo list")}</button>
     </Family>
   );
-  // Phone: one library for the whole release, whatever the studio. In the carousel, the video's files come last,
-  // folded (what they are, and a way to them: the video studio's library, where they are handled).
-  const videoFamily = project && (
-    <div className="lib-phone">
-      <Family id="video-in-carousel" defaultOpen={false} icon="film" title={t("Video")} count={project.videos.length === 1 ? t("1 video") : t("{n} videos", { n: project.videos.length })}>
-        <div className="lib-sum">
-          <div className="lib-sum-row"><span className="muted xs">{t("Official audio")}</span><span className="truncate">{project.audioName ?? t("Not imported yet")}</span></div>
-          {project.videos.map((v) => {
-            const m = /^Video (\d+)$/.exec(v.name);
-            return <div key={v.id} className="lib-sum-row"><span className="muted xs">{m ? t("Video {n}", { n: m[1] }) : v.name}</span><span className="truncate">{v.videoName ?? t("No camera take yet")}</span></div>;
-          })}
-        </div>
-        <button className="lib-add" onClick={() => switchStudio("video")}><Icon name="reel" size={14} />{t("Open in the video studio")}</button>
-      </Family>
-    </div>
-  );
-
   // The release: its name is the title of both studios, and the menu to change it (the only place it shows);
   // its lyrics right next to it, at the same place in both studios.
   // Phone: where we are in the deck (a tap goes there) and the TikTok zones on / off (the clean preview, like
@@ -1451,8 +1449,8 @@ export default function Studio({ userName }: { userName: string }) {
       )}
 
       <div className="main" data-mobile-tab={mobileTab} data-studio={studio}>
-        {(studio === "video" || videoSeen) && (
-          <div style={{ display: studio === "video" ? "contents" : "none" }}>
+        {(studio === "video" || videoSeen || libHub) && (
+          <div style={{ display: studio === "video" || libHub ? "contents" : "none" }}>
           <VideoStudio
             active={studio === "video"}
             stylePage={mobileTab === "style"}
@@ -1475,7 +1473,7 @@ export default function Studio({ userName }: { userName: string }) {
             onCopyJob={setCopyJob}
             onToast={say}
             library={textGroups(["hooks", "captions"])}
-            libraryPhone={<>{textGroups(["hooks", "captions", "texts"])}{photosFamily("photos-in-video", false)}</>}
+            libraryPhone={<>{textGroups(["hooks", "texts", "captions"])}{photosFamily()}</>}
             lyricsRow={lyricsRow}
             captionPools={captionPools}
             onDrawCaption={drawCaptionFrom}
@@ -1499,7 +1497,6 @@ export default function Studio({ userName }: { userName: string }) {
           </section>
           {textGroups(["hooks", "texts", "captions"])}
           {photosFamily()}
-          {videoFamily}
         </aside>
 
         <main className="col center">
@@ -1653,7 +1650,7 @@ export default function Studio({ userName }: { userName: string }) {
         <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} aria-label={t("Style")} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         <span className="mobile-tabs-sep" aria-hidden />
         {/* The library, a page apart (the release's material, whatever the studio); the account is in the header. */}
-        <button className={"dock-lib" + (mobileTab === "lists" ? " on" : "")} aria-pressed={mobileTab === "lists"} aria-label={t("Library")} onClick={() => pickMobileTab("lists")}><Icon name="library" size={20} /></button>
+        <button className={"dock-lib" + (mobileTab === "lists" ? " on" : "")} aria-pressed={mobileTab === "lists"} aria-label={t("Library")} onClick={() => pickMobileTab("lists")}><Icon name="library" size={20} /><span className="tab-name">{t("Library")}</span></button>
       </nav>
 
       {edText && (

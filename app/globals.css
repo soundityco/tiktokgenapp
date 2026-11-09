@@ -1766,3 +1766,17 @@ details.sec:first-of-type { background-image: none; }
 .lib-sum { display: grid; gap: 8px; padding: 2px 0 var(--s2); }
 .lib-sum-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--s3); align-items: baseline; font-size: var(--fs-sm); }
 .lib-sum-row .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1000px) {
+  /* The Library (phone) is the video studio's library column in both studios: the carousel's own is put away. */
+  .main[data-studio="carousel"][data-mobile-tab="lists"] > .col.side.l { display: none; }
+  .main[data-mobile-tab="lists"] .video-shell > .col.side.l { display: grid; border-top: 0; }
+  /* Nothing in it is wider than the screen (long file and list names end with "…"). */
+  .video-shell > .col.side { grid-template-columns: minmax(0, 1fr); }
+  .lib-phone > *, .lib-desk > * { min-width: 0; max-width: 100%; }
+  /* The library's square opens into a pill with its name, like Create and Style: one word shown out of three. */
+  .mobile-tabs > .dock-lib { gap: 0; transition: background .35s cubic-bezier(.3,1.2,.5,1), color .25s, gap .35s cubic-bezier(.3,1.2,.5,1), padding .35s cubic-bezier(.3,1.2,.5,1), width .35s cubic-bezier(.3,1.2,.5,1), scale .12s; }
+  .mobile-tabs > .dock-lib .tab-name { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; font: 600 14px/1 var(--sans);
+    transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .2s; }
+  .mobile-tabs > .dock-lib.on { display: flex; align-items: center; width: auto; gap: 8px; padding: 0 16px 0 13px; }
+  .mobile-tabs > .dock-lib.on .tab-name { max-width: 130px; opacity: 1; transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .25s .08s; }
+}
