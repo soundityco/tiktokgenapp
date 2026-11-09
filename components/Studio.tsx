@@ -167,6 +167,26 @@ export default function Studio({ userName }: { userName: string }) {
     return () => mq.removeEventListener("change", f);
   }, []);
   const libHub = phone && mobileTab === "lists";
+  // The dock's pill: placed on the open page's button (measured), it slides from one to the next.
+  const dockRef = useRef<HTMLElement>(null);
+  const [dockThumb, setDockThumb] = useState<CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    const nav = dockRef.current;
+    if (!nav) return;
+    const place = (slide: boolean) => {
+      const on = nav.querySelector<HTMLElement>(mobileTab === "lists" ? ".dock-lib" : `.dock-pair > button:nth-of-type(${mobileTab === "style" ? 2 : 1})`);
+      if (!on || !on.offsetParent) return;
+      const n = nav.getBoundingClientRect(), b = on.getBoundingClientRect();
+      // (Placed inside the dock's border: its padding box is the pill's frame.)
+      setDockThumb((cur) => ({ translate: `${b.left - n.left - nav.clientLeft}px ${b.top - n.top - nav.clientTop}px`, width: b.width, height: b.height, ...(cur && slide ? {} : { transition: "none" }) }));
+    };
+    place(true);
+    if (typeof ResizeObserver === "undefined") return;
+    let w = nav.offsetWidth, h = nav.offsetHeight;
+    const ro = new ResizeObserver(() => { if (nav.offsetWidth !== w || nav.offsetHeight !== h) { w = nav.offsetWidth; h = nav.offsetHeight; place(false); } });
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, [mobileTab, studio, lang, phone, !!ws]);
   // Kept mounted once shown (its files stay read).
   useEffect(() => { if (libHub) setVideoSeen(true); }, [libHub]);
 
@@ -1636,7 +1656,9 @@ export default function Studio({ userName }: { userName: string }) {
       {/* Phone: one panel at a time, like an app (the centre, the files / lists on the left, the style on the right). */}
       {/* Phone: the page fades to black behind the dock, like under the header. */}
       <div className="dock-fade" aria-hidden />
-      <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab}>
+      <nav className="mobile-tabs" aria-label={t("Sections")} data-tab={mobileTab} ref={dockRef}>
+        {/* One white pill for the three pages (Create, Style, the library): it slides to the open one, taking its size. */}
+        <span className="dock-thumb" aria-hidden style={dockThumb ?? { opacity: 0 }} />
         {/* The video studio's player (its play button and a timeline to scrub), on top of the dock. */}
         <div id="dock-player" className="dock-player" />
         {/* The open studio (its icon on its gradient); a tap goes to the other. */}
@@ -1648,7 +1670,6 @@ export default function Studio({ userName }: { userName: string }) {
         {/* Create and Style share one white pill that slides from one to the other (the desktop studio switch's
             move: a transform only, same time and curve, the labels' colour along); off on the library. */}
         <div className="dock-pair" data-on={mobileTab === "slides" ? "0" : mobileTab === "style" ? "1" : "none"}>
-          <span className="dock-pair-thumb" aria-hidden />
           <button className={mobileTab === "slides" ? "on" : ""} aria-pressed={mobileTab === "slides"} onClick={() => pickMobileTab("slides")}><Icon name="sparkle" size={18} /><span className="tab-name">{/* One word in both studios: the dock keeps its exact layout when switching. */}{t("Create")}</span></button>
           <button className={mobileTab === "style" ? "on" : ""} aria-pressed={mobileTab === "style"} aria-label={t("Style")} onClick={() => pickMobileTab("style")}><Icon name="sliders" size={18} /><span className="tab-name">{t("Style")}</span></button>
         </div>

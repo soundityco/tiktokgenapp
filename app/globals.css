@@ -1834,3 +1834,14 @@ details.sec:first-of-type { background-image: none; }
   .dock-pair > button svg { flex: none; }
 }
 @media (prefers-reduced-motion: reduce) { .dock-pair-thumb, .dock-pair > button { transition: none; } }
+/* Phone dock, one pill for the three pages: it slides (and resizes) from Create to Style to the library. */
+.dock-thumb { display: none; }
+@media (max-width: 1000px) {
+  .mobile-tabs > .dock-thumb { display: block; position: absolute; top: 0; left: 0; z-index: 0; border-radius: 10px; background: var(--accent); pointer-events: none;
+    transition: translate .42s cubic-bezier(.65,0,.35,1), width .42s cubic-bezier(.65,0,.35,1), height .42s cubic-bezier(.65,0,.35,1); }
+  .mobile-tabs > :not(.dock-thumb) { position: relative; z-index: 1; }
+  .dock-pair-thumb { display: none !important; }
+  .mobile-tabs > .dock-lib, .mobile-tabs > .dock-lib.on { background: transparent; transition: color .42s cubic-bezier(.65,0,.35,1), border-color .42s, scale .12s; }
+  .mobile-tabs > .dock-lib.on { color: var(--on-accent); border-color: transparent; }
+  .mobile-tabs > .mobile-tabs-sep { z-index: 2; }
+}
