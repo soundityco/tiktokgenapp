@@ -178,7 +178,9 @@ export default function Studio({ userName }: { userName: string }) {
       if (!on || !on.offsetParent) return;
       const n = nav.getBoundingClientRect(), b = on.getBoundingClientRect();
       // (Placed inside the dock's border: its padding box is the pill's frame.)
-      setDockThumb((cur) => ({ translate: `${b.left - n.left - nav.clientLeft}px ${b.top - n.top - nav.clientTop}px`, width: b.width, height: b.height, ...(cur && slide ? {} : { transition: "none" }) }));
+      // It slides sideways only: its height place follows at once (the video's player row comes and goes with the
+      // library, the dock's buttons move up or down then).
+      setDockThumb((cur) => ({ translate: `${b.left - n.left - nav.clientLeft}px 0`, top: b.top - n.top - nav.clientTop, width: b.width, height: b.height, ...(cur && slide ? {} : { transition: "none" }) }));
     };
     place(true);
     if (typeof ResizeObserver === "undefined") return;
