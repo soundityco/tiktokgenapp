@@ -663,6 +663,8 @@ export const FR: Record<string, string> = {
   "{n} takes found in the video": "{n} prises trouvées dans la vidéo",
   "Takes found in the video (pick the one to use):": "Prises trouvées dans la vidéo (choisis celle à utiliser) :",
   "Take {n}": "Prise {n}",
+  "The photo without its edits, to compare": "La photo sans ses retouches, pour comparer",
+  "Before": "Avant",
   "Saved in your own Drive:": "Enregistrées sur ton propre Drive :",
   "and your folders": "et tes dossiers",
   "Rollout keeps none of your photos.": "Rollout ne garde aucune de tes photos.",

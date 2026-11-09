@@ -2899,7 +2899,12 @@ export default function VideoStudio({
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (
             <div className="deck-bar video-bar">
-              <span /><span />
+              {/* Phone: before / after the grade in one tap, across from Zones. */}
+              {gradesColour(grade) ? (
+                <button className={"deck-zones compare" + (rawView ? " on" : "")} aria-pressed={rawView} onClick={() => setRawView((v) => !v)}
+                  title={t("Show the picture as recorded, to compare")}>{rawView ? t("Before") : t("Before / after")}</button>
+              ) : <span />}
+              <span />
               <button className={"deck-zones" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
                 onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
                 <Icon name={aids.zones && settings.format !== "16:9" ? "eye-off" : "eye"} size={15} />{t("Zones")}
@@ -3460,7 +3465,11 @@ export default function VideoStudio({
                         </div>
           )}
           <div id="video-color" className="stack">
-            <div className="row col-head"><span className="label">{t("Colour")}</span><Hint text={t("The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.")} /></div>
+            <div className="row col-head"><span className="label">{t("Colour")}</span><Hint text={t("The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.")} />
+              {/* Before / after in one click: the picture as recorded, then the grade again. */}
+              {gradesColour(grade) && <><span className="grow" /><button className={"btn sm" + (rawView ? " on" : "")} aria-pressed={rawView} onClick={() => setRawView((v) => !v)}
+                title={t("Show the picture as recorded, to compare")}>{rawView ? t("Before") : t("Before / after")}</button></>}
+            </div>
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}

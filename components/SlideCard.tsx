@@ -100,6 +100,7 @@ export default function SlideCard(p: Props) {
   const text = gen?.text ?? "";
   // Photo edits panel, over the picture.
   const [adjusting, setAdjusting] = useState(false);
+  const [compare, setCompare] = useState(false);
   const [finding, setFinding] = useState(false);
   const [dropHere, setDropHere] = useState(false);
   const [dropErr, setDropErr] = useState<string | null>(null);
@@ -125,9 +126,13 @@ export default function SlideCard(p: Props) {
 
   useEffect(() => {
     if (!cv.current) return;
-    const r = renderSlide(cv.current, cfg, img, text, { guideV: guides.v, guideH: guides.h, zones: p.zones });
+    // Comparing (the photo edits' "Before"): the photo drawn without its edits, the rest as it is.
+    const shown = compare && cfg.pic.adjust ? { ...cfg, pic: { ...cfg.pic, adjust: undefined } } : cfg;
+    const r = renderSlide(cv.current, shown, img, text, { guideV: guides.v, guideH: guides.h, zones: p.zones });
     box.current = r.box;
-  }, [cfg, img, text, guides, p.zones, p.fontsReady]);
+  }, [cfg, img, text, guides, p.zones, p.fontsReady, compare]);
+  // The panel closed (Done, a click away, another photo's): the edits are shown again.
+  useEffect(() => { if (!adjusting) setCompare(false); }, [adjusting]);
 
   const toCanvas = (e: { clientX: number; clientY: number }) => {
     const c = cv.current!;
@@ -484,7 +489,9 @@ export default function SlideCard(p: Props) {
               <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
               <div className="adjust-actions">
                 <button className="btn sm quiet" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
-                <button className="btn sm" onClick={() => setAdjusting(false)}>{t("Done")}</button>
+                <button className={"btn sm" + (compare ? " on" : "")} aria-pressed={compare} disabled={!hasAdjust} onClick={() => setCompare((v) => !v)}
+                  title={t("The photo without its edits, to compare")}>{compare ? t("Before") : t("Before / after")}</button>
+                <button className="btn sm" onClick={() => { setCompare(false); setAdjusting(false); }}>{t("Done")}</button>
               </div>
             </div>
           );

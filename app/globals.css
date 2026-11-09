@@ -2097,3 +2097,9 @@ details.sec:first-of-type { background-image: none; }
   .board-player .dp-strip.on { height: 46px; border-radius: 10px; }
   .board-player .dp-head { width: 6px; height: 56px; margin: -28px 0 0 -3px; border-radius: 3px; }
 }
+/* The library tile on a Drive copy: its violet pill, then the part of the take it holds (on the next line when the
+   tile is narrow), both centred; the ✓ rule above is for the status lines, not for this one. */
+.copy-status.on-copy { flex-wrap: wrap; align-items: center; row-gap: 4px; }
+.copy-status.on-copy > .pill-copy { flex: none; }
+.copy-status.on-copy > .mono { white-space: nowrap; flex: none; }
+.compare.on { color: var(--text); border-color: var(--text); background: var(--raised); }
