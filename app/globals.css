@@ -2214,7 +2214,7 @@ details.sec:first-of-type { background-image: none; }
   .video-side .transport .seg-len { height: 32px; min-height: 32px; background: none; padding: 0 10px; font-size: 12px; }
 }
 /* Phone: the lock first, then the passage and its length. */
-@media (max-width: 1000px) { .app:has(.dock-player:not(:empty)) .transport .tr-lock { order: -1; } }
+@media (max-width: 1000px) { .app:has(.dock-player:not(:empty)) .transport .tr-lock { order: -2; } }
 /* Phone: the zoom's −, + and Fit like the version and sync buttons (32 px, the same border, no fill). */
 @media (max-width: 1000px) {
   .seg-versions .wave-zoom .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
@@ -2244,3 +2244,11 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .transport { order: 6; margin-top: 12px; }
 .video-side .timeline > .seg-versions { order: 7; }
 .video-side .transport .tr-lock { order: -1; }
+/* Takes, everywhere: "Takes" then "Take 1 0:04–0:34"… on one line (the full detail stays in each one's tooltip). */
+.takes-long, .take-w { display: none; }
+.takes-short { display: inline; }
+.video-side .timeline > .takes-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.takes-row .btn { flex: none; white-space: nowrap; }
+/* The segment's tools, everywhere: lock, length, then the passage. */
+.video-side .transport .tr-lock { order: -2; }
+.video-side .transport .seg-len { order: -1; }
