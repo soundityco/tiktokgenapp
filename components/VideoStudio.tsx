@@ -268,6 +268,9 @@ function whenReady(el: HTMLVideoElement, wait = 3000): Promise<void> {
  * find where the camera recording sits in the official track, trim the segment, place the
  * lyrics once, then export a vertical clip with the official audio and the lyrics burned in.
  */
+/** The dock's film strips already made (file, passage): coming back to a page shows them at once. */
+const STRIPS = new Map<string, string[]>();
+
 /** Minutes and seconds, no tenths (the dock's player). */
 const mmss = (x: number) => { const v = Math.max(0, Math.floor(x)); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}`; };
 
@@ -2418,9 +2421,15 @@ export default function VideoStudio({
     : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };
   const segLen = Math.max(0.1, end - settings.crop.start);
   useEffect(() => {
-    if (!dockSlot || !videoUrl) { setStrip([]); return; }
+    if (!dockSlot || !videoUrl) { if (!videoUrl) setStrip([]); return; }
     let off = false;
     const from = settings.crop.start, len = segLen, offset = settings.offset;
+    // Already made for this file and this passage: at once.
+    const key = `${videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}`;
+    const known = STRIPS.get(key);
+    if (known) { setStrip(known); return; }
+    // The first time, right away; while the segment is being moved, once it rests (the old pictures stay meanwhile).
+    const wait = strip.length ? 450 : 0;
     const timer = window.setTimeout(async () => {
       const v = document.createElement("video");
       v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = videoUrl;
@@ -2437,13 +2446,16 @@ export default function VideoStudio({
           cv.width = Math.round((H * v.videoWidth) / v.videoHeight); cv.height = H;
           cv.getContext("2d")!.drawImage(v, 0, 0, cv.width, cv.height);
           out.push(cv.toDataURL("image/jpeg", 0.62));
+          // Each picture takes its place as soon as it is made (the strip is at its full height from the start).
+          if (!off && !wait) setStrip([...out]);
         }
+        if (out.length === N) STRIPS.set(key, out);
         if (!off && out.length) setStrip(out);
       } catch { if (!off) setStrip([]); }
       finally { v.removeAttribute("src"); v.load(); }
-    }, 600);
+    }, wait);
     return () => { off = true; clearTimeout(timer); };
-  }, [dockSlot, videoUrl, settings.crop.start, segLen, settings.offset]);
+  }, [dockSlot, videoUrl, settings.crop.start, segLen, settings.offset]); // eslint-disable-line react-hooks/exhaustive-deps
   const placed = (project.lyricWords?.length ?? 0) > 0;
   /** Nothing synced yet: one button does both. Afterwards each has its own, so changing the video never touches the lyrics. */
   const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
@@ -3359,8 +3371,8 @@ export default function VideoStudio({
             onPointerUp={() => { const was = dockDrag.current?.was; dockDrag.current = null; if (was) setTimeout(() => void playRef.current(), 0); }}
             onPointerCancel={() => { dockDrag.current = null; }}>
             {/* A film strip of the segment (pictures of the take along it), or a plain rail without a take. */}
-            <span className={"dp-strip" + (strip.length ? " on" : "")}>
-              {strip.map((src, i) => <img key={i} src={src} alt="" draggable={false} />)}
+            <span className={"dp-strip" + (videoUrl ? " on" : "")}>
+              {videoUrl ? Array.from({ length: 9 }, (_, i) => strip[i] ? <img key={i} src={strip[i]} alt="" draggable={false} /> : <i key={i} className="dp-slot" />) : null}
               <span className="dp-played" style={{ width: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
             </span>
             <span className="dp-head" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />

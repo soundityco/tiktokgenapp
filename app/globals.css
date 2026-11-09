@@ -1845,3 +1845,10 @@ details.sec:first-of-type { background-image: none; }
   .mobile-tabs > .dock-lib.on { color: var(--on-accent); border-color: transparent; }
   .mobile-tabs > .mobile-tabs-sep { z-index: 2; }
 }
+@media (max-width: 1000px) {
+  /* The strip at its full height from the start; a picture not made yet is a dark slot, each one fades in. */
+  .dp-strip.on { transition: none; }
+  .dp-strip .dp-slot { flex: 1 1 0; min-width: 0; height: 100%; background: #111116; box-shadow: inset -1px 0 0 rgba(255,255,255,.04); }
+  .dp-strip img { animation: dp-pic .28s ease-out backwards; }
+}
+@keyframes dp-pic { from { opacity: 0; } }
