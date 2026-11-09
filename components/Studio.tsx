@@ -1946,6 +1946,7 @@ export default function Studio({ userName }: { userName: string }) {
       {overlay?.k === "newProject" && <PromptDialog title={t("New project")} label={t("Release name")} confirmLabel={t("Create")} onSubmit={createProject} onClose={() => setOverlay(null)} />}
       {shareOpen && (
         <ShareDialog kind="images" caption={project.caption} onClose={() => setShareOpen(false)}
+          place={{ release: project.name, what: carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!) }}
           title={carouselsOf(project).length > 1 ? `${project.name} · ${carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!)}` : project.name}
           build={async () => { cancelExport.current = false; return buildFiles(project); }} />
       )}

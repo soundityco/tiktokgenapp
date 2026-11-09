@@ -262,13 +262,18 @@ export async function receiveFiles(code: string, onState: (s: ReceiveState) => v
 }
 
 /** Plan B, on the computer: the files on the user's Drive, readable by link, the links handed to the phone. */
-export async function shareThroughDrive(code: string, files: { name: string; blob: Blob }[], onProgress: (p: number) => void, signal: AbortSignal) {
-  const { getToken, uploadToDrive } = await import("./drive");
+export async function shareThroughDrive(code: string, files: { name: string; blob: Blob }[], onProgress: (p: number) => void, signal: AbortSignal,
+  /** Where it goes in the Drive: Rollout / Exports / <release> / <what · date> (Rollout itself without it). */
+  place?: { release: string; what: string }) {
+  const { getToken, uploadToDrive, DRIVE_PATHS } = await import("./drive");
+  const d = new Date();
+  const when = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
+  const path = place ? DRIVE_PATHS.exports(place.release || "Release", `${place.what} · ${when}`) : undefined;
   const total = files.reduce((n, f) => n + f.blob.size, 0) || 1;
   let before = 0;
   const drive: { name: string; id: string }[] = [];
   for (const f of files) {
-    const id = await uploadToDrive(f.blob, f.name, (p) => onProgress((before + p * f.blob.size) / total), signal, f.blob.type || undefined);
+    const id = await uploadToDrive(f.blob, f.name, (p) => onProgress((before + p * f.blob.size) / total), signal, f.blob.type || undefined, { tktgen: "export" }, path);
     before += f.blob.size;
     // Readable by whoever has the link (the phone, not signed in); the file stays in the Rollout folder of the Drive.
     await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {

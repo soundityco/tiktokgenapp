@@ -10,8 +10,10 @@ import { Modal } from "./ui";
  * "Send to my phone": a QR code to scan with the phone; the files go straight from this browser to the phone's
  * over the local network (no upload). If the two cannot reach each other, the files can go through the Drive.
  */
-export default function ShareDialog({ title, caption, kind, build, onClose }: {
+export default function ShareDialog({ title, caption, kind, build, onClose, place }: {
   title: string;
+  /** Its folder in the Drive when it goes that way: Rollout / Exports / <release> / <what · date>. */
+  place?: { release: string; what: string };
   caption?: string;
   kind: "video" | "images";
   /** The files to send (made when the window opens: the pictures of a carousel, an exported video…). */
@@ -51,7 +53,7 @@ export default function ShareDialog({ title, caption, kind, build, onClose }: {
   const viaDrive = async () => {
     if (!code) return;
     setDrivePct(0);
-    try { await shareThroughDrive(code, files.current, setDrivePct, ac.current.signal); setDriveDone(true); }
+    try { await shareThroughDrive(code, files.current, setDrivePct, ac.current.signal, place); setDriveDone(true); }
     catch (e) { setState({ step: "error", why: e instanceof Error ? e.message : String(e) }); }
     finally { setDrivePct(null); }
   };

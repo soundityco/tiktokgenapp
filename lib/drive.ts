@@ -201,6 +201,8 @@ export const DRIVE_PATHS = {
   audios: (release: string) => ["Releases", release, "Audios"],
   videos: (release: string) => ["Releases", release, "Videos"],
   luts: ["Utils", "LUTS"],
+  /** What was sent to a phone through the Drive: Exports / <release> / <what> · <when>. */
+  exports: (release: string, what: string) => ["Exports", release, what],
   fonts: ["Utils", "Fonts"],
 };
 const TREE_KEY = "tktgen-drive-tree";
@@ -212,11 +214,16 @@ const writeTree = (t: Record<string, string>) => { try { localStorage.setItem(TR
 const checked = new Set<string>();
 const treeAsk = new Map<string, Promise<string>>();
 
-/** The folder `name` inside `parent`: found (the oldest one) or made. */
+/**
+ * The folder `name` inside `parent`: found or made. Twins (two devices making it at the same moment: the Drive
+ * shows a new folder to searches only after a few seconds) are merged into the oldest one, the others trashed.
+ */
 async function childFolder(parent: string, name: string): Promise<string> {
   const q = `name = '${quote(name)}' and mimeType = 'application/vnd.google-apps.folder' and '${parent}' in parents and trashed = false`;
-  const found = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", orderBy: "createdTime", pageSize: "1" })}`)).json();
-  if (found.files?.[0]?.id) return found.files[0].id as string;
+  const found = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", orderBy: "createdTime", pageSize: "10" })}`)).json();
+  const ids: string[] = (found.files ?? []).map((f: { id: string }) => f.id);
+  if (ids.length > 1) await mergeFolders(ids[0], ids.slice(1));
+  if (ids[0]) return ids[0];
   const res = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
     method: "POST",
     headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
@@ -225,6 +232,47 @@ async function childFolder(parent: string, name: string): Promise<string> {
   if (res.status === 401) signalAuth();
   if (!res.ok) throw new Error(`Google Drive error ${res.status}`);
   return (await res.json()).id as string;
+}
+
+/** Everything in the twins goes into `keep` (their sub-folders merged too), then the twins go to the bin, only when
+ *  all they held was moved (nothing of the user's is ever trashed with them). Returns whether all went. */
+async function mergeFolders(keep: string, twins: string[]): Promise<boolean> {
+  let all = true;
+  for (const twin of twins) {
+    let emptied = true;
+    try {
+      const kids: { id: string; name: string; mimeType: string }[] = [];
+      let page: string | undefined;
+      do {
+        const params = new URLSearchParams({ q: `'${twin}' in parents and trashed = false`, fields: "nextPageToken, files(id,name,mimeType)", pageSize: "1000" });
+        if (page) params.set("pageToken", page);
+        const j = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
+        kids.push(...(j.files ?? []));
+        page = j.nextPageToken;
+      } while (page);
+      for (const k of kids) {
+        if (k.mimeType === "application/vnd.google-apps.folder") {
+          // A sub-folder with the same name on the kept side: merged into it; else moved as it is.
+          const q = `name = '${quote(k.name)}' and mimeType = 'application/vnd.google-apps.folder' and '${keep}' in parents and trashed = false`;
+          const same = (await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1" })}`)).json()).files?.[0]?.id;
+          if (same) { if (!(await mergeFolders(same, [k.id]))) emptied = false; continue; }
+        }
+        const moved = await fetch(`https://www.googleapis.com/drive/v3/files/${k.id}?${new URLSearchParams({ addParents: keep, removeParents: twin, fields: "id" })}`, {
+          method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: "{}",
+        });
+        if (!moved.ok) emptied = false;
+      }
+      if (!emptied) { all = false; continue; } // something stayed in it: the twin stays too
+      await fetch(`https://www.googleapis.com/drive/v3/files/${twin}`, {
+        method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }),
+      });
+      // Forget it wherever this device had it.
+      const tree = readTree();
+      for (const [k, v] of Object.entries(tree)) if (v === twin) delete tree[k];
+      writeTree(tree);
+    } catch (e) { all = false; console.warn("[drive] merge", e); }
+  }
+  return all;
 }
 
 /** A folder of the Rollout tree (e.g. ["Releases", "Merci", "Audios"]), made on the way when missing. */
@@ -257,7 +305,14 @@ export function driveFolder(path: string[]): Promise<string> {
 /** The tree's fixed folders, made when Google is connected (Photos, Releases, Utils / LUTS, Fonts). */
 export async function ensureDriveTree(): Promise<void> {
   if (isDemo() || !(await canWriteDrive())) return;
-  for (const p of [DRIVE_PATHS.photos, DRIVE_PATHS.releases, DRIVE_PATHS.luts, DRIVE_PATHS.fonts]) await driveFolder(p);
+  // Looked up afresh once a visit (not from this device's memory), so twins made by another device are merged.
+  const root = await appFolder();
+  const fresh: Record<string, string> = {};
+  for (const top of ["Photos", "Releases", "Utils", "Exports"]) fresh[top] = await childFolder(root, top);
+  fresh["Utils/LUTS"] = await childFolder(fresh.Utils, "LUTS");
+  fresh["Utils/Fonts"] = await childFolder(fresh.Utils, "Fonts");
+  writeTree({ ...readTree(), ...fresh });
+  for (const k of Object.keys(fresh)) checked.add(k);
 }
 
 /** A list or a release renamed: its folder takes the new name (what is in it stays). Never throws. */

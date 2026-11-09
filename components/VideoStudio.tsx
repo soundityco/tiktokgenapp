@@ -3464,6 +3464,7 @@ export default function VideoStudio({
       )}
       {shareOpen && (
         <ShareDialog kind="video" onClose={() => setShareOpen(false)}
+          place={{ release: project.name, what: lastFiles.current.length > 1 ? t("{n} videos", { n: lastFiles.current.length }) : clipName(clip) }}
           title={lastFiles.current.length > 1 ? `${project.name} · ${t("{n} videos", { n: lastFiles.current.length })}` : `${project.name} · ${clipName(clip)}`}
           // One caption: the video's; several videos: each one's, under its name.
           caption={lastFiles.current.length === 1 ? lastFiles.current[0].caption
