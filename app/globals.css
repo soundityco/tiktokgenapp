@@ -1863,3 +1863,10 @@ details.sec:first-of-type { background-image: none; }
      nudging its icon): only its colours change. */
   .mobile-tabs > button.dock-lib, .mobile-tabs > button.dock-lib.on { padding: 0 !important; gap: 0 !important; }
 }
+@media (max-width: 1000px) {
+  /* Style page: the first and last slides rest exactly in the middle, like the video (the deck's padding takes in
+     the cards' -2vw overlap and their 4px extra, which pushed them 6px left). The swipe is untouched. */
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides {
+    padding-left: calc(52vw - min(37vw, var(--pv-h, 40dvh) * .28125 + 2px));
+    padding-right: calc(52vw - min(37vw, var(--pv-h, 40dvh) * .28125 + 2px)); }
+}
