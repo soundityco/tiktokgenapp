@@ -1784,3 +1784,9 @@ details.sec:first-of-type { background-image: none; }
   /* The library's square: its icon in the middle (the hidden name took a grid cell and pushed it aside). */
   .mobile-tabs > .dock-lib { display: flex; align-items: center; justify-content: center; }
 }
+@media (max-width: 1000px) {
+  /* Carousel Style page: the preview shows the slides only, with Zones (like the video's eye); the photo edits
+     (exposure, contrast…) belong to the studio's own page. */
+  .main[data-studio="carousel"][data-mobile-tab="style"] .adjust-open:not(.video-aids),
+  .main[data-studio="carousel"][data-mobile-tab="style"] .adjust-panel { display: none !important; }
+}
