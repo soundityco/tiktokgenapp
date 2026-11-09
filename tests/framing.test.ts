@@ -1,36 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mergeFolder } from "../lib/drive";
 import { aacConfig } from "../lib/exportVideo";
 import { codecLabel, rotationOf } from "../lib/videoSource";
 import { clampPic, visibleRegion, zoomPic } from "../lib/render";
 import { cropFor } from "../lib/convert";
 import { defaultPic } from "../lib/defaults";
-import type { PicRef } from "../lib/types";
-
-const img = (id: string) => ({ id, name: id + ".jpg", mimeType: "image/jpeg" });
-
-describe("mergeFolder (linked Drive folders)", () => {
-  const pics: PicRef[] = [
-    { id: "a", name: "a.jpg", folder: "F" },
-    { id: "b", name: "b.jpg", folder: "F" },
-    { id: "m", name: "m.jpg" }, // added by hand
-  ];
-  it("adds new photos and drops the ones gone from the folder", () => {
-    const r = mergeFolder(pics, "F", [img("a"), img("c")]);
-    expect(r.map((p) => p.id)).toEqual(["a", "m", "c"]);
-    expect(r[2].folder).toBe("F");
-  });
-  it("returns the same array when nothing changed", () => {
-    expect(mergeFolder(pics, "F", [img("a"), img("b")])).toBe(pics);
-  });
-  it("does not bring back photos removed by hand, nor duplicate hand-added ones", () => {
-    const r = mergeFolder(pics, "F", [img("a"), img("b"), img("x"), img("m")], ["x"]);
-    expect(r).toBe(pics);
-  });
-  it("leaves photos of other folders alone", () => {
-    expect(mergeFolder(pics, "G", [])).toBe(pics);
-  });
-});
 
 describe("photo framing", () => {
   // Square photo on a 9:16 canvas, fill: 1920 px wide at zoom 1, so it can move 420 px each way.

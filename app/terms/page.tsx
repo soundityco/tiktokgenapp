@@ -10,7 +10,7 @@ export default function Terms() {
       <p>By using Rollout you agree to these terms.</p>
 
       <h2>The service</h2>
-      <p>Rollout helps artists create TikTok photo carousels from pictures in their own Google Drive, text they write or import, and optionally the hooks of their own TikTok posts. It is provided as is, without warranty, and may change or stop at any time.</p>
+      <p>Rollout helps artists create TikTok photo carousels and lyric videos from their own pictures, audio and videos (kept in a Rollout folder of their own Google Drive), text they write or import, and optionally the hooks of their own TikTok posts. It is provided as is, without warranty, and may change or stop at any time.</p>
 
       <h2>Your content</h2>
       <p>You keep all rights to your pictures, texts and lyrics. You confirm that you own, or have permission to use, everything you add, and that you respect the rules of TikTok and Google.</p>

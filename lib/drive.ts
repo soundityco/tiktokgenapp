@@ -3,7 +3,6 @@ import { getSession } from "next-auth/react";
 import { decodeImage, looksLikeImage } from "./imageFormat";
 import type { Img } from "./render";
 import { delMedia, getMedia, listMedia, putMedia } from "./idb";
-import type { PicRef } from "./types";
 
 /** Emitted when Google Drive rejects the session, so the studio can offer a reconnect. */
 export const DRIVE_AUTH_EVENT = "tktgen:drive-auth";
@@ -27,15 +26,8 @@ export async function getToken(): Promise<string> {
 export interface DriveItem { id: string; name: string; mimeType: string; thumbnailLink?: string }
 export const isFolder = (i: DriveItem) => i.mimeType === "application/vnd.google-apps.folder";
 export const isImage = (i: DriveItem) => !isFolder(i) && looksLikeImage(i.name, i.mimeType);
-export const isAudio = (i: DriveItem) =>
-  !isFolder(i) && (i.mimeType.startsWith("audio/") || /\.(mp3|wav|m4a|aac|flac|ogg|opus|aiff?)$/i.test(i.name));
-/** What a Drive listing keeps besides folders: photos (carousel) or audio files (official audio of a release). */
-export type DriveKind = "images" | "audio";
-const keep = (kind: DriveKind) => (i: DriveItem) => isFolder(i) || (kind === "audio" ? isAudio(i) : isImage(i));
-
 /** Thumbnail links seen while listing folders: spares one request per thumbnail (see lib/thumb.ts). */
 export const thumbLinks = new Map<string, string>();
-const keepThumbs = (files: DriveItem[]) => files.forEach((f) => f.thumbnailLink && thumbLinks.set(f.id, f.thumbnailLink));
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,71 +42,6 @@ async function api(url: string) {
     if (!limited || attempt >= 4) throw new Error(`Google Drive error ${res.status}`);
     await wait(2 ** attempt * 1000 + Math.random() * 500);
   }
-}
-
-/** List a folder ("root", a folder id, or "shared" for "Shared with me"). Folders first, then images. */
-export async function listFolder(folder: string, kind: DriveKind = "images"): Promise<DriveItem[]> {
-  const q =
-    folder === "shared"
-      ? "sharedWithMe = true and trashed = false"
-      : `'${folder}' in parents and trashed = false`;
-  const items: DriveItem[] = [];
-  let pageToken = "";
-  do {
-    const params = new URLSearchParams({
-      q,
-      fields: "nextPageToken, files(id,name,mimeType,thumbnailLink)",
-      pageSize: "1000",
-      orderBy: "folder,name_natural",
-      supportsAllDrives: "true",
-      includeItemsFromAllDrives: "true",
-    });
-    if (pageToken) params.set("pageToken", pageToken);
-    const data = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
-    items.push(...(data.files ?? []));
-    keepThumbs(data.files ?? []);
-    pageToken = data.nextPageToken ?? "";
-  } while (pageToken);
-  return items.filter(keep(kind));
-}
-
-/** Search the whole Drive by name (folders and supported images). */
-export async function searchDrive(query: string, kind: DriveKind = "images"): Promise<DriveItem[]> {
-  const q = `trashed = false and name contains '${query.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
-  const items: DriveItem[] = [];
-  let pageToken = "";
-  do {
-    const params = new URLSearchParams({
-      q,
-      fields: "nextPageToken, files(id,name,mimeType,thumbnailLink)",
-      pageSize: "200",
-      orderBy: "folder,name_natural",
-      supportsAllDrives: "true",
-      includeItemsFromAllDrives: "true",
-    });
-    if (pageToken) params.set("pageToken", pageToken);
-    const data = await (await api(`https://www.googleapis.com/drive/v3/files?${params}`)).json();
-    items.push(...(data.files ?? []));
-    keepThumbs(data.files ?? []);
-    pageToken = data.nextPageToken ?? "";
-  } while (pageToken);
-  return items.filter(keep(kind));
-}
-
-/**
- * Bring a list up to date with one of its linked folders: photos new in the folder are appended,
- * photos that came from it and are gone (deleted, moved) are dropped. Photos added by hand are kept.
- * Returns the same array when nothing changed.
- */
-export function mergeFolder(pics: PicRef[], folderId: string, listed: DriveItem[], excluded: string[] = []): PicRef[] {
-  const inFolder = new Set(listed.map((i) => i.id));
-  const kept = pics.filter((p) => p.folder !== folderId || inFolder.has(p.id));
-  const have = new Set(kept.map((p) => p.id));
-  const skip = new Set(excluded);
-  const added = listed
-    .filter((i) => isImage(i) && !have.has(i.id) && !skip.has(i.id))
-    .map((i): PicRef => ({ id: i.id, name: i.name, folder: folderId }));
-  return kept.length === pics.length && !added.length ? pics : [...kept, ...added];
 }
 
 /** Download a Drive file as it is (the official audio of a release). */
@@ -397,31 +324,6 @@ export async function moveDriveFolder(from: string[], to: string[]): Promise<voi
   } catch { /* stays where it was: found again by its id */ }
 }
 
-/** A copy of a Drive file (one the app may read) in a folder of the tree, labelled as the app's photo. */
-export async function copyToDriveFolder(id: string, name: string, path: string[], kind = "photo"): Promise<string> {
-  if (isDemo()) throw new Error("Demo mode: nothing is saved to your Drive.");
-  const folder = await driveFolder(path);
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}/copy?fields=id&supportsAllDrives=true`, {
-    method: "POST", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ name, parents: [folder], appProperties: { tktgen: kind } }),
-  });
-  if (r.status === 401) signalAuth();
-  if (!r.ok) throw new Error(`Google Drive error ${r.status}`);
-  return (await r.json()).id as string;
-}
-
-/**
- * Whether the app may still use this file once it only has `drive.file` (it made it, or it was chosen in Google's
- * file picker): true / false, null when it is gone (deleted, trashed, no longer shared).
- */
-export async function isAppFile(id: string): Promise<boolean | null> {
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=isAppAuthorized,trashed&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${await getToken()}` } });
-  if (r.status === 401) { signalAuth(); throw new Error("Google session expired"); }
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`Google Drive error ${r.status}`);
-  const j = await r.json();
-  return j.trashed ? null : !!j.isAppAuthorized;
-}
 
 /** Move a file the app made into a folder of the tree (from wherever it is). */
 export async function moveToDriveFolder(id: string, path: string[], from: string): Promise<void> {

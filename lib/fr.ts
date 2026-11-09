@@ -485,8 +485,8 @@ export const FR: Record<string, string> = {
     "TikTok n'est pas encore configuré sur ce site : ajoute TIKTOK_CLIENT_KEY et TIKTOK_CLIENT_SECRET (voir le README).",
   "Top": "Haut",
   "Try again": "Réessayer",
-  "Turn your photos, hooks and lyrics into TikTok carousels in one click. Sign in with Google to reach your releases and the photo folders in your Drive.":
-    "Transforme tes photos, tes hooks et tes paroles en carrousels TikTok en un clic. Connecte-toi avec Google pour retrouver tes sorties et les dossiers de photos de ton Drive.",
+  "Turn your photos, hooks and lyrics into TikTok carousels in one click. Sign in with Google: your releases are kept in a Rollout folder of your own Drive.":
+    "Transforme tes photos, tes hooks et tes paroles en carrousels TikTok en un clic. Connecte-toi avec Google : tes sorties sont rangées dans un dossier Rollout de ton propre Drive.",
   "Type": "Type",
   "UPPERCASE": "MAJUSCULES",
   "Verse 1": "Couplet 1",

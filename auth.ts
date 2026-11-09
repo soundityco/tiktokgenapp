@@ -2,8 +2,9 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 
-// drive.file: the app may create files in the user's Drive and use those only (copies of the camera videos).
-const SCOPE = "openid email profile https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file";
+// drive.file only: the app may create files in the user's Drive (the Rollout folder) and use those only. Never the
+// whole Drive (drive.readonly is a "restricted" permission: Google asks for a paid security audit to grant it).
+const SCOPE = "openid email profile https://www.googleapis.com/auth/drive.file";
 
 const allowed = () =>
   (process.env.ALLOWED_EMAILS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);

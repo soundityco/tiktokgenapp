@@ -12,13 +12,13 @@ export default function Privacy() {
       <h2>What we access</h2>
       <ul>
         <li><b>Google account:</b> your name and email address, to sign you in and keep your projects separate from other users.</li>
-        <li><b>Google Drive (read-only):</b> only to list your folders and read the pictures and the audio files you choose. We never modify, delete or upload anything in your Drive.</li>
+        <li><b>Google Drive (only the files Rollout creates):</b> Rollout keeps your work in a “Rollout” folder of your own Drive (your photo lists, official audio, camera videos and their working copies, fonts, colour LUTs, and the exports you send to your phone), so you find them on any device. It reads, renames, moves and deletes only the files and folders it created there. It cannot see or open any other file of your Drive.</li>
         <li><b>TikTok (optional, read-only):</b> if you connect your TikTok account, we read the list of your public posts: cover image, caption, and view and like counts. This is used to find the hooks of your best-performing posts. We never post, edit or delete anything on your account.</li>
       </ul>
 
       <h2>What we store</h2>
       <ul>
-        <li>Your projects, text pools, lyrics, settings, and the identifiers of the Drive pictures and audio files you selected.</li>
+        <li>Your projects, text pools, lyrics, settings, and the identifiers of the files Rollout put in your Drive.</li>
         <li>For videos: the lyrics you paste, the timing of each word on the official audio, and the sync, trim and framing settings.</li>
         <li>Hooks you validate, with their view counts when they come from TikTok.</li>
         <li>Earlier versions of these data (at most one every 10 minutes, the last 30), so you can restore them.</li>
@@ -26,9 +26,13 @@ export default function Privacy() {
       </ul>
 
       <h2>What stays on your device</h2>
-      <p>Your pictures stay in your Google Drive and are processed in your browser; they are not copied to our servers. Screenshots used for text detection are processed in your browser and are not uploaded.</p>
-      <p>The official audio, the camera videos and the fonts you load are kept in your browser's storage on this device. Everything done with them (sync with the official audio, recognition of the sung words, conversion of camera formats, export of the video) runs in your browser: these files are never sent to our servers or to anyone else.</p>
+      <p>Your pictures, official audio, camera videos and fonts go from your device to your own Google Drive, and are kept in your browser's storage on this device. They are never copied to our servers. Screenshots used for text detection are processed in your browser and are not uploaded.</p>
+      <p>Everything done with your files (sync with the official audio, recognition of the sung words, conversion of camera formats, export of the carousel or the video) runs in your browser.</p>
+      <p>One exception, only when you use “Send to my phone”: the exported files go through our database for a few minutes so your phone can download them, then are deleted (at the latest after 10 minutes). Big files go through a direct link between your devices or through your own Drive instead.</p>
       <p>To do this, your browser downloads, once, software components from public servers: a speech-recognition model from Hugging Face, and the libraries that run it and convert videos from jsDelivr. These servers see a request from your browser (like for any website) but receive none of your files.</p>
+
+      <h2>Google user data</h2>
+      <p>Rollout's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. Google data is used only to provide the features described above, is never used for advertising, is never sold, and is never read by people except with your consent (for example to help you with a problem you report) or when the law requires it.</p>
 
       <h2>Sharing</h2>
       <p>We do not sell or share your data with third parties. Data is stored with our hosting and database providers (Netlify and Neon) only to run the service.</p>

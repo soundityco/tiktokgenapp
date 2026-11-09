@@ -236,7 +236,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   );
 }
 
-export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void; onSync: (manual: boolean) => void;
+export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void;
   /** Photos dropped or picked: sent to the list's Drive folder (Rollout / Photos / <list>) and added. */
   onUpload: (files: File[]) => void;
   /** Photos being sent (done / total), while it lasts. */
@@ -247,8 +247,7 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   savedIn?: string | null;
   /** That folder in the Drive, as a link. */
   savedHref?: string | null;
-  /** Folders of the user's Drive this list was filled from before (their photos stay where they are). */
-  linkedFolders?: { name: string; href: string }[] }) {
+}) {
   const { t } = useT();
   const { pool } = p;
   const start = useRef({ name: pool.name, scope: pool.scope, projectId: pool.projectId });
@@ -261,8 +260,6 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   const [over, setOver] = useState(false);
   const images = (list: FileList | null) => [...(list ?? [])].filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|avif)$/i.test(f.name));
   const folders = pool.folders ?? [];
-  const onSync = useRef(p.onSync);
-  useEffect(() => { onSync.current(false); }, [pool.id]); // fresh photos each time the list is opened
   // Removing a folder also removes the photos it brought, so a list filled from the wrong folder can be cleaned.
   const unlink = (id: string) => p.onChange((x) => ({
     ...x,
@@ -298,11 +295,8 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
           <span>
             {t("Saved in your own Drive:")}{" "}
             {p.savedHref ? <a className="drive-link" href={p.savedHref} target="_blank" rel="noreferrer">{p.savedIn}<Icon name="share" size={11} /></a> : <span className="mono">{p.savedIn}</span>}
-            {p.linkedFolders?.length ? <> · {t("and your folders")} {p.linkedFolders.map((f, i) => <span key={f.href}>{i ? ", " : ""}<a className="drive-link" href={f.href} target="_blank" rel="noreferrer">{f.name}</a></span>)}</> : null}
             {". "}{t("Rollout keeps none of your photos.")}
           </span>
-        ) : p.linkedFolders?.length ? (
-          <span>{t("In your own Drive: your folders")} {p.linkedFolders.map((f, i) => <span key={f.href}>{i ? ", " : ""}<a className="drive-link" href={f.href} target="_blank" rel="noreferrer">{f.name}</a></span>)}.</span>
         ) : t("Kept on this device only (no Google Drive access).")}
       </p>
       {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them.")}</p>}

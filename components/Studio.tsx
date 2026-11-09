@@ -4,9 +4,9 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, copyToDriveFolder, findDriveTwins, isAppFile, trashDriveFile, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, findDriveTwins, trashDriveFile, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
-import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
+import { DRIVE_AUTH_EVENT, loadDriveImage, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
@@ -48,7 +48,6 @@ const STUDIO_KEY = "tktgen-studio";
  */
 const PREFETCH_PER_LIST = 8;
 /** Linked folders are listed again at most this often when coming back to the tab. */
-const FOLDER_SYNC_EVERY = 5 * 60_000;
 
 type Editor = { k: "text" | "photos"; id: string } | null;
 type MobileTab = "slides" | "lists" | "style";
@@ -219,87 +218,6 @@ export default function Studio({ userName }: { userName: string }) {
     return () => { clearTimeout(t); ro?.disconnect(); window.removeEventListener("resize", measure); };
   }, [mobileTab, studio, !!ws]);
   /**
-   * Once for the account: the photo lists filled before from the user's own Drive folders get their photos copied
-   * into their Rollout folder (Rollout / Photos / <list>, or in their release), then point to the copies and are no
-   * longer linked to those folders (left untouched: the app may not move what it did not make).
-   */
-  const adoptLinkedFolders = async () => {
-    const cur = wsRef.current;
-    if (!cur || cur.drivePhotosV1 || isDemo() || !(await canWriteDrive())) return;
-    const lists = cur.picPools.filter((p) => (p.folders?.length ?? 0) > 0 || p.pics.some((x) => x.folder));
-    if (!lists.length) { upd((w) => ({ ...w, drivePhotosV1: true })); return; }
-    const total = lists.reduce((n, p) => n + p.pics.filter((x) => !x.id.includes(":")).length, 0);
-    say(t("Copying your photos into Rollout… {n} photos", { n: total }));
-    let copied = 0, failed = 0;
-    for (const pool of lists) {
-      const path = listPath(pool);
-      const map = new Map<string, string>();
-      const todo = pool.pics.filter((x) => !x.id.includes(":"));
-      for (let i = 0; i < todo.length; i += 3) {
-        await Promise.all(todo.slice(i, i + 3).map(async (pic) => {
-          try { map.set(pic.id, await copyToDriveFolder(pic.id, pic.name, path)); copied++; }
-          catch (e) { failed++; console.warn("[drive] copy", pic.name, e); }
-        }));
-      }
-      // The list now holds the copies (a photo that could not be copied stays as it was).
-      setPicPool(pool.id, (x) => ({
-        ...x,
-        pics: x.pics.map((y) => (map.has(y.id) ? { id: map.get(y.id)!, name: y.name } : y)),
-        ...(failed ? {} : { folders: [], excluded: [] }),
-      }));
-    }
-    if (!failed) upd((w) => ({ ...w, drivePhotosV1: true }));
-    void flushSave();
-    say(failed ? t("{n} photos copied into Rollout, {m} could not be (tried again next time)", { n: copied, m: failed }) : t("{n} photos copied into Rollout", { n: copied }));
-  };
-  /**
-   * Once for the account, while the app may still read the whole Drive: every photo, official audio and LUT taken
-   * from the user's own Drive (not made by the app) is copied into its Rollout folder, and the workspace points to
-   * the copies. Then the app only needs `drive.file` (files it made, or chosen in Google's picker). The camera
-   * videos are not copied (they can weigh gigabytes): their working copy on the Drive is made by the app already.
-   */
-  const adoptOutsideFiles = async () => {
-    const cur = wsRef.current;
-    if (!cur || cur.driveFilesV1 || isDemo()) { console.info("[drive] adopt: nothing to do", cur?.driveFilesV1 ? "(done before)" : ""); return; }
-    if (!(await canWriteDrive())) { console.info("[drive] adopt: no write access to the Drive"); return; }
-    const todo = new Map<string, { name: string; path: string[]; kind: string }>();
-    const isDriveId = (id?: string) => !!id && /^[\w-]{20,}$/.test(id);
-    for (const pool of cur.picPools) for (const pic of pool.pics) if (isDriveId(pic.id) && !todo.has(pic.id)) todo.set(pic.id, { name: pic.name, path: listPath(pool), kind: "photo" });
-    for (const p of cur.projects) {
-      if (isDriveId(p.audioDriveId) && !todo.has(p.audioDriveId!)) todo.set(p.audioDriveId!, { name: p.audioName || "audio", path: DRIVE_PATHS.audios(p.name || "Release"), kind: "audio" });
-      for (const v of p.videos ?? []) {
-        const lut = v.grade?.lut;
-        if (lut && isDriveId(lut.driveId) && !todo.has(lut.driveId!)) todo.set(lut.driveId!, { name: lut.name.endsWith(".cube") ? lut.name : `${lut.name}.cube`, path: DRIVE_PATHS.luts, kind: "lut" });
-      }
-    }
-    const map = new Map<string, string>();
-    let failed = 0;
-    const ids = [...todo.keys()];
-    for (let i = 0; i < ids.length; i += 4) {
-      await Promise.all(ids.slice(i, i + 4).map(async (id) => {
-        try {
-          const mine = await isAppFile(id);
-          if (mine !== false) return; // the app's own (or gone: nothing to save)
-          const f = todo.get(id)!;
-          map.set(id, await copyToDriveFolder(id, f.name, f.path, f.kind));
-        } catch (e) { failed++; console.warn("[drive] adopt", id, e); }
-      }));
-    }
-    const now = wsRef.current;
-    if (!now) return;
-    // Every place an id is used (lists, slides, photo edits, audio, LUT): the copy's id instead.
-    let json = JSON.stringify(now);
-    for (const [from, to] of map) json = json.split(`"${from}"`).join(`"${to}"`);
-    const next: Workspace = JSON.parse(json);
-    // Linked folders cannot be read any more: their photos are in the list (copied above), the link goes.
-    next.picPools = next.picPools.map((p) => (p.folders?.length || p.excluded?.length ? { ...p, folders: [], excluded: [] } : p));
-    if (!failed) next.driveFilesV1 = true;
-    apply(next, false);
-    void flushSave();
-    if (map.size) say(t("{n} files from your Drive copied into Rollout", { n: map.size }));
-    console.info(`[drive] adopt: ${ids.length} checked, ${map.size} copied, ${failed} failed`);
-  };
-  /**
    * Twins in the Rollout tree (two devices, an older version of the app…), looked for once a day on this device:
    * folders of the same name merged, files with the same bytes in one folder kept once (the workspace then points
    * to the one kept, the others go to the Drive's bin, where they can be taken back for 30 days).
@@ -388,8 +306,6 @@ export default function Studio({ userName }: { userName: string }) {
         return kind === "audio" || f.mimeType.startsWith("audio/") ? DRIVE_PATHS.audios(release) : DRIVE_PATHS.videos(release);
       });
     }).then((n) => { console.info(`[drive] tree ready${n ? `, ${n} files tidied` : ""}`); })
-      .then(() => adoptLinkedFolders())
-      .then(() => adoptOutsideFiles())
       .then(() => tidyTwins())
       .catch((e) => console.warn("[drive] tree", e));
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -729,59 +645,6 @@ export default function Studio({ userName }: { userName: string }) {
     window.addEventListener(DRIVE_AUTH_EVENT, h);
     return () => window.removeEventListener(DRIVE_AUTH_EVENT, h);
   }, []);
-
-  // ---- linked Drive folders: photos added to (or deleted from) the folder follow in the list ----
-  const syncing = useRef(false);
-  const lastSync = useRef(0);
-  const tRef = useRef(t);
-  tRef.current = t;
-  const syncDrive = useCallback(async (onlyPool?: string, manual = false) => {
-    const w = wsRef.current;
-    if (!w || syncing.current) return;
-    const linked = (p: PicPool) => !!p.folders?.length && (!onlyPool || p.id === onlyPool);
-    const ids = [...new Set(w.picPools.filter(linked).flatMap((p) => p.folders!.map((f) => f.id)))];
-    if (!ids.length) return;
-    syncing.current = true;
-    lastSync.current = Date.now();
-    try {
-      const listed = new Map<string, DriveItem[]>();
-      let failed = 0;
-      for (const id of ids) {
-        try { listed.set(id, (await listFolder(id)).filter(isImage)); } catch { failed++; }
-      }
-      const cur = wsRef.current;
-      if (!cur) return;
-      let added = 0, removed = 0;
-      const picPools = cur.picPools.map((p) => {
-        if (!linked(p)) return p;
-        let pics = p.pics;
-        for (const f of p.folders!) {
-          const l = listed.get(f.id);
-          if (l) pics = mergeFolder(pics, f.id, l, p.excluded);
-        }
-        if (pics === p.pics) return p;
-        const before = new Set(p.pics.map((x) => x.id)), after = new Set(pics.map((x) => x.id));
-        added += pics.filter((x) => !before.has(x.id)).length;
-        removed += p.pics.filter((x) => !after.has(x.id)).length;
-        return { ...p, pics };
-      });
-      // Not an undo step: it mirrors Drive, it is not an edit.
-      if (added || removed) apply({ ...cur, picPools }, false);
-      if (added) say(tRef.current("{n} new photos from Drive", { n: added }));
-      else if (manual) say(tRef.current(failed ? "Some folders could not be read" : "Photo list is up to date"));
-    } finally {
-      syncing.current = false;
-    }
-  }, [apply, say]);
-
-  const wsLoaded = !!ws;
-  useEffect(() => {
-    if (!wsLoaded) return;
-    void syncDrive();
-    const h = () => { if (document.visibilityState === "visible" && Date.now() - lastSync.current > FOLDER_SYNC_EVERY) void syncDrive(); };
-    document.addEventListener("visibilitychange", h);
-    return () => document.removeEventListener("visibilitychange", h);
-  }, [wsLoaded, syncDrive]);
 
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => { if (saveState === "saving" || saveState === "error") e.preventDefault(); };
@@ -1939,12 +1802,10 @@ export default function Studio({ userName }: { userName: string }) {
       {edPics && (
         <PicPoolEditor pool={edPics} onClose={() => setEditor(null)} onDelete={() => askDeletePool("photos", edPics.id)}
           onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))}
-          onSync={(manual) => void syncDrive(edPics.id, manual)}
           onUpload={(files) => void uploadToList(edPics.id, files)} uploading={picUpload?.pool === edPics.id ? picUpload : null}
           onMoved={(from, to) => void moveDriveFolder(listPath(from), listPath(to))}
           savedIn={driveWrite ? listPath(edPics).join(" / ") : null}
-          savedHref={picFolderUrl}
-          linkedFolders={(edPics.folders ?? []).map((f) => ({ name: f.name, href: `https://drive.google.com/drive/folders/${f.id}` }))} />
+          savedHref={picFolderUrl} />
       )}
 
       {overlay?.k === "import" && (
