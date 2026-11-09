@@ -278,3 +278,17 @@ describe("captions retouched by hand", () => {
     expect(buildCues(kept, "phrase", { lineChars: 40 }).length).toBe(2);
   });
 });
+
+describe("a line retimed by hand, placed again with a word it did not have", () => {
+  it("the new word sits inside its line, between its neighbours, long enough to be seen", () => {
+    // Before: the line without "de", moved 0.5 s later by hand.
+    const prev = ["tu", "as", "fait", "le", "vide", "tout", "ce", "mal"].map((x, i) => ({ w: x, s: 0.5 + i * 0.3, e: 0.5 + i * 0.3 + 0.3, line: 2, manual: true }));
+    // Placed again: "de" at the model's time (where the line was before it was moved).
+    const next = ["tu", "as", "fait", "le", "vide", "de", "tout", "ce", "mal"].map((x, i) => ({ w: x, s: i * 0.28, e: i * 0.28 + 0.27, line: 2 }));
+    const out = keepManual(prev, next);
+    expect(out.map((x) => x.w).join(" ")).toBe("tu as fait le vide de tout ce mal");
+    const de = out.find((x) => x.w === "de")!;
+    expect(de.e - de.s).toBeGreaterThanOrEqual(0.149);
+    expect(buildCues(out, "phrase", { lineChars: 60 }).map((c) => c.text)).toEqual(["tu as fait le vide de tout ce mal"]);
+  });
+});

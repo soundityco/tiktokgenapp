@@ -67,6 +67,9 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
   return cfg.hooks?.find((h) => h.text.trim() && rel >= h.from - 0.001 && rel < (h.to ?? cfg.crop.duration));
 };
 
+/** The way the lyrics are placed on the audio: raised when it changes, so lyrics placed before are placed again once. */
+const LYRICS_ALIGN_V = 2;
+
 /** What each version of a video keeps for itself (the rest is the video's: camera file, sync, framing, grade). */
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "hooks", "hookTheme", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId"] as const satisfies readonly (keyof VideoSettings)[];
@@ -2136,11 +2139,26 @@ export default function VideoStudio({
     if (!heard?.length) { void generateLyrics(); return; }
     const cfg = settingsRef.current;
     const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
-    onProject((x) => ({ ...x, lyricWords: fresh ? r.words : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p) }));
+    onProject((x) => ({ ...x, lyricWords: fresh ? r.words : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p), lyricsAlignV: LYRICS_ALIGN_V }));
     setGenInfo(r.info);
     if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
   };
+
+  // The way the lyrics are placed got better (a word the model missed now always shows, inside its line): the
+  // lyrics already timed are placed again once, on the words already heard, the retouches kept. Never emptied.
+  useEffect(() => {
+    if (genBusy || (project.lyricsAlignV ?? 0) >= LYRICS_ALIGN_V || !project.heardWords?.length || !project.lyricWords?.length) return;
+    const id = setTimeout(() => {
+      const cfg = settingsRef.current;
+      const r = writtenOf(writtenSrc, project).trim() ? placeWords(project.heardWords!, writtenSrc, project, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5) : null;
+      onProject((x) => (r?.words.length
+        ? { ...x, lyricWords: keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(writtenSrc, x), lyricsAlignV: LYRICS_ALIGN_V }
+        : { ...x, lyricsAlignV: LYRICS_ALIGN_V }));
+      onSaveNow();
+    }, 800);
+    return () => clearTimeout(id);
+  }, [project.id, project.lyricsAlignV, !!project.heardWords?.length, genBusy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pasted lyrics are saved as you type (nothing lost on a reload), and once the song has been
   // heard, every edit re-places the lyrics at once: the timed lines below follow the text.

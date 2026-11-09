@@ -372,6 +372,8 @@ export interface Project {
   lyricsLinked?: boolean;
   /** The sung text the video's lyrics were last placed from: when the sections change, they are placed again. */
   lyricsPlacedFrom?: string;
+  /** Version of the way the lyrics are placed on the audio they were last placed with (placed again once when it changes). */
+  lyricsAlignV?: number;
   /** The lyrics were brought to their one place (lib/lyricsSections migrateLyrics): done once, never again. */
   lyricsV2?: boolean;
   /** Every carousel of the release (the open one is in the fields above). */

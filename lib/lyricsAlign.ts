@@ -556,6 +556,22 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
     } else if (L[(i + 1) * (m + 1) + j] >= L[i * (m + 1) + j + 1]) i++;
     else j++;
   }
+  // A word new to a line retimed by hand (one the model had missed, a word added to the text) sits between its
+  // neighbours of the text, whatever time the model gave it: never outside its line, never unseen.
+  for (let j = 0; j < m; j++) {
+    if (out[j].manual) continue;
+    let r = j;
+    while (r < m && !out[r].manual) r++;
+    const before = out[j - 1], after = out[r];
+    if (before?.manual && after?.manual && before.line === out[j].line && after.line === out[r - 1].line) {
+      const run = out.slice(j, r);
+      const placed: LyricWord[] = [{ ...before }];
+      placeMissed(placed, run.map((x) => ({ w: x.w, line: x.line ?? 0 })), after.s);
+      out[j - 1] = { ...before, e: placed[0].e };
+      run.forEach((x, q) => { out[j + q] = { ...x, s: placed[q + 1].s, e: placed[q + 1].e }; });
+    }
+    j = r;
+  }
   return out.sort((x, y) => x.s - y.s);
 }
 
