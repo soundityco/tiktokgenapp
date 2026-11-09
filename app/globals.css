@@ -2182,7 +2182,7 @@ details.sec:first-of-type { background-image: none; }
   .ver-add { width: 30px; padding: 0; justify-content: center; flex: none; }
   .wave-zoom { flex: none; }
   .takes-row { gap: 6px; flex-wrap: wrap; align-items: center; }
-  .takes-row .btn { height: 28px; min-height: 0; padding: 0 10px; font-size: 12px; }
+
 }
 @media (max-width: 1000px) { .video-stage > .video-bar { grid-template-columns: auto 1fr; } }
 
@@ -2231,3 +2231,16 @@ details.sec:first-of-type { background-image: none; }
 .video-side .transport .tr-lock, .seg-versions .wave-zoom .btn.icon { width: 32px; padding: 0; justify-content: center; }
 .video-side .transport .tr-lock.on { border-color: var(--text); color: var(--text); }
 .seg-versions .ver-add { height: 32px; min-height: 32px; }
+/* The takes: the same format as the segment's other controls (32 px, thin border, no fill); the one used, outlined white. */
+.takes-row .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
+.takes-row .btn.on { border-color: var(--text); color: var(--text); }
+/* Computer too: the tracks first (takes, waveform, hook, lyrics), then the tools that act on them, as on the phone. */
+.video-side .timeline > * { order: 8; }
+.video-side .timeline > .seg-top { order: 1; }
+.video-side .timeline > .takes-row { order: 2; }
+.video-side .timeline > .wave-wrap { order: 3; }
+.video-side .timeline > .hook-track { order: 4; }
+.video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
+.video-side .timeline > .transport { order: 6; margin-top: 12px; }
+.video-side .timeline > .seg-versions { order: 7; }
+.video-side .transport .tr-lock { order: -1; }
