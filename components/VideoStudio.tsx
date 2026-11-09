@@ -1699,6 +1699,22 @@ export default function VideoStudio({
     onSaveNow();
   };
   const [renaming, setRenaming] = useState<string | null>(null);
+  /** The lock of audio and video (on the phone above the tracks, on a computer in the segment's row). */
+  const lockEl = (where = "") => videoBlob && videoDur > 0 ? (
+    <button className={"btn sm icon tr-lock " + where + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
+      aria-label={linked ? t("Audio and video linked") : t("Link audio and video")}
+      title={(linked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}>
+      <Icon name={linked ? "lock" : "unlock"} size={13} />
+    </button>
+  ) : null;
+  /** Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */
+  const zoomEl = (where = "") => (
+    <div className={"wave-zoom " + where} role="group" aria-label={t("Zoom of the waveform")}>
+      <button className="btn icon sm" aria-label={t("Zoom out")} disabled={!view} onClick={() => { const v = viewOf(); zoomTo(v.d * 2, v.s + v.d / 2); }}><Icon name="minus" size={12} /></button>
+      <button className="btn icon sm" aria-label={t("Zoom in")} onClick={() => { const v = viewOf(), c = settingsRef.current.crop; const mid = view ? v.s + v.d / 2 : c.start + c.duration / 2; zoomTo(v.d / 2, mid); }}><Icon name="plus" size={12} /></button>
+      <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("All") : t("Fit")}</span></button>
+    </div>
+  );
   /** The only version named (it becomes a version of its own, ready for a B). Once, from Enter or leaving the field. */
   const nameSolo = (raw: string) => {
     if (renaming !== "solo") return;
@@ -3200,13 +3216,7 @@ export default function VideoStudio({
                       <option value="custom">{settings.crop.duration.toFixed(1).replace(".", lang === "fr" ? "," : ".")} s</option>
                     )}
                   </Select>
-                  {videoBlob && videoDur > 0 && (
-                    <button className={"btn sm icon tr-lock" + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
-                      aria-label={linked ? t("Audio and video linked") : t("Link audio and video")}
-                      title={(linked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}>
-                      <Icon name={linked ? "lock" : "unlock"} size={13} />
-                    </button>
-                  )}
+                  {lockEl("desk-tool")}
                   <span className="grow" />
                   {!syncBusy && !genBusy && firstSync ? (
                     <button className="btn sm primary" onClick={() => void syncAll()}>
@@ -3247,39 +3257,6 @@ export default function VideoStudio({
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
-                  {/* The takes found in the video (it holds the passage more than once): picked like a version. */}
-                  {settings.takes && settings.takes.length > 1 && (() => {
-                    const takes = settings.takes;
-                    const at = takes.findIndex((k) => Math.abs(k.offset - settings.offset) < 0.02);
-                    const cur = takes[at];
-                    return (
-                      <span className="take-slot">
-                        <Menu float left trigger={(open, toggle) => (
-                          <button className={"btn sm ver-pick take-pick" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
-                            {at >= 0 ? t("Take {n}", { n: at + 1 }) : t("Takes")}
-                            {cur && <span className="mono xs muted take-range">{mmss(cur.musicStart)}–{mmss(cur.musicEnd)}</span>}
-                            <Icon name="chevron" size={12} />
-                          </button>
-                        )}>
-                          {(close) => (<div className="ver-list">
-                            {takes.map((k, i) => {
-                              const on = i === at;
-                              return (
-                                <div key={i} className={"ver-line" + (on ? " on" : "")}>
-                                  <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); applyTake(k, takes); }}
-                                    title={t("In the video {a}–{b} · in the song {c}–{d}", { a: fmtTime(k.musicStart), b: fmtTime(k.musicEnd), c: fmtTime(k.offset + k.musicStart), d: fmtTime(k.offset + k.musicEnd) })}>
-                                    <Icon name="check" size={12} />{t("Take {n}", { n: i + 1 })}
-                                    <span className="mono xs">{mmss(k.musicStart)}–{mmss(k.musicEnd)}</span>
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>)}
-                        </Menu>
-                        <Hint text={t("The song plays more than once in this video (you sang it twice, or started over): each take is one of those passes. The first times are where it sits in the video, the second where it falls in the song. Pick the one to use; if you filmed only one pass, the other is a part of the song that sounds alike (a loop of the beat): keep the right one and ignore it.")} />
-                      </span>
-                    );
-                  })()}
                   {/* One version only: it is shown the same way (Version A, its passage), a click names it (nothing to pick). */}
                   {versions.length < 2 && (renaming === "solo" ? (
                     <input className="input sm ver-name ver-solo" autoFocus defaultValue={versions[0]?.name ?? ""} placeholder={t("Version {x}", { x: "A" })} aria-label={t("Rename")}
@@ -3328,17 +3305,51 @@ export default function VideoStudio({
                       </Menu>
                     );
                   })()}
+                  {/* The takes found in the video (it holds the passage more than once): picked like a version. */}
+                  {settings.takes && settings.takes.length > 1 && (() => {
+                    const takes = settings.takes;
+                    const at = takes.findIndex((k) => Math.abs(k.offset - settings.offset) < 0.02);
+                    const cur = takes[at];
+                    return (
+                      <span className="take-slot">
+                        <Menu float left trigger={(open, toggle) => (
+                          <button className={"btn sm ver-pick take-pick" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+                            {at >= 0 ? t("Take {n}", { n: at + 1 }) : t("Takes")}
+                            {cur && <span className="mono xs muted take-range">{mmss(cur.musicStart)}–{mmss(cur.musicEnd)}</span>}
+                            <Icon name="chevron" size={12} />
+                          </button>
+                        )}>
+                          {(close) => (<div className="ver-list">
+                            {takes.map((k, i) => {
+                              const on = i === at;
+                              return (
+                                <div key={i} className={"ver-line" + (on ? " on" : "")}>
+                                  <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); applyTake(k, takes); }}
+                                    title={t("In the video {a}–{b} · in the song {c}–{d}", { a: fmtTime(k.musicStart), b: fmtTime(k.musicEnd), c: fmtTime(k.offset + k.musicStart), d: fmtTime(k.offset + k.musicEnd) })}>
+                                    <Icon name="check" size={12} />{t("Take {n}", { n: i + 1 })}
+                                    <span className="mono xs">{mmss(k.musicStart)}–{mmss(k.musicEnd)}</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>)}
+                        </Menu>
+                        <Hint text={t("The song plays more than once in this video (you sang it twice, or started over): each take is one of those passes. The first times are where it sits in the video, the second where it falls in the song. Pick the one to use; if you filmed only one pass, the other is a part of the song that sounds alike (a loop of the beat): keep the right one and ignore it.")} />
+                      </span>
+                    );
+                  })()}
                   <button className="btn sm quiet ver-add" onClick={addVersion} aria-label={t("New version")}
                     title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
                     <Icon name="plus" size={12} /><span className="ver-add-l">{t("New version")}</span>
                   </button>
                   <span className="grow" />
-                  {/* Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */}
-                  <div className="wave-zoom" role="group" aria-label={t("Zoom of the waveform")}>
-                    <button className="btn icon sm" aria-label={t("Zoom out")} disabled={!view} onClick={() => { const v = viewOf(); zoomTo(v.d * 2, v.s + v.d / 2); }}><Icon name="minus" size={12} /></button>
-                    <button className="btn icon sm" aria-label={t("Zoom in")} onClick={() => { const v = viewOf(), c = settingsRef.current.crop; const mid = view ? v.s + v.d / 2 : c.start + c.duration / 2; zoomTo(v.d / 2, mid); }}><Icon name="plus" size={12} /></button>
-                    <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("All") : t("Fit")}</span></button>
-                  </div>
+                  {zoomEl("desk-tool")}
+                </div>
+                {/* Phone: the lock and the zoom above the tracks they act on. */}
+                <div className="row seg-tools">
+                  {lockEl()}
+                  <span className="grow" />
+                  {zoomEl()}
                 </div>
                 <div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"

@@ -2266,3 +2266,14 @@ details.sec:first-of-type { background-image: none; }
   .seg-versions .ver-pick { flex: none; min-width: 0; overflow: visible; }
   .seg-versions .wave-zoom { margin-left: auto; }
 }
+/* The segment's block, top to bottom (both devices): [phone: lock · zoom], the tracks, version · take · +,
+   then length · passage · sync. On a computer the lock leads the last row and the zoom ends the versions' row. */
+.seg-tools { display: none; }
+.video-side .timeline > .seg-tools { order: 2; }
+.video-side .timeline > .seg-versions { order: 6; margin-top: 12px; }
+.video-side .timeline > .transport { order: 7; margin-top: 0; }
+@media (max-width: 1000px) {
+  .app .video-side .timeline > .seg-tools { display: flex; align-items: center; gap: 6px; }
+  .app .desk-tool { display: none !important; }
+  .video-side .timeline > .transport { margin-top: 0; }
+}
