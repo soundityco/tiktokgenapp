@@ -18,6 +18,7 @@ export const FR: Record<string, string> = {
   "Demo: a brand-new account, nothing is saved (a reload starts again). Click to go back to your account.": "Démo : un compte tout neuf, rien n'est enregistré (recharger repart de zéro). Clique pour revenir à ton compte.",
   "Drive copy updated: {video} (made in {make} s by {how}, sent in {send} s, {size} MB)": "Copie Drive mise à jour : {video} (faite en {make} s par {how}, envoyée en {send} s, {size} Mo)",
   "the video chip": "la puce vidéo",
+  "made in {make} s by {how}, sent in {send} s, {size} MB": "faite en {make} s par {how}, envoyée en {send} s, {size} Mo",
   "The Drive copy of {video} could not be made": "La copie Drive de {video} n'a pas pu être faite",
   "Another video's copy first: {video}": "D'abord la copie d'une autre vidéo : {video}",
   "The Drive copy could not be made": "La copie Drive n'a pas pu être faite",

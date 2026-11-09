@@ -395,6 +395,8 @@ export default function VideoStudio({
   const [copyFits, setCopyFits] = useState(false);
   /** The last copy of the open video failed (a click tries again). */
   const [copyErr, setCopyErr] = useState<string | null>(null);
+  /** How long the last copy took on this device (shown under its status until the page is reloaded). */
+  const [copyTook, setCopyTook] = useState<{ clip: string; text: string } | null>(null);
   const [, tick] = useState(0);
   /** Drive id of the copy open here: another one in the data (made again elsewhere, longer) is fetched instead. */
   const copyShown = useRef<string | null>(null);
@@ -975,6 +977,8 @@ export default function VideoStudio({
       if (old && old !== id) void deleteDriveFile(old);
       setCopyErr(null);
       const secs = (ms: number) => String(Math.max(1, Math.round(ms / 1000)));
+      setCopyTook({ clip: clipId, text: t("made in {make} s by {how}, sent in {send} s, {size} MB", {
+        make: secs(tMade - t0), send: secs(performance.now() - tMade), how: chip ? t("the video chip") : "ffmpeg", size: String(Math.round(copy.size / 1e6)) }) });
       onToast?.(t("Drive copy updated: {video} (made in {make} s by {how}, sent in {send} s, {size} MB)", {
         video: job.label, make: secs(tMade - t0), send: secs(performance.now() - tMade),
         how: chip ? t("the video chip") : "ffmpeg", size: String(Math.round(copy.size / 1e6)),
@@ -1050,8 +1054,9 @@ export default function VideoStudio({
       const n = Math.max(1, Math.ceil((copyDueAt - Date.now()) / 1000));
       return { text: cp ? t("The passage goes past the copy: new copy in {n} s", { n }) : t("Drive copy in {n} s", { n }), p: 0, busy: true, action: { label: t("Now"), run: copyNow } };
     }
-    if (copyFits) return { text: t("Passage already in the copy"), p: 1, ok: true };
-    if (cp && videoBlob && cp.of === videoBlob.size) return { text: t("Drive copy up to date"), p: 1, ok: true,
+    const took = copyTook?.clip === clip.id ? ` · ${copyTook.text}` : "";
+    if (copyFits) return { text: t("Passage already in the copy") + took, p: 1, ok: true };
+    if (cp && videoBlob && cp.of === videoBlob.size) return { text: t("Drive copy up to date") + took, p: 1, ok: true,
       hint: t("A copy of the passage used ({quality}) is on your Drive: open this video on another device to go on working there.", { quality: q }) };
     return null;
   })();
