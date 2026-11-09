@@ -2460,7 +2460,8 @@ export default function VideoStudio({
       v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = videoUrl;
       try {
         await new Promise<void>((ok, ko) => { v.onloadeddata = () => ok(); v.onerror = () => ko(new Error("load")); });
-        const N = 9, H = 72;
+        // Big enough to stay sharp on a computer's wide strip (and on a Retina screen), lightly compressed.
+        const N = 9, H = 240;
         const cv = document.createElement("canvas");
         const out: string[] = [];
         for (let i = 0; i < N && !off; i++) {
@@ -2470,7 +2471,7 @@ export default function VideoStudio({
           if (!v.videoWidth) break;
           cv.width = Math.round((H * v.videoWidth) / v.videoHeight); cv.height = H;
           cv.getContext("2d")!.drawImage(v, 0, 0, cv.width, cv.height);
-          out.push(cv.toDataURL("image/jpeg", 0.62));
+          out.push(cv.toDataURL("image/jpeg", 0.82));
           // Each picture takes its place as soon as it is made (the strip is at its full height from the start).
           if (!off && !wait) setStrip([...out]);
         }

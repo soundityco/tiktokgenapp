@@ -2091,3 +2091,9 @@ details.sec:first-of-type { background-image: none; }
   .video-center .transport .tr-play, .video-center .transport .tr-time { display: none; }
   .video-center .transport .tr-range { display: inline; font-size: 13px; color: var(--text); margin-right: 2px; }
 }
+@media (min-width: 1001px) {
+  /* The board player's strip as tall as the play button; its head taller still, over the capsule's padding (it
+     changes nothing around it). */
+  .board-player .dp-strip.on { height: 46px; border-radius: 10px; }
+  .board-player .dp-head { width: 6px; height: 56px; margin: -28px 0 0 -3px; border-radius: 3px; }
+}
