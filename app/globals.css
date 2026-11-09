@@ -1780,3 +1780,7 @@ details.sec:first-of-type { background-image: none; }
   .mobile-tabs > .dock-lib.on { display: flex; align-items: center; width: auto; gap: 8px; padding: 0 16px 0 13px; }
   .mobile-tabs > .dock-lib.on .tab-name { max-width: 130px; opacity: 1; transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .25s .08s; }
 }
+@media (max-width: 1000px) {
+  /* The library's square: its icon in the middle (the hidden name took a grid cell and pushed it aside). */
+  .mobile-tabs > .dock-lib { display: flex; align-items: center; justify-content: center; }
+}
