@@ -1852,3 +1852,9 @@ details.sec:first-of-type { background-image: none; }
   .dp-strip img { animation: dp-pic .28s ease-out backwards; }
 }
 @keyframes dp-pic { from { opacity: 0; } }
+@media (max-width: 1000px) {
+  /* The library's square: its outline is gone while the pill sits on it, and comes back only once the pill has
+     left (never a dark outline on the white during the slide). */
+  .mobile-tabs > .dock-lib { transition: color .42s cubic-bezier(.65,0,.35,1), border-color .2s .34s, scale .12s; }
+  .mobile-tabs > .dock-lib.on { transition: color .42s cubic-bezier(.65,0,.35,1), border-color 0s, scale .12s; }
+}

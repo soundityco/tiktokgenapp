@@ -2536,8 +2536,16 @@ export default function VideoStudio({
       // Still dragging: later.
       if (scrubRef.current || dragWave.current || dockDrag.current) { timer = window.setTimeout(go, 200); return; }
       followList.current = false;
-      const row = document.querySelectorAll<HTMLElement>(".lyric-timing .cue-row")[currentIdx];
-      if (row?.offsetParent) row.scrollIntoView({ block: "center", behavior: "smooth" });
+      const list = [...document.querySelectorAll<HTMLElement>(".lyric-timing")].find((e) => e.offsetParent);
+      const row = list?.querySelectorAll<HTMLElement>(".cue-row")[currentIdx];
+      if (!list || !row) return;
+      // Only the list scrolls (never the page): the line comes to the middle of the part of the list that is on
+      // screen (between the header and the dock); the list's own ends stop it.
+      const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
+      const top = Math.max(l.top, (document.querySelector(".app > .top") as HTMLElement | null)?.getBoundingClientRect().bottom ?? 0);
+      const bottom = Math.min(l.bottom, (document.querySelector(".mobile-tabs") as HTMLElement | null)?.getBoundingClientRect().top ?? window.innerHeight);
+      const aim = bottom > top ? (top + bottom) / 2 : l.top + l.height / 2;
+      list.scrollBy({ top: r.top + r.height / 2 - aim, behavior: "smooth" });
     };
     timer = window.setTimeout(go, 250);
     return () => clearTimeout(timer);
