@@ -398,16 +398,29 @@ export async function moveDriveFolder(from: string[], to: string[]): Promise<voi
 }
 
 /** A copy of a Drive file (one the app may read) in a folder of the tree, labelled as the app's photo. */
-export async function copyToDriveFolder(id: string, name: string, path: string[]): Promise<string> {
+export async function copyToDriveFolder(id: string, name: string, path: string[], kind = "photo"): Promise<string> {
   if (isDemo()) throw new Error("Demo mode: nothing is saved to your Drive.");
   const folder = await driveFolder(path);
   const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}/copy?fields=id&supportsAllDrives=true`, {
     method: "POST", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ name, parents: [folder], appProperties: { tktgen: "photo" } }),
+    body: JSON.stringify({ name, parents: [folder], appProperties: { tktgen: kind } }),
   });
   if (r.status === 401) signalAuth();
   if (!r.ok) throw new Error(`Google Drive error ${r.status}`);
   return (await r.json()).id as string;
+}
+
+/**
+ * Whether the app may still use this file once it only has `drive.file` (it made it, or it was chosen in Google's
+ * file picker): true / false, null when it is gone (deleted, trashed, no longer shared).
+ */
+export async function isAppFile(id: string): Promise<boolean | null> {
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=isAppAuthorized,trashed&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${await getToken()}` } });
+  if (r.status === 401) { signalAuth(); throw new Error("Google session expired"); }
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`Google Drive error ${r.status}`);
+  const j = await r.json();
+  return j.trashed ? null : !!j.isAppAuthorized;
 }
 
 /** Move a file the app made into a folder of the tree (from wherever it is). */

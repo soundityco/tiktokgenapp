@@ -384,6 +384,9 @@ export interface Workspace {
   textRolesV1?: boolean;
   /** The photo lists once filled from the user's own Drive folders were copied into Rollout / Photos (once). */
   drivePhotosV1?: boolean;
+  /** Every photo, audio and LUT taken from the user's own Drive was copied into Rollout, so the app can work with
+   *  the `drive.file` permission alone (once). */
+  driveFilesV1?: boolean;
   /** The edits made on each photo (by its id): a slide that gets the photo again gets them back. */
   picEdits?: Record<string, PicEdit>;
   picPools: PicPool[];

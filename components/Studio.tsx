@@ -4,7 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, copyToDriveFolder, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, copyToDriveFolder, isAppFile, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { DRIVE_AUTH_EVENT, DriveItem, isImage, listFolder, loadDriveImage, mergeFolder, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
@@ -254,6 +254,52 @@ export default function Studio({ userName }: { userName: string }) {
     void flushSave();
     say(failed ? t("{n} photos copied into Rollout, {m} could not be (tried again next time)", { n: copied, m: failed }) : t("{n} photos copied into Rollout", { n: copied }));
   };
+  /**
+   * Once for the account, while the app may still read the whole Drive: every photo, official audio and LUT taken
+   * from the user's own Drive (not made by the app) is copied into its Rollout folder, and the workspace points to
+   * the copies. Then the app only needs `drive.file` (files it made, or chosen in Google's picker). The camera
+   * videos are not copied (they can weigh gigabytes): their working copy on the Drive is made by the app already.
+   */
+  const adoptOutsideFiles = async () => {
+    const cur = wsRef.current;
+    if (!cur || cur.driveFilesV1 || isDemo() || !(await canWriteDrive())) return;
+    const todo = new Map<string, { name: string; path: string[]; kind: string }>();
+    const isDriveId = (id?: string) => !!id && /^[\w-]{20,}$/.test(id);
+    for (const pool of cur.picPools) for (const pic of pool.pics) if (isDriveId(pic.id) && !todo.has(pic.id)) todo.set(pic.id, { name: pic.name, path: listPath(pool), kind: "photo" });
+    for (const p of cur.projects) {
+      if (isDriveId(p.audioDriveId) && !todo.has(p.audioDriveId!)) todo.set(p.audioDriveId!, { name: p.audioName || "audio", path: DRIVE_PATHS.audios(p.name || "Release"), kind: "audio" });
+      for (const v of p.videos ?? []) {
+        const lut = v.grade?.lut;
+        if (lut && isDriveId(lut.driveId) && !todo.has(lut.driveId!)) todo.set(lut.driveId!, { name: lut.name.endsWith(".cube") ? lut.name : `${lut.name}.cube`, path: DRIVE_PATHS.luts, kind: "lut" });
+      }
+    }
+    const map = new Map<string, string>();
+    let failed = 0;
+    const ids = [...todo.keys()];
+    for (let i = 0; i < ids.length; i += 4) {
+      await Promise.all(ids.slice(i, i + 4).map(async (id) => {
+        try {
+          const mine = await isAppFile(id);
+          if (mine !== false) return; // the app's own (or gone: nothing to save)
+          const f = todo.get(id)!;
+          map.set(id, await copyToDriveFolder(id, f.name, f.path, f.kind));
+        } catch (e) { failed++; console.warn("[drive] adopt", id, e); }
+      }));
+    }
+    const now = wsRef.current;
+    if (!now) return;
+    // Every place an id is used (lists, slides, photo edits, audio, LUT): the copy's id instead.
+    let json = JSON.stringify(now);
+    for (const [from, to] of map) json = json.split(`"${from}"`).join(`"${to}"`);
+    const next: Workspace = JSON.parse(json);
+    // Linked folders cannot be read any more: their photos are in the list (copied above), the link goes.
+    next.picPools = next.picPools.map((p) => (p.folders?.length || p.excluded?.length ? { ...p, folders: [], excluded: [] } : p));
+    if (!failed) next.driveFilesV1 = true;
+    apply(next, false);
+    void flushSave();
+    if (map.size) say(t("{n} files from your Drive copied into Rollout", { n: map.size }));
+    console.info(`[drive] adopt: ${ids.length} checked, ${map.size} copied, ${failed} failed`);
+  };
   // Each photo keeps its own edits (colour, framing): whatever is changed on a slide is remembered for its photo.
   useEffect(() => {
     const cur = wsRef.current;
@@ -311,6 +357,7 @@ export default function Studio({ userName }: { userName: string }) {
       });
     }).then((n) => { if (n) console.info(`[drive] ${n} files tidied into the Rollout tree`); })
       .then(() => adoptLinkedFolders())
+      .then(() => adoptOutsideFiles())
       .catch((e) => console.warn("[drive] tree", e));
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // The header's height (phone: the Style page holds the preview right under it).
@@ -1867,20 +1914,15 @@ export default function Studio({ userName }: { userName: string }) {
       )}
 
       {overlay?.k === "drive" && (
-        <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[], toAll: boolean, folder) => {
+        <DriveBrowser onClose={() => setOverlay(null)} onAdd={(pics: PicRef[], toAll: boolean) => {
           const ids = new Set<string>([overlay.poolId]);
           if (toAll) project.slides.forEach((s) => s.picPoolId && ids.add(s.picPoolId));
           upd((w) => ({
             ...w,
             picPools: w.picPools.map((x) => {
               if (!ids.has(x.id)) return x;
-              // The folder is linked to the list being edited only: the other lists just get a copy.
-              const link = folder && x.id === overlay.poolId ? folder : null;
               const have = new Set(x.pics.map((y) => y.id));
-              const add = pics.filter((y) => !have.has(y.id)).map((y) => (link ? { ...y, folder: link.id } : y));
-              const next = { ...x, pics: [...x.pics, ...add] };
-              if (link && !x.folders?.some((f) => f.id === link.id)) next.folders = [...(x.folders ?? []), link];
-              return next;
+              return { ...x, pics: [...x.pics, ...pics.filter((y) => !have.has(y.id))] };
             }),
           }));
           say(ids.size > 1 ? t("{n} photos added to {m} lists", { n: pics.length, m: ids.size }) : t("{n} photos added", { n: pics.length }));
