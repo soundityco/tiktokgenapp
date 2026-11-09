@@ -2121,3 +2121,16 @@ details.sec:first-of-type { background-image: none; }
 /* The splash kept over the app while its first pictures arrive, then fading out. */
 .boot.boot-over { position: fixed; inset: 0; z-index: 400; min-height: 0; transition: opacity .3s ease; }
 .boot.boot-over.out { opacity: 0; pointer-events: none; }
+
+/* Versions of a video (A/B): chips under the transport, the shown one on white. */
+.seg-versions { gap: 6px; flex-wrap: wrap; align-items: center; }
+.seg-versions > .label { margin-right: 2px; }
+.ver-chip { display: inline-flex; align-items: stretch; height: 28px; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; background: var(--raised); }
+.ver-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ver-chip button { border: 0; background: none; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.ver-main { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; white-space: nowrap; }
+.ver-main .mono { opacity: .65; }
+.ver-more { padding: 0 6px; display: grid; place-items: center; opacity: .7; }
+.ver-more:hover { opacity: 1; }
+.ver-chip > .menu-wrap, .ver-chip > div { display: flex; }
+.ver-name { width: 140px; height: 28px; }

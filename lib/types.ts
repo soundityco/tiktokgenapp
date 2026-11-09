@@ -188,6 +188,13 @@ export interface VideoFrame {
 }
 
 /** One take found in the camera video: where its music plays and its own offset. */
+/** One version of a video (see VideoSettings.versions): the values of its own fields. */
+export interface VideoVersion {
+  id: string;
+  name?: string;
+  v: Partial<VideoSettings>;
+}
+
 export interface VideoTake {
   offset: number;
   musicStart: number;
@@ -288,6 +295,10 @@ export interface VideoSettings {
   format?: "9:16" | "16:9";
   /** Audio and video locked together: the offset does not move and the segment stays inside the synced video. */
   linked?: boolean;
+  /** Versions of this video to compare (A/B): each keeps its own segment, hooks, lyrics and post text; the
+   *  camera file, sync, framing and grade are shared. The one shown lives in the fields above (`activeVersion`). */
+  versions?: VideoVersion[];
+  activeVersion?: string;
   /** Burn the timed lyrics on the video. */
   captions: boolean;
   /** How the generated lyrics are cut into captions: one word at a time or one phrase at a time. */

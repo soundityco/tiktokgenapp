@@ -20,7 +20,7 @@ import { fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource } from "@/lib/grade10";
 import { convertSegment, copyPlanFor, cropFor, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake } from "@/lib/types";
+import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
 import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
@@ -66,6 +66,11 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
   const rel = time - cfg.crop.start;
   return cfg.hooks?.find((h) => h.text.trim() && rel >= h.from - 0.001 && rel < (h.to ?? cfg.crop.duration));
 };
+
+/** What each version of a video keeps for itself (the rest is the video's: camera file, sync, framing, grade). */
+const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "hooks", "hookTheme", "hookPoolId", "showHooks", "hookStyle",
+  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId"] as const satisfies readonly (keyof VideoSettings)[];
+const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
 
 function saveBlob(blob: Blob, name: string) {
   const a = document.createElement("a");
@@ -930,7 +935,13 @@ export default function VideoStudio({
     if (!blob || onCopy || copyAc.current) return;
     const cur = settingsRef.current;
     const clipId = clip.id;
-    const segS = cur.crop.start - cur.offset, segE = segS + cur.crop.duration;
+    let segS = cur.crop.start - cur.offset, segE = segS + cur.crop.duration;
+    // The passages of every version, when they sit close enough: switching versions then needs no new copy.
+    for (const v of cur.versions ?? []) {
+      if (!v.v.crop || v.v.offset === undefined) continue;
+      const s0 = v.v.crop.start - v.v.offset, e0 = s0 + v.v.crop.duration;
+      if (Math.max(segE, e0) - Math.min(segS, s0) <= 180) { segS = Math.min(segS, s0); segE = Math.max(segE, e0); }
+    }
     const from = Math.max(0, segS - 2), to = Math.min(videoDur, segE + 2);
     const key = `${clipId}|${blob.size}|${from.toFixed(1)}|${to.toFixed(1)}`;
     if (to <= from || copyFailed.current === key) return;
@@ -1648,6 +1659,62 @@ export default function VideoStudio({
   }, [settings.takes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Use one take of the video: audio and video get linked on it, and the segment moves inside it if needed. */
+  // ---- versions of the video (A/B): segment, hooks, lyrics and post text of their own ----
+  const versions = settings.versions ?? [];
+  const versionName = (v: VideoVersion, i: number) => v.name?.trim() || t("Version {x}", { x: String.fromCharCode(65 + i) });
+  /** The shown version's values put back in its entry (they are edited in the video's own fields). */
+  const withShown = (cur: VideoSettings) => (cur.versions ?? []).map((x) => (x.id === cur.activeVersion ? { ...x, v: versionOf(cur) } : x));
+  const valuesOf = (v: VideoVersion) => Object.fromEntries(VERSION_KEYS.map((k) => [k, v.v[k]])) as Partial<VideoSettings>;
+  const switchVersion = (id: string) => {
+    const cur = settingsRef.current;
+    if (cur.activeVersion === id) return;
+    const list = withShown(cur);
+    const target = list.find((x) => x.id === id);
+    if (!target) return;
+    stop();
+    setV({ ...valuesOf(target), versions: list, activeVersion: id });
+    setHead(target.v.crop?.start ?? cur.crop.start);
+    onSaveNow();
+  };
+  /** A new version, a copy of the one shown (the first time: the video as it is becomes A, its copy B). */
+  const addVersion = () => {
+    const cur = settingsRef.current;
+    const list = cur.versions?.length ? withShown(cur) : [{ id: uid(), v: versionOf(cur) }];
+    const next = { id: uid(), v: versionOf(cur) };
+    setV({ versions: [...list, next], activeVersion: next.id });
+    onSaveNow();
+    onToast?.(t("{name} made: change its segment, hooks or lyrics to compare", { name: versionName(next, list.length) }));
+  };
+  const renameVersion = (id: string, name: string) => setV({ versions: (settingsRef.current.versions ?? []).map((x) => (x.id === id ? { ...x, name: name.trim() || undefined } : x)) });
+  const removeVersion = (id: string) => {
+    const cur = settingsRef.current;
+    const list = withShown(cur).filter((x) => x.id !== id);
+    const shown = cur.activeVersion === id ? list[0] : undefined;
+    // One left: no versions any more (the video keeps what it shows).
+    if (list.length <= 1) setV({ ...(shown ? valuesOf(shown) : {}), versions: undefined, activeVersion: undefined });
+    else setV({ ...(shown ? valuesOf(shown) : {}), versions: list, ...(shown ? { activeVersion: shown.id } : {}) });
+    if (shown?.v.crop) setHead(shown.v.crop.start);
+    onSaveNow();
+  };
+  const [renaming, setRenaming] = useState<string | null>(null);
+  /** Every version exported, one after the other (file names end with the version's name); the one shown comes back. */
+  const exportVersions = async () => {
+    const back = settingsRef.current.activeVersion;
+    const list = settingsRef.current.versions ?? [];
+    if (list.length < 2) return;
+    lastFiles.current = [];
+    let done = 0;
+    for (let i = 0; i < list.length; i++) {
+      switchVersion(list[i].id);
+      for (let k = 0; k < 60 && settingsRef.current.activeVersion !== list[i].id; k++) await new Promise((r) => setTimeout(r, 50));
+      const r = await exportVideo(true, versionName(list[i], i));
+      if (r === "cancelled") break;
+      if (r === "done") done++;
+    }
+    if (back) switchVersion(back);
+    notify(t("Videos exported"), t("{n} of {m} videos are in your downloads.", { n: done, m: list.length }));
+  };
+
   const applyTake = (k: VideoTake, takes = settingsRef.current.takes) => {
     const cur = settingsRef.current;
     const range = linkRangeOf({ offset: k.offset, musicStart: k.musicStart, musicEnd: k.musicEnd, takes });
@@ -2139,7 +2206,7 @@ export default function VideoStudio({
    * Export the segment as an MP4 (H.264 + AAC, 1080×1920 or 1920×1080). The frames are drawn and
    * encoded one by one on a hidden copy of the video: nothing plays on screen, a window shows the progress.
    */
-  const exportVideo = async (inBatch = false): Promise<"done" | "failed" | "cancelled"> => {
+  const exportVideo = async (inBatch = false, suffix = ""): Promise<"done" | "failed" | "cancelled"> => {
     if (!audioBuf || !videoUrl) return "failed";
     stop();
     const cfg = settingsRef.current;
@@ -2151,7 +2218,7 @@ export default function VideoStudio({
     exportRef.current = ac;
     setErr(null); setNote(null); setExporting(true); setExpMode(null); setExp({ p: 0, step: "audio" });
     const [W, H] = OUT_SIZE(cfg.format);
-    const name = `${project.name || "Rollout"} ${clip.name}`.replace(/[\\/:*?"<>|]+/g, "-");
+    const name = `${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""}`.replace(/[\\/:*?"<>|]+/g, "-");
     let source: { frameAt: (t: number) => Promise<Picture | null>; close: () => void; codec: string } | null = null;
     let stopPlayer = () => {};
     const el = document.createElement("video");
@@ -2885,13 +2952,14 @@ export default function VideoStudio({
           <div className="field h-status"><span className="field-k">{t("Sync status")}</span>
             <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
           </div>
-          {clips.length > 1 && !exporting && !batch ? (
+          {(clips.length > 1 || versions.length > 1) && !exporting && !batch ? (
             <div className="slot h-dl"><Menu trigger={(_, toggle) => (
               <button className="btn primary" aria-label={t("Export")} onClick={toggle} disabled={!audioBuf}><Icon name="download" /><span className="lbl">{t("Export")}</span><Icon name="chevron" size={14} /></button>
             )}>
               {(closeMenu) => (<>
                 <button disabled={!videoBlob} onClick={() => { closeMenu(); void exportVideo(); }}>{t("This video (MP4)")}</button>
-                <button onClick={() => { closeMenu(); exportAll(); }}>{t("All the videos ({n})", { n: clips.length })}</button>
+                {versions.length > 1 && <button disabled={!videoBlob} onClick={() => { closeMenu(); void exportVersions(); }}>{t("Every version of this video ({n})", { n: versions.length })}</button>}
+                {clips.length > 1 && <button onClick={() => { closeMenu(); exportAll(); }}>{t("All the videos ({n})", { n: clips.length })}</button>}
               </>)}
             </Menu></div>
           ) : (
@@ -3059,6 +3127,39 @@ export default function VideoStudio({
                       {genBusy && <button className="btn sm quiet" onClick={cancelLyrics}>{t("Cancel")}</button>}
                     </>
                   )}
+                </div>
+                {/* Versions of this video to compare (A/B): a click shows one; each keeps its segment, hooks and lyrics. */}
+                <div className="row seg-versions" role="group" aria-label={t("Versions")}>
+                  {versions.length > 0 && <span className="label">{t("Versions")}</span>}
+                  {versions.map((v, i) => {
+                    const on = v.id === settings.activeVersion;
+                    const crop = on ? settings.crop : v.v.crop;
+                    if (renaming === v.id) return (
+                      <input key={v.id} className="input sm ver-name" autoFocus defaultValue={v.name ?? ""} placeholder={versionName(v, i)} aria-label={t("Rename")}
+                        onBlur={(e) => { renameVersion(v.id, e.target.value); setRenaming(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setRenaming(null); }} />
+                    );
+                    return (
+                      <span key={v.id} className={"ver-chip" + (on ? " on" : "")}>
+                        <button className="ver-main" aria-pressed={on} onClick={() => switchVersion(v.id)} onDoubleClick={() => setRenaming(v.id)}>
+                          {versionName(v, i)}{crop && <span className="mono xs">{mmss(crop.start)}–{mmss(crop.start + crop.duration)}</span>}
+                        </button>
+                        <Menu float trigger={(_, toggle) => (
+                          <button className="ver-more" aria-label={t("Version options")} aria-haspopup="menu" onClick={toggle}><Icon name="chevron" size={12} /></button>
+                        )}>
+                          {(close) => (<>
+                            <button onClick={() => { close(); setRenaming(v.id); }}>{t("Rename")}</button>
+                            <div className="sep" />
+                            <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); removeVersion(v.id); }}>{t("Delete")}</button>
+                          </>)}
+                        </Menu>
+                      </span>
+                    );
+                  })}
+                  <button className="btn sm quiet ver-add" onClick={addVersion}
+                    title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
+                    <Icon name="plus" size={12} />{versions.length ? t("New version") : t("Make a version B")}
+                  </button>
                 </div>
                 {settings.takes && settings.takes.length > 1 && (
                   <div className="row">
