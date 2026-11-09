@@ -760,6 +760,8 @@ export default function Studio({ userName }: { userName: string }) {
   const [dropPic, setDropPic] = useState<{ i: number; blob: Blob; name: string } | null>(null);
   const [dropBusy, setDropBusy] = useState(false);
   const [driveWrite, setDriveWrite] = useState(false);
+  // Known from the start (photo lists, new releases, uploads all depend on it), not only when a photo is dropped.
+  useEffect(() => { void canWriteDrive().then(setDriveWrite).catch(() => setDriveWrite(false)); }, []);
   /** A picture is being dragged over the page: the slides show they take it. */
   const [boardDrag, setBoardDrag] = useState(false);
   useEffect(() => {
@@ -1780,7 +1782,8 @@ export default function Studio({ userName }: { userName: string }) {
           onSync={(manual) => void syncDrive(edPics.id, manual)}
           onUpload={(files) => void uploadToList(edPics.id, files)} uploading={picUpload?.pool === edPics.id ? picUpload : null}
           onMoved={(from, to) => void moveDriveFolder(listPath(from), listPath(to))}
-          savedIn={driveWrite ? listPath(edPics).join(" / ") : null} />
+          savedIn={driveWrite ? listPath(edPics).join(" / ") : null}
+          linkedFolders={(edPics.folders ?? []).map((f) => f.name)} />
       )}
 
       {overlay?.k === "drive" && (

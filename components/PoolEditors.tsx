@@ -244,7 +244,9 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   /** The list was renamed or its scope changed (its Drive folder follows). */
   onMoved?: (from: { name: string; scope: string; projectId?: string }, to: { name: string; scope: string; projectId?: string }) => void;
   /** Where its photos are kept in the Drive ("Rollout / Photos / …"), null when only on this device. */
-  savedIn?: string | null }) {
+  savedIn?: string | null;
+  /** Folders of the user's Drive this list was filled from before (their photos stay where they are). */
+  linkedFolders?: string[] }) {
   const { t } = useT();
   const { pool } = p;
   const start = useRef({ name: pool.name, scope: pool.scope, projectId: pool.projectId });
@@ -290,7 +292,13 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
       {/* Where the photos are: the user's own Drive, nowhere else. */}
       <p className={"pic-saved xs" + (p.savedIn ? "" : " local")}>
         <Icon name={p.savedIn ? "check" : "alert"} size={13} />
-        {p.savedIn ? t("Saved in your own Drive: {path}. Rollout keeps none of your photos.", { path: p.savedIn }) : t("Kept on this device only (no Google Drive access).")}
+        {p.savedIn
+          ? (p.linkedFolders?.length
+            ? t("In your own Drive: your folders {folders}; the photos you add go to {path}. Rollout keeps none of your photos.", { folders: p.linkedFolders.join(", "), path: p.savedIn })
+            : t("Saved in your own Drive: {path}. Rollout keeps none of your photos.", { path: p.savedIn }))
+          : p.linkedFolders?.length
+            ? t("In your own Drive: your folders {folders}.", { folders: p.linkedFolders.join(", ") })
+            : t("Kept on this device only (no Google Drive access).")}
       </p>
       {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them.")}</p>}
       <div className="thumbs" style={{ maxHeight: "46dvh", overflow: "auto" }}>

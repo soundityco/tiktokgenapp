@@ -663,6 +663,8 @@ export const FR: Record<string, string> = {
   "{n} takes found in the video": "{n} prises trouvées dans la vidéo",
   "Takes found in the video (pick the one to use):": "Prises trouvées dans la vidéo (choisis celle à utiliser) :",
   "Take {n}": "Prise {n}",
+  "In your own Drive: your folders {folders}; the photos you add go to {path}. Rollout keeps none of your photos.": "Sur ton propre Drive : tes dossiers {folders} ; les photos que tu ajoutes vont dans {path}. Rollout ne garde aucune de tes photos.",
+  "In your own Drive: your folders {folders}.": "Sur ton propre Drive : tes dossiers {folders}.",
   "1 photo": "1 photo",
   "Saved in your own Drive: {path}. Rollout keeps none of your photos.": "Enregistrées sur ton propre Drive : {path}. Rollout ne garde aucune de tes photos.",
   "Kept on this device only (no Google Drive access).": "Gardées sur cet appareil seulement (pas d'accès au Google Drive).",
