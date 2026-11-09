@@ -1969,3 +1969,8 @@ details.sec:first-of-type { background-image: none; }
   /* Style page, carousel: the slide starts 16px under the head, like the video. */
   .main[data-studio="carousel"][data-mobile-tab="style"] .carousel-head ~ .deck-wrap { margin-top: 12px; }
 }
+@media (max-width: 1000px) {
+  /* Style page: the column's top as on the Create page (16px), so the release head does not move between them. */
+  .main[data-mobile-tab="style"] .col.center,
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center { padding-top: var(--s4); }
+}
