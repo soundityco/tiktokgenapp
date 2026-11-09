@@ -2049,3 +2049,21 @@ details.sec:first-of-type { background-image: none; }
 .copy-status > svg, .copy-status > .bg-ring { flex: none; margin-top: 2px; }
 .copy-status > span:not(.bg-ring):not(.pill-copy) { min-width: 0; }
 .copy-status .copy-act, .copy-status .hint { flex: none; }
+/* Under the video, both studios' layouts: "Shown" over its two eyes, then a small sheet of facts under a hairline
+   (Format, Take), each with its title on the left. */
+.video-stage > .shown-on { flex-wrap: wrap; row-gap: 8px; }
+.video-stage > .shown-on > .label { flex-basis: 100%; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; font-weight: 500; color: var(--muted); }
+.stage-meta { display: grid; gap: 8px; padding-top: 12px; background-image: var(--soft-line); background-size: 100% 1px; background-repeat: no-repeat; background-position: top; }
+.meta-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: var(--s3); min-height: 22px; }
+.meta-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.meta-v { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-xs); color: var(--text); }
+.meta-v .copy-status { min-width: 0; }
+@media (max-width: 1000px) {
+  .video-stage > .shown-on { grid-column: 1 / -1; grid-row: auto; }
+  .video-stage > .stage-meta { grid-column: 1 / -1; }
+}
+/* A link to the user's own Drive folder (photo lists): where their photos really are. */
+.drive-link { display: inline-flex; align-items: center; gap: 4px; color: var(--text); font-family: var(--mono); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.drive-link:hover { text-decoration-color: var(--text); }
+.pic-saved { align-items: flex-start; }
+.pic-saved > svg { margin-top: 2px; }

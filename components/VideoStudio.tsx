@@ -2549,7 +2549,8 @@ export default function VideoStudio({
   // part of the list on screen (its bottom near the end), once the finger or the mouse is off, never while playing.
   const followList = useRef(false);
   useEffect(() => {
-    const down = (e: PointerEvent) => { if ((e.target as HTMLElement).closest?.(".wave, .lyric-track, .hook-track, .dp-track")) followList.current = true; };
+    // (A line picked in the list itself too: it comes to the middle.)
+    const down = (e: PointerEvent) => { if ((e.target as HTMLElement).closest?.(".wave, .lyric-track, .hook-track, .dp-track, .lyric-timing .cue-text")) followList.current = true; };
     document.addEventListener("pointerdown", down, true);
     return () => document.removeEventListener("pointerdown", down, true);
   }, []);
@@ -2862,8 +2863,15 @@ export default function VideoStudio({
             <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
               onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
           </div>
-          {/* Where the Drive copy of this video stands, right where the passage is changed (the library says the same). */}
-          {copyState && <div className="copy-line">{copyStatusEl()}</div>}
+          {/* What the picture is: its size, then the take it comes from (the original, or the Drive copy and where
+              it stands: the library says the same), each under its title. */}
+          <div className="stage-meta">
+            <div className="meta-row"><span className="meta-k">{t("Format")}</span>
+              <span className="meta-v">{!videoBlob && <span>{t("Nothing to preview yet.")} </span>}<span className="mono">{outW}×{outH}</span>
+                {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}</span>
+            </div>
+            {copyState && <div className="meta-row"><span className="meta-k">{t("Take")}</span><span className="meta-v">{copyStatusEl()}</span></div>}
+          </div>
           {lookErr && grade?.lut && (
             <p className="notice warn xs">
               {t("The LUT “{name}” is not in this browser: the picture is shown without it.", { name: grade.lut.name })}{" "}
@@ -2883,11 +2891,6 @@ export default function VideoStudio({
             );
             return videoBlob && !videoDur ? <p className="muted xs shine">{t("Opening the camera video…")}</p> : null;
           })()}
-          <p className="muted xs row stage-fmt" style={{ gap: 6 }}>
-            {!videoBlob && <span>{t("Nothing to preview yet.")}</span>}
-            <span className="mono">{outW}×{outH}</span>
-            {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}
-          </p>
 
         </div>
 

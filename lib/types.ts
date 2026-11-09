@@ -61,6 +61,9 @@ export interface PicSettings {
   adjust?: PhotoAdjust;
 }
 
+/** A photo's own edits, kept for when it comes back on a slide (its framing only for the same format). */
+export interface PicEdit { adjust?: PhotoAdjust; zoom: number; ox: number; oy: number; format: string }
+
 export interface PhotoAdjust {
   exposure?: number;
   contrast?: number;
@@ -381,6 +384,8 @@ export interface Workspace {
   textRolesV1?: boolean;
   /** The photo lists once filled from the user's own Drive folders were copied into Rollout / Photos (once). */
   drivePhotosV1?: boolean;
+  /** The edits made on each photo (by its id): a slide that gets the photo again gets them back. */
+  picEdits?: Record<string, PicEdit>;
   picPools: PicPool[];
   noRepeat: boolean;
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag

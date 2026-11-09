@@ -18,7 +18,7 @@ import ShareDialog from "./ShareDialog";
 import LyricsEditor from "./LyricsEditor";
 import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf, sungOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
-import type { GenSlide, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
+import type { GenSlide, PicEdit, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import DriveBrowser from "./DriveBrowser";
 import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
@@ -254,6 +254,31 @@ export default function Studio({ userName }: { userName: string }) {
     void flushSave();
     say(failed ? t("{n} photos copied into Rollout, {m} could not be (tried again next time)", { n: copied, m: failed }) : t("{n} photos copied into Rollout", { n: copied }));
   };
+  // Each photo keeps its own edits (colour, framing): whatever is changed on a slide is remembered for its photo.
+  useEffect(() => {
+    const cur = wsRef.current;
+    const p = cur?.projects.find((x) => x.id === cur.currentProjectId);
+    if (!cur || !p?.generated) return;
+    const edits = cur.picEdits ?? {};
+    let changed: Record<string, PicEdit | null> | null = null;
+    p.slides.forEach((s, i) => {
+      const id = p.generated?.[i]?.picId;
+      if (!id) return;
+      const plain = !s.pic.adjust && s.pic.zoom === 1 && !s.pic.ox && !s.pic.oy;
+      const now: PicEdit | null = plain ? null : { adjust: s.pic.adjust, zoom: s.pic.zoom, ox: s.pic.ox, oy: s.pic.oy, format: s.format };
+      const was = edits[id] ?? null;
+      if (JSON.stringify(now) !== JSON.stringify(was)) (changed ??= {})[id] = now;
+    });
+    if (!changed) return;
+    const diff: Record<string, PicEdit | null> = changed;
+    const next = { ...edits };
+    for (const [id, e] of Object.entries(diff)) { if (e) next[id] = e; else delete next[id]; }
+    // Kept small: the 600 most recent.
+    const keys = Object.keys(next);
+    for (const k of keys.slice(0, Math.max(0, keys.length - 600))) delete next[k];
+    // A note beside the edit, not an edit of its own: no undo step.
+    apply({ ...cur, picEdits: next }, false);
+  }, [ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // Google connected: the Rollout tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
   useEffect(() => {
     if (!ws || isDemo()) return;
@@ -895,12 +920,19 @@ export default function Studio({ userName }: { userName: string }) {
       // Another photo (dropped, pasted, found on the web): the edits made on the previous one do not follow it.
       const newPic = patch.picId !== undefined && patch.picId !== g[i].picId;
       g[i] = { ...g[i], ...patch };
-      return { ...p, generated: g, slides: newPic ? p.slides.map((s, k) => (k === i ? reframe(s) : s)) : p.slides };
+      return { ...p, generated: g, slides: newPic ? p.slides.map((s, k) => (k === i ? reframe(s, g[i].picId) : s)) : p.slides };
     });
 
   // ---- generate ----
   // A new photo starts centred and untouched: no zoom, offset or photo edits (light, colours…) of the previous one.
-  const reframe = (s: SlideCfg): SlideCfg => ({ ...s, pic: { ...s.pic, zoom: 1, ox: 0, oy: 0, adjust: undefined } });
+  /** A slide gets another photo: that photo's own edits if it had some (its colour always, its framing when the
+   *  format is the same), else none. */
+  const reframe = (s: SlideCfg, picId?: string | null): SlideCfg => {
+    const e = picId ? wsRef.current?.picEdits?.[picId] : undefined;
+    if (!e) return { ...s, pic: { ...s.pic, zoom: 1, ox: 0, oy: 0, adjust: undefined } };
+    const sameShape = e.format === s.format;
+    return { ...s, pic: { ...s.pic, zoom: sameShape ? e.zoom : 1, ox: sameShape ? e.ox : 0, oy: sameShape ? e.oy : 0, adjust: e.adjust } };
+  };
 
   const generate = useCallback(() => {
     const current = wsRef.current;
@@ -918,7 +950,7 @@ export default function Studio({ userName }: { userName: string }) {
         return p.slides[i].textSource.kind === "lyrics" && old?.edited ? { ...g, text: old.text, edited: true } : g;
       });
       // Only a slide whose photo changed starts again from a plain photo (the same photo keeps its edits).
-      const cfgs = p.slides.map((s, i) => (s.locked || slides[i]?.picId === p.generated?.[i]?.picId ? s : reframe(s)));
+      const cfgs = p.slides.map((s, i) => (s.locked || slides[i]?.picId === p.generated?.[i]?.picId ? s : reframe(s, slides[i]?.picId)));
       // The post's caption: drawn again from its list, if it has one (another one than the current).
       const caption = p.captionPoolId ? drawHook(w, p.captionPoolId, bags, p.caption ? [p.caption] : []) ?? p.caption : p.caption;
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: slides, slides: cfgs, caption } : x)) };
@@ -963,7 +995,7 @@ export default function Studio({ userName }: { userName: string }) {
       const pic = pickPic(p.slides[i].picPoolId, w, bags, others);
       const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
       g[i] = { ...g[i], picId: pic?.id ?? null, picName: pic?.name, picCredit: undefined }; // a photo of the list: no web credit
-      const cfgs = p.slides.map((s, k) => (k === i ? reframe(s) : s));
+      const cfgs = p.slides.map((s, k) => (k === i ? reframe(s, pic?.id) : s));
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g, slides: cfgs } : x)) };
     });
   };
@@ -1076,6 +1108,17 @@ export default function Studio({ userName }: { userName: string }) {
   // Photos added to a list from this device: each one sent to the list's folder in the Drive (Rollout / Photos /
   // <list>), kept on this device too, and added to the list as it arrives. Without Drive access: this device only.
   const [picUpload, setPicUpload] = useState<{ pool: string; done: number; total: number } | null>(null);
+  // The open photo list's own folder in the Drive, as a link (the user sees where their photos are).
+  const [picFolderUrl, setPicFolderUrl] = useState<string | null>(null);
+  const openPics = editor?.k === "photos" ? wsRef.current?.picPools.find((x) => x.id === editor.id) : undefined;
+  const openPicsPath = openPics && driveWrite ? listPath(openPics).join("/") : "";
+  useEffect(() => {
+    setPicFolderUrl(null);
+    if (!openPics || !driveWrite) return;
+    let off = false;
+    void driveFolder(listPath(openPics)).then((id) => { if (!off) setPicFolderUrl(`https://drive.google.com/drive/folders/${id}`); }).catch(() => {});
+    return () => { off = true; };
+  }, [openPicsPath]); // eslint-disable-line react-hooks/exhaustive-deps
   const uploadToList = async (poolId: string, files: File[]) => {
     const pool = wsRef.current?.picPools.find((p) => p.id === poolId);
     if (!pool || !files.length) return;
@@ -1819,7 +1862,8 @@ export default function Studio({ userName }: { userName: string }) {
           onUpload={(files) => void uploadToList(edPics.id, files)} uploading={picUpload?.pool === edPics.id ? picUpload : null}
           onMoved={(from, to) => void moveDriveFolder(listPath(from), listPath(to))}
           savedIn={driveWrite ? listPath(edPics).join(" / ") : null}
-          linkedFolders={(edPics.folders ?? []).map((f) => f.name)} />
+          savedHref={picFolderUrl}
+          linkedFolders={(edPics.folders ?? []).map((f) => ({ name: f.name, href: `https://drive.google.com/drive/folders/${f.id}` }))} />
       )}
 
       {overlay?.k === "drive" && (
