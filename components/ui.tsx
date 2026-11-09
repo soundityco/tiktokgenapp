@@ -537,3 +537,14 @@ export function Select({ value, onChange, children, className = "input", style, 
     </>
   );
 }
+
+/** On / off, like a phone's switch (right: on), in the sliders' look; its label at its left. */
+export function Switch({ label, checked, onChange, title, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; title?: string; disabled?: boolean }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} className={"switch" + (checked ? " on" : "")} title={title} disabled={disabled}
+      onClick={() => onChange(!checked)}>
+      <span className="switch-label">{label}</span>
+      <span className="switch-track" aria-hidden><span className="switch-knob" /></span>
+    </button>
+  );
+}

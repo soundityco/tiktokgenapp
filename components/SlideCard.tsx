@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
-import { Menu, Select } from "./ui";
+import { Menu, Select, Switch } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { poolThemes, textItems } from "@/lib/generate";
@@ -489,8 +489,7 @@ export default function SlideCard(p: Props) {
               <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
               <div className="adjust-actions">
                 <button className="btn sm quiet" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
-                <button className={"btn sm" + (compare ? " on" : "")} aria-pressed={compare} disabled={!hasAdjust} onClick={() => setCompare((v) => !v)}
-                  title={t("The photo without its edits, to compare")}>{compare ? t("Before") : t("Before / after")}</button>
+                <Switch label={t("Edits")} checked={!compare} disabled={!hasAdjust} onChange={(v) => setCompare(!v)} title={t("Off: the photo without its edits, to compare")} />
                 <button className="btn sm" onClick={() => { setCompare(false); setAdjusting(false); }}>{t("Done")}</button>
               </div>
             </div>

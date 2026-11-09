@@ -5,7 +5,7 @@ import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { VideoGrade } from "@/lib/types";
-import { Range, Section, Select, Hint } from "./ui";
+import { Range, Section, Select, Hint, Switch } from "./ui";
 
 const LUTS_KEY = "tktgen-luts";
 
@@ -119,8 +119,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
                 {t("Import a LUT (.cube)")}
                 <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f); e.target.value = ""; }} />
               </label>
-              <button className={"btn sm" + (raw ? " on" : "")} aria-pressed={raw} onClick={() => onRaw(!raw)}
-                title={t("Show the picture as recorded, to compare")}>{raw ? t("Showing the log") : t("Before / after")}</button>
+              <Switch label={t("Edits")} checked={!raw} onChange={(v) => onRaw(!v)} title={t("Off: the picture as recorded, to compare")} />
             </div>
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}
           </>

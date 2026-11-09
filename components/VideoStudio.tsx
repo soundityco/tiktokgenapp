@@ -27,7 +27,7 @@ import PostCaption from "./PostCaption";
 import ShareDialog from "./ShareDialog";
 import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select } from "./ui";
+import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
 import { PHONE_QUERY, StyleTabs, useStyleParts, type SheetPart } from "./StyleSheet";
 
@@ -2900,10 +2900,7 @@ export default function VideoStudio({
           {videoBlob && (
             <div className="deck-bar video-bar">
               {/* Phone: before / after the grade in one tap, across from Zones. */}
-              {gradesColour(grade) ? (
-                <button className={"deck-zones compare" + (rawView ? " on" : "")} aria-pressed={rawView} onClick={() => setRawView((v) => !v)}
-                  title={t("Show the picture as recorded, to compare")}>{rawView ? t("Before") : t("Before / after")}</button>
-              ) : <span />}
+              {gradesColour(grade) ? <Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /> : <span />}
               <span />
               <button className={"deck-zones" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
                 onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
@@ -3467,8 +3464,7 @@ export default function VideoStudio({
           <div id="video-color" className="stack">
             <div className="row col-head"><span className="label">{t("Colour")}</span><Hint text={t("The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.")} />
               {/* Before / after in one click: the picture as recorded, then the grade again. */}
-              {gradesColour(grade) && <><span className="grow" /><button className={"btn sm" + (rawView ? " on" : "")} aria-pressed={rawView} onClick={() => setRawView((v) => !v)}
-                title={t("Show the picture as recorded, to compare")}>{rawView ? t("Before") : t("Before / after")}</button></>}
+              {gradesColour(grade) && <><span className="grow" /><Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /></>}
             </div>
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}
