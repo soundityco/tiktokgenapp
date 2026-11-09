@@ -30,7 +30,6 @@ export const FR: Record<string, string> = {
   "Version": "Version",
   "Version {x}": "Version {x}",
   "New version": "Nouvelle version",
-  "Make a version B": "Créer une version B",
   "{name} made: change its segment, hooks or lyrics to compare": "{name} créée : change son segment, ses hooks ou ses paroles pour comparer",
   "Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)": "Une autre version de cette vidéo, pour comparer : son propre segment, ses hooks, ses paroles et sa légende (la prise, la synchro, le cadrage et la couleur sont partagés)",
   "Every version of this video ({n})": "Toutes les versions de cette vidéo ({n})",

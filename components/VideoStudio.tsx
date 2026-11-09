@@ -1692,13 +1692,22 @@ export default function VideoStudio({
     const cur = settingsRef.current;
     const list = withShown(cur).filter((x) => x.id !== id);
     const shown = cur.activeVersion === id ? list[0] : undefined;
-    // One left: no versions any more (the video keeps what it shows).
-    if (list.length <= 1) setV({ ...(shown ? valuesOf(shown) : {}), versions: undefined, activeVersion: undefined });
+    // One left: it stays, with its name (shown alone, ready for a new one).
+    if (!list.length) setV({ versions: undefined, activeVersion: undefined });
     else setV({ ...(shown ? valuesOf(shown) : {}), versions: list, ...(shown ? { activeVersion: shown.id } : {}) });
     if (shown?.v.crop) setHead(shown.v.crop.start);
     onSaveNow();
   };
   const [renaming, setRenaming] = useState<string | null>(null);
+  /** The only version named (it becomes a version of its own, ready for a B). Once, from Enter or leaving the field. */
+  const nameSolo = (raw: string) => {
+    if (renaming !== "solo") return;
+    setRenaming(null);
+    const name = raw.trim();
+    const cur = settingsRef.current;
+    if (cur.versions?.[0]) renameVersion(cur.versions[0].id, name);
+    else if (name) { const id = uid(); setV({ versions: [{ id, name, v: versionOf(cur) }], activeVersion: id }); onSaveNow(); }
+  };
   /** Every version exported, one after the other (file names end with the version's name); the one shown comes back. */
   const exportVersions = async () => {
     const back = settingsRef.current.activeVersion;
@@ -3238,7 +3247,19 @@ export default function VideoStudio({
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
-                  {versions.length > 0 && (() => {
+                  {/* One version only: it is shown the same way (Version A, its passage), a click names it (nothing to pick). */}
+                  {versions.length < 2 && (renaming === "solo" ? (
+                    <input className="input sm ver-name ver-solo" autoFocus defaultValue={versions[0]?.name ?? ""} placeholder={t("Version {x}", { x: "A" })} aria-label={t("Rename")}
+                      onBlur={(e) => nameSolo(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") nameSolo(e.currentTarget.value); if (e.key === "Escape") setRenaming(null); }} />
+                  ) : (
+                    <button className="btn sm ver-pick" onClick={() => setRenaming("solo")} title={t("Rename")}>
+                      {versions[0] ? versionName(versions[0], 0) : t("Version {x}", { x: "A" })}
+                      <span className="mono xs muted">{mmss(settings.crop.start)}–{mmss(settings.crop.start + settings.crop.duration)}</span>
+                      <Icon name="pencil" size={11} />
+                    </button>
+                  ))}
+                  {versions.length > 1 && (() => {
                     const at = Math.max(0, versions.findIndex((v) => v.id === settings.activeVersion));
                     const shown = versions[at];
                     return (
@@ -3274,9 +3295,9 @@ export default function VideoStudio({
                       </Menu>
                     );
                   })()}
-                  <button className="btn sm quiet ver-add" onClick={addVersion} aria-label={versions.length ? t("New version") : t("Make a version B")}
+                  <button className="btn sm quiet ver-add" onClick={addVersion} aria-label={t("New version")}
                     title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
-                    <Icon name="plus" size={12} /><span className="ver-add-l">{versions.length ? t("New version") : t("Make a version B")}</span>
+                    <Icon name="plus" size={12} /><span className="ver-add-l">{t("New version")}</span>
                   </button>
                   <span className="grow" />
                   {/* Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */}
