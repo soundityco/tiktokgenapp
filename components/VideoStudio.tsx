@@ -2402,6 +2402,8 @@ export default function VideoStudio({
 
   const cancelLyrics = () => { genRef.current?.abort(); genRef.current = null; setGenBusy(false); setGenStep(null); };
 
+  /** "Clear the timing" asked: what goes is said first (it is shared by the release's videos). */
+  const [clearAsk, setClearAsk] = useState(false);
   const clearLyrics = () => {
     const cfg = settingsRef.current;
     const a = cfg.crop.start, b = cfg.crop.start + cfg.crop.duration;
@@ -3707,7 +3709,7 @@ export default function VideoStudio({
                   </span>
                   <Hint text={t("The same lyrics as the carousel's. When you change them, the video places the changed lines again; your retouches stay.")} />
                   {project.lyrics.length > 0 && <button className="btn sm quiet" onClick={onEditLyrics}>{t("Edit")}</button>}
-                  {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={clearLyrics} title={t("Clear lyrics of this segment")}>{t("Clear")}</button>}
+                  {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={() => setClearAsk(true)} title={t("Remove the timing of the lyrics on this segment (the text stays)")}>{t("Clear the timing")}</button>}
                 </div>
               )}
               {/* Not linked yet (older releases): the song's own text, open while nothing is placed, then folded. */}
@@ -3716,7 +3718,7 @@ export default function VideoStudio({
                   <span className="xs grow truncate">{t("Lyrics of the song")}{pasted.lines ? ` · ${t("{n} sung lines", { n: pasted.lines })}` : ""}</span>
                   <Hint text={t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")} />
                   <button className="btn sm quiet" onClick={() => setPasteOpen(true)}>{t("Edit")}</button>
-                  {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={clearLyrics} title={t("Clear lyrics of this segment")}>{t("Clear")}</button>}
+                  {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={() => setClearAsk(true)} title={t("Remove the timing of the lyrics on this segment (the text stays)")}>{t("Clear the timing")}</button>}
                 </div>
               ) : (
                 <>
@@ -3753,7 +3755,7 @@ export default function VideoStudio({
                 </>
               )}
               {/* The pasted text open (older releases): Clear under it; else it is beside Edit. */}
-              {!lyricsLinked && pasteOpen && cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
+              {!lyricsLinked && pasteOpen && cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={() => setClearAsk(true)}>{t("Clear the timing")}</button></div>}
               {/* Plan B, when the audio could not place the lyrics (speech model unavailable, a very noisy live):
                   a section spread over the segment, then fine-tuned with − / + like the synced lines. */}
               {!cues.length && !genBusy && project.lyrics.length > 0 && (
@@ -4036,6 +4038,11 @@ export default function VideoStudio({
         <ConfirmDialog danger title={t("Delete this video")} confirmLabel={t("Delete")}
           message={t("“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.", { name: clipName(clip) })}
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
+      )}
+      {clearAsk && (
+        <ConfirmDialog danger title={t("Clear the timing")} confirmLabel={t("Clear")}
+          message={t("The {n} words placed on this segment lose their timing (your retouches too), on every video of the release that shows this part of the song: they share it. The lyrics themselves and the carousel's sections stay. Undo (⌘Z) brings it back; Sync places them again.", { n: (project.lyricWords ?? []).filter((x) => x.e > settings.crop.start && x.s < settings.crop.start + settings.crop.duration).length })}
+          onConfirm={() => { setClearAsk(false); clearLyrics(); }} onClose={() => setClearAsk(false)} />
       )}
       {(exp || batch) && (
         <Modal title={shareOpen ? (handheld ? t("Share") : t("Send to my phone")) : batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")}
