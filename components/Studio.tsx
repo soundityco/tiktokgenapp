@@ -1575,13 +1575,18 @@ export default function Studio({ userName }: { userName: string }) {
             <div className="label cap">{t("Language")}</div>
             <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
             <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
-            {/* Phone: the draw's settings (both studios), here rather than in an Options menu of each studio. */}
+            {/* The app's settings (both studios): the draw, and the format of the carousel's pictures. */}
             {ws && (
-              <div className="phone-only menu-draw">
+              <div className="menu-draw">
                 <div className="sep" />
                 <div className="label cap">{t("Draw")}</div>
                 <label className="check menu-check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
                 <label className="check menu-check"><input type="checkbox" checked={!!ws.favorTop} onChange={(e) => upd((w) => ({ ...w, favorTop: e.target.checked }))} />{t("Favor my best hooks (by TikTok views)")}</label>
+                <div className="sep" />
+                <div className="label cap">{t("Export format")}</div>
+                {(["jpg", "png"] as const).map((f) => (
+                  <button key={f} onClick={() => upd((w) => ({ ...w, exportFormat: f }))}>{ws.exportFormat === f ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}{f.toUpperCase()}</button>
+                ))}
               </div>
             )}
             <div className="sep" />
@@ -1747,24 +1752,9 @@ export default function Studio({ userName }: { userName: string }) {
               <div className="row nowrap head-actions">
               {exportProgress && <span className="badge h-progress" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn h-cancel" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
-              <div className="slot h-opts"><Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
-                {() => (
-                  <div className="stack opts-pop">
-                    {drawOptions}
-                    {/* Computer: TikTok's zones on the slides (a phone has the deck's own button). */}
-                    <div className="stack opts-part desk-only-640"><span className="label">{t("Preview")}</span>
-                      <label className="check"><input type="checkbox" checked={ws.zones} onChange={(e) => upd((w) => ({ ...w, zones: e.target.checked }))} />{t("Show TikTok interface zones")}</label>
-                    </div>
-                    <div className="stack opts-part"><span className="label">{t("Export format")}</span>
-                      <label className="field">
-                        <Select className="input" value={ws.exportFormat} onChange={(e) => upd((w) => ({ ...w, exportFormat: e.target.value as "jpg" | "png" }))}>
-                          <option value="jpg">JPG</option><option value="png">PNG</option>
-                        </Select>
-                      </label>
-                    </div>
-                  </div>
-                )}
-              </Menu></div>
+              {/* Computer: TikTok's zones on the slides (a phone has the deck's own button). */}
+              <button className={"btn h-zones h-opts" + (ws.zones ? " on" : "")} aria-pressed={ws.zones} onClick={() => upd((w) => ({ ...w, zones: !w.zones }))}
+                title={t("TikTok's interface zones on the slides")}><Icon name={ws.zones ? "eye" : "eye-off"} size={14} />{t("Zones")}</button>
               <button className="btn icon h-share" aria-label={t("Send to my phone")} title={t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
               {carouselsOf(project).length > 1 && !busy ? (
                 <div className="slot h-dl"><Menu trigger={(_, toggle) => (

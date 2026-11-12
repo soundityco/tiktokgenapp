@@ -2461,3 +2461,7 @@ details.sec:first-of-type { background-image: none; }
   .app .video-side .transport .tr-play, .app .video-side .transport .tr-time { display: none; }
   .app .video-side .transport .tr-range { display: inline; font-size: 13px; color: var(--text); margin-right: 2px; }
 }
+/* Computer: the Zones toggle of the studio's head (where Options was), in the head's button format. */
+.studio-head .h-zones { gap: 6px; }
+.studio-head .h-zones:not(.on) { color: var(--muted); }
+.studio-head .h-zones.on { border-color: var(--text); color: var(--text); }

@@ -1825,23 +1825,13 @@ export default function VideoStudio({
     </button>
   ) : null;
   /** The studio's options (draws, preview, export format): in the head on a computer, under the picture on a phone. */
-  const optionsMenu = (where: string) => (
-          <div className={"slot h-opts " + where}><Menu float trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
-            {() => (
-              <div className="stack opts-pop">
-                {drawOptions}
-                {/* Computer: TikTok's zones on the video (a phone has its own button under the picture). */}
-                <div className="stack opts-part desk-only-1000"><span className="label">{t("Preview")}</span>
-                  <label className="check"><input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />{t("Show TikTok interface zones")}</label>
-                </div>
-                <div className="stack opts-part"><span className="label">{t("Export format")}</span>
-                  <label className="field">
-                    <Select className="input" value="mp4" onChange={() => {}}><option value="mp4">MP4</option></Select>
-                  </label>
-                </div>
-              </div>
-            )}
-          </Menu></div>
+  /** Computer: TikTok's zones on the video, in the head where the options were (the draw settings are in the
+   *  account menu now). On a phone, the "Show" button under the picture does it. */
+  const optionsMenu = (where: string) => where ? null : (
+    <button className={"btn h-zones h-opts" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
+      onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
+      <Icon name={aids.zones && settings.format !== "16:9" ? "eye" : "eye-off"} size={14} />{t("Zones")}
+    </button>
   );
   /** Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */
   const zoomEl = (where = "") => (
