@@ -275,7 +275,7 @@ export function StylePresets({
   return (
     <div className="stack">
       <form className="row nowrap" onSubmit={(e) => { e.preventDefault(); save(); }}>
-        <input className="input grow" value={name} onChange={(e) => setName(e.target.value)}
+        <input className="input sm grow" value={name} onChange={(e) => setName(e.target.value)}
           placeholder={t("Preset name")} aria-label={t("Preset name")} maxLength={60} />
         <button className="btn sm" type="submit" disabled={!name.trim()}>{t("Save current style")}</button>
       </form>

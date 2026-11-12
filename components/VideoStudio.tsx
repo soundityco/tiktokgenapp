@@ -3367,7 +3367,9 @@ export default function VideoStudio({
             <div className="deck-bar video-bar">
               {/* Phone, Style page: before / after the grade in one tap. */}
               {gradesColour(grade) ? <Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /> : <span className="bar-noswitch" />}
-              {/* Phone: what the video shows (lyrics, hook), right under the picture, as on a computer. */}
+              {/* Phone, Create page: the picture's size on the left (its line above the take's goes), so the row is
+                  full; what the video shows (lyrics, hook) on the right, under the thumb. */}
+              <span className="bar-format mono">{outW}×{outH}<Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} /></span>
               <span className="bar-show">{shownToggles("bar-chip")}</span>
             </div>
           )}
@@ -3379,7 +3381,7 @@ export default function VideoStudio({
           {/* What the picture is: its size, then the take it comes from (the original, or the Drive copy and where
               it stands: the library says the same), each under its title. */}
           <div className="stage-meta">
-            <div className="meta-row"><span className="meta-k">{t("Format")}</span>
+            <div className="meta-row meta-format"><span className="meta-k">{t("Format")}</span>
               <span className="meta-v">{!videoBlob && <span>{t("Nothing to preview yet.")} </span>}<span className="mono">{outW}×{outH}</span>
                 {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}</span>
             </div>
