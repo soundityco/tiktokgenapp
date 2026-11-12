@@ -1435,6 +1435,7 @@ export default function VideoStudio({
     await delMedia(`video:${id}`).catch(() => {});
     await delMedia(`copy:${id}`).catch(() => {});
     await delMedia(`poster:${id}`).catch(() => {});
+    await delMedia(`strip:${id}`).catch(() => {});
     await delMedia(`audio:${id}`).catch(() => {});
   };
 
@@ -2742,13 +2743,21 @@ export default function VideoStudio({
     if (!active || !videoUrl) { if (!videoUrl) setStrip([]); return; }
     let off = false;
     const from = settings.crop.start, len = segLen, offset = settings.offset;
-    // Already made for this file and this passage: at once.
-    const key = `${videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}`;
+    // Already made for this video's file and this passage: at once, from memory or from this device (kept there,
+    // one strip per video: switching videos or reloading never makes it again).
+    const key = `${clip.id}|${videoBlob?.size ?? videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}`;
+    const disk = `strip:${clip.id}`;
     const known = STRIPS.get(key);
     if (known) { setStrip(known); return; }
     // The first time, right away; while the segment is being moved, once it rests (the old pictures stay meanwhile).
     const wait = strip.length ? 450 : 0;
     const timer = window.setTimeout(async () => {
+      try {
+        const saved = await getMedia(disk);
+        const j = saved ? JSON.parse(await saved.text()) as { key: string; frames: string[] } : null;
+        if (j?.key === key && j.frames.length) { STRIPS.set(key, j.frames); if (!off) setStrip(j.frames); return; }
+      } catch { /* not kept: made below */ }
+      if (off) return;
       const v = document.createElement("video");
       v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = videoUrl;
       try {
@@ -2768,7 +2777,10 @@ export default function VideoStudio({
           // Each picture takes its place as soon as it is made (the strip is at its full height from the start).
           if (!off && !wait) setStrip([...out]);
         }
-        if (out.length === N) STRIPS.set(key, out);
+        if (out.length === N) {
+          STRIPS.set(key, out);
+          void putMedia(disk, new Blob([JSON.stringify({ key, frames: out })], { type: "application/json" })).catch(() => {});
+        }
         if (!off && out.length) setStrip(out);
       } catch { if (!off) setStrip([]); }
       finally { v.removeAttribute("src"); v.load(); }
