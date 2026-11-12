@@ -32,7 +32,6 @@ export const FR: Record<string, string> = {
   "Text retouched": "Texte retouché",
   "Full screen": "Plein écran",
   "Choose the photo": "Choisir la photo",
-  "Show": "Afficher",
   "Text of the line": "Texte de la ligne",
   "Cut the line in two where the cursor is: the rest becomes a line of its own": "Couper la ligne en deux à l'endroit du curseur : la suite devient une ligne à part",
   "Cut here": "Scinder ici",

@@ -1837,20 +1837,18 @@ export default function VideoStudio({
     if (phone) setPlayerOff((v) => !v);
     else if (playing) stop(); else void play();
   };
-  /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and in the phone's
-   *  "Show" button. */
+  /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and under the phone's
+   *  picture. */
   const shownToggles = (cls: string, reachable = true) => {
     const hookOn = !!hooks.length && settings.showHooks !== false;
     return (<>
       <button className={cls + (settings.captions ? " on" : "")} aria-pressed={settings.captions} tabIndex={reachable ? 0 : -1}
-        onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={14} />{t("Lyrics")}</button>
+        onClick={() => setV({ captions: !settings.captions })}><Icon name="type" size={14} />{t("Lyrics")}</button>
       <button className={cls + (hookOn ? " on" : "")} aria-pressed={hookOn} tabIndex={reachable ? 0 : -1}
         onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}>
-        <Icon name={hookOn ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
+        <Icon name="sparkle" size={14} />{t("Hook")}</button>
     </>);
   };
-  /** Phone: the "Show" button under the picture unfolded (zones, lyrics, hook). */
-  const [showOpen, setShowOpen] = useState(false);
   /** The lock of audio and video (on the phone above the tracks, on a computer in the segment's row). */
   const lockEl = (where = "") => videoBlob && videoDur > 0 ? (
     <button className={"btn sm icon tr-lock " + where + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
@@ -2767,7 +2765,20 @@ export default function VideoStudio({
       setV({ frame: fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: d.ox + dx / c.width, oy: d.oy + dy / c.height }) });
     }
   };
-  const cvUp = () => { pdrag.current = null; if (snap.v || snap.h) setSnap({ v: false, h: false }); };
+  const cvUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = pdrag.current;
+    pdrag.current = null;
+    if (snap.v || snap.h) setSnap({ v: false, h: false });
+    // A tap (no drag): the icons over the picture (zones, full screen) show for a few seconds, as a player's controls.
+    if (d && e && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) revealControls();
+  };
+  const [controlsOn, setControlsOn] = useState(false);
+  const controlsTimer = useRef(0);
+  const revealControls = () => {
+    setControlsOn(true);
+    clearTimeout(controlsTimer.current);
+    controlsTimer.current = window.setTimeout(() => setControlsOn(false), 3000);
+  };
   const wheelRef = useRef<(e: WheelEvent) => void>(() => {});
   wheelRef.current = (e) => {
     if (!videoBlob) return;
@@ -3317,7 +3328,7 @@ export default function VideoStudio({
       </div>
       <div className={"video-grid" + (settings.format === "16:9" ? " wide" : "") + (videoBlob ? "" : " no-take")}>
         <div className="stack video-stage">
-          <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "") + (videoUrl && !playerReady ? " shine-box" : "")} style={{ position: "relative" }}>
+          <div className={"cv-wrap" + (settings.format === "16:9" ? " landscape" : "") + (videoUrl && !playerReady ? " shine-box" : "") + (controlsOn ? " controls-on" : "")} style={{ position: "relative" }}>
               <video ref={videoRef} src={videoUrl ?? undefined} className="video-src" muted playsInline preload="auto"
                 onError={() => setPlayerReady(true)}
                 onCanPlay={() => setPlayerReady(true)}
@@ -3340,7 +3351,7 @@ export default function VideoStudio({
             {/* Over the picture: TikTok's zones (bottom left) and the full screen (bottom right); on a computer they show on hover. */}
             {videoBlob && !full && settings.format !== "16:9" && (
               <button className={"pv-zones" + (aids.zones ? " on" : "")} aria-pressed={aids.zones} aria-label={t("Zones")} title={t("TikTok's interface zones on the video")}
-                onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones ? "zones" : "zones-off"} size={15} /></button>
+                onClick={() => { setAids({ zones: !aids.zones }); revealControls(); }}><Icon name={aids.zones ? "zones" : "zones-off"} size={15} /></button>
             )}
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={15} /></button>}
             {/* The full screen: a layer of its own over the app, showing the preview's picture as it is drawn. */}
@@ -3354,21 +3365,13 @@ export default function VideoStudio({
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (
             <div className="deck-bar video-bar">
-              {/* Phone: before / after the grade in one tap, across from Zones. */}
+              {/* Phone, Style page: before / after the grade in one tap. */}
               {gradesColour(grade) ? <Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /> : <span className="bar-noswitch" />}
-              {/* Phone: one "Show" button (where Zones was); a tap unfolds, to its left, what the video shows: the
-                  TikTok zones, the lyrics, the hook. */}
-              <span className={"bar-show" + (showOpen ? " open" : "")}>
-                <span className="bar-show-list" aria-hidden={!showOpen}>
-                  {shownToggles("bar-chip", showOpen)}
-                </span>
-                <button className={"bar-show-btn" + (showOpen ? " on" : "")} aria-expanded={showOpen} onClick={() => setShowOpen((v) => !v)}>
-                  <Icon name={showOpen ? "x" : "eye"} size={14} />{t("Show")}
-                </button>
-              </span>
+              {/* Phone: what the video shows (lyrics, hook), right under the picture, as on a computer. */}
+              <span className="bar-show">{shownToggles("bar-chip")}</span>
             </div>
           )}
-          {/* What the video shows (not what is edited: that is the tabs beside): eyes, on or off. */}
+          {/* What the video shows (not what is edited: that is the tabs beside): lyrics and hook, on or off. */}
           <div className="row shown-on">
             <span className="label">{t("Shown")}</span>
             {shownToggles("btn sm")}

@@ -2301,21 +2301,9 @@ details.sec:first-of-type { background-image: none; }
 
 }
 
-/* Phone, under the picture: "Show" (the segment's button format, not a pill) unfolds to its left the zones,
-   lyrics and hook toggles. */
+/* Phone, under the picture: the Edits switch (Style page) on the left, what the video shows on the right. */
 @media (max-width: 1000px) {
   .video-stage > .video-bar { display: flex !important; align-items: center; gap: 8px; }
-  .video-bar > .bar-show { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-  .bar-show-list { display: inline-flex; gap: 6px; max-width: 0; overflow: hidden; opacity: 0; transition: max-width .32s cubic-bezier(.2,.8,.2,1), opacity .2s; }
-  .bar-show.open .bar-show-list { max-width: 320px; opacity: 1; }
-  .bar-chip, .bar-show-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r);
-    background: none; color: var(--muted); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; flex: none; }
-  .bar-chip.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
-  .bar-chip:disabled { opacity: .4; }
-  .bar-show-btn { color: var(--text); }
-  .bar-show-btn.on { border-color: var(--text); }
-  /* While it is unfolded, the Edits switch steps aside (the row is short on a phone). */
-  .video-bar:has(.bar-show.open) > .switch { display: none; }
 }
 
 /* Under a slide's sources: the text and photo pickers, side by side, each opening a list that scrolls. */
@@ -2482,3 +2470,16 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 /* The player's film strip: dragging the playhead over it never selects (nor drags) its pictures. */
 .dp, .dp * { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
 .dp img { pointer-events: none; }
+
+/* What the video shows, phone and computer: lyrics (T) and hook (✦), each with its icon. On = the app's "on"
+   button (white edge, text bold), off = quiet. On a phone: right under the picture, the same buttons, smaller. */
+.shown-on .btn:not(.on), .bar-show .bar-chip:not(.on) { color: var(--muted); }
+@media (max-width: 1000px) {
+  .video-bar > .bar-show { margin-left: auto; display: inline-flex; gap: 6px; }
+  .bar-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px; border: 1px solid var(--line-2); border-radius: var(--r);
+    background: none; font: inherit; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .bar-chip.on { background: #1d1d23; border-color: var(--text); color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--text); }
+  /* The icons over the picture (zones, full screen): hidden; a tap on the picture shows them a few seconds. */
+  .video-stage .cv-wrap .pv-zones, .video-stage .cv-wrap .pv-expand { opacity: 0; pointer-events: none; }
+  .video-stage .cv-wrap.controls-on .pv-zones, .video-stage .cv-wrap.controls-on .pv-expand { opacity: 1; pointer-events: auto; }
+}
