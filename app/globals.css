@@ -2314,6 +2314,12 @@ details.sec:first-of-type { background-image: none; }
 .cue-row.on .cue-pen { opacity: 1; pointer-events: auto; }
 @media (hover: hover) { .cue-row:hover .cue-pen { opacity: 1; pointer-events: auto; } }
 
-/* The video picker of the studio's head: one button (its name), its list like the versions'. */
-.clip-pick-btn { height: var(--h-sm, 36px); gap: 8px; padding: 0 12px; background: none; border: 1px solid var(--line-2); white-space: nowrap; max-width: 220px; }
-.clip-pick-btn .clip-k { display: inline; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+/* Phone: the video picker in place of "More" (its name cut with an ellipsis); Options after the format line. */
+.opts-phone { display: none; }
+@media (max-width: 1000px) {
+  .studio-head .slot.h-more.clip-pick { display: block; }
+  .clip-pick-btn { height: 40px; gap: 6px; padding: 0 12px; background: none; border: 1px solid var(--line-2); max-width: 150px; }
+  .clip-pick-btn .clip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .video-stage > .stage-meta .slot.h-opts.opts-phone { display: block; margin-left: auto; }
+  .video-head .slot.h-opts:not(.opts-phone) { display: none !important; }
+}

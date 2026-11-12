@@ -1710,6 +1710,25 @@ export default function VideoStudio({
       <Icon name={linked ? "lock" : "unlock"} size={13} />
     </button>
   ) : null;
+  /** The studio's options (draws, preview, export format): in the head on a computer, under the picture on a phone. */
+  const optionsMenu = (where: string) => (
+          <div className={"slot h-opts " + where}><Menu float trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
+            {() => (
+              <div className="stack opts-pop">
+                {drawOptions}
+                {/* Computer: TikTok's zones on the video (a phone has its own button under the picture). */}
+                <div className="stack opts-part desk-only-1000"><span className="label">{t("Preview")}</span>
+                  <label className="check"><input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />{t("Show TikTok interface zones")}</label>
+                </div>
+                <div className="stack opts-part"><span className="label">{t("Export format")}</span>
+                  <label className="field">
+                    <Select className="input" value="mp4" onChange={() => {}}><option value="mp4">MP4</option></Select>
+                  </label>
+                </div>
+              </div>
+            )}
+          </Menu></div>
+  );
   /** Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */
   const zoomEl = (where = "") => (
     <div className={"wave-zoom " + where} role="group" aria-label={t("Zoom of the waveform")}>
@@ -3082,11 +3101,30 @@ export default function VideoStudio({
       <div className={"video-head studio-head" + (headMore ? " more" : "")}>
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
-          {/* The video of the release, as the versions are picked: its list shows one, renames it (pencil), deletes it
-              (bin), and adds a new one at the end. */}
-          <div className="slot h-pick clip-pick"><Menu float left trigger={(open, toggle) => (
+          <label className="field h-pick" style={{ margin: 0 }}>{t("Video")}
+            <Select className="input" style={{ width: 150 }} value={clip.id}
+              onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
+              {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
+            </Select>
+          </label>
+          <button className="btn icon h-new" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <div className="slot h-new"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
+            {(closeMenu) => (<>
+              <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
+              <div className="sep" />
+              <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
+                onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
+            </>)}
+          </Menu></div>
+          {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
+          <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
+          <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
+          <div className="row nowrap head-actions">
+          {optionsMenu("")}
+          {/* Phone: in place of "More", the video picker (as the versions are picked: show one, rename, delete, add). */}
+          <div className="slot h-more clip-pick"><Menu float left trigger={(open, toggle) => (
             <button className={"btn ver-pick clip-pick-btn" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
-              <span className="ver-k clip-k">{t("Video")}</span>{clipName(clip)}<Icon name="chevron" size={12} />
+              <span className="clip-name">{clipName(clip)}</span><Icon name="chevron" size={12} />
             </button>
           )}>
             {(close) => (<div className="ver-list">
@@ -3109,27 +3147,7 @@ export default function VideoStudio({
               </button>
             </div>)}
           </Menu></div>
-          {/* Same history as the carousel (Cmd+Z / Cmd+Shift+Z): every change of the release can be undone. */}
-          <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
-          <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
-          <div className="row nowrap head-actions">
-          <div className="slot h-opts"><Menu trigger={(_, toggle) => <button className="btn quiet" onClick={toggle}>{t("Options")}<Icon name="chevron" size={14} /></button>}>
-            {() => (
-              <div className="stack opts-pop">
-                {drawOptions}
-                {/* Computer: TikTok's zones on the video (a phone has its own button under the picture). */}
-                <div className="stack opts-part desk-only-1000"><span className="label">{t("Preview")}</span>
-                  <label className="check"><input type="checkbox" checked={aids.zones} disabled={settings.format === "16:9"} onChange={(e) => setAids({ zones: e.target.checked })} />{t("Show TikTok interface zones")}</label>
-                </div>
-                <div className="stack opts-part"><span className="label">{t("Export format")}</span>
-                  <label className="field">
-                    <Select className="input" value="mp4" onChange={() => {}}><option value="mp4">MP4</option></Select>
-                  </label>
-                </div>
-              </div>
-            )}
-          </Menu></div>
-          <button className={"btn h-more" + (headMore ? " on" : "")} aria-expanded={headMore} onClick={() => setHeadMore((v) => !v)}>{t("More")}<Icon name="chevron" size={14} /></button>
+
           {/* Where the release stands (sync, lyrics…), titled like the carousel's Slides, right after the video picker. */}
           <div className="field h-status"><span className="field-k">{t("Sync status")}</span>
             <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
@@ -3209,6 +3227,7 @@ export default function VideoStudio({
                 {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}</span>
             </div>
             {copyState && <div className="meta-row"><span className="meta-k">{t("Take")}</span><span className="meta-v">{copyStatusEl()}</span></div>}
+            {optionsMenu("opts-phone")}
           </div>
           {lookErr && grade?.lut && (
             <p className="notice warn xs">
