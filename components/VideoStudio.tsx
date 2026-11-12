@@ -3751,17 +3751,17 @@ export default function VideoStudio({
                 <div key={h.id} className="hook-item">
                   {/* Its name, where it is drawn from (list · tags), then its actions as icons: another one, one picked in the list, remove. */}
                   <div className="row nowrap hook-head">
-                    <span className="label">{t("Hook {n}", { n: i + 1 })}</span>
+                    <span className="hook-num" title={t("Hook {n}", { n: i + 1 })}>#{i + 1}</span>
                     {hookPools.length > 0 && (
                       <Menu float trigger={(open, toggle) => (
                         <button type="button" className={"input sm pick-btn hook-src-btn" + (open ? " on" : "")} onClick={toggle}
                           aria-label={t("List and tags of this hook")} title={t("List and tags of this hook")}>
-                          <Icon name="list" size={12} /><span className="truncate">{src.pool?.name ?? ""}{src.ticked.length ? " · " + (src.ticked.length === 1 ? themeLabel(src.ticked[0], t) : t("{n} tags", { n: src.ticked.length })) : ""}</span>
+                          <span className="truncate">{src.pool?.name ?? ""}{src.ticked.length ? " · " + (src.ticked.length === 1 ? themeLabel(src.ticked[0], t) : t("{n} tags", { n: src.ticked.length })) : ""}</span>
                           <Icon name="chevron" size={13} />
                         </button>
                       )}>
                         {() => (
-                          <div className="pick-pane">
+                          <div className="pick-pane hook-menu">
                             {/* Two parts: the list, then its tags. */}
                             <div className="pick-sec">
                               <span className="pick-k">{t("List")}</span>
@@ -3798,7 +3798,7 @@ export default function VideoStudio({
                         <button className={"btn sm icon quiet" + (open ? " on" : "")} onClick={toggle} aria-label={t("Pick from the list")} title={t("Pick from the list")}><Icon name="list" size={14} /></button>
                       )}>
                         {(close) => (
-                          <div className="pick-pane">
+                          <div className="pick-pane hook-menu">
                             <div className="pick-list">
                               {src.items.map((x, k) => (
                                 <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
