@@ -3761,14 +3761,14 @@ export default function VideoStudio({
                         </button>
                       )}>
                         {() => (
-                          <div className="pick-pane hook-menu">
+                          <div className="pick-pane">
                             {/* Two parts: the list, then its tags. */}
                             <div className="pick-sec">
                               <span className="pick-k">{t("List")}</span>
                               <div className="pick-list">
                                 {hookPools.map((p) => (
                                   <button key={p.id} className={"pick-line" + (p.id === src.poolId ? " on" : "")} onClick={() => editHook(h.id, { pool: p.id, tags: [] })}>
-                                    <span>{p.name}</span><span className="pick-n">{textItems(p).length}</span>
+                                    <span className="dd-check" aria-hidden>{p.id === src.poolId ? "✓" : ""}</span><span>{p.name}</span><span className="pick-n">{textItems(p).length}</span>
                                   </button>
                                 ))}
                               </div>
@@ -3798,11 +3798,11 @@ export default function VideoStudio({
                         <button className={"btn sm icon quiet" + (open ? " on" : "")} onClick={toggle} aria-label={t("Pick from the list")} title={t("Pick from the list")}><Icon name="list" size={14} /></button>
                       )}>
                         {(close) => (
-                          <div className="pick-pane hook-menu">
+                          <div className="pick-pane">
                             <div className="pick-list">
                               {src.items.map((x, k) => (
                                 <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
-                                  <span>{x.replace(/\|/g, " ")}</span>
+                                  <span className="dd-check" aria-hidden>{x === h.text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
                                 </button>
                               ))}
                             </div>

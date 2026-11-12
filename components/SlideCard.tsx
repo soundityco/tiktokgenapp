@@ -347,7 +347,7 @@ export default function SlideCard(p: Props) {
             const on = lyricTicked.includes(l.id);
             return (
               <button key={l.id} className={"pick-line" + (on ? " on" : "")} title={l.text.slice(0, 200)} aria-pressed={on} onClick={() => tickSection(l.id, !on)}>
-                <Icon name="check" size={12} /><span>{l.name}</span>
+                <span className="dd-check" aria-hidden>{on ? "✓" : ""}</span><span>{l.name}</span>
               </button>
             );
           })}
@@ -425,7 +425,7 @@ export default function SlideCard(p: Props) {
                     <div className="pick-list">
                       {listItems.map((x, k) => (
                         <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
-                          <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
+                          <span className="dd-check" aria-hidden>{x === text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
                         </button>
                       ))}
                     </div>

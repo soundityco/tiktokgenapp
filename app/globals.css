@@ -2313,25 +2313,28 @@ details.sec:first-of-type { background-image: none; }
 .pick-btn > .truncate { flex: 1; min-width: 0; }
 .pick-btn.on { border-color: var(--muted); }
 .pick-tag { flex: none; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.pick-pane { display: grid; gap: 8px; width: min(340px, calc(100vw - 32px)); }
-.pick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.menu .pick-chips .pick-chip { width: auto; min-height: 0; height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: 12px; color: var(--muted); }
+/* Picker menus (a slide's text, the lyrics sections, a video hook): built like the app's drop-down (Select):
+   lines in the text colour, a ✓ before the one chosen, the same padding; tags as chips above, a line between parts. */
+.pick-pane { display: grid; gap: 4px; width: min(340px, calc(100vw - 32px)); }
+.pick-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 4px 8px; }
+.menu .pick-chips .pick-chip { width: auto; min-height: 0; height: 30px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: var(--fs-sm); color: var(--text); }
+.menu .pick-chips .pick-chip:hover { border-color: var(--muted); background: none; }
 .menu .pick-chips .pick-chip.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
-.pick-list { display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow-y: auto; } /* a column, not a grid: the grid squeezed the long lines onto each other */
-.menu .pick-list .pick-line { flex: none; height: auto; align-items: flex-start; font-size: 13px; line-height: 1.35; }
-.menu .pick-list .pick-line svg { flex: none; margin-top: 3px; opacity: 0; }
-.menu .pick-list .pick-line.on svg { opacity: 1; }
-/* The video hooks' pickers only: the list then its tags (a small title over each, room around), lines lit when chosen. */
-.hook-menu .pick-n { flex: none; margin-left: auto; font-family: var(--mono); font-size: var(--fs-xs); color: var(--muted); }
-.pick-pane.hook-menu:has(> .pick-sec) { gap: 0; padding: 4px; }
-.hook-menu .pick-sec { display: grid; gap: 8px; padding: 10px 6px 12px; }
-.hook-menu .pick-sec + .pick-sec { border-top: 1px solid var(--line); }
-.hook-menu .pick-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
-.hook-menu .pick-sec > .pick-chips, .hook-menu .pick-sec > p { padding: 0 6px; }
-.menu .hook-menu .pick-list .pick-line { padding: 9px 12px; line-height: 1.4; color: var(--muted); }
-.menu .hook-menu .pick-list .pick-line > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.menu .hook-menu .pick-list .pick-line:hover { color: var(--text); }
-.menu .hook-menu .pick-list .pick-line.on { color: var(--text); background: #18181d; box-shadow: inset 2px 0 0 var(--accent); }
+.pick-list { display: flex; flex-direction: column; gap: 1px; max-height: 280px; overflow-y: auto; } /* a column, not a grid: the grid squeezed the long lines onto each other */
+.pick-chips + .pick-list { border-top: 1px solid var(--line); padding-top: 4px; }
+.menu .pick-list .pick-line { flex: none; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: start; gap: 6px; height: auto; min-height: 32px;
+  padding: 7px 12px 7px 8px; font-size: var(--fs-sm); line-height: 1.4; color: var(--text); }
+.menu .pick-list .pick-line.on { font-weight: 600; }
+.menu .pick-list .pick-line > .dd-check, .menu .pick-list .pick-line > svg { justify-self: center; }
+.menu .pick-list .pick-line > svg { margin-top: 3px; }
+.pick-n { font-family: var(--mono); font-size: var(--fs-xs); color: var(--muted); font-weight: 400; padding-top: 2px; }
+/* In parts (a hook: its list, then its tags), each under a small title like the drop-down's groups. */
+.pick-pane:has(> .pick-sec) { gap: 0; }
+.pick-sec { display: grid; gap: 1px; }
+.pick-sec + .pick-sec { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+.pick-k { padding: 8px 10px 4px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.pick-sec > p { padding: 4px 10px 8px; }
+.pick-sec > .pick-chips { padding: 4px 4px 4px; }
 /* A slide's photo chosen by hand: the list's photos in a grid that scrolls (about three rows in sight). */
 .pic-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 290px; overflow-y: auto; padding: 2px; }
 .menu .pic-grid .pic-cell { display: block; width: 100%; aspect-ratio: 3 / 4; height: auto; min-height: 0; padding: 0; border-radius: var(--r); overflow: hidden; border: 2px solid transparent; }
