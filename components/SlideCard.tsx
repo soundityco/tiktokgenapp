@@ -425,7 +425,7 @@ export default function SlideCard(p: Props) {
                     <div className="pick-list">
                       {listItems.map((x, k) => (
                         <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
-                          <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
+                          <span>{x.replace(/\|/g, " ")}</span>
                         </button>
                       ))}
                     </div>

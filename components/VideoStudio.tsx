@@ -2889,15 +2889,6 @@ export default function VideoStudio({
     const text = drawFor(h, hooks.filter((x) => x.id !== id).map((x) => x.text));
     if (text !== null) editHook(id, fromList(h, text));
   };
-  const drawAll = () => {
-    const taken: string[] = [];
-    setHooks(hooks.map((h) => {
-      const text = drawFor(h, taken);
-      if (text === null) return h;
-      taken.push(text);
-      return { ...h, ...fromList(h, text) };
-    }));
-  };
   useEffect(() => {
     // Nothing to follow: no change at all (no save, no undo step).
     if (!clipsOf(project).some((c) => c.hooks?.length && followLists(c.hooks, hookPools) !== c.hooks)) return;
@@ -3752,14 +3743,6 @@ export default function VideoStudio({
 
           {tab === "hook" && (
             <div className="tab-body">
-              {/* Generate (each hook from its own list and tags), then the hooks. */}
-              <div className="row nowrap hook-pick">
-                {hookPools.length > 0 && (
-                  <button className="btn sm primary" title={t("A different hook for each one, each from its own list and tags")}
-                    onClick={() => { if (hooks.length) drawAll(); else addHook(drawFor(undefined, []) ?? ""); }}><Icon name="sparkle" size={14} />{t("Generate")}</button>
-                )}
-                <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along. Each hook has its own list and tags (the button next to its name).")} />
-              </div>
               {!hookPools.length && <p className="muted xs">{t("Make a hook list in the carousel (Import hooks): the video draws from the same lists.")}</p>}
               {hooks.map((h, i) => {
                 const src = srcOf(h);
@@ -3773,41 +3756,44 @@ export default function VideoStudio({
                       <Menu float trigger={(open, toggle) => (
                         <button type="button" className={"input sm pick-btn hook-src-btn" + (open ? " on" : "")} onClick={toggle}
                           aria-label={t("List and tags of this hook")} title={t("List and tags of this hook")}>
-                          <span className="truncate">{src.pool?.name ?? ""}{src.ticked.length ? " · " + (src.ticked.length === 1 ? themeLabel(src.ticked[0], t) : t("{n} tags", { n: src.ticked.length })) : ""}</span>
+                          <Icon name="list" size={12} /><span className="truncate">{src.pool?.name ?? ""}{src.ticked.length ? " · " + (src.ticked.length === 1 ? themeLabel(src.ticked[0], t) : t("{n} tags", { n: src.ticked.length })) : ""}</span>
                           <Icon name="chevron" size={13} />
                         </button>
                       )}>
                         {() => (
                           <div className="pick-pane">
-                            {hookPools.length > 1 && (
+                            {/* Two parts: the list, then its tags. */}
+                            <div className="pick-sec">
+                              <span className="pick-k">{t("List")}</span>
                               <div className="pick-list">
                                 {hookPools.map((p) => (
                                   <button key={p.id} className={"pick-line" + (p.id === src.poolId ? " on" : "")} onClick={() => editHook(h.id, { pool: p.id, tags: [] })}>
-                                    <Icon name="check" size={12} /><span>{p.name} · {textItems(p).length}</span>
+                                    <span>{p.name}</span><span className="pick-n">{textItems(p).length}</span>
                                   </button>
                                 ))}
                               </div>
-                            )}
-                            {src.groups.length > 1 && (
-                              <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                                <button className={"pick-chip" + (!src.ticked.length ? " on" : "")} onClick={() => setSrc({ tags: [] })}>{t("All ({n})", { n: src.count })}</button>
-                                {src.groups.map((g) => {
-                                  const on = src.ticked.includes(g.id);
-                                  return (
-                                    <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
-                                      onClick={() => setSrc({ tags: on ? src.ticked.filter((x) => x !== g.id) : [...src.ticked, g.id] })}>{themeLabel(g.id, t)} · {g.items.length}</button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {hookPools.length < 2 && src.groups.length < 2 && <p className="muted xs">{t("No tags in this list yet.")}</p>}
+                            </div>
+                            <div className="pick-sec">
+                              <span className="pick-k">{t("Tags")}</span>
+                              {src.groups.length > 1 ? (
+                                <div className="pick-chips" role="group" aria-label={t("Tags")}>
+                                  <button className={"pick-chip" + (!src.ticked.length ? " on" : "")} onClick={() => setSrc({ tags: [] })}>{t("All ({n})", { n: src.count })}</button>
+                                  {src.groups.map((g) => {
+                                    const on = src.ticked.includes(g.id);
+                                    return (
+                                      <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
+                                        onClick={() => setSrc({ tags: on ? src.ticked.filter((x) => x !== g.id) : [...src.ticked, g.id] })}>{themeLabel(g.id, t)} · {g.items.length}</button>
+                                    );
+                                  })}
+                                </div>
+                              ) : <p className="muted xs">{t("No tags in this list yet.")}</p>}
+                            </div>
                           </div>
                         )}
                       </Menu>
                     )}
                     <span className="grow" />
-                    {src.items.length > 0 && (<>
-                      <button className="btn sm icon quiet" onClick={() => drawInto(h.id)} aria-label={t("Another hook")} title={t("Another hook")}><Icon name="refresh" size={14} /></button>
+                    {src.items.length > 0 && (
                       <Menu float trigger={(open, toggle) => (
                         <button className={"btn sm icon quiet" + (open ? " on" : "")} onClick={toggle} aria-label={t("Pick from the list")} title={t("Pick from the list")}><Icon name="list" size={14} /></button>
                       )}>
@@ -3816,15 +3802,18 @@ export default function VideoStudio({
                             <div className="pick-list">
                               {src.items.map((x, k) => (
                                 <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
-                                  <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
+                                  <span>{x.replace(/\|/g, " ")}</span>
                                 </button>
                               ))}
                             </div>
                           </div>
                         )}
                       </Menu>
-                    </>)}
+                    )}
                     <button className="btn sm icon quiet hook-del" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))} aria-label={t("Remove")} title={t("Remove")}><Icon name="trash" size={14} /></button>
+                    {src.items.length > 0 && (
+                      <button className="btn sm primary hook-gen" onClick={() => drawInto(h.id)} title={t("Another hook from its list and tags")}><Icon name="sparkle" size={13} />{t("Generate")}</button>
+                    )}
                   </div>
                   <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
                     onChange={(e) => editHook(h.id, { text: e.target.value, link: undefined })} />
@@ -3851,7 +3840,8 @@ export default function VideoStudio({
                 );
               })}
               <div className="row">
-                <button className="btn sm" onClick={() => addHook()}><Icon name="plus" size={13} />{t("Add a hook")}</button>
+                <button className="btn sm" onClick={() => addHook(drawFor(hooks[hooks.length - 1], hooks.map((h) => h.text)) ?? "")}><Icon name="plus" size={13} />{t("Add a hook")}</button>
+                <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along. Each hook has its own list and tags (the button next to its name).")} />
               </div>
             </div>
           )}
