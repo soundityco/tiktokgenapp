@@ -170,6 +170,8 @@ export interface GenSlide {
   text: string;
   /** Text retouched on the slide (line breaks, cuts…): a copy, it no longer follows the release's lyrics. */
   edited?: boolean;
+  /** The lyrics retouched on this slide, kept aside while it shows another source (they come back with the lyrics). */
+  lyricsDraft?: string;
   picId: string | null;
   picName?: string;
   /** Photo found on the web: who took it and its licence (CC BY: credit them in the post caption). */

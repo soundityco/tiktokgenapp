@@ -873,8 +873,16 @@ export default function Studio({ userName }: { userName: string }) {
     updProject((p) => {
       const q = { ...p, slides: p.slides.map((s, k) => (k === i ? fn(s) : s)) };
       if (!moved) return q;
-      // A new source: its text is taken again from it, the retouches made on the slide are dropped.
-      const generated = q.generated?.map((g, k) => (k === i && g.edited ? { ...g, edited: false } : g)) ?? null;
+      // A new source: its text is taken again from it, the retouches made on the slide are dropped. A lyrics
+      // slide retouched by hand keeps its retouch aside: back on the lyrics, it comes back (and its (i) with it).
+      const leaving = before!.textSource.kind === "lyrics" && after!.textSource.kind !== "lyrics";
+      const back = before!.textSource.kind !== "lyrics" && after!.textSource.kind === "lyrics";
+      const generated = q.generated?.map((g, k) => {
+        if (k !== i) return g;
+        if (leaving && g.edited) return { ...g, edited: false, lyricsDraft: g.text };
+        if (back && g.lyricsDraft) { const { lyricsDraft, ...rest } = g; return { ...rest, text: lyricsDraft, edited: true }; }
+        return g.edited ? { ...g, edited: false } : g;
+      }) ?? null;
       return refreshLyricSlides({ ...q, generated });
     });
     if (moved && after?.textSource.kind === "pool") rerollText(i);
