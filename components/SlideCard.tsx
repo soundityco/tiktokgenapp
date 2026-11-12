@@ -559,8 +559,8 @@ export default function SlideCard(p: Props) {
                 <Switch label={t("Edits")} checked={!compare} disabled={!hasAdjust} onChange={(v) => setCompare(!v)} title={t("Off: the photo without its edits, to compare")} />
               </div>
               <div className="adjust-actions">
-                <button className="btn sm quiet" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
-                <button className="btn sm" onClick={() => { setCompare(false); setAdjusting(false); }}>{t("Done")}</button>
+                <button className="btn sm danger" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
+                <button className="btn sm primary" onClick={() => { setCompare(false); setAdjusting(false); }}>{t("Done")}</button>
               </div>
             </div>
           );
