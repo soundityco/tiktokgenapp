@@ -2513,3 +2513,16 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .zones-open { left: 2px; bottom: 2px; }
 .adjust-open.set::after { top: 6px; right: 6px; }
 .pv-zones, .pv-expand { filter: drop-shadow(0 1px 2px rgba(0,0,0,.65)); }
+/* Phone: the Library is a page like the others (the app's black), not a column. */
+@media (max-width: 1000px) {
+  .main[data-mobile-tab="lists"] .col.side.l { background: var(--bg); border: 0; box-shadow: none; }
+}
+
+/* Over a slide: TikTok's zones far left, the photo's settings beside them, the full screen on the right. Shown on
+   the selected slide (and on the one under the pointer on a computer). */
+.adjust-open { left: 42px; right: auto; }
+.card .pv-expand.card-full { opacity: 0; }
+.card:hover .pv-expand.card-full, .card.sel .pv-expand.card-full, .card .pv-expand.card-full:focus-visible { opacity: 1; }
+@media (hover: hover) and (min-width: 1001px) {
+  .card.sel:not(:hover) .pv-expand.card-full:not(:focus-visible), .card.sel:not(:hover) .adjust-open:not(.set):not(:focus-visible) { opacity: 0; }
+}

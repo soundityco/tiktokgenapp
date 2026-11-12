@@ -30,6 +30,7 @@ import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
+import { FullView } from "./FullView";
 import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from "./StyleSheet";
 
 const RATE = 25;
@@ -1736,51 +1737,9 @@ export default function VideoStudio({
   // puts it back). The dock's player stays over it, faint while playing; a tap on the picture hides or shows it. ----
   const [full, setFull] = useState(false);
   fullRef.current = full;
-  const fullFrom = useRef<DOMRect | null>(null);
-  const swipe = useRef<{ y: number; t: number; dy: number } | null>(null);
   const [playerLit, setPlayerLit] = useState(false);
   const [playerOff, setPlayerOff] = useState(false);
-  const fullCv = useRef<HTMLCanvasElement>(null);
-  const glide = (el: Element, from: DOMRect, to: DOMRect, reverse = false) => {
-    const k = from.width / Math.max(1, to.width);
-    const start = { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${k})`, transformOrigin: "0 0" };
-    const end = { transform: "none", transformOrigin: "0 0" };
-    return el.animate(reverse ? [end, start] : [start, end], { duration: 300, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
-  };
-  const toggleFull = (on: boolean) => {
-    setPlayerOff(false);
-    if (on) { fullFrom.current = canvasRef.current?.getBoundingClientRect() ?? null; setFull(true); return; }
-    // Back: the picture glides to its place in the page, then the layer goes.
-    const big = fullCv.current, small = canvasRef.current;
-    const layer = big?.parentElement;
-    if (!big || !small) { setFull(false); return; }
-    const a = glide(big, small.getBoundingClientRect(), big.getBoundingClientRect(), true);
-    layer?.animate([{ backgroundColor: "rgba(0,0,0,1)" }, { backgroundColor: "rgba(0,0,0,0)" }], { duration: 300, fill: "forwards" });
-    a.onfinish = () => setFull(false);
-  };
-  // Opening: from where the picture is in the page to the whole screen, a short glide.
-  useLayoutEffect(() => {
-    const big = fullCv.current, from = fullFrom.current;
-    fullFrom.current = null;
-    if (!full || !big || !from) return;
-    glide(big, from, big.getBoundingClientRect());
-    big.parentElement?.animate([{ backgroundColor: "rgba(0,0,0,0)" }, { backgroundColor: "rgba(0,0,0,1)" }], { duration: 300 });
-  }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The layer shows the preview's picture as it is drawn (playing, scrubbing, paused).
-  useEffect(() => {
-    if (!full) return;
-    let raf = 0;
-    const copy = () => {
-      const big = fullCv.current, small = canvasRef.current;
-      if (big && small) {
-        if (big.width !== small.width || big.height !== small.height) { big.width = small.width; big.height = small.height; }
-        big.getContext("2d")?.drawImage(small, 0, 0);
-      }
-      raf = requestAnimationFrame(copy);
-    };
-    copy();
-    return () => cancelAnimationFrame(raf);
-  }, [full]);
+  const toggleFull = (on: boolean) => { setPlayerOff(false); setFull(on); };
   // Into or out of the full screen: the picture drawn again, with or without the zones.
   useEffect(() => { if (!playing) drawAt(headRef.current); }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -1790,20 +1749,18 @@ export default function VideoStudio({
     root.classList.toggle("pv-noplayer", full && playerOff);
     return () => { root.classList.remove("pv-full", "pv-dim", "pv-noplayer"); };
   }, [full, playing, playerLit, playerOff]);
-  // Escape leaves the full screen. On a computer, as on a video site: the player fades once the mouse rests (or
+  // On a computer, as on a video site: the player fades once the mouse rests (or
   // leaves the window), and comes back as soon as it moves; the cursor hides with it.
   const [idle, setIdle] = useState(false);
   useEffect(() => {
     if (!full) { setIdle(false); return; }
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); toggleFull(false); } };
     let timer = 0;
     const wake = () => { setIdle(false); clearTimeout(timer); timer = window.setTimeout(() => setIdle(true), 900); };
     const away = () => { clearTimeout(timer); setIdle(true); };
-    window.addEventListener("keydown", key);
     window.addEventListener("mousemove", wake);
     document.documentElement.addEventListener("mouseleave", away);
     wake();
-    return () => { window.removeEventListener("keydown", key); window.removeEventListener("mousemove", wake); document.documentElement.removeEventListener("mouseleave", away); clearTimeout(timer); };
+    return () => { window.removeEventListener("mousemove", wake); document.documentElement.removeEventListener("mouseleave", away); clearTimeout(timer); };
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.documentElement.classList.toggle("pv-idle", full && idle); return () => document.documentElement.classList.remove("pv-idle"); }, [full, idle]);
   // A tap on the faint player brings it back to full colour for a few seconds.
@@ -1815,25 +1772,9 @@ export default function VideoStudio({
     dock?.addEventListener("pointerdown", lit);
     return () => { dock?.removeEventListener("pointerdown", lit); clearTimeout(timer); };
   }, [full]);
-  const fullDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    swipe.current = { y: e.clientY, t: performance.now(), dy: 0 };
-  };
-  const fullMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const d = swipe.current;
-    if (!d) return;
-    d.dy = Math.max(0, e.clientY - d.y);
-    e.currentTarget.style.transform = d.dy ? `translateY(${d.dy}px) scale(${1 - Math.min(0.25, d.dy / 1200)})` : "";
-  };
-  const fullUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const d = swipe.current;
-    swipe.current = null;
-    const c = e.currentTarget;
-    if (!d) return;
-    if (d.dy > 90) { c.getAnimations().forEach((x) => x.cancel()); c.style.transform = ""; toggleFull(false); return; } // swiped down: back in its place
-    if (d.dy > 6) { c.animate([{ transform: c.style.transform }, { transform: "none" }], { duration: 200, easing: "ease-out" }); c.style.transform = ""; return; }
-    c.style.transform = "";
-    // A tap: on a phone the player hides, or comes back; on a computer (the player stays) it plays or pauses.
+  /** A tap on the full-screen picture: on a phone the player hides, or comes back; on a computer (the player
+   *  stays) it plays or pauses. */
+  const fullTap = () => {
     if (phone) setPlayerOff((v) => !v);
     else if (playing) stop(); else void play();
   };
@@ -3354,13 +3295,8 @@ export default function VideoStudio({
                 onClick={() => { setAids({ zones: !aids.zones }); revealControls(); }}><Icon name={aids.zones ? "zones" : "zones-off"} size={18} /></button>
             )}
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={18} /></button>}
-            {/* The full screen: a layer of its own over the app, showing the preview's picture as it is drawn. */}
-            {full && typeof document !== "undefined" && createPortal(
-              <div className="pv-full-layer">
-                <canvas ref={fullCv} className="pv-full-cv" width={outW} height={outH}
-                  onPointerDown={fullDown} onPointerMove={fullMove} onPointerUp={fullUp} onPointerCancel={fullUp} />
-                <button className="pv-close" aria-label={t("Close")} onClick={() => toggleFull(false)}><Icon name="x" size={18} /></button>
-              </div>, document.body)}
+            {/* The full screen (the same as the carousel's): the preview's picture as it is drawn, over the app. */}
+            {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onTap={fullTap} />}
           </div>
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (

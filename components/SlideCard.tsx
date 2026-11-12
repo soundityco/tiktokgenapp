@@ -57,6 +57,8 @@ interface Props {
   onRerollPic: () => void;
   /** TikTok's zones on and off (the button over the slide). */
   onZones?: () => void;
+  /** The slide full screen (the carousel's full view, slides swiped there). */
+  onFull?: () => void;
   /** A photo of the slide's list chosen by hand (its picture shown in a grid). */
   onChoosePic?: (id: string, name: string) => void;
   onRerollText: () => void;
@@ -527,6 +529,12 @@ export default function SlideCard(p: Props) {
           <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
             onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current })); }}>
             <Icon name="tune" size={18} />
+          </button>
+        )}
+        {!adjusting && p.onFull && (
+          <button className="pv-expand card-full" aria-label={t("Full screen")} title={t("Full screen")}
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); p.onFull!(); }}>
+            <Icon name="expand" size={18} />
           </button>
         )}
         {adjusting && (() => {
