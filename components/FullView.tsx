@@ -11,19 +11,26 @@ import { useT } from "@/lib/i18n";
  * (`onSide`, the carousel): the next or previous one. A tap: `onTap`. The picture shown is the page's own canvas,
  * copied as it is drawn (playing, scrubbing…).
  */
-export function FullView({ source, onClose, onTap, onSide, children }: {
+export function FullView({ source, onClose, onTap, onSide, label, children }: {
   /** The page's canvas shown full screen (also where it glides from and back to). */
   source: () => HTMLCanvasElement | null;
   onClose: () => void;
   onTap?: () => void;
   /** Sideways: 1 the next one, -1 the previous one. */
   onSide?: (dir: 1 | -1) => void;
+  /** Under the picture, like the carousel's preview (the video's name). */
+  label?: string;
   /** Over the picture (a player…). */
   children?: ReactNode;
 }) {
   const { t } = useT();
   const layer = useRef<HTMLDivElement>(null);
   const big = useRef<HTMLCanvasElement>(null);
+  const bg = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
+  const xBtn = useRef<HTMLButtonElement>(null);
+  /** The blurred dark, the bar and the cross: they fade while the picture glides (the carousel's preview). */
+  const fades = () => [bg.current, bar.current, xBtn.current].filter((x): x is HTMLDivElement | HTMLButtonElement => !!x);
   const closing = useRef(false);
   const drag = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
 
@@ -43,10 +50,11 @@ export function FullView({ source, onClose, onTap, onSide, children }: {
     closing.current = true;
     if (!c || !small) { onClose(); return; }
     const from = getComputedStyle(c).transform;
+    for (const x of c.getAnimations()) x.cancel();
     c.style.transform = "";
-    const a = c.animate([{ transform: from === "none" ? "none" : from, transformOrigin: "0 0" }, { transform: over(small.getBoundingClientRect()), transformOrigin: "0 0" }],
+    const a = c.animate([{ transform: from === "none" ? "none" : from }, { transform: over(small.getBoundingClientRect()) }],
       { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
-    layer.current?.animate([{ backgroundColor: getComputedStyle(layer.current).backgroundColor }, { backgroundColor: "rgba(0,0,0,0)" }], { duration: 280, fill: "forwards" });
+    for (const el of fades()) el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0 }], { duration: 240, fill: "forwards" });
     a.onfinish = onClose;
   };
   const closeRef = useRef(close);
@@ -57,9 +65,12 @@ export function FullView({ source, onClose, onTap, onSide, children }: {
   useLayoutEffect(() => {
     const c = big.current, small = source();
     if (!c || !small) return;
-    c.animate([{ transform: over(small.getBoundingClientRect()), transformOrigin: "0 0" }, { transform: "none", transformOrigin: "0 0" }],
+    // At the picture's size before measuring (the copy that sizes it runs after this).
+    if (small.width && (c.width !== small.width || c.height !== small.height)) { c.width = small.width; c.height = small.height; }
+    for (const a of c.getAnimations()) a.cancel(); // measured without any glide on it (React may run this twice)
+    c.animate([{ transform: over(small.getBoundingClientRect()) }, { transform: "none" }],
       { duration: 300, easing: "cubic-bezier(.2,.8,.2,1)" });
-    layer.current?.animate([{ backgroundColor: "rgba(0,0,0,0)" }, { backgroundColor: "rgba(0,0,0,1)" }], { duration: 300 });
+    for (const el of fades()) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The page's picture, copied as it is drawn.
@@ -95,9 +106,12 @@ export function FullView({ source, onClose, onTap, onSide, children }: {
     const side = !!onSide && Math.abs(d.dx) > Math.abs(d.dy);
     if (side) { c.style.transform = `translateX(${d.dx}px)`; return; }
     const dy = Math.max(0, d.dy);
-    // Down: the picture follows, shrinks a little, and the black thins out.
-    c.style.transform = dy ? `translate(${d.dx * 0.4}px, ${dy}px) scale(${1 - Math.min(0.3, dy / 1000)})` : "";
-    if (layer.current) layer.current.style.backgroundColor = `rgba(0,0,0,${Math.max(0.25, 1 - dy / 500)})`;
+    // Down: the picture follows, shrinks a little around its centre (the origin is its top left, for the glide),
+    // and the dark thins out.
+    const k = 1 - Math.min(0.3, dy / 1000);
+    c.style.transform = dy ? `translate(${d.dx * 0.4 + (c.offsetWidth * (1 - k)) / 2}px, ${dy + (c.offsetHeight * (1 - k)) / 2}px) scale(${k})` : "";
+    const o = String(Math.max(0.25, 1 - dy / 500));
+    for (const el of fades()) el.style.opacity = o;
   };
   const up = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const d = drag.current, c = e.currentTarget;
@@ -120,7 +134,7 @@ export function FullView({ source, onClose, onTap, onSide, children }: {
       // Not far enough: back to the full screen.
       c.animate([{ transform: c.style.transform || "none" }, { transform: "none" }], { duration: 200, easing: "ease-out" });
       c.style.transform = "";
-      if (layer.current) layer.current.style.backgroundColor = "";
+      for (const el of fades()) el.style.opacity = "";
       return;
     }
     c.style.transform = "";
@@ -129,8 +143,20 @@ export function FullView({ source, onClose, onTap, onSide, children }: {
 
   return createPortal(
     <div ref={layer} className="pv-full-layer">
-      <canvas ref={big} className="pv-full-cv" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
-      <button className="pv-close" aria-label={t("Close")} onClick={close}><Icon name="x" size={18} /></button>
+      {/* As the carousel's preview: a blurred dark (a tap there closes), the picture with its cross, its name under it. */}
+      <div ref={bg} className="preview-bg" onClick={close} aria-hidden />
+      <div className="pv-full-box">
+        <div className="preview-pic">
+          <canvas ref={big} className="pv-full-cv" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
+          <button ref={xBtn} className="pv-close" aria-label={t("Close")} onClick={close}><Icon name="x" size={18} /></button>
+        </div>
+        {label && (
+          <div ref={bar} className="preview-bar">
+            <span className="mono xs truncate">{label}</span>
+            <span className="muted xs grow preview-hint">{t("Esc to close")}</span>
+          </div>
+        )}
+      </div>
       {children}
     </div>, document.body);
 }

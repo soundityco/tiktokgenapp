@@ -2589,3 +2589,14 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .hook-src-btn { flex: 0 1 200px; min-width: 0; width: auto; }
 .hook-head .hook-gen { margin-left: 6px; flex: none; }
 .hook-head .hook-del:hover { color: var(--danger); }
+
+/* The video's full screen, laid out like the carousel's preview: the blurred dark, the picture (the player's room
+   kept under it), its cross at its top right, its name under it. */
+.pv-full-layer { background: none; padding: 16px 16px 112px; }
+.pv-full-box { position: relative; display: grid; gap: var(--s2); max-width: 100%; }
+.pv-full-cv { max-width: 100%; max-height: calc(100dvh - 176px); border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); transform-origin: 0 0; }
+.pv-full-box .preview-pic .pv-close { position: absolute; top: 4px; right: 4px; }
+@media (max-width: 1000px) {
+  .pv-full-layer { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 112px); }
+  .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 166px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+}

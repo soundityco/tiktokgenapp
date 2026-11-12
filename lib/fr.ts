@@ -19,6 +19,7 @@ export const FR: Record<string, string> = {
   "Drive copy updated: {video} (made in {make} s by {how}, sent in {send} s, {size} MB)": "Copie Drive mise à jour : {video} (faite en {make} s par {how}, envoyée en {send} s, {size} Mo)",
   "the video chip": "la puce vidéo",
   "All tags": "Tous les tags",
+  "Esc to close": "Échap pour fermer",
   "Other ways…": "Autres moyens…",
   "Shared.": "Partagé.",
   "Send to another device": "Envoyer sur un autre appareil",
