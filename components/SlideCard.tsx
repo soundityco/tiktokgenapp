@@ -364,9 +364,10 @@ export default function SlideCard(p: Props) {
       {/* The slide's sources, as two tiles: its text (an icon of the kind: the release's lyrics in their gold, a
           list) and its photo (the one on the slide, small). Each: where it comes from, then which one. */}
       <div className="src-tiles">
-        <div className={"src-tile src-" + cfg.textSource.kind}>
+        <div className={"src-tile src-" + cfg.textSource.kind + (listPool ? " src-" + listPool.kind : "")}>
           <div className="src-head">
-            <span className="src-ico" aria-hidden><Icon name={cfg.textSource.kind === "lyrics" ? "music" : cfg.textSource.kind === "pool" ? "type" : "minus"} size={14} /></span>
+            {/* One icon per kind of text: hooks (the opening), the release's lyrics, the other slides' texts. */}
+            <span className="src-ico" aria-hidden><Icon name={cfg.textSource.kind === "lyrics" ? "music" : listPool?.kind === "hooks" ? "sparkle" : cfg.textSource.kind === "pool" ? "list" : "minus"} size={14} /></span>
             <span className="src-k" title={t("Text from")}>{t("Text")}</span>
           {/* A lyrics slide retouched by hand: said in an (i), with the way back to the release's lyrics beside it. */}
           {cfg.textSource.kind === "lyrics" && p.gen?.edited && !p.locked && (<>

@@ -2430,3 +2430,15 @@ details.sec:first-of-type { background-image: none; }
 .src-head .src-k { flex: none; }
 .src-head .hint { margin-left: auto; }
 .src-head .src-back { width: 18px; height: 18px; min-height: 18px; }
+/* Source tiles, take two: the photo as a square like the icons; the selectors melted into the tile (a line of
+   text and its chevron, lit on hover), the source in the text colour, the pick under it quieter. */
+.src-ico.has-pic { width: 26px; height: 26px; border-radius: var(--r); overflow: hidden; }
+.src-ico.has-pic .thumb { width: 100%; height: 100%; aspect-ratio: 1; border-radius: 0; }
+.src-hooks .src-ico { color: var(--text); }
+.src-tile { gap: 2px; padding: 10px 6px 8px; }
+.src-tile .src-head { padding: 0 4px 6px; }
+.src-tile .input { height: 30px; min-height: 30px; padding: 0 6px; background: none; border-color: transparent; font-size: 13px; color: var(--text); }
+.src-tile .input:hover, .src-tile .input.on, .src-tile .input[aria-expanded="true"] { background: var(--raised); border-color: transparent; }
+.src-tile .pick-btn { color: var(--muted); font-size: 12px; }
+.src-tile .pick-btn:hover { color: var(--text); }
+.src-tile .pick-add { height: 30px; border-color: transparent; background: none; justify-content: flex-start; padding: 0 6px; color: var(--muted); }
