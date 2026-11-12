@@ -2603,3 +2603,9 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 /* The video full screen: the picture leaves its frame (as if it moved there), so the frame stays, empty, where it
    was; nothing else of the page moves. It comes back in as the full screen closes. */
 html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
+/* The carousel's full screen: the slides before / after beside the one shown (shown only while swiped), moved together. */
+.pv-track { position: relative; }
+.pv-side { position: absolute; top: 0; width: 100%; height: 100%; border-radius: var(--r); visibility: hidden; pointer-events: none; }
+.pv-side.prev { right: calc(100% + 24px); }
+.pv-side.next { left: calc(100% + 24px); }
+.pv-track.sliding .pv-side { visibility: visible; }

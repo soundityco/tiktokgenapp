@@ -1905,7 +1905,7 @@ export default function Studio({ userName }: { userName: string }) {
           onRestore={(data) => { apply(linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(data), (n) => t("Part {n}", { n }), t("Chorus"))))); say(t("Version restored: undo to go back")); }} />
       )}
       {preview && studio === "carousel" && (
-        <SlidePreview index={sel} total={nSlides} cfg={project.slides[sel]} gen={project.generated?.[sel]} fontsReady={fontsReady}
+        <SlidePreview index={sel} total={nSlides} slides={project.slides} gens={project.slides.map((_, i) => project.generated?.[i])} fontsReady={fontsReady}
           onNav={(i) => updProject((p) => ({ ...p, selectedSlide: i }))} onClose={() => setPreview(false)} />
       )}
       {overlay?.k === "newPool" && <NewPoolDialog kind={overlay.kind} textKind={overlay.textKind} onCreate={createPool} onClose={() => setOverlay(null)}
