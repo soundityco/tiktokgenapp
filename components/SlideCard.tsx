@@ -124,8 +124,9 @@ export default function SlideCard(p: Props) {
   const [tool, setTool] = useState<keyof PhotoAdjust>("exposure");
   // One photo's edits open at a time: opening another card's closes this one.
   const myId = useRef(Math.random());
-  // A click or a tap anywhere off the picture closes its edits (the slide stays selected).
+  // A click or a tap anywhere off the edits panel closes it (the slide stays selected).
   const picWrap = useRef<HTMLDivElement>(null);
+  const adjustPanel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const other = (e: Event) => { if ((e as CustomEvent).detail !== myId.current) setAdjusting(false); };
     window.addEventListener(ADJUST_OPEN, other);
@@ -133,7 +134,8 @@ export default function SlideCard(p: Props) {
   }, []);
   useEffect(() => {
     if (!adjusting) return;
-    const away = (e: PointerEvent) => { if (!picWrap.current?.contains(e.target as Node)) setAdjusting(false); };
+    // Anywhere off the panel itself (the photo above it too): the same as Done.
+    const away = (e: PointerEvent) => { if (!adjustPanel.current?.contains(e.target as Node)) { setCompare(false); setAdjusting(false); } };
     document.addEventListener("pointerdown", away, true);
     return () => document.removeEventListener("pointerdown", away, true);
   }, [adjusting]);
@@ -552,7 +554,7 @@ export default function SlideCard(p: Props) {
             return { ...c, pic: { ...c.pic, adjust: Object.values(next).some((x) => x) ? next : undefined } };
           });
           return (
-            <div className={"adjust-panel" + (adjustLeaving ? " leaving" : "")} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            <div ref={adjustPanel} className={"adjust-panel" + (adjustLeaving ? " leaving" : "")} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
               <div className="adjust-tools" role="tablist" aria-label={t("Photo edits")}>
                 {ADJUST.map((x) => (
                   <button key={x.k} role="tab" aria-selected={tool === x.k} className={(tool === x.k ? "on" : "") + (adj[x.k] ? " set" : "")}
