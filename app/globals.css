@@ -2347,3 +2347,21 @@ details.sec:first-of-type { background-image: none; }
 .menu .pic-grid .pic-cell.on { border-color: var(--text); }
 .pic-cell > * { width: 100%; height: 100%; }
 .pic-cell img, .pic-cell canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Phone: the preview full screen. The picture fills the screen on black (it glides there, and back); the dock's
+   player stays over it (faint while playing, a tap brings it back), a tap on the picture hides it. */
+.pv-expand, .pv-close { display: none; }
+@media (max-width: 1000px) {
+  .pv-expand { display: grid; place-items: center; position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border-radius: var(--r);
+    border: 1px solid rgba(255,255,255,.22); background: rgba(10,10,14,.55); color: #fff; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 2; }
+  .pv-full-layer { position: fixed; inset: 0; z-index: 80; background: #000; display: grid; place-items: center; touch-action: none; }
+  .pv-full-cv { display: block; max-width: 100vw; max-height: 100dvh; width: auto; height: auto; touch-action: none; }
+  .pv-close { display: grid; place-items: center; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 12px; width: 40px; height: 40px; border-radius: var(--r);
+    border: 1px solid rgba(255,255,255,.22); background: rgba(10,10,14,.55); color: #fff; z-index: 82; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  html.pv-full, html.pv-full body { overflow: hidden; }
+  html.pv-full .mobile-tabs { z-index: 85; transition: opacity .3s; }
+  html.pv-full .mobile-tabs > :not(.dock-player):not(.dock-thumb) { display: none; }
+  html.pv-full .mobile-tabs .dock-thumb { opacity: 0 !important; }
+  html.pv-dim .mobile-tabs { opacity: .38; }
+  html.pv-noplayer .mobile-tabs { opacity: 0; pointer-events: none; transform: translateY(12px); }
+}

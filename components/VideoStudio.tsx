@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
@@ -1730,6 +1730,90 @@ export default function VideoStudio({
     onSaveNow();
   };
   const [renaming, setRenaming] = useState<string | null>(null);
+  // ---- phone: the preview full screen (the picture itself grows to fill the screen; a swipe down or the cross
+  // puts it back). The dock's player stays over it, faint while playing; a tap on the picture hides or shows it. ----
+  const [full, setFull] = useState(false);
+  const fullFrom = useRef<DOMRect | null>(null);
+  const swipe = useRef<{ y: number; t: number; dy: number } | null>(null);
+  const [playerLit, setPlayerLit] = useState(false);
+  const [playerOff, setPlayerOff] = useState(false);
+  const fullCv = useRef<HTMLCanvasElement>(null);
+  const glide = (el: Element, from: DOMRect, to: DOMRect, reverse = false) => {
+    const k = from.width / Math.max(1, to.width);
+    const start = { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${k})`, transformOrigin: "0 0" };
+    const end = { transform: "none", transformOrigin: "0 0" };
+    return el.animate(reverse ? [end, start] : [start, end], { duration: 300, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
+  };
+  const toggleFull = (on: boolean) => {
+    setPlayerOff(false);
+    if (on) { fullFrom.current = canvasRef.current?.getBoundingClientRect() ?? null; setFull(true); return; }
+    // Back: the picture glides to its place in the page, then the layer goes.
+    const big = fullCv.current, small = canvasRef.current;
+    const layer = big?.parentElement;
+    if (!big || !small) { setFull(false); return; }
+    const a = glide(big, small.getBoundingClientRect(), big.getBoundingClientRect(), true);
+    layer?.animate([{ backgroundColor: "rgba(0,0,0,1)" }, { backgroundColor: "rgba(0,0,0,0)" }], { duration: 300, fill: "forwards" });
+    a.onfinish = () => setFull(false);
+  };
+  // Opening: from where the picture is in the page to the whole screen, a short glide.
+  useLayoutEffect(() => {
+    const big = fullCv.current, from = fullFrom.current;
+    fullFrom.current = null;
+    if (!full || !big || !from) return;
+    glide(big, from, big.getBoundingClientRect());
+    big.parentElement?.animate([{ backgroundColor: "rgba(0,0,0,0)" }, { backgroundColor: "rgba(0,0,0,1)" }], { duration: 300 });
+  }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The layer shows the preview's picture as it is drawn (playing, scrubbing, paused).
+  useEffect(() => {
+    if (!full) return;
+    let raf = 0;
+    const copy = () => {
+      const big = fullCv.current, small = canvasRef.current;
+      if (big && small) {
+        if (big.width !== small.width || big.height !== small.height) { big.width = small.width; big.height = small.height; }
+        big.getContext("2d")?.drawImage(small, 0, 0);
+      }
+      raf = requestAnimationFrame(copy);
+    };
+    copy();
+    return () => cancelAnimationFrame(raf);
+  }, [full]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("pv-full", full);
+    root.classList.toggle("pv-dim", full && playing && !playerLit);
+    root.classList.toggle("pv-noplayer", full && playerOff);
+    return () => { root.classList.remove("pv-full", "pv-dim", "pv-noplayer"); };
+  }, [full, playing, playerLit, playerOff]);
+  // A tap on the faint player brings it back to full colour for a few seconds.
+  useEffect(() => {
+    if (!full) return;
+    const dock = document.querySelector(".mobile-tabs");
+    let timer = 0;
+    const lit = () => { setPlayerLit(true); clearTimeout(timer); timer = window.setTimeout(() => setPlayerLit(false), 3000); };
+    dock?.addEventListener("pointerdown", lit);
+    return () => { dock?.removeEventListener("pointerdown", lit); clearTimeout(timer); };
+  }, [full]);
+  const fullDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    swipe.current = { y: e.clientY, t: performance.now(), dy: 0 };
+  };
+  const fullMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = swipe.current;
+    if (!d) return;
+    d.dy = Math.max(0, e.clientY - d.y);
+    e.currentTarget.style.transform = d.dy ? `translateY(${d.dy}px) scale(${1 - Math.min(0.25, d.dy / 1200)})` : "";
+  };
+  const fullUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const d = swipe.current;
+    swipe.current = null;
+    const c = e.currentTarget;
+    if (!d) return;
+    if (d.dy > 90) { c.getAnimations().forEach((x) => x.cancel()); c.style.transform = ""; toggleFull(false); return; } // swiped down: back in its place
+    if (d.dy > 6) { c.animate([{ transform: c.style.transform }, { transform: "none" }], { duration: 200, easing: "ease-out" }); c.style.transform = ""; return; }
+    c.style.transform = "";
+    setPlayerOff((v) => !v); // a tap: the player hides, or comes back
+  };
   /** Phone: the "Show" button under the picture unfolded (zones, lyrics, hook). */
   const [showOpen, setShowOpen] = useState(false);
   /** The lock of audio and video (on the phone above the tracks, on a computer in the segment's row). */
@@ -3234,6 +3318,15 @@ export default function VideoStudio({
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
               onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
+            {/* Phone: the preview full screen, and back. */}
+            {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={15} /></button>}
+            {/* The full screen: a layer of its own over the app, showing the preview's picture as it is drawn. */}
+            {full && typeof document !== "undefined" && createPortal(
+              <div className="pv-full-layer">
+                <canvas ref={fullCv} className="pv-full-cv" width={outW} height={outH}
+                  onPointerDown={fullDown} onPointerMove={fullMove} onPointerUp={fullUp} onPointerCancel={fullUp} />
+                <button className="pv-close" aria-label={t("Close")} onClick={() => toggleFull(false)}><Icon name="x" size={18} /></button>
+              </div>, document.body)}
           </div>
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (
