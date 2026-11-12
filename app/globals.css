@@ -150,12 +150,14 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 .board-empty li { counter-increment: s; display: flex; gap: var(--s3); color: var(--muted); }
 .board-empty li::before { content: counter(s, decimal-leading-zero); font-family: var(--mono); font-size: var(--fs-xs); color: var(--accent-hi); padding-top: 2px; }
 
-.slides { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: var(--s5) var(--s4); align-items: start; }
+.slides { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: var(--s5); align-items: start; } /* between slides: the board's margin (24px) */
 .card { display: grid; gap: var(--s3); min-width: 0; }
 /* A select takes the width of its longest option (a long text of the list): kept inside its card. */
 .card select, .card .dd, .card .input { width: 100%; min-width: 0; max-width: 100%; }
-.card-head { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; min-width: 0; }
-.card-head .btn.sm { padding: 0 8px; }
+.card-head { display: flex; align-items: center; gap: var(--s1); flex-wrap: nowrap; min-width: 0; } /* one line, whatever the slide's width */
+.card-head .btn.sm { padding: 0 6px; gap: 4px; }
+.card-head > * { flex: none; }
+.card-head > .grow { flex: 1 1 0; min-width: 0; }
 .card-head .btn.icon.sm { width: 26px; padding: 0; }
 .menu button:disabled { opacity: .4; cursor: not-allowed; }
 .idx-chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: var(--fs-sm); color: var(--muted); padding: 2px 7px; border: 1px solid var(--line-2); border-radius: 999px; background: none; cursor: pointer; transition: all .12s; }
@@ -2539,7 +2541,8 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .card .pv-expand.card-full { opacity: 0; }
 .card:hover .pv-expand.card-full, .card.sel .pv-expand.card-full, .card .pv-expand.card-full:focus-visible { opacity: 1; }
 @media (hover: hover) and (min-width: 1001px) {
-  .card.sel:not(:hover) .pv-expand.card-full:not(:focus-visible), .card.sel:not(:hover) .adjust-open:not(.set):not(:focus-visible) { opacity: 0; }
+  /* Computer: the icons over a slide only under the pointer, the photo's settings too, even once changed (its dot then shows). */
+  .card:not(:hover) .pv-expand.card-full:not(:focus-visible), .card:not(:hover) .adjust-open:not(:focus-visible) { opacity: 0; }
 }
 /* Phone (no pointer to hover with): the three icons over every slide, all the time, also while the deck is swiped. */
 @media (hover: none), (max-width: 1000px) {
