@@ -1513,10 +1513,7 @@ export default function Studio({ userName }: { userName: string }) {
             onClick={() => updProject((p) => ({ ...p, selectedSlide: i }))} />
         ))}
       </div>
-      <button className={"deck-zones" + (phoneZones ? " on" : "")} aria-pressed={phoneZones} onClick={togglePhoneZones}
-        title={t("TikTok's interface zones on the slides")}>
-        <Icon name={phoneZones ? "eye-off" : "eye"} size={15} />{t("Zones")}
-      </button>
+
     </div>
   );
   const releaseTitle = (<>
@@ -1550,7 +1547,7 @@ export default function Studio({ userName }: { userName: string }) {
   // One slide card (the deck's, or on a phone the selected slide's fields under the deck).
   const cardFor = (cfg: SlideCfg, i: number, part?: "fields") => (
               <SlideCard key={(part ?? "") + cfg.id} part={part} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={slideTexts} picPools={vPics} zones={isPhone ? phoneZones : ws.zones} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
+                textPools={slideTexts} picPools={vPics} zones={isPhone ? phoneZones : ws.zones} onZones={isPhone ? togglePhoneZones : () => upd((w) => ({ ...w, zones: !w.zones }))} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
                 lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
@@ -1752,9 +1749,7 @@ export default function Studio({ userName }: { userName: string }) {
               <div className="row nowrap head-actions">
               {exportProgress && <span className="badge h-progress" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn h-cancel" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
-              {/* Computer: TikTok's zones on the slides (a phone has the deck's own button). */}
-              <button className={"btn h-zones h-opts" + (ws.zones ? " on" : "")} aria-pressed={ws.zones} onClick={() => upd((w) => ({ ...w, zones: !w.zones }))}
-                title={t("TikTok's interface zones on the slides")}><Icon name={ws.zones ? "eye" : "eye-off"} size={14} />{t("Zones")}</button>
+
               <button className="btn icon h-share" aria-label={t("Send to my phone")} title={t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
               {carouselsOf(project).length > 1 && !busy ? (
                 <div className="slot h-dl"><Menu trigger={(_, toggle) => (

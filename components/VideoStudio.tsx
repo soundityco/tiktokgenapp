@@ -1825,14 +1825,6 @@ export default function VideoStudio({
     </button>
   ) : null;
   /** The studio's options (draws, preview, export format): in the head on a computer, under the picture on a phone. */
-  /** Computer: TikTok's zones on the video, in the head where the options were (the draw settings are in the
-   *  account menu now). On a phone, the "Show" button under the picture does it. */
-  const optionsMenu = (where: string) => where ? null : (
-    <button className={"btn h-zones h-opts" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
-      onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
-      <Icon name={aids.zones && settings.format !== "16:9" ? "eye" : "eye-off"} size={14} />{t("Zones")}
-    </button>
-  );
   /** Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */
   const zoomEl = (where = "") => (
     <div className={"wave-zoom " + where} role="group" aria-label={t("Zoom of the waveform")}>
@@ -3238,7 +3230,6 @@ export default function VideoStudio({
           <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={onUndo} disabled={!canUndo}><Icon name="undo" /></button>
           <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={onRedo} disabled={!canRedo}><Icon name="redo" /></button>
           <div className="row nowrap head-actions">
-          {optionsMenu("")}
           {/* Phone: in place of "More", the video picker (as the versions are picked: show one, rename, delete, add). */}
           <div className="slot h-more clip-pick"><Menu float left trigger={(open, toggle) => (
             <button className={"btn ver-pick clip-pick-btn" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
@@ -3311,6 +3302,11 @@ export default function VideoStudio({
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
               onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
             {/* Phone: the preview full screen, and back. */}
+            {/* Over the picture: TikTok's zones (bottom left) and the full screen (bottom right); on a computer they show on hover. */}
+            {videoBlob && !full && settings.format !== "16:9" && (
+              <button className={"pv-zones" + (aids.zones ? " on" : "")} aria-pressed={aids.zones} aria-label={t("Zones")} title={t("TikTok's interface zones on the video")}
+                onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones ? "eye" : "eye-off"} size={15} /></button>
+            )}
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={15} /></button>}
             {/* The full screen: a layer of its own over the app, showing the preview's picture as it is drawn. */}
             {full && typeof document !== "undefined" && createPortal(
@@ -3329,8 +3325,6 @@ export default function VideoStudio({
                   TikTok zones, the lyrics, the hook. */}
               <span className={"bar-show" + (showOpen ? " open" : "")}>
                 <span className="bar-show-list" aria-hidden={!showOpen}>
-                  <button className={"bar-chip" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"} tabIndex={showOpen ? 0 : -1}
-                    onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones && settings.format !== "16:9" ? "eye" : "eye-off"} size={13} />{t("Zones")}</button>
                   <button className={"bar-chip" + (settings.captions ? " on" : "")} aria-pressed={settings.captions} tabIndex={showOpen ? 0 : -1}
                     onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={13} />{t("Lyrics")}</button>
                   <button className={"bar-chip" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false} tabIndex={showOpen ? 0 : -1}
@@ -3358,7 +3352,6 @@ export default function VideoStudio({
                 {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}</span>
             </div>
             {copyState && <div className="meta-row"><span className="meta-k">{t("Take")}</span><span className="meta-v">{copyStatusEl()}</span></div>}
-            {optionsMenu("opts-phone")}
           </div>
           {lookErr && grade?.lut && (
             <p className="notice warn xs">

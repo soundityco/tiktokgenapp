@@ -2364,7 +2364,6 @@ details.sec:first-of-type { background-image: none; }
 
 /* Phone: the preview full screen. The picture fills the screen on black (it glides there, and back); the dock's
    player stays over it (faint while playing, a tap brings it back), a tap on the picture hides it. */
-.pv-expand, .pv-close { display: none; }
 @media (max-width: 1000px) {
   .pv-expand { display: grid; place-items: center; position: absolute; right: 2px; bottom: 2px; width: 40px; height: 40px; padding: 0; border: 0; background: none;
     color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 2; }
@@ -2465,3 +2464,45 @@ details.sec:first-of-type { background-image: none; }
 .studio-head .h-zones { gap: 6px; }
 .studio-head .h-zones:not(.on) { color: var(--muted); }
 .studio-head .h-zones.on { border-color: var(--text); color: var(--text); }
+/* Phone (≤ 640): the head on one row whatever the player is doing (it is empty for a moment while another video
+   opens): the release's title (cut with an ellipsis), the video picker (its own width, cut too), the download. */
+@media (max-width: 640px) {
+  .video-head.studio-head { grid-template-columns: minmax(0, 1fr) max-content var(--h) !important; }
+  .video-head .release-title { grid-column: 1; min-width: 0; }
+  .video-head .h-more { grid-column: 2 !important; grid-row: 1 !important; }
+  .video-head .h-dl { grid-column: 3 !important; grid-row: 1 !important; }
+  .studio-head .release-title .menu-wrap, .studio-head .release-pick { min-width: 0; max-width: 100%; }
+  .studio-head .release-pick { display: flex; align-items: center; }
+  .studio-head .release-pick .display { min-width: 0; }
+  .clip-pick-btn { max-width: 140px; }
+}
+/* Over a preview: TikTok's zones (bottom left) and, on the video, the full screen (bottom right). Bare icons with
+   room for a finger; on a computer they show when the pointer is over the picture (and stay while zones are on). */
+.pv-zones, .pv-expand { display: grid; place-items: center; position: absolute; bottom: 2px; width: 40px; height: 40px; padding: 0; border: 0; background: none;
+  color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 2; cursor: pointer; transition: opacity .15s; }
+.pv-zones { left: 2px; }
+.pv-expand { right: 2px; }
+.zones-open { position: absolute; left: 8px; bottom: 8px; z-index: 2; width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18);
+  background: rgba(8,8,10,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: #fff; display: grid; place-items: center; cursor: pointer;
+  opacity: 0; transition: opacity .15s; }
+.card:hover .zones-open, .card.sel .zones-open, .zones-open:focus-visible { opacity: 1; }
+@media (hover: hover) and (min-width: 1001px) {
+  .video-stage .cv-wrap .pv-zones:not(.on), .video-stage .cv-wrap .pv-expand { opacity: 0; }
+  .video-stage .cv-wrap:hover .pv-zones, .video-stage .cv-wrap:hover .pv-expand { opacity: 1; }
+}
+/* The full screen, on a computer too: the picture on black, the cross; the board's player above it. */
+.pv-full-layer { position: fixed; inset: 0; z-index: 80; background: #000; display: grid; place-items: center; touch-action: none; }
+.pv-full-cv { display: block; max-width: 100vw; max-height: 100dvh; width: auto; height: auto; touch-action: none; }
+.pv-close { display: grid; place-items: center; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px; width: 44px; height: 44px; padding: 0; border: 0; background: none;
+  color: #fff; z-index: 82; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); cursor: pointer; }
+html.pv-full, html.pv-full body { overflow: hidden; }
+@media (min-width: 1001px) {
+  html.pv-full .board-player { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 85; width: min(640px, calc(100vw - 48px)); transition: opacity .3s; }
+  html.pv-dim .board-player { opacity: .38; }
+  html.pv-dim .board-player:hover { opacity: 1; }
+  html.pv-noplayer .board-player { opacity: 0; pointer-events: none; }
+}
+/* Computer: the board's floating player can sit over the bottom of the picture: the icons go to its top. */
+@media (min-width: 1001px) {
+  .video-stage .cv-wrap .pv-zones, .video-stage .cv-wrap .pv-expand { top: 2px; bottom: auto; }
+}

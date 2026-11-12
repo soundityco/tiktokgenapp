@@ -55,6 +55,8 @@ interface Props {
   onCfg: (fn: (c: SlideCfg) => SlideCfg) => void;
   onText: (t: string) => void;
   onRerollPic: () => void;
+  /** TikTok's zones on and off (the button over the slide). */
+  onZones?: () => void;
   /** A photo of the slide's list chosen by hand (its picture shown in a grid). */
   onChoosePic?: (id: string, name: string) => void;
   onRerollText: () => void;
@@ -514,6 +516,13 @@ export default function SlideCard(p: Props) {
         {dropHere && <div className="drop-hint">{t("Drop the picture here")}</div>}
         <canvas ref={cv} className="cv" width={1080} height={1920}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
+        {/* TikTok's zones over the slide, on and off (shown on hover, and on the selected slide). */}
+        {!adjusting && p.onZones && (
+          <button className={"zones-open" + (p.zones ? " on" : "")} aria-pressed={!!p.zones} title={t("TikTok's interface zones on the slides")} aria-label={t("Zones")}
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onZones!(); }}>
+            <Icon name={p.zones ? "eye" : "eye-off"} size={15} />
+          </button>
+        )}
         {!adjusting && img && !p.locked && (
           <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
             onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current })); }}>
