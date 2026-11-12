@@ -357,21 +357,63 @@ export default function SlideCard(p: Props) {
           </Select>
         </label>
       </div>
-      {cfg.textSource.kind === "pool" && groups.length > 1 && !p.locked && (
-        <Select className="input sm slide-pick" aria-label={t("Theme")} value={theme ?? "__all"}
-          onChange={(e) => { const v = e.target.value; p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: v === "__all" ? undefined : v } } : c)); }}>
-          <option value="__all">{t("All themes ({n})", { n: allItems.length })}</option>
-          {groups.map((g) => <option key={g.id || "other"} value={g.id}>{themeLabel(g.id, t)} · {g.items.length}</option>)}
-        </Select>
-      )}
-      {/* Under the sources, like the sections of a lyrics slide: the same place on every slide. */}
-      {listItems.length > 1 && !p.locked && (
-        // The text on the slide, drawn or picked, shows as chosen in the list (a text retouched by hand: none).
-        <Select className="input sm slide-pick" value={listItems.includes(text) ? text : ""} aria-label={t("Pick from the list")} onClick={(e) => e.stopPropagation()}
-          onChange={(e) => { if (e.target.value) p.onText(e.target.value); }}>
-          <option value="" disabled={listItems.includes(text)}>{text.trim() && !listItems.includes(text) ? t("Text retouched · pick from the list…") : t("Pick from the list…")}</option>
-          {listItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ").slice(0, 120)}</option>)}
-        </Select>
+      {/* Under the sources, one picker each, side by side: the text (its themes as chips, then the list) and the
+          photo (a grid). Both lists scroll. */}
+      {!p.locked && ((cfg.textSource.kind === "pool" && allItems.length > 0) || (pool && pool.pics.length > 0 && p.onChoosePic)) && (
+        <div className="cols2 src-picks">
+          {cfg.textSource.kind === "pool" && allItems.length > 0 ? (
+            <Menu float left trigger={(open, toggle) => (
+              <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Pick from the list")}>
+                <span className="truncate">{listItems.includes(text) ? text.replace(/\|/g, " ") : text.trim() ? t("Text retouched") : t("Pick a text")}</span>
+                {theme !== undefined && <span className="pick-tag">{themeLabel(theme, t)}</span>}
+                <Icon name="chevron" size={13} />
+              </button>
+            )}>
+              {(close) => (
+                <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+                  {groups.length > 1 && (
+                    <div className="pick-chips" role="group" aria-label={t("Theme")}>
+                      <button className={"pick-chip" + (theme === undefined ? " on" : "")} onClick={() => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: undefined } } : c))}>
+                        {t("All themes ({n})", { n: allItems.length })}</button>
+                      {groups.map((g) => (
+                        <button key={g.id || "other"} className={"pick-chip" + (theme === g.id ? " on" : "")}
+                          onClick={() => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: g.id } } : c))}>
+                          {themeLabel(g.id, t)} · {g.items.length}</button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="pick-list">
+                    {listItems.map((x, k) => (
+                      <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
+                        <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Menu>
+          ) : <span />}
+          {pool && pool.pics.length > 0 && p.onChoosePic ? (
+            <Menu float trigger={(open, toggle) => (
+              <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Choose the photo")}>
+                <span className="truncate">{p.gen?.picName ?? t("Choose the photo")}</span>
+                <Icon name="chevron" size={13} />
+              </button>
+            )}>
+              {(close) => (
+                <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+                  <div className="pic-grid">
+                    {pool.pics.map((x) => (
+                      <button key={x.id} className={"pic-cell" + (x.id === p.gen?.picId ? " on" : "")} title={x.name} onClick={() => { close(); p.onChoosePic!(x.id, x.name); }}>
+                        <Thumb id={x.id} name={x.name} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Menu>
+          ) : <span />}
+        </div>
       )}
       {cfg.textSource.kind === "lyrics" && (() => {
         const src = cfg.textSource;
@@ -450,21 +492,6 @@ export default function SlideCard(p: Props) {
         {FIND_PHOTOS && <button className="btn sm quiet icon" onClick={(e) => { e.stopPropagation(); setFinding(true); }} disabled={p.locked}
           title={t("Find a photo on the web (free to post)")} aria-label={t("Find a photo")}><Icon name="search" size={14} /></button>}
         <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId || p.locked} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
-        {p.onChoosePic && pool && pool.pics.length > 0 && !p.locked && (
-          <Menu float trigger={(_, toggle) => (
-            <button className="btn sm quiet icon pic-choose" aria-label={t("Choose the photo")} title={t("Choose the photo")} onClick={(e) => { e.stopPropagation(); toggle(); }}><Icon name="image" size={14} /></button>
-          )}>
-            {(close) => (
-              <div className="pic-grid" onClick={(e) => e.stopPropagation()}>
-                {pool.pics.map((x) => (
-                  <button key={x.id} className={"pic-cell" + (x.id === p.gen?.picId ? " on" : "")} title={x.name} onClick={() => { close(); p.onChoosePic!(x.id, x.name); }}>
-                    <Thumb id={x.id} name={x.name} />
-                  </button>
-                ))}
-              </div>
-            )}
-          </Menu>
-        )}
         <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind !== "pool" || p.locked}
           title={cfg.textSource.kind === "lyrics" ? t("The lyrics are not drawn: tick the sections under the slide") : t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
         <button className="btn sm quiet icon" onClick={p.onSave} aria-label={t("Save this slide")} title={t("Save this slide")}><Icon name="download" size={14} /></button>
