@@ -114,6 +114,33 @@ void main() {
   color = vec4(grade(sum / float(taps * taps)), 1.0);
 }`;
 
+/** Frames whose planes cannot be read (a phone's video chip: HEVC on Android…): the browser puts the picture on
+ *  the GPU itself (in half floats when it can, so more than 8 bits survive), then the same LUT, crop and scaling. */
+const FS_RGB = `#version 300 es
+precision highp float;
+precision highp sampler3D;
+uniform sampler2D rgbT;
+uniform sampler3D lut;
+uniform int n;
+uniform vec4 crop;
+uniform vec2 up;
+uniform vec2 rawSize;   // size of the picture uploaded
+uniform int rot;
+uniform vec2 outSize;
+uniform int taps;
+in vec2 at;
+out vec4 color;
+` + FS.slice(FS.indexOf("vec3 lutAt"), FS.indexOf("vec3 sampleAt")) + `vec3 sampleAt(vec2 o) {
+  vec2 u = crop.xy + o * crop.zw;
+  vec2 r;
+  if (rot == 90) r = vec2(u.y, up.x - u.x);
+  else if (rot == 180) r = vec2(up.x - u.x, up.y - u.y);
+  else if (rot == 270) r = vec2(up.y - u.y, u.x);
+  else r = u;
+  return texture(rgbT, r / rawSize).rgb;
+}
+` + FS.slice(FS.indexOf("void main()"));
+
 type Plane = { tex: WebGLTexture; w: number; h: number };
 
 /** One WebGL 2 context for the export's grade (made once a page). */
@@ -131,26 +158,14 @@ class Grade10 {
     const gl = this.canvas.getContext("webgl2", { preserveDrawingBuffer: true, premultipliedAlpha: false, antialias: false });
     if (!gl) throw new Error("no WebGL 2");
     this.gl = gl;
-    const sh = (type: number, src: string) => {
-      const s = gl.createShader(type)!;
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? "shader");
-      return s;
-    };
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
-    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? "program");
+    const prog = this.program(FS);
     gl.useProgram(prog);
     this.prog = prog;
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(prog, "p");
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     for (const k of ["n", "nv12", "sub", "crop", "up", "rawOrigin", "rot", "outSize", "range", "taps"]) this.u[k] = gl.getUniformLocation(prog, k);
     const tex = (unit: number, target: number) => {
       const t = gl.createTexture()!;
@@ -169,6 +184,24 @@ class Grade10 {
     gl.uniform1i(gl.getUniformLocation(prog, "vT"), 2);
     gl.uniform1i(gl.getUniformLocation(prog, "lut"), 3);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  }
+
+  private program(fs: string) {
+    const gl = this.gl;
+    const sh = (type: number, src: string) => {
+      const s = gl.createShader(type)!;
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? "shader");
+      return s;
+    };
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+    gl.bindAttribLocation(prog, 0, "p");
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? "program");
+    return prog;
   }
 
   get lost() { return this.gl.isContextLost(); }
@@ -197,7 +230,8 @@ class Grade10 {
   async draw(frame: VideoFrame, rotation: number, crop: ConvertCrop, upW: number, upH: number): Promise<boolean> {
     const fmt = frame.format;
     const spec = FORMATS[fmt ?? ""];
-    if (!spec || !this.size) return false;
+    if (!this.size) return false;
+    if (!spec) return this.drawRGB(frame, rotation, crop, upW, upH);
     // The rectangle of the raw frame under the crop (even, for the chroma).
     const rawW = frame.codedWidth, rawH = frame.codedHeight;
     let rx = crop.x, ry = crop.y, rw = crop.w, rh = crop.h;
@@ -248,6 +282,69 @@ class Grade10 {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return true;
   }
+
+  private rgb: { prog: WebGLProgram; tex: WebGLTexture; u: Record<string, WebGLUniformLocation | null>; half: boolean } | null = null;
+  /** Used for the frames of this export: "planes" (10-bit values read), "rgb" (put on the GPU by the browser). */
+  mode: "planes" | "rgb" = "planes";
+
+  /** A frame whose planes cannot be read: the browser uploads its picture, the shader grades it (same LUT). */
+  private drawRGB(frame: VideoFrame, rotation: number, crop: ConvertCrop, upW: number, upH: number): boolean {
+    const gl = this.gl;
+    try {
+      if (!this.rgb) {
+        const prog = this.program(FS_RGB);
+        const tex = gl.createTexture()!;
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        const u: Record<string, WebGLUniformLocation | null> = {};
+        for (const k of ["n", "crop", "up", "rawSize", "rot", "outSize", "taps", "rgbT", "lut"]) u[k] = gl.getUniformLocation(prog, k);
+        this.rgb = { prog, tex, u, half: true };
+      }
+      const r = this.rgb;
+      gl.useProgram(r.prog);
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, r.tex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      while (gl.getError() !== gl.NO_ERROR) { /* clear */ }
+      // Half floats first (more than 8 bits of the decoded picture kept when the browser can), else 8 bits.
+      if (r.half) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, frame);
+        if (gl.getError() !== gl.NO_ERROR) r.half = false;
+      }
+      if (!r.half) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, frame);
+        if (gl.getError() !== gl.NO_ERROR) return false;
+      }
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      const fw = frame.displayWidth, fh = frame.displayHeight;
+      // Already upright when uploaded (some browsers turn it): then no turn here.
+      const turned = (rotation === 90 || rotation === 270) && fw === upW && fh === upH;
+      const w = crop.out.w, h = crop.out.h;
+      if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; }
+      gl.viewport(0, 0, w, h);
+      gl.uniform1i(r.u.rgbT, 4);
+      gl.uniform1i(r.u.lut, 3);
+      gl.uniform1i(r.u.n, this.size);
+      gl.uniform4f(r.u.crop, crop.x, crop.y, crop.w, crop.h);
+      gl.uniform2f(r.u.up, upW, upH);
+      gl.uniform2f(r.u.rawSize, fw, fh);
+      gl.uniform1i(r.u.rot, turned ? 0 : rotation);
+      gl.uniform2f(r.u.outSize, w, h);
+      gl.uniform1i(r.u.taps, crop.w / w > 1.5 ? 2 : 1);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.useProgram(this.prog);
+      this.mode = "rgb";
+      return true;
+    } catch (e) {
+      console.info("[grade10] picture upload failed:", e);
+      gl.useProgram(this.prog);
+      return false;
+    }
+  }
 }
 
 /** How each pixel format of WebCodecs is laid out. 10-bit formats are 16-bit values (0-1023). */
@@ -275,6 +372,7 @@ export async function gpuGradedSource(file: Blob, from: number, to: number, crop
   try {
     if (!shared || shared.lost) shared = new Grade10();
     g = shared;
+    g.mode = "planes";
     g.setLut(lut, lutSize);
   } catch (e) { console.info("[grade10] no GPU grade:", e); return null; }
   // Decoded in software when the browser can: its frames give their planes (a hardware frame often does not).
@@ -289,7 +387,7 @@ export async function gpuGradedSource(file: Blob, from: number, to: number, crop
       return null;
     }
   } catch (e) { console.info("[grade10] first frame failed:", e); src.close(); return null; }
-  console.info("[grade10] export graded on the GPU from the decoded frames:", src.codec);
+  console.info("[grade10] export graded on the GPU from the decoded frames:", src.codec, (g.mode as string) === "rgb" ? "(picture uploaded by the browser)" : "(10-bit planes)");
   return {
     codec: src.codec,
     async frameAt(t: number): Promise<Picture | null> {
