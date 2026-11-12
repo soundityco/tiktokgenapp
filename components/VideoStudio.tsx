@@ -3707,6 +3707,7 @@ export default function VideoStudio({
                   </span>
                   <Hint text={t("The same lyrics as the carousel's. When you change them, the video places the changed lines again; your retouches stay.")} />
                   {project.lyrics.length > 0 && <button className="btn sm quiet" onClick={onEditLyrics}>{t("Edit")}</button>}
+                  {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={clearLyrics} title={t("Clear lyrics of this segment")}>{t("Clear")}</button>}
                 </div>
               )}
               {/* Not linked yet (older releases): the song's own text, open while nothing is placed, then folded. */}
@@ -3715,6 +3716,7 @@ export default function VideoStudio({
                   <span className="xs grow truncate">{t("Lyrics of the song")}{pasted.lines ? ` · ${t("{n} sung lines", { n: pasted.lines })}` : ""}</span>
                   <Hint text={t("No pasted lyrics, no lyrics on the video. The audio is only used to know when each written word is sung.")} />
                   <button className="btn sm quiet" onClick={() => setPasteOpen(true)}>{t("Edit")}</button>
+                  {cues.length > 0 && !genBusy && <button className="btn sm quiet danger" onClick={clearLyrics} title={t("Clear lyrics of this segment")}>{t("Clear")}</button>}
                 </div>
               ) : (
                 <>
@@ -3750,7 +3752,8 @@ export default function VideoStudio({
               )}
                 </>
               )}
-              {cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
+              {/* The pasted text open (older releases): Clear under it; else it is beside Edit. */}
+              {!lyricsLinked && pasteOpen && cues.length > 0 && !genBusy && <div><button className="btn sm quiet danger" onClick={clearLyrics}>{t("Clear lyrics of this segment")}</button></div>}
               {/* Plan B, when the audio could not place the lyrics (speech model unavailable, a very noisy live):
                   a section spread over the segment, then fine-tuned with − / + like the synced lines. */}
               {!cues.length && !genBusy && project.lyrics.length > 0 && (
@@ -4010,13 +4013,17 @@ export default function VideoStudio({
           <div id="video-color" className="stack">
             <div className="row col-head"><span className="label">{t("Colour")}</span><Hint text={t("The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.")} />
               {/* Before / after in one click: the picture as recorded, then the grade again. */}
-              {gradesColour(grade) && <><span className="grow" /><Switch off={t("Before")} on={t("After")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Before: the picture as recorded, to compare")} /></>}
+              {/* The grade on / off in one click (the switch alone: what it does shows on the picture), then Reset
+                  (the grade removed), like the other parts' Reset. */}
+              {grade && <span className="grow" />}
+              {gradesColour(grade) && <Switch checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Grade on / off: the picture as recorded, to compare")} />}
+              {grade && <button className="btn sm quiet" onClick={() => { setRawView(false); setV({ grade: undefined }); }} title={t("Remove the grade")}>{t("Reset")}</button>}
             </div>
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
-                clips={clips.length}
-                onApplyAll={() => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => ({ ...c, grade })) }))} />
+                others={clips.filter((c) => c.id !== clip.id).map((c) => ({ id: c.id, name: clipName(c) }))}
+                onApplyTo={(ids) => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (ids.includes(c.id) ? { ...c, grade } : c)) }))} />
                       </div>
         </aside>
       {/* The player: on the phone's dock; on a computer floating at the bottom of the board (the same one). */}

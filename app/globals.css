@@ -2609,3 +2609,6 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .pv-side.prev { right: calc(100% + 24px); }
 .pv-side.next { left: calc(100% + 24px); }
 .pv-track.sliding .pv-side { visibility: visible; }
+.pick-pane > .pick-k { padding: 8px 10px 4px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.pick-foot { gap: 8px; padding: 8px 4px 4px 10px; border-top: 1px solid var(--line); align-items: center; }
+.menu .pick-foot .btn { width: auto; flex: none; justify-content: center; padding: 0 12px; }

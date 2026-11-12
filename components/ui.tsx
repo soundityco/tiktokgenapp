@@ -548,10 +548,10 @@ export function Switch({ label, off, on, checked, onChange, title, disabled }: {
 }) {
   const sides = off !== undefined && on !== undefined;
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={sides ? `${off} / ${on}` : undefined}
+    <button type="button" role="switch" aria-checked={checked} aria-label={sides ? `${off} / ${on}` : label ? undefined : title}
       className={"switch" + (checked ? " on" : "") + (sides ? " sides" : "")} title={title} disabled={disabled}
       onClick={() => onChange(!checked)}>
-      {sides ? <span className={"switch-side" + (!checked ? " lit" : "")}>{off}</span> : <span className="switch-label">{label}</span>}
+      {sides ? <span className={"switch-side" + (!checked ? " lit" : "")}>{off}</span> : label ? <span className="switch-label">{label}</span> : null}
       <span className="switch-track" aria-hidden><span className="switch-knob" /></span>
       {sides && <span className={"switch-side" + (checked ? " lit" : "")}>{on}</span>}
     </button>

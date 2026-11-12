@@ -5,7 +5,8 @@ import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { VideoGrade } from "@/lib/types";
-import { Range, Section, Select, Hint, Switch } from "./ui";
+import { Menu, Range, Section, Select, Hint, Switch } from "./ui";
+import Icon from "./Icon";
 
 const LUTS_KEY = "tktgen-luts";
 
@@ -27,7 +28,7 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips, onApplyAll, onLutStored, sdr }: {
+export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, others, onApplyTo, onLutStored, sdr }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   grade: VideoGrade | undefined;
@@ -35,8 +36,9 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
   raw: boolean;
   onRaw: (v: boolean) => void;
   lookErr: string | null;
-  clips: number;
-  onApplyAll: () => void;
+  /** The release's other videos: this grade can be put on the ones ticked (two takes of one shoot…). */
+  others: { id: string; name: string }[];
+  onApplyTo: (ids: string[]) => void;
   /** A LUT file was stored (also a missing one put back under its id): read it again. */
   onLutStored: (id: string) => void;
 }) {
@@ -157,10 +159,44 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
         )}
       </Section>
 
-      <div className="row">
-        {clips > 1 && <button className="btn sm" onClick={onApplyAll} title={t("Use this grade on every video of the release")}>{t("On every video")}</button>}
-        <button className="btn sm quiet danger" onClick={() => { onRaw(false); onChange(undefined); }}>{t("Remove the grade")}</button>
-      </div>
+      {/* This grade on other videos of the release, the ones ticked (its versions share it already). */}
+      {others.length > 0 && <ApplyTo others={others} onApply={onApplyTo} />}
     </>
+  );
+}
+
+/** "Apply to…": the release's other videos to tick, then Apply. */
+function ApplyTo({ others, onApply }: { others: { id: string; name: string }[]; onApply: (ids: string[]) => void }) {
+  const { t } = useT();
+  const [picked, setPicked] = useState<string[]>([]);
+  return (
+    <div className="row">
+      <Menu float trigger={(open, toggle) => (
+        <button className={"btn sm" + (open ? " on" : "")} onClick={toggle} title={t("Put this grade on other videos of the release (shot the same way)")}>
+          {t("Apply to other videos")}<Icon name="chevron" size={13} />
+        </button>
+      )}>
+        {(close) => (
+          <div className="pick-pane">
+            <span className="pick-k">{t("Videos of the release")}</span>
+            <div className="pick-list">
+              {others.map((o) => {
+                const on = picked.includes(o.id);
+                return (
+                  <button key={o.id} className={"pick-line" + (on ? " on" : "")} aria-pressed={on}
+                    onClick={() => setPicked(on ? picked.filter((x) => x !== o.id) : [...picked, o.id])}>
+                    <span className="dd-check" aria-hidden>{on ? "✓" : ""}</span><span>{o.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="row pick-foot">
+              <span className="muted xs grow">{t("Their own grade is replaced.")}</span>
+              <button className="btn sm primary" disabled={!picked.length} onClick={() => { onApply(picked); setPicked([]); close(); }}>{t("Apply")}</button>
+            </div>
+          </div>
+        )}
+      </Menu>
+    </div>
   );
 }
