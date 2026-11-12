@@ -2602,3 +2602,6 @@ html.pv-full, html.pv-full body { overflow: hidden; }
   .pv-full-layer { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 172px); }
   .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 226px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 }
+/* The video full screen: the picture leaves its frame (as if it moved there), so the frame stays, empty, where it
+   was; nothing else of the page moves. It comes back in as the full screen closes. */
+html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
