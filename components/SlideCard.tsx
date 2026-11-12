@@ -5,7 +5,7 @@ import Icon from "./Icon";
 import { Menu, Select, Switch } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
-import { poolThemes, textItems } from "@/lib/generate";
+import { poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { themeGroups, themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { Wheel } from "./ui";
@@ -306,10 +306,12 @@ export default function SlideCard(p: Props) {
   const listPool = cfg.textSource.kind === "pool" ? p.textPools.find((x) => cfg.textSource.kind === "pool" && x.id === cfg.textSource.poolId) : undefined;
   // A hooks list sorted by theme: the slide may draw from one theme only.
   const allItems = listPool ? textItems(listPool) : [];
-  const itemThemes = listPool && isLineList(listPool) ? poolThemes(listPool) : [];
-  const groups = themeGroups(itemThemes);
-  const theme = cfg.textSource.kind === "pool" ? cfg.textSource.theme : undefined;
-  const listItems = theme !== undefined && itemThemes.includes(theme) ? allItems.filter((_, i) => itemThemes[i] === theme) : allItems;
+  // Its tags (several per text): the slide draws from the ticked ones only.
+  const itemTags = listPool && isLineList(listPool) ? poolTags(listPool) : [];
+  const groups = tagGroups(itemTags);
+  const ticked = (cfg.textSource.kind === "pool" ? sourceTags(cfg.textSource.tags, cfg.textSource.theme) : undefined)?.filter((x) => groups.some((g) => g.id === x));
+  const listItems = ticked?.length ? allItems.filter((_, i) => itemTags[i].some((x) => ticked.includes(x))) : allItems;
+  const setTicked = (list: string[]) => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: undefined, tags: list.length ? list : undefined } } : c));
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
   // Under the picture: the slide's text and sources. On a phone they show once, under the deck (part "fields"),
@@ -365,21 +367,23 @@ export default function SlideCard(p: Props) {
             <Menu float left trigger={(open, toggle) => (
               <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Pick from the list")}>
                 <span className="truncate">{listItems.includes(text) ? text.replace(/\|/g, " ") : text.trim() ? t("Text retouched") : t("Pick a text")}</span>
-                {theme !== undefined && <span className="pick-tag">{themeLabel(theme, t)}</span>}
+                {!!ticked?.length && <span className="pick-tag">{ticked.length === 1 ? themeLabel(ticked[0], t) : t("{n} tags", { n: ticked.length })}</span>}
                 <Icon name="chevron" size={13} />
               </button>
             )}>
               {(close) => (
                 <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
                   {groups.length > 1 && (
-                    <div className="pick-chips" role="group" aria-label={t("Theme")}>
-                      <button className={"pick-chip" + (theme === undefined ? " on" : "")} onClick={() => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: undefined } } : c))}>
-                        {t("All themes ({n})", { n: allItems.length })}</button>
-                      {groups.map((g) => (
-                        <button key={g.id || "other"} className={"pick-chip" + (theme === g.id ? " on" : "")}
-                          onClick={() => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: g.id } } : c))}>
-                          {themeLabel(g.id, t)} · {g.items.length}</button>
-                      ))}
+                    <div className="pick-chips" role="group" aria-label={t("Tags")}>
+                      <button className={"pick-chip" + (!ticked?.length ? " on" : "")} onClick={() => setTicked([])}>{t("All ({n})", { n: allItems.length })}</button>
+                      {groups.map((g) => {
+                        const on = !!ticked?.includes(g.id);
+                        return (
+                          <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
+                            onClick={() => setTicked(on ? (ticked ?? []).filter((x) => x !== g.id) : [...(ticked ?? []), g.id])}>
+                            {themeLabel(g.id, t)} · {g.items.length}</button>
+                        );
+                      })}
                     </div>
                   )}
                   <div className="pick-list">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultWorkspace } from "../lib/defaults";
-import { drawHook, followLists, generateAll, hookKey, hookLink, lyricsText, pick, pickText, textItems, weightedPick, weightedPickBag } from "../lib/generate";
+import { drawHook, followLists, generateAll, hookKey, hookLink, lyricsText, pick, pickText, poolTags, tagGroups, taggedItems, textItems, weightedPick, weightedPickBag } from "../lib/generate";
 import type { TextPool } from "../lib/types";
 
 const pool = (kind: TextPool["kind"], text: string): TextPool => ({ id: "p", name: "p", scope: "shared", kind, text });
@@ -223,5 +223,22 @@ describe("hooks linked to their list (video)", () => {
     expect(d[0].link).toBeUndefined();
     // Nothing changed: the same array.
     expect(followLists(hooks, [v1])).toBe(hooks);
+  });
+});
+
+describe("tags of a hooks list", () => {
+  const hooks = { id: "h", name: "Hooks", scope: "shared", kind: "hooks", text: "Ce son va te hanter\nNouveau son vendredi\nÉcoute jusqu'au bout" } as TextPool;
+  it("a text without tags of its own has its theme as its tag", () => {
+    const tags = poolTags(hooks);
+    expect(tags).toHaveLength(3);
+    expect(tags.every((x) => x.length === 1)).toBe(true);
+  });
+  it("tags set by hand win, a text can have several, and drawing keeps to the ticked ones", () => {
+    const p = { ...hooks, tags: { [hookKey("Ce son va te hanter")]: ["émotion", "teaser"], [hookKey("Nouveau son vendredi")]: ["teaser"] } };
+    expect(poolTags(p)[0]).toEqual(["émotion", "teaser"]);
+    expect(taggedItems(p, ["teaser"])).toEqual(["Ce son va te hanter", "Nouveau son vendredi"]);
+    expect(taggedItems(p, ["émotion"])).toEqual(["Ce son va te hanter"]);
+    const g = tagGroups(poolTags(p));
+    expect(g.find((x) => x.id === "teaser")!.items).toEqual([0, 1]);
   });
 });

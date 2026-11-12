@@ -79,7 +79,8 @@ export interface PhotoAdjust {
  */
 export type TextSource =
   | { kind: "none" }
-  | { kind: "pool"; poolId: string; /** Only the texts of this theme of the list (see lib/themes). */ theme?: string }
+  | { kind: "pool"; poolId: string; /** Only the texts of this theme of the list (see lib/themes). */ theme?: string;
+      /** Only the texts with one of these tags (replaces `theme`, see lib/generate poolTags). */ tags?: string[] }
   | { kind: "lyrics"; sectionId?: string; sectionIds?: string[]; header?: string };
 
 export interface SlideCfg {
@@ -107,6 +108,8 @@ export interface TextPool {
   themes?: Record<string, string>;
   /** Themes found by the local model (public/themes/worker.js), by hookKey; "" = no theme. Hand-set ones win. */
   aiThemes?: Record<string, string>;
+  /** Tags of a text set by hand (hookKey -> tags). A text without its own tags has one: its theme (lib/generate poolTags). */
+  tags?: Record<string, string[]>;
   /** hook (normalised) -> views. Reserved for the TikTok import (phase 2). */
   views?: Record<string, number>;
 }
@@ -263,6 +266,8 @@ export interface VideoSourceInfo {
 export interface VideoSettings {
   /** Only the hooks of this theme of the hook list (see lib/themes). */
   hookTheme?: string;
+  /** Only the hooks with one of these tags (replaces `hookTheme`). */
+  hookTags?: string[];
   /** Text of the TikTok post (caption and hashtags), and the captions list it is drawn from. */
   caption?: string;
   captionPoolId?: string;

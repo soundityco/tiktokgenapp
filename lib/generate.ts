@@ -103,13 +103,14 @@ export function weightedPickBag(
  * One hook from a list, for the video studio: the same shuffle bag as the carousel, so a hook used
  * on one side does not come back on the other before the list has been used up. Mutates `bags`.
  */
-export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = [], theme?: string): string | null {
+export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = [], tags?: string[] | string): string | null {
   const pool = ws.textPools.find((p) => p.id === poolId);
   if (!pool) return null;
-  // One theme of the list only (its own shuffle bag), as for a slide; an empty theme: the whole list.
-  const inTheme = theme !== undefined ? themedItems(pool, theme) : [];
-  const items = inTheme.length ? inTheme : textItems(pool);
-  const bag = inTheme.length ? `${pool.id}#${theme}` : pool.id;
+  // Some tags of the list only (their own shuffle bag), as for a slide; none (or none matching): the whole list.
+  const want = typeof tags === "string" ? [tags] : tags;
+  const inTags = want?.length ? taggedItems(pool, want) : [];
+  const items = inTags.length ? inTags : textItems(pool);
+  const bag = inTags.length ? bagOf(pool.id, want) : pool.id;
   if (!items.length) return null;
   const skip = new Set(exclude);
   if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length) {
@@ -179,11 +180,12 @@ export function pickText(project: Project, ws: Workspace, slideIdx: number, bags
   if (src.kind === "pool") {
     const pool = ws.textPools.find((p) => p.id === src.poolId);
     if (!pool) return "";
-    // One theme of the list only (its own shuffle bag); a theme left empty: the whole list.
+    // Some tags of the list only (their own shuffle bag); none ticked, or none matching: the whole list.
     const all = textItems(pool);
-    const inTheme = src.theme !== undefined ? themedItems(pool, src.theme) : all;
-    const items = inTheme.length ? inTheme : all;
-    const bag = src.theme !== undefined && inTheme.length ? `${pool.id}#${src.theme}` : pool.id;
+    const want = sourceTags(src.tags, src.theme);
+    const inTags = want ? taggedItems(pool, want) : all;
+    const items = inTags.length ? inTags : all;
+    const bag = want && inTags.length ? bagOf(pool.id, want) : pool.id;
     if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length && items.length) {
       return weightedPickBag(bag, items, pool.views, bags, ws.noRepeat) ?? "";
     }
@@ -239,3 +241,30 @@ export function themedItems(pool: TextPool, theme: string): string[] {
   const items = textItems(pool), th = poolThemes(pool);
   return items.filter((_, i) => th[i] === theme);
 }
+
+/**
+ * The tags of every text of a list: the ones set by hand, else one, its theme (found by hand, the local model or
+ * the lexicon). "" is the tag of the texts that have none ("Other").
+ */
+export function poolTags(pool: TextPool): string[][] {
+  const items = textItems(pool), th = poolThemes(pool);
+  return items.map((x, i) => {
+    const own = pool.tags?.[hookKey(x)];
+    return own ? (own.length ? own : [""]) : [th[i]];
+  });
+}
+/** The tags of a list, the biggest first ("" last), with their texts' indexes (a text is under each of its tags). */
+export function tagGroups(tags: string[][]): { id: string; items: number[] }[] {
+  const m = new Map<string, number[]>();
+  tags.forEach((list, i) => list.forEach((id) => m.set(id, [...(m.get(id) ?? []), i])));
+  return [...m.entries()].map(([id, items]) => ({ id, items })).sort((a, b) => (a.id === "") === (b.id === "") ? b.items.length - a.items.length : a.id === "" ? 1 : -1);
+}
+/** The texts of a list with at least one of `tags`. */
+export function taggedItems(pool: TextPool, tags: string[]): string[] {
+  const items = textItems(pool), tg = poolTags(pool);
+  return items.filter((_, i) => tg[i].some((x) => tags.includes(x)));
+}
+/** The tags a source draws from: its own, else its older single theme, else none (the whole list). */
+export const sourceTags = (tags?: string[], theme?: string): string[] | undefined => (tags?.length ? tags : theme !== undefined ? [theme] : undefined);
+/** The shuffle bag of a list drawn from some of its tags only (its own bag, so the whole list's is left as it is). */
+const bagOf = (poolId: string, tags?: string[]) => (tags?.length ? `${poolId}#${[...tags].sort().join("+")}` : poolId);

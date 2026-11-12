@@ -49,7 +49,7 @@ const STUDIO_KEY = "tktgen-studio";
 const PREFETCH_PER_LIST = 8;
 /** Linked folders are listed again at most this often when coming back to the tab. */
 
-type Editor = { k: "text" | "photos"; id: string } | null;
+type Editor = { k: "text" | "photos"; id: string; /** Open on the texts sorted by tag (right after an import). */ byTag?: boolean } | null;
 type MobileTab = "slides" | "lists" | "style";
 type CarPart = "text" | "photo" | "position" | "presets";
 type PreflightItem = { key: string; params?: Record<string, string | number> };
@@ -1846,7 +1846,7 @@ export default function Studio({ userName }: { userName: string }) {
       </nav>
 
       {edText && (
-        <TextPoolEditor pool={edText} onClose={() => setEditor(null)} onDelete={() => askDeletePool("text", edText.id)}
+        <TextPoolEditor key={edText.id + (editor?.byTag ? ":tags" : "")} byTag={!!editor?.byTag} pool={edText} onClose={() => setEditor(null)} onDelete={() => askDeletePool("text", edText.id)}
           onChange={(fn) => setTextPool(edText.id, (x) => scopeFix(fn(x)))} onImport={() => setOverlay({ k: "import", poolId: edText.id })}
           onRefreshViews={() => void refreshViews(edText)} viewsBusy={viewsBusy} />
       )}
@@ -1868,6 +1868,8 @@ export default function Studio({ userName }: { userName: string }) {
             const pool: TextPool = { id: uid(), name: t("Imported hooks"), scope: "shared", kind: "hooks", text: hooks.map((h) => h.text).join("\n"), ...(Object.keys(views).length ? { views } : {}) };
             upd((w) => ({ ...w, textPools: [...w.textPools, pool] }));
             say(t("{n} hooks added to “{name}”", { n: hooks.length, name: pool.name }));
+            // Straight to the list sorted by tag: the hooks imported, ready to be checked and tagged.
+            setEditor({ k: "text", id: pool.id, byTag: true });
             return;
           }
           setTextPool(id, (x) => {
@@ -1880,6 +1882,7 @@ export default function Studio({ userName }: { userName: string }) {
             };
           });
           say(t("{n} hooks added", { n: hooks.length }));
+          setEditor({ k: "text", id, byTag: true });
         }} />
       )}
       {dropPic && project && (

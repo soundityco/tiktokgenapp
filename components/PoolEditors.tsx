@@ -1,7 +1,7 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
 import { useEffect, useRef, useState } from "react";
-import { hookKey, joinCaptions, poolThemes, splitCaptions, textItems } from "@/lib/generate";
+import { hookKey, joinCaptions, poolTags, poolThemes, splitCaptions, tagGroups, textItems } from "@/lib/generate";
 import { THEMES, themeGroups, themeLabel } from "@/lib/themes";
 import { classifyThemes } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
@@ -9,7 +9,7 @@ import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
 import Icon from "./Icon";
-import { Modal, ScopeSelect, Select } from "./ui";
+import { Menu, Modal, ScopeSelect, Select } from "./ui";
 
 export function Thumb({ id, name }: { id: string; name: string }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -100,6 +100,24 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
     onChange((x) => ({ ...x, themes: { ...(x.themes ?? {}), [hookKey(text)]: id } }));
   };
   const handSet = (text: string) => pool.themes?.[hookKey(text)] !== undefined;
+  // Tags: several per text. Without its own, a text has its theme as its only tag.
+  const tagsNow = poolTags(pool);
+  const tagGroupsNow = tagGroups(tagsNow);
+  const knownTags = [...new Set([...tagsNow.flat().filter(Boolean), ...THEMES.map((x) => x.id)])];
+  const setTags = (text: string, list: string[]) => onChange((x) => ({ ...x, tags: { ...(x.tags ?? {}), [hookKey(text)]: [...new Set(list)] } }));
+  const [renamingTag, setRenamingTag] = useState<string | null>(null);
+  /** A tag renamed on every text that has it (the texts that only had it as their theme get it as their own tag). */
+  const renameTag = (from: string, to: string) => {
+    setRenamingTag(null);
+    const name = to.trim();
+    if (!name || name === themeLabel(from, t)) return;
+    onChange((x) => {
+      const now = poolTags(x), list = textItems(x);
+      const tg = { ...(x.tags ?? {}) };
+      list.forEach((text, k) => { if (now[k].includes(from)) tg[hookKey(text)] = [...new Set(now[k].map((y) => (y === from ? name : y)).filter(Boolean))]; });
+      return { ...x, tags: tg };
+    });
+  };
 
   // The local model: the whole list the first time, then only the texts added since.
   const [ai, setAi] = useState<null | { step: "model" | "think"; pct: number }>(null);
@@ -131,21 +149,49 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
           <Icon name="sparkle" size={13} />{sorted ? t("Sort again") : t("Sort with the local model")}</button>}
       </div>
       {aiErr && <p className="notice bad xs">{t("The local model could not run: {why}", { why: aiErr })}</p>}
-      {groups.map((g) => (
+      {tagGroupsNow.map((g) => (
         <section key={g.id || "other"} className="theme-group">
-          <h4 className="label">{themeLabel(g.id, t)} <span className="muted">· {g.items.length}</span></h4>
+          <h4 className="label row tag-head">
+            {renamingTag === g.id ? (
+              <input className="input sm" autoFocus defaultValue={g.id ? themeLabel(g.id, t) : ""} aria-label={t("Rename the tag")}
+                onKeyDown={(e) => { if (e.key === "Enter") renameTag(g.id, e.currentTarget.value); if (e.key === "Escape") setRenamingTag(null); }}
+                onBlur={(e) => renameTag(g.id, e.target.value)} />
+            ) : (<>
+              <span>{themeLabel(g.id, t)}</span> <span className="muted">· {g.items.length}</span>
+              {g.id && <button className="btn icon sm quiet" aria-label={t("Rename the tag")} title={t("Rename the tag")} onClick={() => setRenamingTag(g.id)}><Icon name="pencil" size={11} /></button>}
+            </>)}
+          </h4>
           {g.items.map((i) => (
             <div key={i} className="row nowrap theme-item">
               <span className="grow truncate" title={items[i]}>{items[i].replace(/\|/g, " ")}</span>
-              {handSet(items[i]) && (
-                <button className="btn sm quiet" title={t("Back to the theme found automatically")}
-                  onClick={() => onChange((x) => { const th = { ...(x.themes ?? {}) }; delete th[hookKey(items[i])]; return { ...x, themes: th }; })}>{t("Auto")}</button>
+              <span className="tag-chips">
+                {tagsNow[i].filter(Boolean).map((tag) => (
+                  <button key={tag} className="tag-chip" title={t("Remove this tag")} onClick={() => setTags(items[i], tagsNow[i].filter((x) => x !== tag))}>
+                    {themeLabel(tag, t)}<Icon name="x" size={10} />
+                  </button>
+                ))}
+                <Menu float trigger={(_, toggle) => (
+                  <button className="tag-chip add" aria-label={t("Add a tag")} title={t("Add a tag")} onClick={toggle}><Icon name="plus" size={11} /></button>
+                )}>
+                  {(close) => (<div className="tag-menu">
+                    {knownTags.map((tag) => {
+                      const on = tagsNow[i].includes(tag);
+                      return (
+                        <button key={tag} className={on ? "on" : ""} onClick={() => setTags(items[i], on ? tagsNow[i].filter((x) => x !== tag) : [...tagsNow[i].filter(Boolean), tag])}>
+                          <Icon name={on ? "check" : "plus"} size={12} />{themeLabel(tag, t)}
+                        </button>
+                      );
+                    })}
+                    <div className="sep" />
+                    <input className="input sm" placeholder={t("New tag…")} aria-label={t("New tag…")}
+                      onKeyDown={(e) => { const v = e.currentTarget.value.trim(); if (e.key === "Enter" && v) { setTags(items[i], [...tagsNow[i].filter(Boolean), v]); close(); } }} />
+                  </div>)}
+                </Menu>
+              </span>
+              {pool.tags?.[hookKey(items[i])] !== undefined && (
+                <button className="btn sm quiet" title={t("Back to the tag found automatically")}
+                  onClick={() => onChange((x) => { const tg = { ...(x.tags ?? {}) }; delete tg[hookKey(items[i])]; return { ...x, tags: tg }; })}>{t("Auto")}</button>
               )}
-              <Select className="input sm" value={themes[i]} aria-label={t("Theme")} onChange={(e) => setTheme(items[i], e.target.value)}>
-                {known.map((id) => <option key={id} value={id}>{themeLabel(id, t)}</option>)}
-                <option value="">{t("Other")}</option>
-                <option value="__new">{t("New theme…")}</option>
-              </Select>
             </div>
           ))}
         </section>
@@ -154,12 +200,12 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
   );
 }
 
-export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; onImport: () => void; onRefreshViews?: () => void; viewsBusy?: boolean }) {
+export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; onImport: () => void; onRefreshViews?: () => void; viewsBusy?: boolean; byTag?: boolean }) {
   const { t } = useT();
   const { pool } = p;
   const file = useRef<HTMLInputElement>(null);
   const [imports, setImports] = useState(0); // a .txt added: the captions boxes are read again
-  const [view, setView] = useState<"text" | "themes">("text");
+  const [view, setView] = useState<"text" | "themes">(p.byTag ? "themes" : "text");
   const n = textItems(pool).length;
   const perf = pool.kind === "hooks" && pool.views
     ? textItems(pool)
@@ -186,7 +232,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
       {isLineList(pool) && n > 1 && (
         <div className="row seg-tabs" role="tablist">
           <button role="tab" aria-selected={view === "text"} className={"btn sm" + (view === "text" ? " on" : "")} onClick={() => setView("text")}>{t("Texts")}</button>
-          <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By theme")}</button>
+          <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By tag")}</button>
 
         </div>
       )}

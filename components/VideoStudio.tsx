@@ -11,7 +11,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
-import { followLists, hookLink, poolThemes, textItems } from "@/lib/generate";
+import { followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
@@ -80,7 +80,7 @@ const FADE = 0.15;
 const LYRICS_ALIGN_V = 3;
 
 /** What each version of a video keeps for itself (the rest is the video's: camera file, sync, framing, grade). */
-const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "hooks", "hookTheme", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId"] as const satisfies readonly (keyof VideoSettings)[];
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
 
@@ -335,7 +335,7 @@ export default function VideoStudio({
   /** Hook lists of the release (the same as the carousel's). */
   hookPools: TextPool[];
   /** Draw a hook from a list (shared shuffle bag with the carousel); `exclude`: hooks already on this video. */
-  onDrawHook: (poolId: string, exclude: string[], theme?: string) => string | null;
+  onDrawHook: (poolId: string, exclude: string[], tags?: string[]) => string | null;
   onProject: (fn: (p: Project) => Project) => void;
   /** Another release uses this Drive file as its official audio (it is then kept when this one is replaced). */
   audioUsedElsewhere?: (driveId: string) => boolean;
@@ -2892,15 +2892,17 @@ export default function VideoStudio({
   const hookPoolId = settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : slide1Pool ?? hookPools[0]?.id;
   const hookPool = hookPools.find((p) => p.id === hookPoolId);
   // A hooks list sorted by theme: the video may draw from one theme only, as a slide does.
-  const hookThemes = useMemo(() => (hookPool?.kind === "hooks" ? poolThemes(hookPool) : []), [hookPool]);
-  const hookGroups = useMemo(() => themeGroups(hookThemes), [hookThemes]);
-  const hookTheme = settings.hookTheme !== undefined && hookThemes.includes(settings.hookTheme) ? settings.hookTheme : undefined;
+  // Its tags (several per hook): the video draws from the ticked ones only, as a slide does.
+  const hookTagsOf = useMemo(() => (hookPool?.kind === "hooks" ? poolTags(hookPool) : []), [hookPool]);
+  const hookGroups = useMemo(() => tagGroups(hookTagsOf), [hookTagsOf]);
+  const hookTicked = (sourceTags(settings.hookTags, settings.hookTheme) ?? []).filter((x) => hookGroups.some((g) => g.id === x));
   const hookItems = useMemo(() => {
     const all = hookPool ? textItems(hookPool) : [];
-    return hookTheme !== undefined ? all.filter((_, i) => hookThemes[i] === hookTheme) : all;
-  }, [hookPool, hookTheme, hookThemes]);
+    return hookTicked.length ? all.filter((_, i) => hookTagsOf[i].some((x) => hookTicked.includes(x))) : all;
+  }, [hookPool, hookTagsOf, hookTicked.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setHookTicked = (list: string[]) => setV({ hookTheme: undefined, hookTags: list.length ? list : undefined });
   /** A hook drawn for this video, different from the ones already on it. */
-  const drawFor = (taken: string[]) => (hookPoolId ? onDrawHook(hookPoolId, taken, hookTheme) : null);
+  const drawFor = (taken: string[]) => (hookPoolId ? onDrawHook(hookPoolId, taken, hookTicked.length ? hookTicked : undefined) : null);
   /** A text of the list in a hook: linked to its line, so editing it in the list follows here. */
   const fromList = (text: string): Partial<VideoHook> => ({ text, link: hookLink(hookPool, text) });
   const drawInto = (id: string) => {
@@ -3792,18 +3794,24 @@ export default function VideoStudio({
                 <label className="field grow">
                   <span className="row" style={{ gap: 6 }}>{t("Hook list")} <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} /></span>
                   <Select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
-                    onChange={(e) => setV({ hookPoolId: e.target.value || undefined, hookTheme: undefined })} disabled={!hookPools.length}>
+                    onChange={(e) => setV({ hookPoolId: e.target.value || undefined, hookTheme: undefined, hookTags: undefined })} disabled={!hookPools.length}>
                     <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
                     {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
                   </Select>
                 </label>
                 {hookGroups.length > 1 && (
-                  <label className="field grow">{t("Theme")}
-                    <Select className="input" value={hookTheme ?? "__all"} onChange={(e) => setV({ hookTheme: e.target.value === "__all" ? undefined : e.target.value })}>
-                      <option value="__all">{t("All themes ({n})", { n: hookThemes.length })}</option>
-                      {hookGroups.map((g) => <option key={g.id || "other"} value={g.id}>{themeLabel(g.id, t)} · {g.items.length}</option>)}
-                    </Select>
-                  </label>
+                  <div className="field grow hook-tags">{t("Tags")}
+                    <div className="pick-chips" role="group" aria-label={t("Tags")}>
+                      <button className={"pick-chip" + (!hookTicked.length ? " on" : "")} onClick={() => setHookTicked([])}>{t("All ({n})", { n: hookTagsOf.length })}</button>
+                      {hookGroups.map((g) => {
+                        const on = hookTicked.includes(g.id);
+                        return (
+                          <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
+                            onClick={() => setHookTicked(on ? hookTicked.filter((x) => x !== g.id) : [...hookTicked, g.id])}>{themeLabel(g.id, t)} · {g.items.length}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
                 {hookItems.length > 0 && (
                   <button className="btn primary" title={t("A different hook from the list for each one")}
