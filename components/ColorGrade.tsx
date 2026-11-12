@@ -119,7 +119,7 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, clips
                 {t("Import a LUT (.cube)")}
                 <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f); e.target.value = ""; }} />
               </label>
-              <Switch label={t("Edits")} checked={!raw} onChange={(v) => onRaw(!v)} title={t("Off: the picture as recorded, to compare")} />
+              <Switch off={t("Before")} on={t("After")} checked={!raw} onChange={(v) => onRaw(!v)} title={t("Before: the picture as recorded, to compare")} />
             </div>
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}
           </>

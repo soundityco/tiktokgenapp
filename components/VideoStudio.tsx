@@ -3302,7 +3302,7 @@ export default function VideoStudio({
           {videoBlob && (
             <div className="deck-bar video-bar">
               {/* Phone, Style page: before / after the grade in one tap. */}
-              {gradesColour(grade) ? <Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /> : <span className="bar-noswitch" />}
+              {gradesColour(grade) ? <Switch off={t("Before")} on={t("After")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Before: the picture as recorded, to compare")} /> : <span className="bar-noswitch" />}
               {/* Phone, Create page: the picture's size on the left (its line above the take's goes), so the row is
                   full; what the video shows (lyrics, hook) on the right, under the thumb. */}
               <span className="bar-format mono">{outW}×{outH}<Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} /></span>
@@ -3961,7 +3961,7 @@ export default function VideoStudio({
           <div id="video-color" className="stack">
             <div className="row col-head"><span className="label">{t("Colour")}</span><Hint text={t("The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.")} />
               {/* Before / after in one click: the picture as recorded, then the grade again. */}
-              {gradesColour(grade) && <><span className="grow" /><Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /></>}
+              {gradesColour(grade) && <><span className="grow" /><Switch off={t("Before")} on={t("After")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Before: the picture as recorded, to compare")} /></>}
             </div>
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}

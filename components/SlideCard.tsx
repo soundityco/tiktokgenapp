@@ -108,7 +108,14 @@ export default function SlideCard(p: Props) {
   const [guides, setGuides] = useState({ v: false, h: false });
   const text = gen?.text ?? "";
   // Photo edits panel, over the picture.
-  const [adjusting, setAdjusting] = useState(false);
+  const [adjusting, setAdjustingNow] = useState(false);
+  /** The panel leaving: it slides down and fades, then goes. */
+  const [adjustLeaving, setAdjustLeaving] = useState(false);
+  const setAdjusting = (on: boolean) => {
+    if (on) { setAdjustLeaving(false); setAdjustingNow(true); return; }
+    setAdjustLeaving(true);
+    window.setTimeout(() => { setAdjustingNow(false); setAdjustLeaving(false); }, 170);
+  };
   const [compare, setCompare] = useState(false);
   const [finding, setFinding] = useState(false);
   const [dropHere, setDropHere] = useState(false);
@@ -545,7 +552,7 @@ export default function SlideCard(p: Props) {
             return { ...c, pic: { ...c.pic, adjust: Object.values(next).some((x) => x) ? next : undefined } };
           });
           return (
-            <div className="adjust-panel" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            <div className={"adjust-panel" + (adjustLeaving ? " leaving" : "")} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
               <div className="adjust-tools" role="tablist" aria-label={t("Photo edits")}>
                 {ADJUST.map((x) => (
                   <button key={x.k} role="tab" aria-selected={tool === x.k} className={(tool === x.k ? "on" : "") + (adj[x.k] ? " set" : "")}
@@ -556,7 +563,7 @@ export default function SlideCard(p: Props) {
               <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
               {/* Under the wheel, centred: the edits on / off to compare; then, at the very bottom, Reset and Done. */}
               <div className="adjust-compare">
-                <Switch label={t("Edits")} checked={!compare} disabled={!hasAdjust} onChange={(v) => setCompare(!v)} title={t("Off: the photo without its edits, to compare")} />
+                <Switch off={t("Before")} on={t("After")} checked={!compare} disabled={!hasAdjust} onChange={(v) => setCompare(!v)} title={t("Before: the photo without its edits, to compare")} />
               </div>
               <div className="adjust-actions">
                 <button className="btn sm danger" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>

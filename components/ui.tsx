@@ -539,12 +539,21 @@ export function Select({ value, onChange, children, className = "input", style, 
 }
 
 /** On / off, like a phone's switch (right: on), in the sliders' look; its label at its left. */
-export function Switch({ label, checked, onChange, title, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; title?: string; disabled?: boolean }) {
+/**
+ * An on / off switch (to the right: on). Either a label before it, or the two states named on each side
+ * (`off` left, `on` right: "Before ◯ After"), the one that holds lit.
+ */
+export function Switch({ label, off, on, checked, onChange, title, disabled }: {
+  label?: string; off?: string; on?: string; checked: boolean; onChange: (v: boolean) => void; title?: string; disabled?: boolean;
+}) {
+  const sides = off !== undefined && on !== undefined;
   return (
-    <button type="button" role="switch" aria-checked={checked} className={"switch" + (checked ? " on" : "")} title={title} disabled={disabled}
+    <button type="button" role="switch" aria-checked={checked} aria-label={sides ? `${off} / ${on}` : undefined}
+      className={"switch" + (checked ? " on" : "") + (sides ? " sides" : "")} title={title} disabled={disabled}
       onClick={() => onChange(!checked)}>
-      <span className="switch-label">{label}</span>
+      {sides ? <span className={"switch-side" + (!checked ? " lit" : "")}>{off}</span> : <span className="switch-label">{label}</span>}
       <span className="switch-track" aria-hidden><span className="switch-knob" /></span>
+      {sides && <span className={"switch-side" + (checked ? " lit" : "")}>{on}</span>}
     </button>
   );
 }

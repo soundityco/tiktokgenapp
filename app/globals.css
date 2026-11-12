@@ -2533,3 +2533,19 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 /* The photo's edits panel: the wheel, the edits switch centred under it, then Reset and Done at the bottom (two
    halves of one row). */
 .adjust-compare { display: flex; justify-content: center; }
+
+/* "Before ◯ After": the two states on each side of the switch, the one that holds lit. */
+.switch.sides { gap: 10px; }
+.switch-side { color: var(--muted); transition: color .2s; }
+.switch-side.lit { color: var(--text); }
+.switch.sides.on { color: inherit; }
+/* The photo's edits panel: it rises from the bottom of the photo and fades in; it goes the same way. */
+.adjust-panel { animation: adjust-up .24s cubic-bezier(.2,.8,.2,1); }
+.adjust-panel.leaving { animation: adjust-down .17s ease-in forwards; }
+@keyframes adjust-up { from { opacity: 0; translate: 0 16px; } }
+@keyframes adjust-down { to { opacity: 0; translate: 0 12px; } }
+.adjust-actions { gap: 10px; }
+/* What opens elsewhere without a motion: the fonts' list drops in, a lyrics line being edited fades in. */
+.font-menu { animation: drop-in .18s cubic-bezier(.2,.8,.2,1); }
+.cue-edit { animation: hint-in .16s ease-out; }
+@media (prefers-reduced-motion: reduce) { .adjust-panel, .adjust-panel.leaving, .font-menu, .cue-edit { animation: none; } }
