@@ -6,6 +6,19 @@ import { sendFiles, shareThroughDrive, type SendState } from "@/lib/shareP2P";
 import Icon from "./Icon";
 import { Modal } from "./ui";
 
+/** A phone or a tablet (a finger, no mouse): "send to my phone" makes no sense there, the phone's own share sheet does. */
+export function useHandheld(): boolean {
+  const [h, setH] = useState(false);
+  useEffect(() => {
+    const mq = matchMedia("(hover: none) and (pointer: coarse)");
+    const f = () => setH(mq.matches);
+    f();
+    mq.addEventListener("change", f);
+    return () => mq.removeEventListener("change", f);
+  }, []);
+  return h;
+}
+
 /**
  * "Send to my phone": a QR code to scan with the phone; the files go straight from this browser to the phone's
  * over the local network (no upload). If the two cannot reach each other, the files can go through the Drive.
@@ -30,6 +43,19 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
   const files = useRef<{ name: string; blob: Blob }[]>([]);
   const ac = useRef(new AbortController());
 
+  const handheld = useHandheld();
+  /** On a phone: the phone's share sheet first (gallery, TikTok, a friend…); the QR code for another device after. */
+  const [native, setNative] = useState<"choose" | "shared" | null>(null);
+  const send = async (a: AbortController) => {
+    try {
+      await sendFiles(files.current, { kind, title, caption }, (s) => {
+        setState(s);
+        if (s.step === "waiting") void QRCode.toDataURL(s.url, { margin: 1, width: 480, color: { dark: "#0b0b10", light: "#f0eee8" } }).then(setQr);
+      }, a.signal);
+    } catch (e) {
+      if (!a.signal.aborted) setState({ step: "error", why: e instanceof Error ? e.message : String(e) });
+    }
+  };
   useEffect(() => {
     // A new controller each time (React may mount the window twice in development: the first one is stopped).
     const a = new AbortController();
@@ -39,16 +65,25 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
         files.current = await build();
         if (a.signal.aborted) return;
         if (!files.current.length) { setState({ step: "error", why: t("Nothing to send yet.") }); return; }
-        await sendFiles(files.current, { kind, title, caption }, (s) => {
-          setState(s);
-          if (s.step === "waiting") void QRCode.toDataURL(s.url, { margin: 1, width: 480, color: { dark: "#0b0b10", light: "#f0eee8" } }).then(setQr);
-        }, a.signal);
+        const sheet = matchMedia("(hover: none) and (pointer: coarse)").matches
+          && !!navigator.canShare?.({ files: files.current.map((f) => new File([f.blob], f.name, { type: f.blob.type })) });
+        if (sheet) { setNative("choose"); setState({ step: "opening" }); return; }
+        await send(a);
       } catch (e) {
         if (!a.signal.aborted) setState({ step: "error", why: e instanceof Error ? e.message : String(e) });
       }
     })();
     return () => a.abort();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** The phone's share sheet (the caption copied first: TikTok does not take it from there). */
+  const shareNative = async () => {
+    if (caption) await navigator.clipboard?.writeText(caption).catch(() => {});
+    try {
+      await navigator.share({ files: files.current.map((f) => new File([f.blob], f.name, { type: f.blob.type })), title });
+      setNative("shared");
+    } catch { /* closed without choosing */ }
+  };
+  const toOtherDevice = () => { setNative(null); void send(ac.current); };
 
   const code = "code" in state ? state.code : undefined;
   const url = "url" in state ? state.url : undefined;
@@ -74,7 +109,15 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
   const body = (
     <>
       <div className="stack share-send">
-        {state.step === "building" || state.step === "opening" ? (
+        {native ? (
+          native === "shared"
+            ? <p><Icon name="check" size={14} /> {t("Shared.")}{caption ? ` ${t("The caption is copied: paste it in TikTok.")}` : ""}</p>
+            : <>
+                <p>{t("Save it in your gallery, open it in TikTok or send it to a friend.")}</p>
+                {caption && <p className="muted xs">{t("The caption is copied when you share: paste it in TikTok.")}</p>}
+                <p className="muted xs">{files.current.length > 1 ? `${files.current.length} ${t("files")}${mb && ` · ${mb}`}` : mb}</p>
+              </>
+        ) : state.step === "building" || state.step === "opening" ? (
           <p className="shine">{state.step === "building" ? t("Preparing the files…") : t("Opening the link…")}</p>
         ) : state.step === "error" ? (
           <p className="notice bad xs">{t("The share could not start: {why}", { why: state.why })}</p>
@@ -83,9 +126,9 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
             <div className="share-qr">{qr ? <img src={qr} alt={t("QR code to scan with the phone")} /> : <div className="share-qr-skel shine-box" />}</div>
             {state.step === "waiting" && state.relay ? (
               <>
-                <p>{t("Scan it with your phone's camera.")}</p>
+                <p>{handheld ? t("Scan it with the other device's camera.") : t("Scan it with your phone's camera.")}</p>
                 {state.relay.pct < 1
-                  ? <><p className="muted xs shine">{t("Getting the files ready… {n}%", { n: Math.round(state.relay.pct * 100) })}</p><div className="bar export-bar shine-bar"><div style={{ width: `${state.relay.pct * 100}%` }} /></div></>
+                  ? <><p className="muted xs shine">{t("Getting the files ready… {n}% · you can scan now: the phone takes them as they come.", { n: Math.round(state.relay.pct * 100) })}</p><div className="bar export-bar shine-bar"><div style={{ width: `${state.relay.pct * 100}%` }} /></div></>
                   : <p className="muted xs"><Icon name="check" size={12} /> {t("Files ready, waiting for the phone.")}</p>}
                 <p className="muted xs">{t("The files stay a few minutes on Rollout's side, deleted as soon as the phone has them. The link works 10 minutes, for one phone.")} {mb && `· ${files.current.length} ${t("files")} · ${mb}`}</p>
               </>
@@ -116,11 +159,19 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
         {url && state.step !== "done" && <p className="muted xs share-url">{url}</p>}
       </div>
       <div className="modal-foot">
-        {canNative && <button className="btn left" onClick={() => void navigator.share({ files: files.current.map((f) => new File([f.blob], f.name, { type: f.blob.type })), title }).catch(() => {})}>{t("Other ways (AirDrop…)")}</button>}
-        <button className="btn primary" onClick={() => { ac.current.abort(); onClose(); }}>{bare ? t("Back") : state.step === "done" || driveDone ? t("Done") : t("Close")}</button>
+        {native === "choose" ? (<>
+          <button className="btn left" onClick={toOtherDevice}><Icon name="share" size={14} />{t("Another device (QR code)")}</button>
+          <button className="btn quiet" onClick={() => { ac.current.abort(); onClose(); }}>{bare ? t("Back") : t("Close")}</button>
+          <button className="btn primary" onClick={() => void shareNative()}><Icon name="share" size={14} />{t("Share…")}</button>
+        </>) : (<>
+        {/* A computer that can share files: its own sheet (AirDrop only named on Apple). A phone has Share instead. */}
+        {canNative && !native && !handheld && <button className="btn left" onClick={() => void navigator.share({ files: files.current.map((f) => new File([f.blob], f.name, { type: f.blob.type })), title }).catch(() => {})}>
+          {/Mac|iPhone|iPad/.test(navigator.userAgent) ? t("Other ways (AirDrop…)") : t("Other ways…")}</button>}
+        <button className="btn primary" onClick={() => { ac.current.abort(); onClose(); }}>{bare ? t("Back") : state.step === "done" || driveDone || native === "shared" ? t("Done") : t("Close")}</button>
+        </>)}
       </div>
     </>
   );
   if (bare) return body;
-  return <Modal title={t("Send to my phone")} onClose={() => { ac.current.abort(); onClose(); }}>{body}</Modal>;
+  return <Modal title={native ? t("Share") : handheld ? t("Send to another device") : t("Send to my phone")} onClose={() => { ac.current.abort(); onClose(); }}>{body}</Modal>;
 }

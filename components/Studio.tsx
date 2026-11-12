@@ -15,7 +15,7 @@ import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textIt
 import { useT } from "@/lib/i18n";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
 import PostCaption from "./PostCaption";
-import ShareDialog from "./ShareDialog";
+import ShareDialog, { useHandheld } from "./ShareDialog";
 import LyricsEditor from "./LyricsEditor";
 import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf, sungOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
@@ -135,6 +135,7 @@ export default function Studio({ userName }: { userName: string }) {
   const [busy, setBusy] = useState(false);
   /** "Send to my phone" (QR code) for the open carousel. */
   const [shareOpen, setShareOpen] = useState(false);
+  const handheld = useHandheld();
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
   const { canInstall, installed, install, iosHelp, closeIosHelp } = useInstall();
   // Phone: the tools of the studio head folded under "More" (the release, share, download and generate stay out).
@@ -1746,7 +1747,7 @@ export default function Studio({ userName }: { userName: string }) {
               {exportProgress && <span className="badge h-progress" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn h-cancel" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
 
-              <button className="btn icon h-share" aria-label={t("Send to my phone")} title={t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
+              <button className="btn icon h-share" aria-label={handheld ? t("Share") : t("Send to my phone")} title={handheld ? t("Share") : t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
               {carouselsOf(project).length > 1 && !busy ? (
                 <div className="slot h-dl"><Menu trigger={(_, toggle) => (
                   <button className="btn primary" aria-label={t("Download")} onClick={toggle}><Icon name="download" /><span className="lbl">{t("Download")}</span><Icon name="chevron" size={14} /></button>

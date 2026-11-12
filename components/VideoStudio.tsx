@@ -25,7 +25,7 @@ import CaptionStyle from "./CaptionStyle";
 import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
-import ShareDialog from "./ShareDialog";
+import ShareDialog, { useHandheld } from "./ShareDialog";
 import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
@@ -436,6 +436,7 @@ export default function VideoStudio({
   /** The videos just exported (with their caption): "Send to my phone" sends them without exporting again. */
   const lastFiles = useRef<{ name: string; blob: Blob; caption?: string }[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
+  const handheld = useHandheld();
   /** Why the colour grade could not run on the graphics card (the export then converts with ffmpeg, slower). */
   const [gpuWhy, setGpuWhy] = useState("");
   /** Export window: progress 0-1 and current step ("record" = realtime fallback). */
@@ -4011,7 +4012,7 @@ export default function VideoStudio({
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
       )}
       {(exp || batch) && (
-        <Modal title={shareOpen ? t("Send to my phone") : batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")}
+        <Modal title={shareOpen ? (handheld ? t("Share") : t("Send to my phone")) : batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")}
           onClose={closeExport}>
           {/* Send to my phone: the same window shows the QR code instead (Back returns to the export). */}
           {shareOpen ? (
@@ -4071,7 +4072,7 @@ export default function VideoStudio({
           </div>
           <div className="modal-foot">
             {(batch ? batchDone : exp?.done) && lastFiles.current.length > 0 && (
-              <button className="btn left" onClick={() => setShareOpen(true)}><Icon name="share" size={14} />{t("Send to my phone")}</button>
+              <button className="btn left" onClick={() => setShareOpen(true)}><Icon name="share" size={14} />{handheld ? t("Share") : t("Send to my phone")}</button>
             )}
             {(batch ? batchDone : exp?.done)
               ? <button className="btn primary" onClick={closeExport}>{t("Close")}</button>
