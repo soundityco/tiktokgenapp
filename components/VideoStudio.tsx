@@ -3351,9 +3351,9 @@ export default function VideoStudio({
             {/* Over the picture: TikTok's zones (bottom left) and the full screen (bottom right); on a computer they show on hover. */}
             {videoBlob && !full && settings.format !== "16:9" && (
               <button className={"pv-zones" + (aids.zones ? " on" : "")} aria-pressed={aids.zones} aria-label={t("Zones")} title={t("TikTok's interface zones on the video")}
-                onClick={() => { setAids({ zones: !aids.zones }); revealControls(); }}><Icon name={aids.zones ? "zones" : "zones-off"} size={15} /></button>
+                onClick={() => { setAids({ zones: !aids.zones }); revealControls(); }}><Icon name={aids.zones ? "zones" : "zones-off"} size={18} /></button>
             )}
-            {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={15} /></button>}
+            {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={18} /></button>}
             {/* The full screen: a layer of its own over the app, showing the preview's picture as it is drawn. */}
             {full && typeof document !== "undefined" && createPortal(
               <div className="pv-full-layer">

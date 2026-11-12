@@ -2504,3 +2504,12 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 }
 /* Storage: Rollout's size big, the Drive's free space on the right. */
 .storage-head .storage-free { margin-left: auto; font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }
+
+/* The icons over a slide (photo settings, zones), like the video's: the icon alone, a soft shadow, room for a finger.
+   The photo's settings, once changed, keep their small dot. */
+.adjust-open, .zones-open { width: 40px; height: 40px; border: 0; border-radius: 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.65)); }
+.adjust-open { right: 2px; bottom: 2px; }
+.zones-open { left: 2px; bottom: 2px; }
+.adjust-open.set::after { top: 6px; right: 6px; }
+.pv-zones, .pv-expand { filter: drop-shadow(0 1px 2px rgba(0,0,0,.65)); }

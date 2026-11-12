@@ -520,13 +520,13 @@ export default function SlideCard(p: Props) {
         {!adjusting && p.onZones && (
           <button className={"zones-open" + (p.zones ? " on" : "")} aria-pressed={!!p.zones} title={t("TikTok's interface zones on the slides")} aria-label={t("Zones")}
             onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onZones!(); }}>
-            <Icon name={p.zones ? "zones" : "zones-off"} size={15} />
+            <Icon name={p.zones ? "zones" : "zones-off"} size={18} />
           </button>
         )}
         {!adjusting && img && !p.locked && (
           <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
             onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current })); }}>
-            <Icon name="sliders" size={15} />
+            <Icon name="tune" size={18} />
           </button>
         )}
         {adjusting && (() => {

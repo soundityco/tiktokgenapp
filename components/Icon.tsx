@@ -8,10 +8,14 @@ const P: Record<string, string> = {
   "eye-off": "M4 4l16 16M9.9 5.7A9.6 9.6 0 0112 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 01-3 3.7M6.6 6.9C4 8.6 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.5 0 2.9-.4 4-1M10 10a2.8 2.8 0 004 4",
   minus: "M5 12h14",
   x: "M6 6l12 12M18 6L6 18",
-  expand: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
-  /** TikTok's zones: a square of diagonal stripes; barred when they are off. */
-  zones: "M4 4h16v16H4zM4 10l6-6M4 16L16 4M8 20L20 8M14 20l6-6",
-  "zones-off": "M4 4h16v16H4zM4 10l6-6M4 16L16 4M8 20L20 8M14 20l6-6M2 2l20 20",
+  /** Full screen: the four corners, rounded. */
+  expand: "M4 9V6.5A2.5 2.5 0 016.5 4H9M15 4h2.5A2.5 2.5 0 0120 6.5V9M20 15v2.5a2.5 2.5 0 01-2.5 2.5H15M9 20H6.5A2.5 2.5 0 014 17.5V15",
+  /** TikTok's interface over the picture: a phone with its column of buttons on the right and the caption at the
+   *  bottom; barred when they are off. */
+  zones: "M8 3h8a2.5 2.5 0 012.5 2.5v13A2.5 2.5 0 0116 21H8a2.5 2.5 0 01-2.5-2.5v-13A2.5 2.5 0 018 3zM15.6 8.4v.01M15.6 11.4v.01M15.6 14.4v.01M8.6 17.4h4.6",
+  "zones-off": "M8 3h8a2.5 2.5 0 012.5 2.5v13A2.5 2.5 0 0116 21H8a2.5 2.5 0 01-2.5-2.5v-13A2.5 2.5 0 018 3zM15.6 8.4v.01M15.6 11.4v.01M15.6 14.4v.01M8.6 17.4h4.6M3.5 3.5l17 17",
+  /** The photo's settings: two sliders and their round knobs. */
+  tune: "M4 8h8M18 8h2M4 16h2M12 16h8M15 5.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM9 13.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z",
   check: "M5 12.5l4.5 4.5L19 7.5",
   chevron: "M6 9l6 6 6-6",
   back: "M19 12H5M11 6l-6 6 6 6",
@@ -66,8 +70,10 @@ export default function Icon({ name, size = 16 }: { name: keyof typeof P | "more
       </svg>
     );
   }
+  // The icons drawn over a picture (photo settings, TikTok's zones, full screen): a heavier line, read on any image.
+  const heavy = name === "tune" || name === "zones" || name === "zones-off" || name === "expand";
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={heavy ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={P[name]} />
     </svg>
   );
