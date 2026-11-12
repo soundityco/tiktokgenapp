@@ -170,7 +170,8 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onTap, onSi
     // The way is chosen once, after a few pixels (a sideways swipe is never taken for a pull down).
     if (!d.axis) {
       if (Math.hypot(d.dx, d.dy) < 10) return;
-      d.axis = onSide && Math.abs(d.dx) > Math.abs(d.dy) ? "x" : "y";
+      // Sideways only with a finger (or a pen): with a mouse, the arrows do it, the picture does not move sideways.
+      d.axis = onSide && e.pointerType !== "mouse" && Math.abs(d.dx) > Math.abs(d.dy) ? "x" : "y";
     }
     if (d.axis === "x") {
       // The picture and its neighbours together; none that way: it resists.
