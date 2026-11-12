@@ -2364,7 +2364,7 @@ details.sec:first-of-type { background-image: none; }
     color: #fff; z-index: 82; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
   html.pv-full, html.pv-full body { overflow: hidden; }
   html.pv-full .mobile-tabs { z-index: 85; transition: opacity .3s; }
-  html.pv-full .mobile-tabs > :not(.dock-player):not(.dock-thumb) { display: none; }
+  html.pv-full .mobile-tabs > :not(.dock-player):not(.dock-thumb) { visibility: hidden; pointer-events: none; } /* hidden in place: the player does not move */
   html.pv-full .mobile-tabs .dock-thumb { opacity: 0 !important; }
   html.pv-dim .mobile-tabs { opacity: .38; }
   html.pv-noplayer .mobile-tabs { opacity: 0; pointer-events: none; transform: translateY(12px); }
@@ -2482,6 +2482,8 @@ details.sec:first-of-type { background-image: none; }
 html.pv-full, html.pv-full body { overflow: hidden; }
 @media (min-width: 1001px) {
   html.pv-full .board-player { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 85; width: min(640px, calc(100vw - 48px)); transition: opacity .3s; }
+  /* Exactly where it was before the full screen (measured as it opens): it does not move. */
+  html.pv-full.pv-pinned .board-player { left: var(--fp-x); top: var(--fp-y); bottom: auto; translate: none; width: var(--fp-w); margin: 0; }
   /* Computer: the player always there; it fades when the mouse rests, comes back when it moves or is over it. */
   html.pv-full .board-player { transition: opacity .3s ease; }
   html.pv-idle .board-player:not(:hover) { opacity: .15; }
@@ -2597,6 +2599,6 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 176px); border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); transform-origin: 0 0; }
 .pv-full-box .preview-pic .pv-close { position: absolute; top: 4px; right: 4px; }
 @media (max-width: 1000px) {
-  .pv-full-layer { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 112px); }
-  .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 166px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+  .pv-full-layer { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 172px); }
+  .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 226px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 }

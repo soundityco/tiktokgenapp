@@ -1747,11 +1747,29 @@ export default function VideoStudio({
   useEffect(() => { if (!playing) drawAt(headRef.current); }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const root = document.documentElement;
+    // Computer: the player pinned where it is now, so the full screen does not move it.
+    if (full && !root.classList.contains("pv-full")) {
+      const p = document.querySelector<HTMLElement>(".board-player")?.getBoundingClientRect();
+      if (p?.width) {
+        root.style.setProperty("--fp-x", `${p.left}px`);
+        root.style.setProperty("--fp-y", `${p.top}px`);
+        root.style.setProperty("--fp-w", `${p.width}px`);
+        root.classList.add("pv-pinned");
+      }
+    }
+    if (!full) root.classList.remove("pv-pinned");
     root.classList.toggle("pv-full", full);
     root.classList.toggle("pv-dim", full && playing && !playerLit);
     root.classList.toggle("pv-noplayer", full && playerOff);
     return () => { root.classList.remove("pv-full", "pv-dim", "pv-noplayer"); };
   }, [full, playing, playerLit, playerOff]);
+  // The window resized while full screen: the player goes back to its centred place.
+  useEffect(() => {
+    if (!full) return;
+    const r = () => document.documentElement.classList.remove("pv-pinned");
+    window.addEventListener("resize", r);
+    return () => window.removeEventListener("resize", r);
+  }, [full]);
   // On a computer, as on a video site: the player fades once the mouse rests (or
   // leaves the window), and comes back as soon as it moves; the cursor hides with it.
   const [idle, setIdle] = useState(false);
