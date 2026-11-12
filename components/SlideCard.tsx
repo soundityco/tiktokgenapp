@@ -344,19 +344,6 @@ export default function SlideCard(p: Props) {
       </div>)}
     </Menu>
   );
-  const lyricsHead = lyricSrc && p.lyrics.length > 0 ? (
-    <div className="row nowrap lyric-src-head">
-      <label className="check xs">
-        <input type="checkbox" checked={lyricSrc.header !== undefined}
-          onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...lyricSrc, header: e.target.checked ? t("Lyrics") : undefined } }))} />
-        {t("Header")}
-      </label>
-      {lyricSrc.header !== undefined && (
-        <input className="input sm grow" value={lyricSrc.header} aria-label={t("Header")} placeholder={t("Lyrics")}
-          onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...lyricSrc, header: e.target.value } }))} />
-      )}
-    </div>
-  ) : null;
 
   // Under the picture: the slide's text and sources. On a phone they show once, under the deck (part "fields"),
   // so they fade in place instead of sliding with the cards.
@@ -384,7 +371,8 @@ export default function SlideCard(p: Props) {
           </>)}</span>
           <Select className="input" value={textVal} onChange={(e) => {
             const v = e.target.value;
-            p.onCfg((c) => ({ ...c, textSource: v === "" ? { kind: "none" } : v === "__lyrics" ? { kind: "lyrics" } : { kind: "pool", poolId: v } }));
+            // Lyrics: "Lyrics:" on top of the text, in the app's language (to retouch on the slide like the rest).
+            p.onCfg((c) => ({ ...c, textSource: v === "" ? { kind: "none" } : v === "__lyrics" ? { kind: "lyrics", header: t("Lyrics:") } : { kind: "pool", poolId: v } }));
           }}>
             <option value="">{t("No text")}</option>
             <option value="__lyrics">{t("Lyrics")}</option>
@@ -463,7 +451,6 @@ export default function SlideCard(p: Props) {
           ) : <span />}
         </div>
       )}
-      {lyricsHead}
   </>);
   if (p.part === "fields") return <div className="card card-fields">{fields}</div>;
 
