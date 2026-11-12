@@ -1790,6 +1790,22 @@ export default function VideoStudio({
     root.classList.toggle("pv-noplayer", full && playerOff);
     return () => { root.classList.remove("pv-full", "pv-dim", "pv-noplayer"); };
   }, [full, playing, playerLit, playerOff]);
+  // Escape leaves the full screen. On a computer, as on a video site: the player fades once the mouse rests (or
+  // leaves the window), and comes back as soon as it moves; the cursor hides with it.
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (!full) { setIdle(false); return; }
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); toggleFull(false); } };
+    let timer = 0;
+    const wake = () => { setIdle(false); clearTimeout(timer); timer = window.setTimeout(() => setIdle(true), 2000); };
+    const away = () => { clearTimeout(timer); setIdle(true); };
+    window.addEventListener("keydown", key);
+    window.addEventListener("mousemove", wake);
+    document.documentElement.addEventListener("mouseleave", away);
+    wake();
+    return () => { window.removeEventListener("keydown", key); window.removeEventListener("mousemove", wake); document.documentElement.removeEventListener("mouseleave", away); clearTimeout(timer); };
+  }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { document.documentElement.classList.toggle("pv-idle", full && idle); return () => document.documentElement.classList.remove("pv-idle"); }, [full, idle]);
   // A tap on the faint player brings it back to full colour for a few seconds.
   useEffect(() => {
     if (!full) return;
@@ -1817,7 +1833,9 @@ export default function VideoStudio({
     if (d.dy > 90) { c.getAnimations().forEach((x) => x.cancel()); c.style.transform = ""; toggleFull(false); return; } // swiped down: back in its place
     if (d.dy > 6) { c.animate([{ transform: c.style.transform }, { transform: "none" }], { duration: 200, easing: "ease-out" }); c.style.transform = ""; return; }
     c.style.transform = "";
-    setPlayerOff((v) => !v); // a tap: the player hides, or comes back
+    // A tap: on a phone the player hides, or comes back; on a computer (the player stays) it plays or pauses.
+    if (phone) setPlayerOff((v) => !v);
+    else if (playing) stop(); else void play();
   };
   /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and in the phone's
    *  "Show" button. */

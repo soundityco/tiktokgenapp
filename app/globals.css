@@ -2468,9 +2468,11 @@ details.sec:first-of-type { background-image: none; }
 html.pv-full, html.pv-full body { overflow: hidden; }
 @media (min-width: 1001px) {
   html.pv-full .board-player { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 85; width: min(640px, calc(100vw - 48px)); transition: opacity .3s; }
-  html.pv-dim .board-player { opacity: .38; }
-  html.pv-dim .board-player:hover { opacity: 1; }
-  html.pv-noplayer .board-player { opacity: 0; pointer-events: none; }
+  /* Computer: the player always there; it fades when the mouse rests, comes back when it moves or is over it. */
+  html.pv-full .board-player { transition: opacity .4s; }
+  html.pv-idle .board-player:not(:hover) { opacity: .15; }
+  html.pv-idle .pv-full-layer, html.pv-idle .pv-full-layer * { cursor: none; }
+  html.pv-idle .pv-close { opacity: 0; transition: opacity .4s; }
 }
 /* Computer: the slide's zones button only when the pointer is over the slide (the selected one too). */
 @media (hover: hover) and (min-width: 1001px) {
