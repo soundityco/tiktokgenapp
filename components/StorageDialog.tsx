@@ -72,9 +72,11 @@ export default function StorageDialog({ usedCopies, onClose }: {
         <div className="stack"><div className="storage-bar shine-box" /><p className="muted xs shine">{t("Reading your Drive…")}</p></div>
       ) : (
         <>
+          {/* What matters: what Rollout takes on the Drive; on the right, what is still free on it. */}
           <div className="storage-head">
-            <span className="storage-big">{fmt(quota.used)}</span>
-            <span className="muted">{limit ? t("of {total} used on your Drive", { total: fmt(limit) }) : t("used on your Drive (no limit)")}</span>
+            <span className="storage-big">{fmt(rollout)}</span>
+            <span className="muted grow">{t("used by Rollout on your Drive")}</span>
+            <span className="storage-free">{limit ? t("{free} free of {total}", { free: fmt(Math.max(0, limit - quota.used)), total: fmt(limit) }) : t("No limit")}</span>
           </div>
           {/* Rollout's kinds first (in their colours), then the rest of the Drive, then the free space. */}
           <div className="storage-bar" role="img" aria-label={t("{used} of {total} used", { used: fmt(quota.used), total: limit ? fmt(limit) : "∞" })}>

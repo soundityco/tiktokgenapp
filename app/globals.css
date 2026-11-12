@@ -2502,3 +2502,5 @@ html.pv-full, html.pv-full body { overflow: hidden; }
   /* Nothing left in the information line (no take copy to report): it takes no room. */
   .video-stage > .stage-meta:not(:has(.meta-row:not(.meta-format))) { display: none; }
 }
+/* Storage: Rollout's size big, the Drive's free space on the right. */
+.storage-head .storage-free { margin-left: auto; font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }
