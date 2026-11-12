@@ -26,7 +26,7 @@ const CHUNK = 16 * 1024 * 1024;
 const AHEAD = 20;
 
 /** avcC / hvcC / vpcC / av1C box of the track: the decoder's `description`. */
-function describe(file: ReturnType<typeof createFile>, track: Track): Uint8Array | undefined {
+export function describe(file: ReturnType<typeof createFile>, track: Track): Uint8Array | undefined {
   const trak = file.getTrackById(track.id) as any;
   for (const entry of trak?.mdia?.minf?.stbl?.stsd?.entries ?? []) {
     const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;

@@ -682,13 +682,10 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .lyric-checks .check { display: grid; grid-template-columns: auto minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 8px; text-transform: none; letter-spacing: normal; font-family: var(--sans); color: var(--text); font-size: var(--fs-sm); padding: 3px 0; }
 .lyric-pick .check { text-transform: none; letter-spacing: normal; font-family: var(--sans); }
 /* A lyrics slide: the sections it shows (a menu of ticks) and its optional header, under its sources. */
-.lyric-src { display: grid; gap: var(--s2); margin-top: var(--s2); }
-.lyric-src-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
-.lyric-src-pick svg { flex: none; color: var(--muted); }
-.lyric-src-head { gap: var(--s2); min-height: var(--h-sm); }
+
 .menu .menu-check { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--r); cursor: pointer; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs-sm); color: var(--text); }
 .menu .menu-check:hover { background: #1d1d23; }
-.card .slide-pick { margin-top: var(--s2); }
+
 /* Something the release still needs (its lyrics): an orange outline and dot. */
 .btn.needs { border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); }
 .btn.needs:hover:not(:disabled) { border-color: var(--warn); }
@@ -888,11 +885,7 @@ details.sec > summary::after { transition: transform .22s cubic-bezier(.3,1.3,.5
   /* As much room over it (from the picture) as under it (to the slide's text): 24px each, with the card's gap. */
   .deck-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin: var(--s3) 0 0; }
   .deck-dots { display: flex; justify-content: center; gap: 6px; }
-  .deck-zones { justify-self: end; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px solid var(--line-2); border-radius: 999px;
-    background: none; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
-    transition: color .15s, border-color .15s, background .15s, scale .12s; }
-  .deck-zones.on { color: var(--text); border-color: var(--muted); background: var(--raised); }
-  .deck-zones:active { scale: .95; }
+
   .deck-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--line-2); cursor: pointer;
     transition: width .3s cubic-bezier(.3,1.2,.5,1), background .2s; }
   .deck-dots button.on { width: 20px; background: var(--accent); }
@@ -1794,11 +1787,7 @@ details.sec:first-of-type { background-image: none; }
    its box in Framing. The Style page shows it too (the picture's block keeps its height in both studios). */
 @media (max-width: 1000px) {
   .video-stage > .video-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin: 0; grid-column: 1 / -1; }
-  .video-bar .deck-zones { justify-self: end; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px solid var(--line-2); border-radius: 999px;
-    background: none; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
-    transition: color .15s, border-color .15s, background .15s, scale .12s; }
-  .video-bar .deck-zones.on { color: var(--text); border-color: var(--muted); background: var(--raised); }
-  .video-bar .deck-zones:disabled { opacity: .4; }
+
   .main[data-studio="video"][data-mobile-tab="style"] .video-stage > .video-bar { display: grid !important; margin-top: 10px; }
 }
 @media (max-width: 1000px) {
@@ -1941,19 +1930,14 @@ details.sec:first-of-type { background-image: none; }
 .btn.primary.gen-btn:active:not(:disabled) { scale: .98; }
 /* Computer: the Zones toggle beside Options (the same look as the phone's deck button). */
 .opts-row { gap: var(--s2); align-items: center; }
-.head-zones { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px solid var(--line-2); border-radius: 999px;
-  background: none; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
-  transition: color .15s, border-color .15s, background .15s, scale .12s; }
-.head-zones:hover { color: var(--text); }
-.head-zones.on { color: var(--text); border-color: var(--muted); background: var(--raised); }
-.head-zones:active { scale: .95; }
+
 @media (max-width: 640px) {
-  .head-zones { display: none; }
+
   /* The deck under the carousel head: 16px to the slide's own head line. */
   .main[data-mobile-tab="slides"] .carousel-head + .board-empty + .deck-wrap, .main[data-mobile-tab="slides"] .carousel-head + .deck-wrap { margin-top: 12px; }
 }
 /* Zones, on: like every active toggle of the app (white outline and text), so its state reads at a glance. */
-.deck-zones.on, .video-bar .deck-zones.on, .head-zones.on { color: var(--text); border-color: var(--text); background: var(--raised); }
+
 /* Style page (phone): the same release head as the Create page, in both studios. It scrolls away under the app's
    header (the block sticks --style-head higher) while the preview and the control hold still. */
 @media (max-width: 1000px) {
@@ -1997,7 +1981,7 @@ details.sec:first-of-type { background-image: none; }
 .opts-pop { padding: var(--s2) var(--s3); min-width: 280px; gap: var(--s3); }
 .opts-part { gap: 8px; }
 .opts-part + .opts-part { padding-top: var(--s3); background-image: var(--soft-line); background-size: 100% 1px; background-repeat: no-repeat; background-position: top; }
-.head-zones { display: none !important; }
+
 @media (max-width: 640px) { .desk-only-640 { display: none !important; } }
 @media (max-width: 1000px) { .desk-only-1000 { display: none !important; } }
 /* Video head: the status, then Options at the end of the second line (computer); in "More" on a phone. */
@@ -2160,14 +2144,13 @@ details.sec:first-of-type { background-image: none; }
 .menu .ver-line .ver-del { color: var(--danger); }
 .menu .ver-line .ver-del:hover { color: color-mix(in srgb, var(--danger) 80%, #fff); background: color-mix(in srgb, var(--danger) 16%, transparent); }
 /* Short labels for the phone only. */
-.lbl-short, .takes-short, .bar-shown { display: none; }
+.lbl-short { display: none; }
 
 @media (max-width: 1000px) {
   /* Under the picture: Create shows what the video shows (lyrics, hook) next to Zones; Style keeps the Edits switch. */
-  .video-bar > .bar-shown { display: inline-flex; gap: 6px; justify-self: start; }
-  .main[data-mobile-tab="style"] .video-bar > .bar-shown,
+
   .main:not([data-mobile-tab="style"]) .video-bar > .switch,
-  .main:not([data-mobile-tab="style"]) .video-bar > .bar-noswitch { display: none; }
+  .main:not([data-mobile-tab="style"]) .video-bar > .bar-noswitch{ display: none; }
   /* Lyrics and Hook: exactly the Zones button (same class). */
   .video-stage > .shown-on { display: none; }
   /* Format and take: one quiet line, no titles. */
@@ -2175,13 +2158,12 @@ details.sec:first-of-type { background-image: none; }
   .video-stage > .stage-meta .meta-row { display: flex; min-height: 0; gap: 0; }
   .video-stage > .stage-meta .meta-k { display: none; }
   /* The segment's tools: one row (version, new version as an icon, zoom), short labels. */
-  .ver-pick .ver-k, .ver-add .ver-add-l, .wave-fit .lbl-long, .takes-long, .take-w { display: none; }
-  .wave-fit .lbl-short, .takes-short { display: inline; }
+  .ver-pick .ver-k, .wave-fit .lbl-long { display: none; }
+  .wave-fit .lbl-short { display: inline; }
   .seg-versions { flex-wrap: nowrap; }
   .ver-pick { min-width: 0; overflow: hidden; }
-  .ver-add { width: 30px; padding: 0; justify-content: center; flex: none; }
+
   .wave-zoom { flex: none; }
-  .takes-row { gap: 6px; flex-wrap: wrap; align-items: center; }
 
 }
 @media (max-width: 1000px) { .video-stage > .video-bar { grid-template-columns: auto 1fr; } }
@@ -2193,7 +2175,7 @@ details.sec:first-of-type { background-image: none; }
      then the tools that act on them (range, length, lock, sync; versions and zoom), then the rest. */
   .video-side .timeline > * { order: 8; }
   .video-side .timeline > .seg-top { order: 1; }
-  .video-side .timeline > .takes-row { order: 2; }
+
   .video-side .timeline > .wave-wrap { order: 3; }
   .video-side .timeline > .hook-track { order: 4; }
   .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
@@ -2219,7 +2201,7 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 1000px) {
   .seg-versions .wave-zoom .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
   .seg-versions .wave-zoom .btn.icon { width: 32px; padding: 0; }
-  .seg-versions .ver-add { height: 32px; min-height: 32px; width: 32px; }
+
 }
 /* The segment's controls, phone and computer alike: 32 px, the same thin border, no fill, 12 px text
    (length, lock, sync, version, new version, zoom). The play button and a primary action keep their look. */
@@ -2230,14 +2212,13 @@ details.sec:first-of-type { background-image: none; }
 .seg-versions .wave-zoom .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
 .video-side .transport .tr-lock, .seg-versions .wave-zoom .btn.icon { width: 32px; padding: 0; justify-content: center; }
 .video-side .transport .tr-lock.on { border-color: var(--text); color: var(--text); }
-.seg-versions .ver-add { height: 32px; min-height: 32px; }
+
 /* The takes: the same format as the segment's other controls (32 px, thin border, no fill); the one used, outlined white. */
-.takes-row .btn { height: 32px; min-height: 32px; padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
-.takes-row .btn.on { border-color: var(--text); color: var(--text); }
+
 /* Computer too: the tracks first (takes, waveform, hook, lyrics), then the tools that act on them, as on the phone. */
 .video-side .timeline > * { order: 8; }
 .video-side .timeline > .seg-top { order: 1; }
-.video-side .timeline > .takes-row { order: 2; }
+
 .video-side .timeline > .wave-wrap { order: 3; }
 .video-side .timeline > .hook-track { order: 4; }
 .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
@@ -2245,10 +2226,7 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .seg-versions { order: 7; }
 .video-side .transport .tr-lock { order: -1; }
 /* Takes, everywhere: "Takes" then "Take 1 0:04–0:34"… on one line (the full detail stays in each one's tooltip). */
-.takes-long, .take-w { display: none; }
-.takes-short { display: inline; }
-.video-side .timeline > .takes-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-.takes-row .btn { flex: none; white-space: nowrap; }
+
 /* The segment's tools, everywhere: lock, length, then the passage. */
 .video-side .transport .tr-lock { order: -2; }
 .video-side .transport .seg-len { order: -1; }
@@ -2274,7 +2252,7 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .transport { order: 7; margin-top: 0; }
 @media (max-width: 1000px) {
   .app .video-side .timeline > .seg-tools { display: flex; align-items: center; gap: 6px; }
-  .app .desk-tool { display: none !important; }
+
   .video-side .timeline > .transport { margin-top: 0; }
 }
 /* The lock and the zoom's −, + and Fit: one format wherever they are (32 px, thin border, no fill). */
@@ -2315,13 +2293,12 @@ details.sec:first-of-type { background-image: none; }
 @media (hover: hover) { .cue-row:hover .cue-pen { opacity: 1; pointer-events: auto; } }
 
 /* Phone: the video picker in place of "More" (its name cut with an ellipsis); Options after the format line. */
-.opts-phone { display: none; }
+
 @media (max-width: 1000px) {
   .studio-head .slot.h-more.clip-pick { display: block; }
   .clip-pick-btn { height: 40px; gap: 6px; padding: 0 12px; background: none; border: 1px solid var(--line-2); max-width: 150px; }
   .clip-pick-btn .clip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .video-stage > .stage-meta .slot.h-opts.opts-phone { display: block; margin-left: auto; }
-  .video-head .slot.h-opts:not(.opts-phone) { display: none !important; }
+
 }
 
 /* Phone, under the picture: "Show" (the segment's button format, not a pill) unfolds to its left the zones,
@@ -2342,7 +2319,7 @@ details.sec:first-of-type { background-image: none; }
 }
 
 /* Under a slide's sources: the text and photo pickers, side by side, each opening a list that scrolls. */
-.card .src-picks { margin-top: var(--s2); align-items: start; }
+
 .pick-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; text-align: left; cursor: pointer; font-size: 12px; }
 .pick-btn > .truncate { flex: 1; min-width: 0; }
 .pick-btn.on { border-color: var(--muted); }
@@ -2400,12 +2377,7 @@ details.sec:first-of-type { background-image: none; }
 /* The slide's pickers: the same text size as the source selectors above them. */
 .pick-btn { font-size: inherit; }
 /* Phone: the carousel's Zones button in the format of the video's "Show" (not a pill). */
-@media (max-width: 1000px) {
-  .deck-bar .deck-zones { height: 32px; padding: 0 10px; border-radius: var(--r); font-family: inherit; font-size: 12px; letter-spacing: normal; text-transform: none; color: var(--text); }
-  .deck-bar .deck-zones.on { border-color: var(--text); background: none; }
-}
-.card .src-picks .pick-add { width: 100%; justify-content: center; }
-.card .lyric-src-head { margin-top: var(--s2); }
+
 .card .src-back { width: 20px; height: 20px; min-height: 20px; padding: 0; justify-content: center; color: var(--muted); }
 /* A slide's sources as two tiles: an icon of the kind (lyrics in their gold) or the photo on the slide, small;
    the title; where it comes from; then which one. */
@@ -2445,7 +2417,7 @@ details.sec:first-of-type { background-image: none; }
 .phone-only { display: none; }
 @media (max-width: 1000px) {
   .phone-only { display: block; }
-  .video-stage > .stage-meta .slot.h-opts.opts-phone { display: none; }
+
 }
 /* The lyrics' icon exactly as in the library (its T, its gold, its ground). */
 .src-lyrics .src-ico { color: var(--lyrics); background: color-mix(in srgb, var(--lyrics) 10%, var(--bg)); }
@@ -2461,9 +2433,7 @@ details.sec:first-of-type { background-image: none; }
   .app .video-side .transport .tr-range { display: inline; font-size: 13px; color: var(--text); margin-right: 2px; }
 }
 /* Computer: the Zones toggle of the studio's head (where Options was), in the head's button format. */
-.studio-head .h-zones { gap: 6px; }
-.studio-head .h-zones:not(.on) { color: var(--muted); }
-.studio-head .h-zones.on { border-color: var(--text); color: var(--text); }
+
 /* Phone (≤ 640): the head on one row whatever the player is doing (it is empty for a moment while another video
    opens): the release's title (cut with an ellipsis), the video picker (its own width, cut too), the download. */
 @media (max-width: 640px) {

@@ -30,7 +30,7 @@ import { themeGroups, themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
-import { PHONE_QUERY, StyleTabs, useStyleParts, type SheetPart } from "./StyleSheet";
+import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from "./StyleSheet";
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -309,7 +309,6 @@ export default function VideoStudio({
   releaseTitle,
   library,
   libraryPhone,
-  drawOptions,
   lyricsRow,
   onCopyJob,
   onToast,
@@ -350,8 +349,6 @@ export default function VideoStudio({
   library?: ReactNode;
   /** The same on a phone, where the library holds everything of the release (the carousel's lists too). */
   libraryPhone?: ReactNode;
-  /** The draw's options of the Options menu (shared with the carousel's). */
-  drawOptions?: ReactNode;
   /** The release's lyrics, as a row of the library (next to the official audio). */
   lyricsRow?: ReactNode;
   /** Shown (the video studio is kept mounted, hidden, while the carousel is open). */
@@ -1733,6 +1730,8 @@ export default function VideoStudio({
     onSaveNow();
   };
   const [renaming, setRenaming] = useState<string | null>(null);
+  /** The phone layout: the same pieces, placed for a small screen. */
+  const phone = usePhone();
   // ---- phone: the preview full screen (the picture itself grows to fill the screen; a swipe down or the cross
   // puts it back). The dock's player stays over it, faint while playing; a tap on the picture hides or shows it. ----
   const [full, setFull] = useState(false);
@@ -1819,6 +1818,18 @@ export default function VideoStudio({
     if (d.dy > 6) { c.animate([{ transform: c.style.transform }, { transform: "none" }], { duration: 200, easing: "ease-out" }); c.style.transform = ""; return; }
     c.style.transform = "";
     setPlayerOff((v) => !v); // a tap: the player hides, or comes back
+  };
+  /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and in the phone's
+   *  "Show" button. */
+  const shownToggles = (cls: string, reachable = true) => {
+    const hookOn = !!hooks.length && settings.showHooks !== false;
+    return (<>
+      <button className={cls + (settings.captions ? " on" : "")} aria-pressed={settings.captions} tabIndex={reachable ? 0 : -1}
+        onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={14} />{t("Lyrics")}</button>
+      <button className={cls + (hookOn ? " on" : "")} aria-pressed={hookOn} tabIndex={reachable ? 0 : -1}
+        onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}>
+        <Icon name={hookOn ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
+    </>);
   };
   /** Phone: the "Show" button under the picture unfolded (zones, lyrics, hook). */
   const [showOpen, setShowOpen] = useState(false);
@@ -3331,10 +3342,7 @@ export default function VideoStudio({
                   TikTok zones, the lyrics, the hook. */}
               <span className={"bar-show" + (showOpen ? " open" : "")}>
                 <span className="bar-show-list" aria-hidden={!showOpen}>
-                  <button className={"bar-chip" + (settings.captions ? " on" : "")} aria-pressed={settings.captions} tabIndex={showOpen ? 0 : -1}
-                    onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={13} />{t("Lyrics")}</button>
-                  <button className={"bar-chip" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false} tabIndex={showOpen ? 0 : -1}
-                    onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={13} />{t("Hook")}</button>
+                  {shownToggles("bar-chip", showOpen)}
                 </span>
                 <button className={"bar-show-btn" + (showOpen ? " on" : "")} aria-expanded={showOpen} onClick={() => setShowOpen((v) => !v)}>
                   <Icon name={showOpen ? "x" : "eye"} size={14} />{t("Show")}
@@ -3345,10 +3353,7 @@ export default function VideoStudio({
           {/* What the video shows (not what is edited: that is the tabs beside): eyes, on or off. */}
           <div className="row shown-on">
             <span className="label">{t("Shown")}</span>
-            <button className={"btn sm" + (settings.captions ? " on" : "")} aria-pressed={settings.captions}
-              onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={14} />{t("Lyrics")}</button>
-            <button className={"btn sm" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
-              onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
+            {shownToggles("btn sm")}
           </div>
           {/* What the picture is: its size, then the take it comes from (the original, or the Drive copy and where
               it stands: the library says the same), each under its title. */}
@@ -3421,7 +3426,7 @@ export default function VideoStudio({
                       <option value="custom">{settings.crop.duration.toFixed(1).replace(".", lang === "fr" ? "," : ".")} s</option>
                     )}
                   </Select>
-                  {lockEl("desk-tool")}
+                  {!phone && lockEl()}
                   <span className="grow" />
                   <span className="tr-sync">
                   {!syncBusy && !genBusy && firstSync ? (
@@ -3460,7 +3465,7 @@ export default function VideoStudio({
                     </>
                   )}
                   </span>
-                  {zoomEl("desk-tool tr-zoom")}
+                  {!phone && zoomEl("tr-zoom")}
                 </div>
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
@@ -3545,12 +3550,14 @@ export default function VideoStudio({
                     );
                   })()}
                 </div>
-                {/* Phone: the lock and the zoom above the tracks they act on. */}
-                <div className="row seg-tools">
-                  {lockEl()}
-                  <span className="grow" />
-                  {zoomEl()}
-                </div>
+                {/* Phone: the lock and the zoom above the tracks they act on (on a computer: in the segment's row). */}
+                {phone && (
+                  <div className="row seg-tools">
+                    {lockEl()}
+                    <span className="grow" />
+                    {zoomEl()}
+                  </div>
+                )}
                 <div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}

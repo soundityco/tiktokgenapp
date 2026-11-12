@@ -1453,12 +1453,6 @@ export default function Studio({ userName }: { userName: string }) {
     </Family>
   );
   /** The draw's options, the same in both studios' Options menu (hooks for the videos, every text for the slides). */
-  const drawOptions = ws && (
-    <div className="stack opts-part"><span className="label">{t("Draw")}</span>
-      <label className="check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
-      <label className="check"><input type="checkbox" checked={!!ws.favorTop} onChange={(e) => upd((w) => ({ ...w, favorTop: e.target.checked }))} />{t("Favor my best hooks (by TikTok views)")}</label>
-    </div>
-  );
   /** Generate and its warnings badge: in the carousel's head on a computer; floating over the dock on a phone. */
   const genRow = project && (
                 <div className="row nowrap gen-row">
@@ -1683,7 +1677,6 @@ export default function Studio({ userName }: { userName: string }) {
             onCopyJob={setCopyJob}
             onToast={say}
             library={textGroups(["hooks", "captions"])}
-            drawOptions={drawOptions}
             libraryPhone={<>{textGroups(["hooks", "texts", "captions"])}{photosFamily()}</>}
             lyricsRow={lyricsRow}
             captionPools={captionPools}

@@ -1,8 +1,8 @@
-import { createFile, DataStream, Endianness, type Sample, type Track } from "mp4box";
+import type { Sample } from "mp4box";
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { ffmpegAlone, type CopyPlan } from "./convert";
 import { aacConfig } from "./exportVideo";
-import { readIndex, readSamples, rotationOf } from "./videoSource";
+import { describe, readIndex, readSamples, rotationOf } from "./videoSource";
 
 /**
  * The working copy of a take made by the device's own video chip (WebCodecs): the pictures are decoded and
@@ -24,19 +24,6 @@ const AVC = ["avc1.640033", "avc1.640034", "avc1.4d0033", "avc1.640028"];
 /** 10 bits: HEVC Main 10 (Safari, the video chip), else VP9 profile 2 (Chrome, its own fast encoder). */
 const TEN = ["hvc1.2.4.L153.B0", "hvc1.2.4.L156.B0", "hvc1.2.4.L150.B0", "hvc1.2.4.L123.B0", "vp09.02.51.10", "vp09.02.41.10"];
 
-/** avcC / hvcC box of the track: the decoder's `description`. */
-function describe(file: ReturnType<typeof createFile>, track: Track): Uint8Array | undefined {
-  const trak = file.getTrackById(track.id) as any;
-  for (const entry of trak?.mdia?.minf?.stbl?.stsd?.entries ?? []) {
-    const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
-    if (box) {
-      const stream = new DataStream(undefined, 0, Endianness.BIG_ENDIAN);
-      box.write(stream);
-      return new Uint8Array(stream.buffer, 8);
-    }
-  }
-  return undefined;
-}
 
 async function firstSupported<C extends VideoEncoderConfig | VideoDecoderConfig>(
   check: (c: C) => Promise<{ supported?: boolean }>, configs: C[]): Promise<C | null> {

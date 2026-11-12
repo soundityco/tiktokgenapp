@@ -4,6 +4,19 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 /** The phone layout (the studios' tabs and dock): the style is a page of its own there, part by part. */
 export const PHONE_QUERY = "(max-width: 1000px)";
 
+/** The phone layout is on (the same flag everywhere: one component, placed differently, never two components). */
+export function usePhone(): boolean {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const mq = matchMedia(PHONE_QUERY);
+    const f = () => setPhone(mq.matches);
+    f();
+    mq.addEventListener("change", f);
+    return () => mq.removeEventListener("change", f);
+  }, []);
+  return phone;
+}
+
 export interface SheetPart<P extends string> { id: P; label: string }
 
 /**
