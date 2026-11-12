@@ -3677,11 +3677,13 @@ export default function VideoStudio({
                             <button className="btn sm primary" onMouseDown={(e) => e.preventDefault()} onClick={() => saveCue()}>{t("OK")}</button>
                           </span>
                         ) : (<>
-                          <button className="cue-text grow truncate xs" onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
+                          <button className="cue-text truncate xs" onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
                             {c.text.replace(/\n/g, " ⏎ ")}
                           </button>
+                          {/* Right after the line's text (not at the far end): close at hand. */}
                           <button className="btn icon sm quiet cue-pen" aria-label={t("Edit the line")} title={t("Edit the line: a missing word, or cut it in two")}
-                            onClick={() => { stop(); setEditCue({ i, text: c.words.map((x) => x.w).join(" ") }); }}><Icon name="pencil" size={11} /></button>
+                            onClick={() => { stop(); setEditCue({ i, text: c.words.map((x) => x.w).join(" ") }); }}><Icon name="pencil" size={14} /></button>
+                          <span className="grow" />
                         </>)}
                         <span className="nudge">
                           <button className="btn sm quiet" aria-label={t("Shorter")} title={t("Hide this line earlier (−0.1 s)")} onClick={() => retime(i, "end", -1)}>−</button>

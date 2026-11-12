@@ -2293,7 +2293,9 @@ details.sec:first-of-type { background-image: none; }
 .cue-edit .input { flex: 1; min-width: 0; height: 30px; font-size: 12px; }
 .cue-edit .btn { height: 30px; min-height: 30px; flex: none; font-size: 12px; }
 /* The pencil of a lyrics line: shown when the line is hovered (computer) or is the current one (tapped, playing). */
-.cue-pen { flex: none; width: 26px; height: 26px; min-height: 26px; padding: 0; justify-content: center; color: var(--muted); opacity: 0; pointer-events: none; transition: opacity .15s; }
+.cue-pen { flex: none; width: var(--h-sm); height: var(--h-sm); min-height: var(--h-sm); padding: 0; justify-content: center; color: var(--text); opacity: 0; pointer-events: none; transition: opacity .15s, background .15s; }
+.cue-pen:hover { background: #1d1d23; }
+.cue-row .cue-text { flex: 0 1 auto; min-width: 0; }
 .cue-row.on .cue-pen { opacity: 1; pointer-events: auto; }
 @media (hover: hover) { .cue-row:hover .cue-pen { opacity: 1; pointer-events: auto; } }
 
