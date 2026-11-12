@@ -1224,13 +1224,14 @@ export default function Studio({ userName }: { userName: string }) {
   // ---- export ----
   async function buildFiles(p: Project, onStep?: (done: number, total: number) => void, failures?: string[]) {
     const ext = ws!.exportFormat;
+    const when = stamp();
     const out: { name: string; blob: Blob }[] = [];
     for (let i = 0; i < p.slides.length; i++) {
       if (cancelExport.current) break;
       const g = p.generated?.[i];
       try {
         const img = g?.picId ? await loadDriveImage(g.picId) : null;
-        out.push({ name: `slide${i + 1}.${ext}`, blob: await slideToBlob(p.slides[i], img, g?.text ?? "", ext) });
+        out.push({ name: `slide${i + 1} ${when}.${ext}`, blob: await slideToBlob(p.slides[i], img, g?.text ?? "", ext) });
       } catch (e: any) {
         failures?.push(`Slide ${i + 1}: ${e?.message ?? t("Export failed")}`);
       }
@@ -1290,7 +1291,7 @@ export default function Studio({ userName }: { userName: string }) {
       const p = project!, g = p.generated?.[i];
       const img = g?.picId ? await loadDriveImage(g.picId) : null;
       const ext = ws!.exportFormat;
-      download(await slideToBlob(p.slides[i], img, g?.text ?? "", ext), `${safe(p.name)} slide${i + 1}.${ext}`);
+      download(await slideToBlob(p.slides[i], img, g?.text ?? "", ext), `${safe(p.name)} slide${i + 1} ${stamp()}.${ext}`);
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
   }
 
@@ -1813,7 +1814,12 @@ export default function Studio({ userName }: { userName: string }) {
         <div id="dock-player" className="dock-player" />
         {/* The open studio (its icon on its gradient); a tap goes to the other. */}
         <button className={"dock-studio " + studio} aria-label={studio === "video" ? t("Go to the carousel studio") : t("Go to the video studio")}
-          onClick={() => { switchStudio(studio === "video" ? "carousel" : "video"); try { navigator.vibrate?.(8); } catch { /* not on this phone */ } }}>
+          onClick={() => {
+            switchStudio(studio === "video" ? "carousel" : "video");
+            // From the library (the same page in both studios): straight to the other studio's Create page.
+            if (mobileTab === "lists") pickMobileTab("slides");
+            try { navigator.vibrate?.(8); } catch { /* not on this phone */ }
+          }}>
           <span key={studio} className="ds-icon"><Icon name={studio === "video" ? "reel" : "deck"} size={22} /></span>
         </button>
         <span className="mobile-tabs-sep" aria-hidden />

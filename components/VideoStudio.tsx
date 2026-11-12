@@ -67,6 +67,15 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
   return cfg.hooks?.find((h) => h.text.trim() && rel >= h.from - 0.001 && rel < (h.to ?? cfg.crop.duration));
 };
 
+/** "2026-11-12 14-05": the date and time put at the end of an exported file's name. */
+const stampNow = () => {
+  const d = new Date(), z = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}-${z(d.getMinutes())}`;
+};
+
+/** Fade of the sound when playback starts or stops (seconds). */
+const FADE = 0.15;
+
 /** The way the lyrics are placed on the audio: raised when it changes, so lyrics placed before are placed again once. */
 const LYRICS_ALIGN_V = 3;
 
@@ -481,6 +490,7 @@ export default function VideoStudio({
   const videoRef = useRef<HTMLVideoElement>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const fadeRef = useRef<GainNode | null>(null);
   const rafRef = useRef(0);
   const originRef = useRef(0);
   const ioRef = useRef(0);
@@ -724,10 +734,21 @@ export default function VideoStudio({
   const stop = useCallback(() => {
     playToken.current++;
     cancelAnimationFrame(rafRef.current);
-    if (sourceRef.current) {
-      try { sourceRef.current.stop(); } catch { /* already stopped */ }
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
+    const src = sourceRef.current, fade = fadeRef.current;
+    sourceRef.current = null;
+    fadeRef.current = null;
+    if (src) {
+      // The sound fades out over a moment, then stops (the picture stops at once).
+      const ctx = src.context, now = ctx.currentTime;
+      try {
+        if (fade) {
+          fade.gain.cancelScheduledValues(now);
+          fade.gain.setValueAtTime(fade.gain.value, now);
+          fade.gain.linearRampToValueAtTime(0, now + FADE);
+        }
+        src.stop(fade ? now + FADE + 0.01 : 0);
+      } catch { /* already stopped */ }
+      window.setTimeout(() => { src.disconnect(); fade?.disconnect(); }, fade ? FADE * 1000 + 60 : 0);
     }
     if (videoRef.current) { videoRef.current.pause(); videoRef.current.playbackRate = 1; }
     setPlaying(false);
@@ -1462,10 +1483,16 @@ export default function VideoStudio({
     }
     const src = ctx.createBufferSource();
     src.buffer = audioBuf;
-    src.connect(ctx.destination);
+    // A short fade in (and out at the stop), as music apps do: no click when it starts or stops.
+    const fade = ctx.createGain();
+    fade.gain.setValueAtTime(0, ctx.currentTime);
+    fade.gain.linearRampToValueAtTime(1, ctx.currentTime + FADE);
+    src.connect(fade);
+    fade.connect(ctx.destination);
     originRef.current = ctx.currentTime;
     src.start(0, from, until - from);
     sourceRef.current = src;
+    fadeRef.current = fade;
     if (el && el.paused) void el.play().catch(() => {});
     setPlaying(true);
     const tick = () => {
@@ -1702,6 +1729,8 @@ export default function VideoStudio({
     onSaveNow();
   };
   const [renaming, setRenaming] = useState<string | null>(null);
+  /** Phone: the "Show" button under the picture unfolded (zones, lyrics, hook). */
+  const [showOpen, setShowOpen] = useState(false);
   /** The lock of audio and video (on the phone above the tracks, on a computer in the segment's row). */
   const lockEl = (where = "") => videoBlob && videoDur > 0 ? (
     <button className={"btn sm icon tr-lock " + where + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
@@ -2381,7 +2410,8 @@ export default function VideoStudio({
     exportRef.current = ac;
     setErr(null); setNote(null); setExporting(true); setExpMode(null); setExp({ p: 0, step: "audio" });
     const [W, H] = OUT_SIZE(cfg.format);
-    const name = `${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""}`.replace(/[\\/:*?"<>|]+/g, "-");
+    // The date and time at the end: two exports of the same video never take each other's name.
+    const name = `${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""} ${stampNow()}`.replace(/[\\/:*?"<>|]+/g, "-");
     let source: { frameAt: (t: number) => Promise<Picture | null>; close: () => void; codec: string } | null = null;
     let stopPlayer = () => {};
     const el = document.createElement("video");
@@ -3198,17 +3228,21 @@ export default function VideoStudio({
             <div className="deck-bar video-bar">
               {/* Phone: before / after the grade in one tap, across from Zones. */}
               {gradesColour(grade) ? <Switch label={t("Edits")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Off: the picture as recorded, to compare")} /> : <span className="bar-noswitch" />}
-              {/* Phone, Create page: what the video shows, in the same row as Zones (the Edits switch is the Style page's). */}
-              <span className="bar-shown">
-                <button className={"deck-zones bar-eye" + (settings.captions ? " on" : "")} aria-pressed={settings.captions}
-                  onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={14} />{t("Lyrics")}</button>
-                <button className={"deck-zones bar-eye" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false}
-                  onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={14} />{t("Hook")}</button>
+              {/* Phone: one "Show" button (where Zones was); a tap unfolds, to its left, what the video shows: the
+                  TikTok zones, the lyrics, the hook. */}
+              <span className={"bar-show" + (showOpen ? " open" : "")}>
+                <span className="bar-show-list" aria-hidden={!showOpen}>
+                  <button className={"bar-chip" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"} tabIndex={showOpen ? 0 : -1}
+                    onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones && settings.format !== "16:9" ? "eye" : "eye-off"} size={13} />{t("Zones")}</button>
+                  <button className={"bar-chip" + (settings.captions ? " on" : "")} aria-pressed={settings.captions} tabIndex={showOpen ? 0 : -1}
+                    onClick={() => setV({ captions: !settings.captions })}><Icon name={settings.captions ? "eye" : "eye-off"} size={13} />{t("Lyrics")}</button>
+                  <button className={"bar-chip" + (hooks.length && settings.showHooks !== false ? " on" : "")} aria-pressed={!!hooks.length && settings.showHooks !== false} tabIndex={showOpen ? 0 : -1}
+                    onClick={() => { if (!hooks.length) { setTab("hook"); addHook(); } else setV({ showHooks: settings.showHooks === false }); }}><Icon name={hooks.length && settings.showHooks !== false ? "eye" : "eye-off"} size={13} />{t("Hook")}</button>
+                </span>
+                <button className={"bar-show-btn" + (showOpen ? " on" : "")} aria-expanded={showOpen} onClick={() => setShowOpen((v) => !v)}>
+                  <Icon name={showOpen ? "x" : "eye"} size={14} />{t("Show")}
+                </button>
               </span>
-              <button className={"deck-zones" + (aids.zones && settings.format !== "16:9" ? " on" : "")} aria-pressed={aids.zones} disabled={settings.format === "16:9"}
-                onClick={() => setAids({ zones: !aids.zones })} title={t("TikTok's interface zones on the video")}>
-                <Icon name={aids.zones && settings.format !== "16:9" ? "eye-off" : "eye"} size={15} />{t("Zones")}
-              </button>
             </div>
           )}
           {/* What the video shows (not what is edited: that is the tabs beside): eyes, on or off. */}

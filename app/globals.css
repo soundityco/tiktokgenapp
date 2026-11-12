@@ -2323,3 +2323,20 @@ details.sec:first-of-type { background-image: none; }
   .video-stage > .stage-meta .slot.h-opts.opts-phone { display: block; margin-left: auto; }
   .video-head .slot.h-opts:not(.opts-phone) { display: none !important; }
 }
+
+/* Phone, under the picture: "Show" (the segment's button format, not a pill) unfolds to its left the zones,
+   lyrics and hook toggles. */
+@media (max-width: 1000px) {
+  .video-stage > .video-bar { display: flex !important; align-items: center; gap: 8px; }
+  .video-bar > .bar-show { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  .bar-show-list { display: inline-flex; gap: 6px; max-width: 0; overflow: hidden; opacity: 0; transition: max-width .32s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+  .bar-show.open .bar-show-list { max-width: 320px; opacity: 1; }
+  .bar-chip, .bar-show-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r);
+    background: none; color: var(--muted); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; flex: none; }
+  .bar-chip.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+  .bar-chip:disabled { opacity: .4; }
+  .bar-show-btn { color: var(--text); }
+  .bar-show-btn.on { border-color: var(--text); }
+  /* While it is unfolded, the Edits switch steps aside (the row is short on a phone). */
+  .video-bar:has(.bar-show.open) > .switch { display: none; }
+}
