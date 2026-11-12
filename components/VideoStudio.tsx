@@ -3317,7 +3317,8 @@ export default function VideoStudio({
             )}
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={18} /></button>}
             {/* The full screen (the same as the carousel's): the preview's picture as it is drawn, over the app. */}
-            {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onTap={fullTap} label={clipName(clip)} />}
+            {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onTap={fullTap} player label={clipName(clip)}
+              bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("Esc to close")}</span></>} />}
           </div>
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (

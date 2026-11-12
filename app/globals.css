@@ -197,17 +197,10 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .modal.wide { width: min(820px, 100%); }
 .modal-foot { display: flex; gap: var(--s2); justify-content: flex-end; align-items: center; flex-wrap: wrap; padding-top: var(--s3); border-top: 1px solid var(--line); }
 .modal-foot .left { margin-right: auto; }
-.preview { display: grid; gap: var(--s2); max-width: 100%; }
-.preview-canvas { display: block; max-height: calc(92dvh - 48px); max-width: 100%; width: auto; height: auto; margin: 0 auto; border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
 .preview-bar { display: flex; align-items: center; gap: var(--s2); color: var(--text); }
 .preview-pic { position: relative; justify-self: center; max-width: 100%; }
-.preview-canvas { touch-action: none; cursor: grab; transform-origin: 0 0; }
-/* The preview's dark on its own layer (it fades while the picture glides to / from its slide). */
-.ov.preview-ov { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; }
+/* The full screen's dark on its own layer (it fades while the picture glides to / from its place). */
 .preview-bg { position: absolute; inset: 0; background: rgba(4,4,6,.66); backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2); }
-.preview-ov > .preview { position: relative; }
-.preview-ov:not(.in) .preview { visibility: hidden; }
-.preview-pic .pv-close { position: absolute; top: 4px; right: 4px; }
 @media (hover: none) { .preview-hint { visibility: hidden; } } /* no keys on a phone */
 .flip svg { transform: scaleX(-1); }
 .tabs { display: inline-flex; gap: var(--s4); border-bottom: 1px solid var(--line); width: 100%; }
@@ -2592,15 +2585,20 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .hook-head .hook-gen { margin-left: 6px; flex: none; }
 .hook-head .hook-del:hover { color: var(--danger); }
 
-/* The video's full screen, laid out like the carousel's preview: the blurred dark, the picture (the player's room
-   kept under it), its cross at its top right, its name under it. */
-.pv-full-layer { background: none; padding: 16px 16px 112px; }
+/* The full screen of both studios (a slide, the video): the blurred dark, the picture with its cross at its top
+   right, its bar under it. The video's keeps room for its player under it. */
+.pv-full-layer { background: none; padding: 16px; }
+.pv-full-layer.has-player { padding-bottom: 112px; }
 .pv-full-box { position: relative; display: grid; gap: var(--s2); max-width: 100%; }
-.pv-full-cv { max-width: 100%; max-height: calc(100dvh - 176px); border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); transform-origin: 0 0; }
+.pv-full-cv { max-width: 100%; max-height: calc(100dvh - 32px - 42px); border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); transform-origin: 0 0; }
+.has-player .pv-full-cv { max-height: calc(100dvh - 176px); }
 .pv-full-box .preview-pic .pv-close { position: absolute; top: 4px; right: 4px; }
+.pv-full-cv { cursor: grab; }
 @media (max-width: 1000px) {
-  .pv-full-layer { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 172px); }
-  .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 226px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+  .pv-full-layer { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px); }
+  .pv-full-layer.has-player { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 172px); }
+  .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 66px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+  .has-player .pv-full-cv { max-height: calc(100dvh - 226px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 }
 /* The video full screen: the picture leaves its frame (as if it moved there), so the frame stays, empty, where it
    was; nothing else of the page moves. It comes back in as the full screen closes. */
