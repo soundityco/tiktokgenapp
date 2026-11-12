@@ -2450,3 +2450,14 @@ details.sec:first-of-type { background-image: none; }
 }
 /* The lyrics' icon exactly as in the library (its T, its gold, its ground). */
 .src-lyrics .src-ico { color: var(--lyrics); background: color-mix(in srgb, var(--lyrics) 10%, var(--bg)); }
+/* Phone: the sync status lives in the Segment block only, whatever the player is doing (it is empty for a moment
+   while another video opens: the head must not change then). */
+@media (max-width: 1000px) {
+  .video-head .h-status { display: none !important; }
+  .app .video-side .timeline > .seg-top { display: flex; align-items: center; }
+}
+@media (max-width: 1000px) {
+  .app .video-side .timeline > .seg-top { min-height: 0; line-height: 1.2; margin-bottom: 8px; }
+  .app .video-side .transport .tr-play, .app .video-side .transport .tr-time { display: none; }
+  .app .video-side .transport .tr-range { display: inline; font-size: 13px; color: var(--text); margin-right: 2px; }
+}
