@@ -6,7 +6,6 @@ import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProjec
 import { delMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, findDriveTwins, trashDriveFile, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
-import { FullView } from "./FullView";
 import { DRIVE_AUTH_EVENT, loadDriveImage, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
@@ -88,8 +87,6 @@ export default function Studio({ userName }: { userName: string }) {
   /** The splash stays over the app until what the screen shows is ready (the first slides' photos, the video's
    *  picture), 2.5 s at most, then fades: no half-empty screen filling in after it. */
   const [boot, setBoot] = useState<"hold" | "fade" | "gone">("hold");
-  /** The carousel's slides full screen (the shared full view: swiped sideways from one to the next). */
-  const [slideFull, setSlideFull] = useState(false);
   /** How far the start is (0-1), shown under the logo: the app running, the data, then the pictures on screen. */
   const [bootP, setBootP] = useState(0.08);
   const bootTo = (p: number) => setBootP((x) => Math.max(x, Math.min(1, p)));
@@ -1545,7 +1542,7 @@ export default function Studio({ userName }: { userName: string }) {
   // One slide card (the deck's, or on a phone the selected slide's fields under the deck).
   const cardFor = (cfg: SlideCfg, i: number, part?: "fields") => (
               <SlideCard key={(part ?? "") + cfg.id} part={part} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={slideTexts} picPools={vPics} zones={!slideFull && (isPhone ? phoneZones : ws.zones)} onZones={isPhone ? togglePhoneZones : () => upd((w) => ({ ...w, zones: !w.zones }))} onFull={() => setSlideFull(true)} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
+                textPools={slideTexts} picPools={vPics} zones={isPhone ? phoneZones : ws.zones} onZones={isPhone ? togglePhoneZones : () => upd((w) => ({ ...w, zones: !w.zones }))} onFull={() => setPreview(true)} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
                 lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
@@ -1930,11 +1927,6 @@ export default function Studio({ userName }: { userName: string }) {
       {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} danger />}
       {overlay?.k === "lyrics" && (
         <LyricsEditor name={project.name} lyrics={project.lyrics} song={project.lyricsLinked ? undefined : project.songLyrics} synced={!!project.lyricsLinked && !!project.lyricWords?.length} onChange={setLyrics} onClose={() => setOverlay(null)} />
-      )}
-      {slideFull && project && (
-        <FullView source={() => document.querySelector<HTMLCanvasElement>(".card.sel .cv-wrap canvas.cv")}
-          onClose={() => setSlideFull(false)}
-          onSide={(dir) => updProject((p) => ({ ...p, selectedSlide: Math.max(0, Math.min(p.slides.length - 1, p.selectedSlide + dir)) }))} />
       )}
       <Toast msg={toast} />
       {boot !== "gone" && bootEl(boot === "fade" ? "out" : "on")}

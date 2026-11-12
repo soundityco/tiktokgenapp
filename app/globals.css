@@ -200,6 +200,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .preview { display: grid; gap: var(--s2); max-width: 100%; }
 .preview-canvas { display: block; max-height: calc(92dvh - 48px); max-width: 100%; width: auto; height: auto; margin: 0 auto; border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
 .preview-bar { display: flex; align-items: center; gap: var(--s2); color: var(--text); }
+.preview-pic { position: relative; justify-self: center; max-width: 100%; }
+.preview-pic .pv-close { position: absolute; top: 4px; right: 4px; }
+@media (hover: none) { .preview-hint { visibility: hidden; } } /* no keys on a phone */
 .flip svg { transform: scaleX(-1); }
 .tabs { display: inline-flex; gap: var(--s4); border-bottom: 1px solid var(--line); width: 100%; }
 .tab { height: 34px; padding: 0; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); cursor: pointer; }

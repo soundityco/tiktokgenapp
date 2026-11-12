@@ -45,13 +45,16 @@ export default function SlidePreview({
   return (
     <div className="ov preview-ov" role="dialog" aria-modal="true" aria-label={t("Slide {n}", { n: index + 1 })} onClick={onClose}>
       <div className="preview" onClick={(e) => e.stopPropagation()}>
-        <canvas ref={cv} className="preview-canvas" />
+        {/* The cross at the picture's top right, the video's full screen one. */}
+        <div className="preview-pic">
+          <canvas ref={cv} className="preview-canvas" />
+          <button className="pv-close" aria-label={t("Close")} onClick={onClose}><Icon name="x" size={18} /></button>
+        </div>
         <div className="preview-bar">
           <button className="btn sm quiet icon" aria-label={t("Previous slide")} disabled={index === 0} onClick={() => onNav(index - 1)}><Icon name="back" size={14} /></button>
           <span className="mono xs">{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</span>
           <button className="btn sm quiet icon flip" aria-label={t("Next slide")} disabled={index === total - 1} onClick={() => onNav(index + 1)}><Icon name="back" size={14} /></button>
-          <span className="muted xs grow">{t("Space or Esc to close · ← → to browse")}</span>
-          <button className="btn sm quiet icon" aria-label={t("Close")} onClick={onClose}><Icon name="x" size={14} /></button>
+          <span className="muted xs grow preview-hint">{t("Space or Esc to close · ← → to browse")}</span>
         </div>
       </div>
     </div>
