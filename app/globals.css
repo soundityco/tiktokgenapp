@@ -2442,3 +2442,11 @@ details.sec:first-of-type { background-image: none; }
 .src-tile .pick-btn { color: var(--muted); font-size: 12px; }
 .src-tile .pick-btn:hover { color: var(--text); }
 .src-tile .pick-add { height: 30px; border-color: transparent; background: none; justify-content: flex-start; padding: 0 6px; color: var(--muted); }
+/* Phone only: the draw's settings in the account menu; the video studio's Options menu stays on the computer. */
+.phone-only { display: none; }
+@media (max-width: 1000px) {
+  .phone-only { display: block; }
+  .video-stage > .stage-meta .slot.h-opts.opts-phone { display: none; }
+}
+/* The lyrics' icon exactly as in the library (its T, its gold, its ground). */
+.src-lyrics .src-ico { color: var(--lyrics); background: color-mix(in srgb, var(--lyrics) 10%, var(--bg)); }

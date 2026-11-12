@@ -1575,6 +1575,15 @@ export default function Studio({ userName }: { userName: string }) {
             <div className="label cap">{t("Language")}</div>
             <button onClick={() => { setLang("en"); close(); }}>{lang === "en" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}English</button>
             <button onClick={() => { setLang("fr"); close(); }}>{lang === "fr" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}Français</button>
+            {/* Phone: the draw's settings (both studios), here rather than in an Options menu of each studio. */}
+            {ws && (
+              <div className="phone-only menu-draw">
+                <div className="sep" />
+                <div className="label cap">{t("Draw")}</div>
+                <label className="check menu-check"><input type="checkbox" checked={ws.noRepeat} onChange={(e) => upd((w) => ({ ...w, noRepeat: e.target.checked }))} />{t("No repeats until everything was used")}</label>
+                <label className="check menu-check"><input type="checkbox" checked={!!ws.favorTop} onChange={(e) => upd((w) => ({ ...w, favorTop: e.target.checked }))} />{t("Favor my best hooks (by TikTok views)")}</label>
+              </div>
+            )}
             <div className="sep" />
             <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
             <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
