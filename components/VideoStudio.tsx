@@ -3745,55 +3745,71 @@ export default function VideoStudio({
 
           {tab === "hook" && (
             <div className="tab-body">
-              <div className="row hook-pick">
-                <label className="field grow">
-                  <span className="row" style={{ gap: 6 }}>{t("Hook list")} <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} /></span>
-                  <Select className="input" value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
-                    onChange={(e) => setV({ hookPoolId: e.target.value || undefined, hookTheme: undefined, hookTags: undefined })} disabled={!hookPools.length}>
-                    <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
-                    {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
-                  </Select>
-                </label>
+              {/* One line: the list the hooks come from, its tags (in a menu), and Generate. */}
+              <div className="row nowrap hook-pick">
+                <Select className="input sm grow" aria-label={t("Hook list")} value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
+                  onChange={(e) => setV({ hookPoolId: e.target.value || undefined, hookTheme: undefined, hookTags: undefined })} disabled={!hookPools.length}>
+                  <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
+                  {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
+                </Select>
                 {hookGroups.length > 1 && (
-                  <div className="field grow hook-tags">{t("Tags")}
-                    <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                      <button className={"pick-chip" + (!hookTicked.length ? " on" : "")} onClick={() => setHookTicked([])}>{t("All ({n})", { n: hookTagsOf.length })}</button>
-                      {hookGroups.map((g) => {
-                        const on = hookTicked.includes(g.id);
-                        return (
-                          <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
-                            onClick={() => setHookTicked(on ? hookTicked.filter((x) => x !== g.id) : [...hookTicked, g.id])}>{themeLabel(g.id, t)} · {g.items.length}</button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <Menu float trigger={(open, toggle) => (
+                    <button type="button" className={"input sm pick-btn hook-tags-btn" + (open ? " on" : "")} onClick={toggle} aria-label={t("Tags")}>
+                      <span className="truncate">{hookTicked.length === 0 ? t("All tags") : hookTicked.length === 1 ? themeLabel(hookTicked[0], t) : t("{n} tags", { n: hookTicked.length })}</span>
+                      <Icon name="chevron" size={13} />
+                    </button>
+                  )}>
+                    {() => (
+                      <div className="pick-pane">
+                        <div className="pick-chips" role="group" aria-label={t("Tags")}>
+                          <button className={"pick-chip" + (!hookTicked.length ? " on" : "")} onClick={() => setHookTicked([])}>{t("All ({n})", { n: hookTagsOf.length })}</button>
+                          {hookGroups.map((g) => {
+                            const on = hookTicked.includes(g.id);
+                            return (
+                              <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
+                                onClick={() => setHookTicked(on ? hookTicked.filter((x) => x !== g.id) : [...hookTicked, g.id])}>{themeLabel(g.id, t)} · {g.items.length}</button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </Menu>
                 )}
                 {hookItems.length > 0 && (
-                  <button className="btn primary" title={t("A different hook from the list for each one")}
-                    onClick={() => { if (hooks.length) drawAll(); else addHook(drawFor([]) ?? ""); }}><Icon name="sparkle" />{t("Generate")}</button>
+                  <button className="btn sm primary" title={t("A different hook from the list for each one")}
+                    onClick={() => { if (hooks.length) drawAll(); else addHook(drawFor([]) ?? ""); }}><Icon name="sparkle" size={14} />{t("Generate")}</button>
                 )}
+                <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} />
               </div>
               {!hookPools.length && <p className="muted xs">{t("Make a hook list in the carousel (Import hooks): the video draws from the same lists.")}</p>}
               {hooks.map((h, i) => (
                 <div key={h.id} className="hook-item">
-                  <div className="row">
+                  {/* Its name, then its actions as icons: another one drawn, one picked in the list, go to it, remove. */}
+                  <div className="row nowrap hook-head">
                     <span className="label grow">{t("Hook {n}", { n: i + 1 })}</span>
-                    <button className="btn sm quiet" onClick={() => { stop(); setHead(round2(settings.crop.start + h.from)); }}>{t("Go to it")}</button>
-                    <button className="btn sm quiet danger" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))}>{t("Remove")}</button>
+                    {hookItems.length > 0 && (<>
+                      <button className="btn sm icon quiet" onClick={() => drawInto(h.id)} aria-label={t("Another hook")} title={t("Another hook")}><Icon name="refresh" size={14} /></button>
+                      <Menu float trigger={(open, toggle) => (
+                        <button className={"btn sm icon quiet" + (open ? " on" : "")} onClick={toggle} aria-label={t("Pick from the list")} title={t("Pick from the list")}><Icon name="list" size={14} /></button>
+                      )}>
+                        {(close) => (
+                          <div className="pick-pane">
+                            <div className="pick-list">
+                              {hookItems.map((x, k) => (
+                                <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(x)); }}>
+                                  <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </Menu>
+                    </>)}
+                    <button className="btn sm icon quiet" onClick={() => { stop(); setHead(round2(settings.crop.start + h.from)); }} aria-label={t("Go to it")} title={t("Go to it")}><Icon name="play" size={13} /></button>
+                    <button className="btn sm icon quiet hook-del" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))} aria-label={t("Remove")} title={t("Remove")}><Icon name="trash" size={14} /></button>
                   </div>
                   <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
                     onChange={(e) => editHook(h.id, { text: e.target.value, link: undefined })} />
-                  {hookItems.length > 0 && (
-                    <div className="row">
-                      <button className="btn sm quiet" onClick={() => drawInto(h.id)} title={t("Pick another text")}><Icon name="refresh" size={13} />{t("Another hook")}</button>
-                      {/* The hook's text, drawn or picked, shows as chosen in the list. */}
-                      <Select className="input sm grow" value={hookItems.includes(h.text) ? h.text : ""} aria-label={t("Pick from the list")}
-                        onChange={(e) => { if (e.target.value) editHook(h.id, fromList(e.target.value)); }}>
-                        <option value="" disabled={hookItems.includes(h.text)}>{h.text.trim() && !hookItems.includes(h.text) ? t("Text retouched · pick from the list…") : t("Pick from the list…")}</option>
-                        {hookItems.map((x, k) => <option key={k} value={x}>{x.replace(/\|/g, " ")}</option>)}
-                      </Select>
-                    </div>
-                  )}
                   <div className="row">
                     <span className="nudge">
                       <span className="muted xs">{t("From")}</span>

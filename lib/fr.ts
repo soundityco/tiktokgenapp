@@ -18,6 +18,7 @@ export const FR: Record<string, string> = {
   "Demo: a brand-new account, nothing is saved (a reload starts again). Click to go back to your account.": "Démo : un compte tout neuf, rien n'est enregistré (recharger repart de zéro). Clique pour revenir à ton compte.",
   "Drive copy updated: {video} (made in {make} s by {how}, sent in {send} s, {size} MB)": "Copie Drive mise à jour : {video} (faite en {make} s par {how}, envoyée en {send} s, {size} Mo)",
   "the video chip": "la puce vidéo",
+  "All tags": "Tous les tags",
   "Before: the picture as recorded, to compare": "Avant : l'image telle qu'elle a été filmée, pour comparer",
   "Before: the photo without its edits, to compare": "Avant : la photo sans ses retouches, pour comparer",
   "After": "Après",

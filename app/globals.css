@@ -2550,3 +2550,10 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .font-menu { animation: drop-in .18s cubic-bezier(.2,.8,.2,1); }
 .cue-edit { animation: hint-in .16s ease-out; }
 @media (prefers-reduced-motion: reduce) { .adjust-panel, .adjust-panel.leaving, .font-menu, .cue-edit { animation: none; } }
+
+/* The video's hooks: one line on top (list, tags, Generate), each hook with its actions as small icons. */
+.hook-pick { gap: 8px; align-items: center; }
+.hook-pick > .dd { min-width: 0; }
+.hook-tags-btn { flex: 0 1 170px; min-width: 0; width: auto; }
+.hook-head { gap: 2px; align-items: center; }
+.hook-head .hook-del:hover { color: var(--danger); }
