@@ -1163,9 +1163,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .deck-dots { touch-action: none; padding: 10px 8px; margin: -10px -8px; }
 }
 /* Undo / redo: one pair, the arrows 12px apart (narrow buttons, touching). */
-.top .top-hist, .top .top-hist.btn.icon { width: 28px; }
-.top .top-hist + .top-hist { margin-left: -8px; }
-@media (max-width: 640px) { .top .top-hist, .top .top-hist.btn.icon { width: 30px; } }
+/* Undo / redo: square buttons (as wide as tall), side by side with no gap. */
+.top .top-hist, .top .top-hist.btn.icon { width: auto; aspect-ratio: 1; padding: 0; justify-content: center; }
+.top .top-hist + .top-hist { margin-left: -8px; } /* touching: the top bar's gap (8px) taken back */
 
 @media (max-width: 640px) {
   /* Room for it on a 360px screen: slimmer tabs. */
@@ -2469,12 +2469,16 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 @media (min-width: 1001px) {
   html.pv-full .board-player { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 85; width: min(640px, calc(100vw - 48px)); transition: opacity .3s; }
   /* Computer: the player always there; it fades when the mouse rests, comes back when it moves or is over it. */
-  html.pv-full .board-player { transition: opacity .4s; }
+  html.pv-full .board-player { transition: opacity .3s ease; }
   html.pv-idle .board-player:not(:hover) { opacity: .15; }
   html.pv-idle .pv-full-layer, html.pv-idle .pv-full-layer * { cursor: none; }
-  html.pv-idle .pv-close { opacity: 0; transition: opacity .4s; }
+  html.pv-idle .pv-close { opacity: 0; transition: opacity .3s ease; }
 }
 /* Computer: the slide's zones button only when the pointer is over the slide (the selected one too). */
 @media (hover: hover) and (min-width: 1001px) {
   .card.sel:not(:hover) .zones-open:not(:focus-visible) { opacity: 0; }
 }
+
+/* The player's film strip: dragging the playhead over it never selects (nor drags) its pictures. */
+.dp, .dp * { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
+.dp img { pointer-events: none; }

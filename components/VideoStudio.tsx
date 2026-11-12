@@ -1797,7 +1797,7 @@ export default function VideoStudio({
     if (!full) { setIdle(false); return; }
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); toggleFull(false); } };
     let timer = 0;
-    const wake = () => { setIdle(false); clearTimeout(timer); timer = window.setTimeout(() => setIdle(true), 2000); };
+    const wake = () => { setIdle(false); clearTimeout(timer); timer = window.setTimeout(() => setIdle(true), 900); };
     const away = () => { clearTimeout(timer); setIdle(true); };
     window.addEventListener("keydown", key);
     window.addEventListener("mousemove", wake);
