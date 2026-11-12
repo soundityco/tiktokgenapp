@@ -2408,3 +2408,25 @@ details.sec:first-of-type { background-image: none; }
 .card .src-picks .pick-add { width: 100%; justify-content: center; }
 .card .lyric-src-head { margin-top: var(--s2); }
 .card .src-back { width: 20px; height: 20px; min-height: 20px; padding: 0; justify-content: center; color: var(--muted); }
+/* A slide's sources as two tiles: an icon of the kind (lyrics in their gold) or the photo on the slide, small;
+   the title; where it comes from; then which one. */
+.src-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); margin-top: var(--s2); }
+.src-tile { display: grid; gap: 8px; align-content: start; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); min-width: 0; }
+.src-tile.src-lyrics { border-color: color-mix(in srgb, var(--lyrics) 32%, var(--line)); }
+.src-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.src-ico { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r); background: var(--raised); color: var(--muted); overflow: hidden; }
+.src-lyrics .src-ico { color: var(--lyrics); background: color-mix(in srgb, var(--lyrics) 14%, transparent); }
+.src-pool .src-ico { color: var(--text); }
+.src-ico.has-pic { width: 22px; height: 30px; background: none; }
+.src-ico.has-pic .thumb { width: 100%; height: 100%; aspect-ratio: auto; outline: 0; border-radius: 3px; }
+.src-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.src-tile .pick-btn, .src-tile .pick-add { margin: 0; }
+.src-tile > *, .src-tile .menu-wrap { min-width: 0; }
+.src-tile .menu-wrap { display: block; width: 100%; }
+.src-tile .pick-btn { width: 100%; }
+.src-head .hint, .src-head .src-back { flex: none; }
+.src-k { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-head { gap: 6px; }
+.src-head .src-k { flex: none; }
+.src-head .hint { margin-left: auto; }
+.src-head .src-back { width: 18px; height: 18px; min-height: 18px; }

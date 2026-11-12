@@ -361,14 +361,20 @@ export default function SlideCard(p: Props) {
       <label className="field slide-text">{t("Text on the slide")}
         <textarea className="input" rows={3} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
       </label>
-      <div className="cols2 fields">
-        <label className="field"><span className="row" style={{ gap: 6 }}>{t("Text from")}
+      {/* The slide's sources, as two tiles: its text (an icon of the kind: the release's lyrics in their gold, a
+          list) and its photo (the one on the slide, small). Each: where it comes from, then which one. */}
+      <div className="src-tiles">
+        <div className={"src-tile src-" + cfg.textSource.kind}>
+          <div className="src-head">
+            <span className="src-ico" aria-hidden><Icon name={cfg.textSource.kind === "lyrics" ? "music" : cfg.textSource.kind === "pool" ? "type" : "minus"} size={14} /></span>
+            <span className="src-k" title={t("Text from")}>{t("Text")}</span>
           {/* A lyrics slide retouched by hand: said in an (i), with the way back to the release's lyrics beside it. */}
           {cfg.textSource.kind === "lyrics" && p.gen?.edited && !p.locked && (<>
             <Hint text={t("Retouched on this slide: the lyrics of the release are not changed.")} />
             <button type="button" className="btn icon sm quiet src-back" aria-label={t("Back to the lyrics")} title={t("Back to the lyrics")}
               onClick={(e) => { e.preventDefault(); p.onLyricsBack(); }}><Icon name="undo" size={11} /></button>
-          </>)}</span>
+          </>)}
+          </div>
           <Select className="input" value={textVal} onChange={(e) => {
             const v = e.target.value;
             // Lyrics: "Lyrics:" on top of the text, in the app's language (to retouch on the slide like the rest).
@@ -378,8 +384,48 @@ export default function SlideCard(p: Props) {
             <option value="__lyrics">{t("Lyrics")}</option>
             {p.textPools.filter((x) => x.kind !== "block" || x.id === textVal).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </Select>
-        </label>
-        <label className="field">{t("Photo from")}
+          {!p.locked && (
+          cfg.textSource.kind === "pool" && allItems.length > 0 ? (
+              <Menu float left trigger={(open, toggle) => (
+                <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Pick from the list")}>
+                  <span className="truncate">{listItems.includes(text) ? text.replace(/\|/g, " ") : text.trim() ? t("Text retouched") : t("Pick a text")}</span>
+                  {!!ticked?.length && <span className="pick-tag">{ticked.length === 1 ? themeLabel(ticked[0], t) : t("{n} tags", { n: ticked.length })}</span>}
+                  <Icon name="chevron" size={13} />
+                </button>
+              )}>
+                {(close) => (
+                  <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+                    {groups.length > 1 && (
+                      <div className="pick-chips" role="group" aria-label={t("Tags")}>
+                        <button className={"pick-chip" + (!ticked?.length ? " on" : "")} onClick={() => setTicked([])}>{t("All ({n})", { n: allItems.length })}</button>
+                        {groups.map((g) => {
+                          const on = !!ticked?.includes(g.id);
+                          return (
+                            <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
+                              onClick={() => setTicked(on ? (ticked ?? []).filter((x) => x !== g.id) : [...(ticked ?? []), g.id])}>
+                              {themeLabel(g.id, t)} · {g.items.length}</button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="pick-list">
+                      {listItems.map((x, k) => (
+                        <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
+                          <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Menu>
+            ) : lyricsPick
+          )}
+        </div>
+        <div className="src-tile src-photo">
+          <div className="src-head">
+            <span className={"src-ico" + (p.gen?.picId ? " has-pic" : "")} aria-hidden>{p.gen?.picId ? <Thumb id={p.gen.picId} name={p.gen.picName ?? ""} /> : <Icon name="image" size={14} />}</span>
+            <span className="src-k" title={t("Photo from")}>{t("Photo")}</span>
+          </div>
           <Select className="input" value={cfg.picPoolId ?? ""} onChange={(e) => {
             const v = e.target.value || null;
             p.onCfg((c) => ({ ...c, picPoolId: v }));
@@ -389,68 +435,30 @@ export default function SlideCard(p: Props) {
             <option value="">{t("No photo")}</option>
             {p.picPools.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </Select>
-        </label>
-      </div>
-      {/* Under the sources, one picker each, side by side: the text (its themes as chips, then the list) and the
-          photo (a grid). Both lists scroll. */}
-      {!p.locked && ((cfg.textSource.kind === "pool" && allItems.length > 0) || lyricsPick || (pool && pool.pics.length > 0 && p.onChoosePic)) && (
-        <div className="cols2 src-picks">
-          {cfg.textSource.kind === "pool" && allItems.length > 0 ? (
-            <Menu float left trigger={(open, toggle) => (
-              <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Pick from the list")}>
-                <span className="truncate">{listItems.includes(text) ? text.replace(/\|/g, " ") : text.trim() ? t("Text retouched") : t("Pick a text")}</span>
-                {!!ticked?.length && <span className="pick-tag">{ticked.length === 1 ? themeLabel(ticked[0], t) : t("{n} tags", { n: ticked.length })}</span>}
-                <Icon name="chevron" size={13} />
-              </button>
-            )}>
-              {(close) => (
-                <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
-                  {groups.length > 1 && (
-                    <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                      <button className={"pick-chip" + (!ticked?.length ? " on" : "")} onClick={() => setTicked([])}>{t("All ({n})", { n: allItems.length })}</button>
-                      {groups.map((g) => {
-                        const on = !!ticked?.includes(g.id);
-                        return (
-                          <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
-                            onClick={() => setTicked(on ? (ticked ?? []).filter((x) => x !== g.id) : [...(ticked ?? []), g.id])}>
-                            {themeLabel(g.id, t)} · {g.items.length}</button>
-                        );
-                      })}
+          {!p.locked && (
+          pool && pool.pics.length > 0 && p.onChoosePic ? (
+              <Menu float trigger={(open, toggle) => (
+                <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Choose the photo")}>
+                  <span className="truncate">{p.gen?.picName ?? t("Choose the photo")}</span>
+                  <Icon name="chevron" size={13} />
+                </button>
+              )}>
+                {(close) => (
+                  <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+                    <div className="pic-grid">
+                      {pool.pics.map((x) => (
+                        <button key={x.id} className={"pic-cell" + (x.id === p.gen?.picId ? " on" : "")} title={x.name} onClick={() => { close(); p.onChoosePic!(x.id, x.name); }}>
+                          <Thumb id={x.id} name={x.name} />
+                        </button>
+                      ))}
                     </div>
-                  )}
-                  <div className="pick-list">
-                    {listItems.map((x, k) => (
-                      <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
-                        <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
-                      </button>
-                    ))}
                   </div>
-                </div>
-              )}
-            </Menu>
-          ) : lyricsPick ?? <span />}
-          {pool && pool.pics.length > 0 && p.onChoosePic ? (
-            <Menu float trigger={(open, toggle) => (
-              <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Choose the photo")}>
-                <span className="truncate">{p.gen?.picName ?? t("Choose the photo")}</span>
-                <Icon name="chevron" size={13} />
-              </button>
-            )}>
-              {(close) => (
-                <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
-                  <div className="pic-grid">
-                    {pool.pics.map((x) => (
-                      <button key={x.id} className={"pic-cell" + (x.id === p.gen?.picId ? " on" : "")} title={x.name} onClick={() => { close(); p.onChoosePic!(x.id, x.name); }}>
-                        <Thumb id={x.id} name={x.name} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Menu>
-          ) : <span />}
+                )}
+              </Menu>
+            ) : null
+          )}
         </div>
-      )}
+      </div>
   </>);
   if (p.part === "fields") return <div className="card card-fields">{fields}</div>;
 
