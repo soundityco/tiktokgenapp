@@ -10,7 +10,7 @@ import { Modal } from "./ui";
  * "Send to my phone": a QR code to scan with the phone; the files go straight from this browser to the phone's
  * over the local network (no upload). If the two cannot reach each other, the files can go through the Drive.
  */
-export default function ShareDialog({ title, caption, kind, build, onClose, place }: {
+export default function ShareDialog({ title, caption, kind, build, onClose, place, bare }: {
   title: string;
   /** Its folder in the Drive when it goes that way: Rollout / Exports / <release> / <what · date>. */
   place?: { release: string; what: string };
@@ -19,6 +19,8 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
   /** The files to send (made when the window opens: the pictures of a carousel, an exported video…). */
   build: () => Promise<{ name: string; blob: Blob }[]>;
   onClose: () => void;
+  /** Inside another window (the export's): only its content and its buttons, the last one going back. */
+  bare?: boolean;
 }) {
   const { t } = useT();
   const [state, setState] = useState<SendState | { step: "building" } | { step: "error"; why: string }>({ step: "building" });
@@ -69,8 +71,8 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
   const canNative = typeof navigator !== "undefined" && files.current.length > 0
     && !!navigator.canShare?.({ files: files.current.map((f) => new File([f.blob], f.name, { type: f.blob.type })) });
 
-  return (
-    <Modal title={t("Send to my phone")} onClose={() => { ac.current.abort(); onClose(); }}>
+  const body = (
+    <>
       <div className="stack share-send">
         {state.step === "building" || state.step === "opening" ? (
           <p className="shine">{state.step === "building" ? t("Preparing the files…") : t("Opening the link…")}</p>
@@ -115,8 +117,10 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
       </div>
       <div className="modal-foot">
         {canNative && <button className="btn left" onClick={() => void navigator.share({ files: files.current.map((f) => new File([f.blob], f.name, { type: f.blob.type })), title }).catch(() => {})}>{t("Other ways (AirDrop…)")}</button>}
-        <button className="btn primary" onClick={() => { ac.current.abort(); onClose(); }}>{state.step === "done" || driveDone ? t("Done") : t("Close")}</button>
+        <button className="btn primary" onClick={() => { ac.current.abort(); onClose(); }}>{bare ? t("Back") : state.step === "done" || driveDone ? t("Done") : t("Close")}</button>
       </div>
-    </Modal>
+    </>
   );
+  if (bare) return body;
+  return <Modal title={t("Send to my phone")} onClose={() => { ac.current.abort(); onClose(); }}>{body}</Modal>;
 }

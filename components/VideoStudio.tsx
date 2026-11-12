@@ -2609,6 +2609,7 @@ export default function VideoStudio({
     exportRef.current?.abort();
     setExp(null);
     setBatch(null);
+    setShareOpen(false);
   };
 
   /**
@@ -4006,17 +4007,19 @@ export default function VideoStudio({
           message={t("“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.", { name: clipName(clip) })}
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
       )}
-      {shareOpen && (
-        <ShareDialog kind="video" onClose={() => setShareOpen(false)}
-          place={{ release: project.name, what: lastFiles.current.length > 1 ? t("{n} videos", { n: lastFiles.current.length }) : clipName(clip) }}
-          title={lastFiles.current.length > 1 ? `${project.name} · ${t("{n} videos", { n: lastFiles.current.length })}` : `${project.name} · ${clipName(clip)}`}
-          // One caption: the video's; several videos: each one's, under its name.
-          caption={lastFiles.current.length === 1 ? lastFiles.current[0].caption
-            : lastFiles.current.filter((f) => f.caption).map((f) => `${f.name.replace(/ clip\.\w+$/, "")}\n${f.caption}`).join("\n\n———\n\n") || undefined}
-          build={async () => lastFiles.current.map((f) => ({ name: f.name, blob: f.blob }))} />
-      )}
       {(exp || batch) && (
-        <Modal title={batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")} onClose={closeExport}>
+        <Modal title={shareOpen ? t("Send to my phone") : batch ? (batchDone ? t("Videos ready") : t("Exporting the videos")) : exp?.done ? t("Video ready") : t("Exporting the video")}
+          onClose={closeExport}>
+          {/* Send to my phone: the same window shows the QR code instead (Back returns to the export). */}
+          {shareOpen ? (
+          <ShareDialog bare kind="video" onClose={() => setShareOpen(false)}
+            place={{ release: project.name, what: lastFiles.current.length > 1 ? t("{n} videos", { n: lastFiles.current.length }) : clipName(clip) }}
+            title={lastFiles.current.length > 1 ? `${project.name} · ${t("{n} videos", { n: lastFiles.current.length })}` : `${project.name} · ${clipName(clip)}`}
+            // One caption: the video's; several videos: each one's, under its name.
+            caption={lastFiles.current.length === 1 ? lastFiles.current[0].caption
+              : lastFiles.current.filter((f) => f.caption).map((f) => `${f.name.replace(/ clip\.\w+$/, "")}\n${f.caption}`).join("\n\n———\n\n") || undefined}
+            build={async () => lastFiles.current.map((f) => ({ name: f.name, blob: f.blob }))} />
+          ) : (<>
           <div className="stack">
             {batch && (
               <ul className="batch-list">
@@ -4070,6 +4073,7 @@ export default function VideoStudio({
               ? <button className="btn primary" onClick={closeExport}>{t("Close")}</button>
               : <button className="btn quiet" onClick={closeExport}>{t("Cancel")}</button>}
           </div>
+          </>)}
         </Modal>
       )}
     </div>
