@@ -972,6 +972,17 @@ export default function Studio({ userName }: { userName: string }) {
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g, slides: cfgs } : x)) };
     });
   };
+  /** A photo of the slide's list picked by hand. */
+  const choosePic = (i: number, id: string, name: string) => {
+    if (project?.slides[i]?.locked) return;
+    upd((w) => {
+      const p = w.projects.find((x) => x.id === w.currentProjectId)!;
+      const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
+      g[i] = { ...g[i], picId: id, picName: name, picCredit: undefined };
+      const cfgs = p.slides.map((s, k) => (k === i ? reframe(s, id) : s));
+      return { ...w, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g, slides: cfgs } : x)) };
+    });
+  };
   const rerollText = (i: number) => {
     if (project?.slides[i]?.locked) return;
     upd((w) => {
@@ -1537,7 +1548,7 @@ export default function Studio({ userName }: { userName: string }) {
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
                 onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt, edited: true })}
                 onLyricsBack={() => setGen(i, { text: cfg.textSource.kind === "lyrics" ? slideLyrics(project, cfg.textSource) : "", edited: false })}
-                onRerollPic={() => rerollPic(i)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
+                onRerollPic={() => rerollPic(i)} onChoosePic={(id, name) => choosePic(i, id, name)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
                 onWebPic={(img) => setGen(i, { picId: webPicId(img.full), picName: img.author || img.license,
                   picCredit: { author: img.author, license: img.license, page: img.page, required: img.creditRequired } })}
                 onImage={(blob, name) => { setBoardDrag(false); setDropPic({ i, blob, name }); }}

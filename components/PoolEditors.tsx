@@ -11,7 +11,7 @@ import type { PicPool, PicRef, TextPool } from "@/lib/types";
 import Icon from "./Icon";
 import { Modal, ScopeSelect, Select } from "./ui";
 
-function Thumb({ id, name }: { id: string; name: string }) {
+export function Thumb({ id, name }: { id: string; name: string }) {
   const holder = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);

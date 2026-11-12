@@ -11,6 +11,7 @@ import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool }
 import { Wheel } from "./ui";
 import { isLineList } from "@/lib/defaults";
 import ImageFinder from "./ImageFinder";
+import { Thumb } from "./PoolEditors";
 import type { FoundImage } from "@/lib/imageSearch";
 
 /** Photo search on the web (Flickr / Pexels): off for now, the photos did not have the look wanted. */
@@ -54,6 +55,8 @@ interface Props {
   onCfg: (fn: (c: SlideCfg) => SlideCfg) => void;
   onText: (t: string) => void;
   onRerollPic: () => void;
+  /** A photo of the slide's list chosen by hand (its picture shown in a grid). */
+  onChoosePic?: (id: string, name: string) => void;
   onRerollText: () => void;
   /** A lyrics slide retouched by hand: back to the release's lyrics. */
   onLyricsBack: () => void;
@@ -90,6 +93,8 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const ADJUST_OPEN = "rollout:adjust-open";
 
 export default function SlideCard(p: Props) {
+  /** The slide's photo list (its photos to choose from). */
+  const pool = p.picPools.find((x) => x.id === p.cfg.picPoolId);
   const { t } = useT();
   const { cfg, gen } = p;
   const { img, err } = useDriveImage(gen?.picId ?? null);
@@ -344,6 +349,8 @@ export default function SlideCard(p: Props) {
           <Select className="input" value={cfg.picPoolId ?? ""} onChange={(e) => {
             const v = e.target.value || null;
             p.onCfg((c) => ({ ...c, picPoolId: v }));
+            // Another list: the slide takes a photo drawn from it at once (none for "No photo").
+            if (!p.locked) p.onRerollPic();
           }}>
             <option value="">{t("No photo")}</option>
             {p.picPools.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
@@ -443,6 +450,21 @@ export default function SlideCard(p: Props) {
         {FIND_PHOTOS && <button className="btn sm quiet icon" onClick={(e) => { e.stopPropagation(); setFinding(true); }} disabled={p.locked}
           title={t("Find a photo on the web (free to post)")} aria-label={t("Find a photo")}><Icon name="search" size={14} /></button>}
         <button className="btn sm quiet" onClick={p.onRerollPic} disabled={!cfg.picPoolId || p.locked} title={t("Pick another photo")}><Icon name="refresh" size={13} />{t("Photo")}</button>
+        {p.onChoosePic && pool && pool.pics.length > 0 && !p.locked && (
+          <Menu float trigger={(_, toggle) => (
+            <button className="btn sm quiet icon pic-choose" aria-label={t("Choose the photo")} title={t("Choose the photo")} onClick={(e) => { e.stopPropagation(); toggle(); }}><Icon name="image" size={14} /></button>
+          )}>
+            {(close) => (
+              <div className="pic-grid" onClick={(e) => e.stopPropagation()}>
+                {pool.pics.map((x) => (
+                  <button key={x.id} className={"pic-cell" + (x.id === p.gen?.picId ? " on" : "")} title={x.name} onClick={() => { close(); p.onChoosePic!(x.id, x.name); }}>
+                    <Thumb id={x.id} name={x.name} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </Menu>
+        )}
         <button className="btn sm quiet" onClick={p.onRerollText} disabled={cfg.textSource.kind !== "pool" || p.locked}
           title={cfg.textSource.kind === "lyrics" ? t("The lyrics are not drawn: tick the sections under the slide") : t("Pick another text")}><Icon name="refresh" size={13} />{t("Text")}</button>
         <button className="btn sm quiet icon" onClick={p.onSave} aria-label={t("Save this slide")} title={t("Save this slide")}><Icon name="download" size={14} /></button>
