@@ -9,6 +9,9 @@ const P: Record<string, string> = {
   minus: "M5 12h14",
   x: "M6 6l12 12M18 6L6 18",
   expand: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+  /** TikTok's zones: a square of diagonal stripes; barred when they are off. */
+  zones: "M4 4h16v16H4zM4 10l6-6M4 16L16 4M8 20L20 8M14 20l6-6",
+  "zones-off": "M4 4h16v16H4zM4 10l6-6M4 16L16 4M8 20L20 8M14 20l6-6M2 2l20 20",
   check: "M5 12.5l4.5 4.5L19 7.5",
   chevron: "M6 9l6 6 6-6",
   back: "M19 12H5M11 6l-6 6 6 6",

@@ -520,7 +520,7 @@ export default function SlideCard(p: Props) {
         {!adjusting && p.onZones && (
           <button className={"zones-open" + (p.zones ? " on" : "")} aria-pressed={!!p.zones} title={t("TikTok's interface zones on the slides")} aria-label={t("Zones")}
             onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onZones!(); }}>
-            <Icon name={p.zones ? "eye" : "eye-off"} size={15} />
+            <Icon name={p.zones ? "zones" : "zones-off"} size={15} />
           </button>
         )}
         {!adjusting && img && !p.locked && (

@@ -2487,7 +2487,7 @@ details.sec:first-of-type { background-image: none; }
   opacity: 0; transition: opacity .15s; }
 .card:hover .zones-open, .card.sel .zones-open, .zones-open:focus-visible { opacity: 1; }
 @media (hover: hover) and (min-width: 1001px) {
-  .video-stage .cv-wrap .pv-zones:not(.on), .video-stage .cv-wrap .pv-expand { opacity: 0; }
+  .video-stage .cv-wrap .pv-zones, .video-stage .cv-wrap .pv-expand { opacity: 0; }
   .video-stage .cv-wrap:hover .pv-zones, .video-stage .cv-wrap:hover .pv-expand { opacity: 1; }
 }
 /* The full screen, on a computer too: the picture on black, the cross; the board's player above it. */
@@ -2502,7 +2502,7 @@ html.pv-full, html.pv-full body { overflow: hidden; }
   html.pv-dim .board-player:hover { opacity: 1; }
   html.pv-noplayer .board-player { opacity: 0; pointer-events: none; }
 }
-/* Computer: the board's floating player can sit over the bottom of the picture: the icons go to its top. */
-@media (min-width: 1001px) {
-  .video-stage .cv-wrap .pv-zones, .video-stage .cv-wrap .pv-expand { top: 2px; bottom: auto; }
+/* Computer: the slide's zones button only when the pointer is over the slide (the selected one too). */
+@media (hover: hover) and (min-width: 1001px) {
+  .card.sel:not(:hover) .zones-open:not(:focus-visible) { opacity: 0; }
 }

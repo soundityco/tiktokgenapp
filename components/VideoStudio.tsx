@@ -695,6 +695,9 @@ export default function VideoStudio({
   const [snap, setSnap] = useState({ v: false, h: false });
   const aidsRef = useRef({ zones: false, guideV: false, guideH: false });
   // The alignment guides always show while dragging (as on every social app): only the zones can be turned off.
+  /** The preview is in full screen (set further down, where the full screen lives). */
+  const fullRef = useRef(false);
+  // The full screen shows the picture as it will be posted: never TikTok's zones over it.
   aidsRef.current = { zones: aids.zones && settings.format !== "16:9", guideV: snap.v, guideH: snap.h };
   const drawAt = useCallback((time: number) => {
     const c = canvasRef.current;
@@ -706,7 +709,7 @@ export default function VideoStudio({
     const boxes = drawScene(g, c.width, c.height, pic, time, { raw: rawRef.current, keep });
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
-    drawHelpers(g, c.width, c.height, aidsRef.current);
+    drawHelpers(g, c.width, c.height, fullRef.current ? { ...aidsRef.current, zones: false } : aidsRef.current);
     // The first picture of the video (or its last picture kept from before) is on screen: the splash can go.
     if (!shownOnce.current && (pic || posterRef.current)) { shownOnce.current = true; window.dispatchEvent(new Event("rollout:video-ready")); }
   }, [drawScene]);
@@ -1733,6 +1736,7 @@ export default function VideoStudio({
   // ---- phone: the preview full screen (the picture itself grows to fill the screen; a swipe down or the cross
   // puts it back). The dock's player stays over it, faint while playing; a tap on the picture hides or shows it. ----
   const [full, setFull] = useState(false);
+  fullRef.current = full;
   const fullFrom = useRef<DOMRect | null>(null);
   const swipe = useRef<{ y: number; t: number; dy: number } | null>(null);
   const [playerLit, setPlayerLit] = useState(false);
@@ -1778,6 +1782,8 @@ export default function VideoStudio({
     copy();
     return () => cancelAnimationFrame(raf);
   }, [full]);
+  // Into or out of the full screen: the picture drawn again, with or without the zones.
+  useEffect(() => { if (!playing) drawAt(headRef.current); }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("pv-full", full);
@@ -3305,7 +3311,7 @@ export default function VideoStudio({
             {/* Over the picture: TikTok's zones (bottom left) and the full screen (bottom right); on a computer they show on hover. */}
             {videoBlob && !full && settings.format !== "16:9" && (
               <button className={"pv-zones" + (aids.zones ? " on" : "")} aria-pressed={aids.zones} aria-label={t("Zones")} title={t("TikTok's interface zones on the video")}
-                onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones ? "eye" : "eye-off"} size={15} /></button>
+                onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones ? "zones" : "zones-off"} size={15} /></button>
             )}
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={15} /></button>}
             {/* The full screen: a layer of its own over the app, showing the preview's picture as it is drawn. */}
