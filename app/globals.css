@@ -2554,6 +2554,10 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 /* The video's hooks: one line on top (list, tags, Generate), each hook with its actions as small icons. */
 .hook-pick { gap: 8px; align-items: center; }
 .hook-pick > .dd { min-width: 0; }
-.hook-tags-btn { flex: 0 1 170px; min-width: 0; width: auto; }
-.hook-head { gap: 2px; align-items: center; }
+.hook-head { gap: 2px; align-items: center; margin-block: calc((18px - var(--h-sm)) / 2); } /* the 30px buttons overhang: label → text as in the other tabs */
+.hook-head > .label { margin-right: 6px; flex: none; }
+.hook-src-btn { flex: 0 1 190px; min-width: 0; width: auto; }
+/* Melted into the head like the slides' source selectors: a quiet line of text and its chevron, lit on hover. */
+.hook-src-btn.input { background: none; border-color: transparent; color: var(--muted); padding: 0 6px; }
+.hook-src-btn.input:hover, .hook-src-btn.input.on { background: var(--raised); border-color: transparent; color: var(--text); }
 .hook-head .hook-del:hover { color: var(--danger); }

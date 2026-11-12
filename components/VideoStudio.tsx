@@ -2846,51 +2846,58 @@ export default function VideoStudio({
   const hooks = settings.hooks ?? [];
   const setHooks = (list: VideoHook[]) => setV({ hooks: list });
   const editHook = (id: string, patch: Partial<VideoHook>) => setHooks(hooks.map((h) => (h.id === id ? { ...h, ...patch } : h)));
-  const addHook = (text = "") => {
-    const last = hooks[hooks.length - 1];
-    const from = last ? round2(Math.min(segLen - 1, last.to ?? Math.min(3, segLen / 2))) : 0;
-    const list = last && last.to === undefined ? hooks.map((h) => (h === last ? { ...h, to: from } : h)) : hooks;
-    setHooks([...list, { id: uid(), text, from, to: last ? round2(Math.min(segLen, from + 3)) : undefined, link: text ? hookLink(hookPool, text) : undefined }]);
-    if (settings.showHooks === false) setV({ showHooks: true });
-  };
   // ---- hook lists: the same as the carousel's; by default the one of the first slide of the release ----
   const slide1Pool = (() => {
     const src = project.slides[0]?.textSource;
     return src?.kind === "pool" && hookPools.some((p) => p.id === src.poolId) ? src.poolId : undefined;
   })();
   const hookPoolId = settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : slide1Pool ?? hookPools[0]?.id;
-  const hookPool = hookPools.find((p) => p.id === hookPoolId);
-  // A hooks list sorted by theme: the video may draw from one theme only, as a slide does.
-  // Its tags (several per hook): the video draws from the ticked ones only, as a slide does.
-  const hookTagsOf = useMemo(() => (hookPool?.kind === "hooks" ? poolTags(hookPool) : []), [hookPool]);
-  const hookGroups = useMemo(() => tagGroups(hookTagsOf), [hookTagsOf]);
-  const hookTicked = (sourceTags(settings.hookTags, settings.hookTheme) ?? []).filter((x) => hookGroups.some((g) => g.id === x));
-  const hookItems = useMemo(() => {
-    const all = hookPool ? textItems(hookPool) : [];
-    return hookTicked.length ? all.filter((_, i) => hookTagsOf[i].some((x) => hookTicked.includes(x))) : all;
-  }, [hookPool, hookTagsOf, hookTicked.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
-  const setHookTicked = (list: string[]) => setV({ hookTheme: undefined, hookTags: list.length ? list : undefined });
-  /** A hook drawn for this video, different from the ones already on it. */
-  const drawFor = (taken: string[]) => (hookPoolId ? onDrawHook(hookPoolId, taken, hookTicked.length ? hookTicked : undefined) : null);
-  /** A text of the list in a hook: linked to its line, so editing it in the list follows here. */
-  const fromList = (text: string): Partial<VideoHook> => ({ text, link: hookLink(hookPool, text) });
-  const drawInto = (id: string) => {
-    const text = drawFor(hooks.filter((h) => h.id !== id).map((h) => h.text));
-    if (text !== null) editHook(id, fromList(text));
-  };
-  const drawAll = () => {
-    const taken: string[] = [];
-    const list = hooks.map((h) => {
-      const text = drawFor(taken);
-      if (text === null) return h;
-      taken.push(text);
-      return { ...h, ...fromList(text) };
-    });
-    setHooks(list);
-  };
   // A hook line edited in the carousel's list: every video of the release that uses it follows.
   // The lists are made again at each render: only their text decides when to look.
   const listsKey = hookPools.map((p) => `${p.id}\u0001${p.text}`).join("\u0002");
+  const tagsByPool = useMemo(() => new Map(hookPools.map((p) => [p.id, p.kind === "hooks" ? poolTags(p) : []])), [listsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Where a hook is drawn from: its own list and tags (each hook its own), else the video's (by default slide 1's list). */
+  const srcOf = (h?: VideoHook) => {
+    const poolId = h?.pool && hookPools.some((p) => p.id === h.pool) ? h.pool : hookPoolId;
+    const pool = hookPools.find((p) => p.id === poolId);
+    const tagsOf = (poolId && tagsByPool.get(poolId)) || [];
+    const groups = tagGroups(tagsOf);
+    const own = h?.pool && h.pool === poolId ? h.tags : undefined;
+    const ticked = (own ?? (poolId === hookPoolId ? sourceTags(settings.hookTags, settings.hookTheme) : undefined) ?? []).filter((x) => groups.some((g) => g.id === x));
+    const all = pool ? textItems(pool) : [];
+    const items = ticked.length ? all.filter((_, i) => tagsOf[i]?.some((x) => ticked.includes(x))) : all;
+    return { poolId, pool, groups, ticked, items, count: tagsOf.length };
+  };
+  /** A hook drawn from its list (and tags), different from the ones already on the video. */
+  const drawFor = (h: VideoHook | undefined, taken: string[]) => {
+    const s = srcOf(h);
+    return s.poolId ? onDrawHook(s.poolId, taken, s.ticked.length ? s.ticked : undefined) : null;
+  };
+  /** A text of the list in a hook: linked to its line, so editing it in the list follows here. */
+  const fromList = (h: VideoHook | undefined, text: string): Partial<VideoHook> => ({ text, link: hookLink(srcOf(h).pool, text) });
+  const addHook = (text = "") => {
+    const last = hooks[hooks.length - 1];
+    const from = last ? round2(Math.min(segLen - 1, last.to ?? Math.min(3, segLen / 2))) : 0;
+    const list = last && last.to === undefined ? hooks.map((h) => (h === last ? { ...h, to: from } : h)) : hooks;
+    // A new hook draws from the same place as the one before (changed on its own afterwards).
+    const src = last?.pool ? { pool: last.pool, tags: last.tags } : {};
+    setHooks([...list, { id: uid(), text, from, to: last ? round2(Math.min(segLen, from + 3)) : undefined, ...src, link: text ? hookLink(srcOf(last).pool, text) : undefined }]);
+    if (settings.showHooks === false) setV({ showHooks: true });
+  };
+  const drawInto = (id: string) => {
+    const h = hooks.find((x) => x.id === id);
+    const text = drawFor(h, hooks.filter((x) => x.id !== id).map((x) => x.text));
+    if (text !== null) editHook(id, fromList(h, text));
+  };
+  const drawAll = () => {
+    const taken: string[] = [];
+    setHooks(hooks.map((h) => {
+      const text = drawFor(h, taken);
+      if (text === null) return h;
+      taken.push(text);
+      return { ...h, ...fromList(h, text) };
+    }));
+  };
   useEffect(() => {
     // Nothing to follow: no change at all (no save, no undo step).
     if (!clipsOf(project).some((c) => c.hooks?.length && followLists(c.hooks, hookPools) !== c.hooks)) return;
@@ -3745,49 +3752,61 @@ export default function VideoStudio({
 
           {tab === "hook" && (
             <div className="tab-body">
-              {/* One line: the list the hooks come from, its tags (in a menu), and Generate. */}
+              {/* Generate (each hook from its own list and tags), then the hooks. */}
               <div className="row nowrap hook-pick">
-                <Select className="input sm grow" aria-label={t("Hook list")} value={settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : ""}
-                  onChange={(e) => setV({ hookPoolId: e.target.value || undefined, hookTheme: undefined, hookTags: undefined })} disabled={!hookPools.length}>
-                  <option value="">{slide1Pool ? t("Same as slide 1 ({name})", { name: hookPools.find((p) => p.id === slide1Pool)?.name ?? "" }) : hookPools.length ? t("First list ({name})", { name: hookPools[0].name }) : t("No hook list yet")}</option>
-                  {hookPools.map((p) => <option key={p.id} value={p.id}>{p.name} · {textItems(p).length}</option>)}
-                </Select>
-                {hookGroups.length > 1 && (
-                  <Menu float trigger={(open, toggle) => (
-                    <button type="button" className={"input sm pick-btn hook-tags-btn" + (open ? " on" : "")} onClick={toggle} aria-label={t("Tags")}>
-                      <span className="truncate">{hookTicked.length === 0 ? t("All tags") : hookTicked.length === 1 ? themeLabel(hookTicked[0], t) : t("{n} tags", { n: hookTicked.length })}</span>
-                      <Icon name="chevron" size={13} />
-                    </button>
-                  )}>
-                    {() => (
-                      <div className="pick-pane">
-                        <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                          <button className={"pick-chip" + (!hookTicked.length ? " on" : "")} onClick={() => setHookTicked([])}>{t("All ({n})", { n: hookTagsOf.length })}</button>
-                          {hookGroups.map((g) => {
-                            const on = hookTicked.includes(g.id);
-                            return (
-                              <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
-                                onClick={() => setHookTicked(on ? hookTicked.filter((x) => x !== g.id) : [...hookTicked, g.id])}>{themeLabel(g.id, t)} · {g.items.length}</button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </Menu>
+                {hookPools.length > 0 && (
+                  <button className="btn sm primary" title={t("A different hook for each one, each from its own list and tags")}
+                    onClick={() => { if (hooks.length) drawAll(); else addHook(drawFor(undefined, []) ?? ""); }}><Icon name="sparkle" size={14} />{t("Generate")}</button>
                 )}
-                {hookItems.length > 0 && (
-                  <button className="btn sm primary" title={t("A different hook from the list for each one")}
-                    onClick={() => { if (hooks.length) drawAll(); else addHook(drawFor([]) ?? ""); }}><Icon name="sparkle" size={14} />{t("Generate")}</button>
-                )}
-                <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along.")} />
+                <Hint text={t("A title over the video, at the top by default. Add several to change it along the video, or keep one all along. Each hook has its own list and tags (the button next to its name).")} />
               </div>
               {!hookPools.length && <p className="muted xs">{t("Make a hook list in the carousel (Import hooks): the video draws from the same lists.")}</p>}
-              {hooks.map((h, i) => (
+              {hooks.map((h, i) => {
+                const src = srcOf(h);
+                const setSrc = (patch: Partial<VideoHook>) => editHook(h.id, { pool: src.poolId, tags: src.ticked, ...patch });
+                return (
                 <div key={h.id} className="hook-item">
-                  {/* Its name, then its actions as icons: another one drawn, one picked in the list, go to it, remove. */}
+                  {/* Its name, where it is drawn from (list · tags), then its actions as icons: another one, one picked in the list, remove. */}
                   <div className="row nowrap hook-head">
-                    <span className="label grow">{t("Hook {n}", { n: i + 1 })}</span>
-                    {hookItems.length > 0 && (<>
+                    <span className="label">{t("Hook {n}", { n: i + 1 })}</span>
+                    {hookPools.length > 0 && (
+                      <Menu float trigger={(open, toggle) => (
+                        <button type="button" className={"input sm pick-btn hook-src-btn" + (open ? " on" : "")} onClick={toggle}
+                          aria-label={t("List and tags of this hook")} title={t("List and tags of this hook")}>
+                          <span className="truncate">{src.pool?.name ?? ""}{src.ticked.length ? " · " + (src.ticked.length === 1 ? themeLabel(src.ticked[0], t) : t("{n} tags", { n: src.ticked.length })) : ""}</span>
+                          <Icon name="chevron" size={13} />
+                        </button>
+                      )}>
+                        {() => (
+                          <div className="pick-pane">
+                            {hookPools.length > 1 && (
+                              <div className="pick-list">
+                                {hookPools.map((p) => (
+                                  <button key={p.id} className={"pick-line" + (p.id === src.poolId ? " on" : "")} onClick={() => editHook(h.id, { pool: p.id, tags: [] })}>
+                                    <Icon name="check" size={12} /><span>{p.name} · {textItems(p).length}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {src.groups.length > 1 && (
+                              <div className="pick-chips" role="group" aria-label={t("Tags")}>
+                                <button className={"pick-chip" + (!src.ticked.length ? " on" : "")} onClick={() => setSrc({ tags: [] })}>{t("All ({n})", { n: src.count })}</button>
+                                {src.groups.map((g) => {
+                                  const on = src.ticked.includes(g.id);
+                                  return (
+                                    <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
+                                      onClick={() => setSrc({ tags: on ? src.ticked.filter((x) => x !== g.id) : [...src.ticked, g.id] })}>{themeLabel(g.id, t)} · {g.items.length}</button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {hookPools.length < 2 && src.groups.length < 2 && <p className="muted xs">{t("No tags in this list yet.")}</p>}
+                          </div>
+                        )}
+                      </Menu>
+                    )}
+                    <span className="grow" />
+                    {src.items.length > 0 && (<>
                       <button className="btn sm icon quiet" onClick={() => drawInto(h.id)} aria-label={t("Another hook")} title={t("Another hook")}><Icon name="refresh" size={14} /></button>
                       <Menu float trigger={(open, toggle) => (
                         <button className={"btn sm icon quiet" + (open ? " on" : "")} onClick={toggle} aria-label={t("Pick from the list")} title={t("Pick from the list")}><Icon name="list" size={14} /></button>
@@ -3795,8 +3814,8 @@ export default function VideoStudio({
                         {(close) => (
                           <div className="pick-pane">
                             <div className="pick-list">
-                              {hookItems.map((x, k) => (
-                                <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(x)); }}>
+                              {src.items.map((x, k) => (
+                                <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
                                   <Icon name="check" size={12} /><span>{x.replace(/\|/g, " ")}</span>
                                 </button>
                               ))}
@@ -3805,7 +3824,6 @@ export default function VideoStudio({
                         )}
                       </Menu>
                     </>)}
-                    <button className="btn sm icon quiet" onClick={() => { stop(); setHead(round2(settings.crop.start + h.from)); }} aria-label={t("Go to it")} title={t("Go to it")}><Icon name="play" size={13} /></button>
                     <button className="btn sm icon quiet hook-del" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))} aria-label={t("Remove")} title={t("Remove")}><Icon name="trash" size={14} /></button>
                   </div>
                   <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
@@ -3830,7 +3848,8 @@ export default function VideoStudio({
                     </label>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               <div className="row">
                 <button className="btn sm" onClick={() => addHook()}><Icon name="plus" size={13} />{t("Add a hook")}</button>
               </div>

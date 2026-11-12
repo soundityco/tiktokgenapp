@@ -217,6 +217,10 @@ export interface VideoHook {
   to?: number;
   /** Taken from a hook list: the line it came from, so an edit of that line in the list follows here. */
   link?: { pool: string; line: number; text: string; count: number };
+  /** The hook list it is drawn from (none: the video's, by default slide 1's). */
+  pool?: string;
+  /** Only the texts with one of these tags ([] = all; none: the video's tags). */
+  tags?: string[];
 }
 
 /** Colour grade of a camera clip (see lib/grade.ts). Sliders are applied in linear light / DaVinci Intermediate. */
