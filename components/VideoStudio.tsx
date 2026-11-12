@@ -3303,7 +3303,7 @@ export default function VideoStudio({
               {gradesColour(grade) ? <Switch off={t("Before")} on={t("After")} checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Before: the picture as recorded, to compare")} /> : <span className="bar-noswitch" />}
               {/* Phone, Create page: the picture's size on the left (its line above the take's goes), so the row is
                   full; what the video shows (lyrics, hook) on the right, under the thumb. */}
-              <span className="bar-format mono">{outW}×{outH}<Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} /></span>
+              <span className="bar-format"><span className="bar-k">{t("Format")}</span><span className="bar-v mono">{outW}×{outH}<Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} /></span></span>
               <span className="bar-show">{shownToggles("bar-chip")}</span>
             </div>
           )}
@@ -3319,7 +3319,7 @@ export default function VideoStudio({
               <span className="meta-v">{!videoBlob && <span>{t("Nothing to preview yet.")} </span>}<span className="mono">{outW}×{outH}</span>
                 {videoBlob && <Hint text={t("Drag the picture to reframe it, the lyrics to move them. Double-click resets.")} />}</span>
             </div>
-            {copyState && <div className="meta-row"><span className="meta-k">{t("Take")}</span><span className="meta-v">{copyStatusEl()}</span></div>}
+            {copyState && <div className="meta-row"><span className="meta-k">{t("Video")}</span><span className="meta-v">{copyStatusEl()}</span></div>}
           </div>
           {lookErr && grade?.lut && (
             <p className="notice warn xs">

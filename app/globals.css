@@ -2040,7 +2040,7 @@ details.sec:first-of-type { background-image: none; }
    (Format, Take), each with its title on the left. */
 .video-stage > .shown-on { flex-wrap: wrap; row-gap: 8px; }
 .video-stage > .shown-on > .label { flex-basis: 100%; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; font-weight: 500; color: var(--muted); }
-.stage-meta { display: grid; gap: 8px; padding-top: 12px; background-image: var(--soft-line); background-size: 100% 1px; background-repeat: no-repeat; background-position: top; }
+.stage-meta { display: grid; gap: 8px; padding-top: 12px; } /* no line above: the same room, without it */
 .meta-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: var(--s3); min-height: 22px; }
 .meta-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .meta-v { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-xs); color: var(--text); }
@@ -2511,7 +2511,9 @@ html.pv-full, html.pv-full body { overflow: hidden; }
    the Edits switch there instead. */
 .bar-format { display: none; }
 @media (max-width: 1000px) {
-  .main:not([data-mobile-tab="style"]) .video-bar > .bar-format { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text); }
+  .main:not([data-mobile-tab="style"]) .video-bar > .bar-format { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: var(--fs-xs); color: var(--text); }
+  .bar-format .bar-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .bar-format .bar-v { display: inline-flex; align-items: center; gap: 6px; }
   .main[data-mobile-tab="style"] .video-bar > .bar-format { display: none; }
   .video-stage > .stage-meta .meta-format { display: none; }
 }
