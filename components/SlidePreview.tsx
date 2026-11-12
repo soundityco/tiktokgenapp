@@ -92,18 +92,28 @@ export default function SlidePreview({
 
   // Dragged down the picture follows and shrinks, the dark thins out; let go far enough it goes back to its slide.
   // Dragged sideways: the previous / next slide.
-  const drag = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; dx: number; dy: number; axis: "x" | "y" | null } | null>(null);
   const down = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (closing.current) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, dx: 0, dy: 0 };
+    drag.current = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, axis: null };
   };
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const d = drag.current, c = e.currentTarget;
     if (!d) return;
     d.dx = e.clientX - d.x;
     d.dy = e.clientY - d.y;
-    if (Math.abs(d.dx) > Math.abs(d.dy)) { c.style.transform = `translateX(${d.dx}px)`; return; }
+    // The way is chosen once, after a few pixels (a sideways swipe is never taken for a pull down).
+    if (!d.axis) {
+      if (Math.hypot(d.dx, d.dy) < 10) return;
+      d.axis = Math.abs(d.dx) > Math.abs(d.dy) ? "x" : "y";
+    }
+    if (d.axis === "x") {
+      const k = keys.current;
+      const end = (d.dx > 0 && k.index === 0) || (d.dx < 0 && k.index === k.total - 1);
+      c.style.transform = `translateX(${end ? d.dx * 0.25 : d.dx}px)`; // no slide that way: it resists
+      return;
+    }
     const dy = Math.max(0, d.dy);
     const k = 1 - Math.min(0.3, dy / 1000);
     // Shrinks around its centre (the transform's origin is the top left, for the glide).
@@ -114,15 +124,28 @@ export default function SlidePreview({
   const up = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const d = drag.current, c = e.currentTarget;
     drag.current = null;
-    if (!d) return;
-    const side = Math.abs(d.dx) > Math.abs(d.dy);
-    if (!side && d.dy > 90) { close(); return; }
+    if (!d || !d.axis) return;
+    if (d.axis === "y" && d.dy > 90) { close(); return; }
     const k = keys.current;
-    const to = side && Math.abs(d.dx) > 60 ? k.index + (d.dx < 0 ? 1 : -1) : k.index;
+    const to = d.axis === "x" && Math.abs(d.dx) > 60 ? k.index + (d.dx < 0 ? 1 : -1) : k.index;
+    if (to !== k.index && to >= 0 && to < k.total) {
+      // The next one: this slide goes out on its side, the new one comes in from the other.
+      const dir = d.dx < 0 ? 1 : -1;
+      const out = c.animate([{ transform: c.style.transform }, { transform: `translateX(${-dir * window.innerWidth * 0.6}px)`, opacity: 0 }], { duration: 160, easing: "ease-in", fill: "forwards" });
+      out.onfinish = () => {
+        k.onNav(to);
+        c.style.transform = "";
+        // Once the new slide is drawn.
+        requestAnimationFrame(() => {
+          out.cancel();
+          c.animate([{ transform: `translateX(${dir * window.innerWidth * 0.6}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" });
+        });
+      };
+      return;
+    }
     c.animate([{ transform: c.style.transform || "none" }, { transform: "none" }], { duration: 200, easing: "ease-out" });
     c.style.transform = "";
     for (const el of fades()) el.style.opacity = "";
-    if (to !== k.index && to >= 0 && to < k.total) k.onNav(to);
   };
 
   return (
