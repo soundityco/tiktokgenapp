@@ -3535,7 +3535,7 @@ export default function VideoStudio({
                     <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                   </div>
                 )}
-                <div className="lyric-track" role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
+                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
                   {cues.map((c, i) => (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
                       style={{

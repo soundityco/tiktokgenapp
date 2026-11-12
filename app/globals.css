@@ -382,7 +382,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .hook-track { height: 26px; }
 .hook-track .cue { border-left-color: var(--blue); }
 .hook-track .cue.on { border-left-color: var(--blue); }
-.hook-track.off { opacity: .45; }
+/* A track whose text is not shown on the video (lyrics or hook switched off): dimmed in the timeline. */
+.lyric-track.off { opacity: .45; }
 .hook-item { display: grid; gap: var(--s2); padding-bottom: var(--s3); border-bottom: 1px solid var(--line); }
 .hook-item .nudge { display: inline-flex; align-items: center; gap: 2px; }
 .hook-item .nudge .btn { width: 24px; padding: 0; justify-content: center; }
