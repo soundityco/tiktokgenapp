@@ -201,7 +201,12 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .preview-canvas { display: block; max-height: calc(92dvh - 48px); max-width: 100%; width: auto; height: auto; margin: 0 auto; border-radius: var(--r); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
 .preview-bar { display: flex; align-items: center; gap: var(--s2); color: var(--text); }
 .preview-pic { position: relative; justify-self: center; max-width: 100%; }
-.preview-canvas { touch-action: none; cursor: grab; }
+.preview-canvas { touch-action: none; cursor: grab; transform-origin: 0 0; }
+/* The preview's dark on its own layer (it fades while the picture glides to / from its slide). */
+.ov.preview-ov { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; }
+.preview-bg { position: absolute; inset: 0; background: rgba(4,4,6,.66); backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2); }
+.preview-ov > .preview { position: relative; }
+.preview-ov:not(.in) .preview { visibility: hidden; }
 .preview-pic .pv-close { position: absolute; top: 4px; right: 4px; }
 @media (hover: none) { .preview-hint { visibility: hidden; } } /* no keys on a phone */
 .flip svg { transform: scaleX(-1); }

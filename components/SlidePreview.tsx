@@ -31,10 +31,58 @@ export default function SlidePreview({
     if (cv.current) renderSlide(cv.current, cfg, img, gen?.text ?? "");
   }, [cfg, img, gen?.text, fontsReady]);
 
+  // Like the video's full screen: the picture glides from its slide to here, and back to its slide when it closes
+  // (the cross, Space, Escape, a tap beside, or dragged down far enough). The dark, the bar and the cross fade with it.
+  const ov = useRef<HTMLDivElement>(null);
+  const bg = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
+  const xBtn = useRef<HTMLButtonElement>(null);
+  const closing = useRef(false);
+  const card = () => document.querySelector<HTMLCanvasElement>(".card.sel .cv-wrap canvas.cv");
+  const fades = () => [bg.current, bar.current, xBtn.current].filter((x): x is HTMLDivElement | HTMLButtonElement => !!x);
+  /** The transform (origin top left) that puts the picture over `to`. */
+  const over = (to: DOMRect) => {
+    const c = cv.current!;
+    const prev = c.style.transform;
+    c.style.transform = "none";
+    const base = c.getBoundingClientRect();
+    c.style.transform = prev;
+    return `translate(${to.left - base.left}px, ${to.top - base.top}px) scale(${to.width / Math.max(1, base.width)})`;
+  };
+  const close = () => {
+    if (closing.current) return;
+    closing.current = true;
+    const c = cv.current, small = card();
+    if (!c || !small) { onClose(); return; }
+    const from = getComputedStyle(c).transform;
+    for (const a of c.getAnimations()) a.cancel();
+    c.style.transform = "";
+    const a = c.animate([{ transform: from === "none" ? "none" : from }, { transform: over(small.getBoundingClientRect()) }],
+      { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
+    for (const el of fades()) el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0 }], { duration: 240, fill: "forwards" });
+    a.onfinish = onClose;
+  };
+  const closeRef = useRef(close);
+  closeRef.current = close;
+
+  // Opening (once the picture is drawn at its size): from the slide to here.
+  useEffect(() => {
+    // Measured on the next frame (the picture laid out at its size), nothing else moving it.
+    const raf = requestAnimationFrame(() => {
+      const c = cv.current, small = card();
+      ov.current?.classList.add("in");
+      if (!c || !small) return;
+      for (const a of c.getAnimations()) a.cancel();
+      c.animate([{ transform: over(small.getBoundingClientRect()) }, { transform: "none" }], { duration: 300, easing: "cubic-bezier(.2,.8,.2,1)" });
+      for (const el of fades()) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const c = keys.current;
-      if (e.key === " " || e.key === "Escape") { e.preventDefault(); c.onClose(); }
+      if (e.key === " " || e.key === "Escape") { e.preventDefault(); closeRef.current(); }
       else if (e.key === "ArrowLeft" && c.index > 0) { e.preventDefault(); c.onNav(c.index - 1); }
       else if (e.key === "ArrowRight" && c.index < c.total - 1) { e.preventDefault(); c.onNav(c.index + 1); }
     };
@@ -42,11 +90,11 @@ export default function SlidePreview({
     return () => window.removeEventListener("keydown", k);
   }, []);
 
-  // Like the video's full screen: dragged down the picture follows, shrinks and the dark thins out; let go far enough
-  // it closes. Dragged sideways: the previous / next slide.
-  const ov = useRef<HTMLDivElement>(null);
+  // Dragged down the picture follows and shrinks, the dark thins out; let go far enough it goes back to its slide.
+  // Dragged sideways: the previous / next slide.
   const drag = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
   const down = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (closing.current) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { x: e.clientX, y: e.clientY, dx: 0, dy: 0 };
   };
@@ -57,37 +105,36 @@ export default function SlidePreview({
     d.dy = e.clientY - d.y;
     if (Math.abs(d.dx) > Math.abs(d.dy)) { c.style.transform = `translateX(${d.dx}px)`; return; }
     const dy = Math.max(0, d.dy);
-    c.style.transform = dy ? `translate(${d.dx * 0.4}px, ${dy}px) scale(${1 - Math.min(0.3, dy / 1000)})` : "";
-    if (ov.current) ov.current.style.opacity = String(Math.max(0.35, 1 - dy / 500));
+    const k = 1 - Math.min(0.3, dy / 1000);
+    // Shrinks around its centre (the transform's origin is the top left, for the glide).
+    c.style.transform = dy ? `translate(${d.dx * 0.4 + (c.offsetWidth * (1 - k)) / 2}px, ${dy + (c.offsetHeight * (1 - k)) / 2}px) scale(${k})` : "";
+    const o = String(Math.max(0.25, 1 - dy / 500));
+    for (const el of fades()) el.style.opacity = o;
   };
   const up = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const d = drag.current, c = e.currentTarget;
     drag.current = null;
     if (!d) return;
     const side = Math.abs(d.dx) > Math.abs(d.dy);
-    if (!side && d.dy > 90) {
-      // Let go far enough: the picture goes on down as the window fades, then it closes.
-      c.animate([{ transform: c.style.transform }, { transform: `translate(${d.dx * 0.4}px, ${d.dy + 160}px) scale(.7)`, opacity: 0 }], { duration: 200, easing: "ease-in", fill: "forwards" });
-      ov.current?.animate([{ opacity: ov.current.style.opacity || "1" }, { opacity: 0 }], { duration: 200, fill: "forwards" }).addEventListener("finish", onClose);
-      return;
-    }
+    if (!side && d.dy > 90) { close(); return; }
     const k = keys.current;
     const to = side && Math.abs(d.dx) > 60 ? k.index + (d.dx < 0 ? 1 : -1) : k.index;
     c.animate([{ transform: c.style.transform || "none" }, { transform: "none" }], { duration: 200, easing: "ease-out" });
     c.style.transform = "";
-    if (ov.current) ov.current.style.opacity = "";
+    for (const el of fades()) el.style.opacity = "";
     if (to !== k.index && to >= 0 && to < k.total) k.onNav(to);
   };
 
   return (
-    <div ref={ov} className="ov preview-ov" role="dialog" aria-modal="true" aria-label={t("Slide {n}", { n: index + 1 })} onClick={onClose}>
+    <div ref={ov} className="ov preview-ov" role="dialog" aria-modal="true" aria-label={t("Slide {n}", { n: index + 1 })} onClick={close}>
+      <div ref={bg} className="preview-bg" aria-hidden />
       <div className="preview" onClick={(e) => e.stopPropagation()}>
         {/* The cross at the picture's top right, the video's full screen one. */}
         <div className="preview-pic">
           <canvas ref={cv} className="preview-canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
-          <button className="pv-close" aria-label={t("Close")} onClick={onClose}><Icon name="x" size={18} /></button>
+          <button ref={xBtn} className="pv-close" aria-label={t("Close")} onClick={close}><Icon name="x" size={18} /></button>
         </div>
-        <div className="preview-bar">
+        <div ref={bar} className="preview-bar">
           <button className="btn sm quiet icon" aria-label={t("Previous slide")} disabled={index === 0} onClick={() => onNav(index - 1)}><Icon name="back" size={14} /></button>
           <span className="mono xs">{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</span>
           <button className="btn sm quiet icon flip" aria-label={t("Next slide")} disabled={index === total - 1} onClick={() => onNav(index + 1)}><Icon name="back" size={14} /></button>
