@@ -2530,3 +2530,6 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 @media (hover: none), (max-width: 1000px) {
   .card .adjust-open, .card .zones-open, .card .pv-expand.card-full { opacity: 1; }
 }
+/* The photo's edits panel: the wheel, the edits switch centred under it, then Reset and Done at the bottom (two
+   halves of one row). */
+.adjust-compare { display: flex; justify-content: center; }

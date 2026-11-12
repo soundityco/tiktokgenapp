@@ -554,9 +554,12 @@ export default function SlideCard(p: Props) {
               </div>
               <div className="adjust-value">{v > 0 && cur.min < 0 ? "+" : ""}{v}</div>
               <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
+              {/* Under the wheel, centred: the edits on / off to compare; then, at the very bottom, Reset and Done. */}
+              <div className="adjust-compare">
+                <Switch label={t("Edits")} checked={!compare} disabled={!hasAdjust} onChange={(v) => setCompare(!v)} title={t("Off: the photo without its edits, to compare")} />
+              </div>
               <div className="adjust-actions">
                 <button className="btn sm quiet" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
-                <Switch label={t("Edits")} checked={!compare} disabled={!hasAdjust} onChange={(v) => setCompare(!v)} title={t("Off: the photo without its edits, to compare")} />
                 <button className="btn sm" onClick={() => { setCompare(false); setAdjusting(false); }}>{t("Done")}</button>
               </div>
             </div>
