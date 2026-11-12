@@ -286,6 +286,8 @@ class Grade10 {
   private rgb: { prog: WebGLProgram; tex: WebGLTexture; u: Record<string, WebGLUniformLocation | null>; half: boolean } | null = null;
   /** Used for the frames of this export: "planes" (10-bit values read), "rgb" (put on the GPU by the browser). */
   mode: "planes" | "rgb" = "planes";
+  /** Why the last picture upload failed. */
+  err = "";
 
   /** A frame whose planes cannot be read: the browser uploads its picture, the shader grades it (same LUT). */
   private drawRGB(frame: VideoFrame, rotation: number, crop: ConvertCrop, upW: number, upH: number): boolean {
@@ -317,7 +319,8 @@ class Grade10 {
       }
       if (!r.half) {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, frame);
-        if (gl.getError() !== gl.NO_ERROR) return false;
+        const e = gl.getError();
+        if (e !== gl.NO_ERROR) { this.err = `upload error 0x${e.toString(16)}`; return false; }
       }
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       const fw = frame.displayWidth, fh = frame.displayHeight;
@@ -341,6 +344,7 @@ class Grade10 {
       return true;
     } catch (e) {
       console.info("[grade10] picture upload failed:", e);
+      this.err = e instanceof Error ? e.message : String(e);
       gl.useProgram(this.prog);
       return false;
     }
@@ -359,6 +363,8 @@ const FORMATS: Record<string, { wide: boolean; nv12: boolean; sub: [number, numb
 };
 
 let shared: Grade10 | null = null;
+/** Why the last GPU grade gave up (empty when it ran): shown in the export window. */
+export let gpuGradeReason = "";
 
 /**
  * The camera file's frames for the export, graded on the GPU from their own values: each `frameAt` gives the part
@@ -367,35 +373,43 @@ let shared: Grade10 | null = null;
  */
 export async function gpuGradedSource(file: Blob, from: number, to: number, crop: ConvertCrop, upW: number, upH: number,
   lut: Float32Array, lutSize: number, onProgress?: (p: number) => void, signal?: AbortSignal) {
-  if (typeof VideoFrame === "undefined") return null;
+  gpuGradeReason = "";
+  if (typeof VideoFrame === "undefined") { gpuGradeReason = "no WebCodecs"; return null; }
   let g: Grade10;
   try {
     if (!shared || shared.lost) shared = new Grade10();
     g = shared;
     g.mode = "planes";
     g.setLut(lut, lutSize);
-  } catch (e) { console.info("[grade10] no GPU grade:", e); return null; }
-  // Decoded in software when the browser can: its frames give their planes (a hardware frame often does not).
-  const src = await VideoSource.open(file, from, to, onProgress, signal, "prefer-software");
-  if (!src) return null;
-  // The first frame tells whether its pixel format can be read.
-  try {
-    const f = await src.rawAt(from);
-    if (!f || !(await g.draw(f, src.rotation, crop, upW, upH))) {
-      console.info("[grade10] pixel format not readable:", f?.format ?? "none");
-      src.close();
-      return null;
-    }
-  } catch (e) { console.info("[grade10] first frame failed:", e); src.close(); return null; }
+  } catch (e) { gpuGradeReason = `WebGL: ${e instanceof Error ? e.message : String(e)}`; console.info("[grade10] no GPU grade:", e); return null; }
+  // Decoded in software when the browser can: its frames give their planes (a hardware frame often does not). Some
+  // browsers say they have a software decoder and fail on the first frame (HEVC on Android): then the hardware one,
+  // whose pictures the browser puts on the GPU itself.
+  const why: string[] = [];
+  let src: VideoSource | null = null;
+  for (const first of ["prefer-software", "prefer-hardware"] as HardwareAcceleration[]) {
+    if (signal?.aborted) return null;
+    const s = await VideoSource.open(file, from, to, onProgress, signal, first);
+    if (!s) { why.push(`${first}: ${VideoSource.lastReason || "not opened"}`); break; }
+    try {
+      const f = await s.rawAt(from);
+      if (f && (await g.draw(f, s.rotation, crop, upW, upH))) { src = s; break; }
+      why.push(`${first}: ${f ? `frame ${f.format ?? "opaque"} not drawn${g.err ? ` (${g.err})` : ""}` : "no frame"}`);
+    } catch (e) { why.push(`${first}: ${e instanceof Error ? e.message : String(e)}`); }
+    s.close();
+  }
+  gpuGradeReason = why.join(" · ");
+  if (!src) { console.info("[grade10] not used:", gpuGradeReason); return null; }
+  const ok = src;
   console.info("[grade10] export graded on the GPU from the decoded frames:", src.codec, (g.mode as string) === "rgb" ? "(picture uploaded by the browser)" : "(10-bit planes)");
   return {
-    codec: src.codec,
+    codec: ok.codec,
     async frameAt(t: number): Promise<Picture | null> {
-      const f = await src.rawAt(t);
+      const f = await ok.rawAt(t);
       if (!f) return null;
-      if (!(await g.draw(f, src.rotation, crop, upW, upH))) throw new Error("frame format changed");
+      if (!(await g.draw(f, ok.rotation, crop, upW, upH))) throw new Error("frame format changed");
       return { src: g.canvas, w: upW, h: upH, part: crop, graded: true };
     },
-    close: () => src.close(),
+    close: () => ok.close(),
   };
 }

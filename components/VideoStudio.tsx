@@ -17,7 +17,7 @@ import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { type Picture, VideoSource } from "@/lib/videoSource";
 import { fastWorkCopy } from "@/lib/fastCopy";
-import { gpuGradedSource } from "@/lib/grade10";
+import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { convertSegment, copyPlanFor, cropFor, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -436,6 +436,8 @@ export default function VideoStudio({
   /** The videos just exported (with their caption): "Send to my phone" sends them without exporting again. */
   const lastFiles = useRef<{ name: string; blob: Blob; caption?: string }[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
+  /** Why the colour grade could not run on the graphics card (the export then converts with ffmpeg, slower). */
+  const [gpuWhy, setGpuWhy] = useState("");
   /** Export window: progress 0-1 and current step ("record" = realtime fallback). */
   const [exp, setExpRaw] = useState<null | { p: number; step: ExportStep | ConvertStep | "record"; done?: boolean; file?: string }>(null);
   /** Progress updates only when the whole percentage or the step changes: no re-render per frame. */
@@ -2486,6 +2488,7 @@ export default function VideoStudio({
           const t0 = performance.now();
           const gpu = await gpuGradedSource(videoBlob, Math.max(0, from - cfg.offset), until - cfg.offset, crop, ow, oh, lut, 65,
             (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal).catch((e) => { console.info("[grade10] not used:", e); return null; });
+          setGpuWhy(gpu ? "" : gpuGradeReason);
           if (gpu) {
             source = gpu; part = crop; graded = true;
             detail = t("colour grade applied on the graphics card (10-bit)");
@@ -4055,6 +4058,7 @@ export default function VideoStudio({
               <div style={{ width: `${exp.p * 100}%` }} />
             </div>
             <p className="muted xs">{outW}×{outH} · H.264 + AAC · {EXPORT_FPS} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
+            {exp.step === "convert" && gpuWhy && <p className="muted xs">{t("Colour grade on the graphics card not possible here: {why}", { why: gpuWhy })}</p>}
             {expMode && (expMode.direct
               ? <p className="muted xs">{t("Camera frames decoded from the file ({codec}): you can switch tabs.", { codec: expMode.detail })}</p>
               : <p className="notice warn xs">{t("Camera frames read by the browser's player ({why}): the export plays the clip in real time. Keep this tab visible, it pauses while hidden.", { why: expMode.detail || "?" })}</p>)}
