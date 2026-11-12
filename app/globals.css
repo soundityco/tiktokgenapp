@@ -2526,3 +2526,7 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 @media (hover: hover) and (min-width: 1001px) {
   .card.sel:not(:hover) .pv-expand.card-full:not(:focus-visible), .card.sel:not(:hover) .adjust-open:not(.set):not(:focus-visible) { opacity: 0; }
 }
+/* Phone (no pointer to hover with): the three icons over every slide, all the time, also while the deck is swiped. */
+@media (hover: none), (max-width: 1000px) {
+  .card .adjust-open, .card .zones-open, .card .pv-expand.card-full { opacity: 1; }
+}
