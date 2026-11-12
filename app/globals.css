@@ -2395,3 +2395,16 @@ details.sec:first-of-type { background-image: none; }
 .hook-tags .pick-chips { margin-top: 6px; }
 .hook-tags .pick-chip { height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
 .hook-tags .pick-chip.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+/* The photo grid: each cell as tall as its picture (3:4), never over the next one. */
+.menu .pic-grid .pic-cell { aspect-ratio: auto; height: auto; }
+.pic-cell .thumb { width: 100%; height: auto; aspect-ratio: 3 / 4; outline: 0; border-radius: 0; }
+/* The slide's pickers: the same text size as the source selectors above them. */
+.pick-btn { font-size: inherit; }
+/* Phone: the carousel's Zones button in the format of the video's "Show" (not a pill). */
+@media (max-width: 1000px) {
+  .deck-bar .deck-zones { height: 32px; padding: 0 10px; border-radius: var(--r); font-family: inherit; font-size: 12px; letter-spacing: normal; text-transform: none; color: var(--text); }
+  .deck-bar .deck-zones.on { border-color: var(--text); background: none; }
+}
+.card .src-picks .pick-add { width: 100%; justify-content: center; }
+.card .lyric-src-head { margin-top: var(--s2); }
+.card .src-back { width: 20px; height: 20px; min-height: 20px; padding: 0; justify-content: center; color: var(--muted); }

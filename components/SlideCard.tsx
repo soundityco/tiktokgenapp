@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
-import { Menu, Select, Switch } from "./ui";
+import { Hint, Menu, Select, Switch } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
@@ -314,6 +314,50 @@ export default function SlideCard(p: Props) {
   const setTicked = (list: string[]) => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: undefined, tags: list.length ? list : undefined } } : c));
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
+  // A lyrics slide: its sections ticked (picked like a hook, under "Text from"), and its optional header line.
+  const lyricSrc = cfg.textSource.kind === "lyrics" ? cfg.textSource : null;
+  const lyricTicked = lyricSrc ? (lyricSrc.sectionIds ?? (lyricSrc.sectionId ? [lyricSrc.sectionId] : p.lyrics[0] ? [p.lyrics[0].id] : [])) : [];
+  const tickSection = (id: string, on: boolean) => lyricSrc && p.onCfg((c) => ({ ...c, textSource: { ...lyricSrc, sectionId: undefined,
+    sectionIds: p.lyrics.map((l) => l.id).filter((x) => (x === id ? on : lyricTicked.includes(x))) } }));
+  const lyricNames = p.lyrics.filter((l) => lyricTicked.includes(l.id)).map((l) => l.name);
+  const lyricsPick = !lyricSrc ? null : !p.lyrics.length ? (
+    <button className="btn sm pick-add" onClick={p.onEditLyrics}><Icon name="plus" size={13} />{t("Add the lyrics")}</button>
+  ) : (
+    <Menu float left trigger={(open, toggle) => (
+      <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} title={lyricNames.join(", ")} aria-label={t("Sections")}>
+        <span className="truncate">{lyricNames.length ? lyricNames.join(" · ") : t("None ticked")}</span><Icon name="chevron" size={13} />
+      </button>
+    )}>
+      {() => (<div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+        <div className="pick-list">
+          {p.lyrics.map((l) => {
+            const on = lyricTicked.includes(l.id);
+            return (
+              <button key={l.id} className={"pick-line" + (on ? " on" : "")} title={l.text.slice(0, 200)} aria-pressed={on} onClick={() => tickSection(l.id, !on)}>
+                <Icon name="check" size={12} /><span>{l.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="sep" />
+        <button className="pick-line" onClick={p.onEditLyrics}><Icon name="pencil" size={12} /><span>{t("Edit the lyrics…")}</span></button>
+      </div>)}
+    </Menu>
+  );
+  const lyricsHead = lyricSrc && p.lyrics.length > 0 ? (
+    <div className="row nowrap lyric-src-head">
+      <label className="check xs">
+        <input type="checkbox" checked={lyricSrc.header !== undefined}
+          onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...lyricSrc, header: e.target.checked ? t("Lyrics") : undefined } }))} />
+        {t("Header")}
+      </label>
+      {lyricSrc.header !== undefined && (
+        <input className="input sm grow" value={lyricSrc.header} aria-label={t("Header")} placeholder={t("Lyrics")}
+          onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...lyricSrc, header: e.target.value } }))} />
+      )}
+    </div>
+  ) : null;
+
   // Under the picture: the slide's text and sources. On a phone they show once, under the deck (part "fields"),
   // so they fade in place instead of sliding with the cards.
   const fields = (<>
@@ -330,14 +374,14 @@ export default function SlideCard(p: Props) {
       <label className="field slide-text">{t("Text on the slide")}
         <textarea className="input" rows={3} placeholder={t("Slide text")} value={text} onChange={(e) => p.onText(e.target.value)} />
       </label>
-      {cfg.textSource.kind === "lyrics" && p.gen?.edited && !p.locked && (
-        <p className="muted xs row" style={{ gap: 6 }}>
-          {t("Retouched on this slide: the lyrics of the release are not changed.")}
-          <button type="button" className="field-link" onClick={p.onLyricsBack}>{t("Back to the lyrics")}</button>
-        </p>
-      )}
       <div className="cols2 fields">
-        <label className="field">{t("Text from")}
+        <label className="field"><span className="row" style={{ gap: 6 }}>{t("Text from")}
+          {/* A lyrics slide retouched by hand: said in an (i), with the way back to the release's lyrics beside it. */}
+          {cfg.textSource.kind === "lyrics" && p.gen?.edited && !p.locked && (<>
+            <Hint text={t("Retouched on this slide: the lyrics of the release are not changed.")} />
+            <button type="button" className="btn icon sm quiet src-back" aria-label={t("Back to the lyrics")} title={t("Back to the lyrics")}
+              onClick={(e) => { e.preventDefault(); p.onLyricsBack(); }}><Icon name="undo" size={11} /></button>
+          </>)}</span>
           <Select className="input" value={textVal} onChange={(e) => {
             const v = e.target.value;
             p.onCfg((c) => ({ ...c, textSource: v === "" ? { kind: "none" } : v === "__lyrics" ? { kind: "lyrics" } : { kind: "pool", poolId: v } }));
@@ -361,7 +405,7 @@ export default function SlideCard(p: Props) {
       </div>
       {/* Under the sources, one picker each, side by side: the text (its themes as chips, then the list) and the
           photo (a grid). Both lists scroll. */}
-      {!p.locked && ((cfg.textSource.kind === "pool" && allItems.length > 0) || (pool && pool.pics.length > 0 && p.onChoosePic)) && (
+      {!p.locked && ((cfg.textSource.kind === "pool" && allItems.length > 0) || lyricsPick || (pool && pool.pics.length > 0 && p.onChoosePic)) && (
         <div className="cols2 src-picks">
           {cfg.textSource.kind === "pool" && allItems.length > 0 ? (
             <Menu float left trigger={(open, toggle) => (
@@ -396,7 +440,7 @@ export default function SlideCard(p: Props) {
                 </div>
               )}
             </Menu>
-          ) : <span />}
+          ) : lyricsPick ?? <span />}
           {pool && pool.pics.length > 0 && p.onChoosePic ? (
             <Menu float trigger={(open, toggle) => (
               <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Choose the photo")}>
@@ -419,50 +463,7 @@ export default function SlideCard(p: Props) {
           ) : <span />}
         </div>
       )}
-      {cfg.textSource.kind === "lyrics" && (() => {
-        const src = cfg.textSource;
-        // Ticked: its own sections, or (older slides) the one it showed, or the first one.
-        const ticked = src.sectionIds ?? (src.sectionId ? [src.sectionId] : p.lyrics[0] ? [p.lyrics[0].id] : []);
-        const tick = (id: string, on: boolean) => p.onCfg((c) => ({ ...c, textSource: { ...src, sectionId: undefined,
-          sectionIds: p.lyrics.map((l) => l.id).filter((x) => (x === id ? on : ticked.includes(x))) } }));
-        const names = p.lyrics.filter((l) => ticked.includes(l.id)).map((l) => l.name);
-        if (!p.lyrics.length) return (
-          <div className="lyric-src">
-            <button className="btn sm" onClick={p.onEditLyrics}><Icon name="plus" size={13} />{t("Add the lyrics")}</button>
-          </div>
-        );
-        return (
-          <div className="lyric-src">
-            <Menu float trigger={(_, toggle) => (
-                <button type="button" className="input lyric-src-pick" onClick={toggle} title={names.join(", ")} aria-label={t("Sections")}>
-                  <span className="truncate">{names.length ? names.join(" · ") : t("None ticked")}</span><Icon name="chevron" size={14} />
-                </button>
-              )}>
-                {() => (<>
-                  {p.lyrics.map((l) => (
-                    <label key={l.id} className="check menu-check" title={l.text.slice(0, 200)}>
-                      <input type="checkbox" checked={ticked.includes(l.id)} onChange={(e) => tick(l.id, e.target.checked)} />
-                      <span className="truncate">{l.name}</span>
-                    </label>
-                  ))}
-                  <div className="sep" />
-                  <button onClick={p.onEditLyrics}>{t("Edit the lyrics…")}</button>
-                </>)}
-              </Menu>
-            <div className="row nowrap lyric-src-head">
-              <label className="check xs">
-                <input type="checkbox" checked={src.header !== undefined}
-                  onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...src, header: e.target.checked ? t("Lyrics") : undefined } }))} />
-                {t("Header")}
-              </label>
-              {src.header !== undefined && (
-                <input className="input sm grow" value={src.header} aria-label={t("Header")} placeholder={t("Lyrics")}
-                  onChange={(e) => p.onCfg((c) => ({ ...c, textSource: { ...src, header: e.target.value } }))} />
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {lyricsHead}
   </>);
   if (p.part === "fields") return <div className="card card-fields">{fields}</div>;
 
