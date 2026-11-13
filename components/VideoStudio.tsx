@@ -4058,18 +4058,19 @@ export default function VideoStudio({
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
             onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
             onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
+          {/* Progressive zoom: its factor on one line (like the lens), then, when on, what it zooms. */}
           <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>
             <span className="label">{t("Progressive zoom")}</span>
-            {[undefined, 1.05, 1.1].map((v) => (
-              <button key={v ?? 0} className={"btn sm" + ((settings.push ?? undefined) === v ? " on" : "")} aria-pressed={(settings.push ?? undefined) === v}
-                onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
-            ))}
+            <Select className="input sm grow" aria-label={t("Progressive zoom")} value={String(settings.push ?? 0)}
+              onChange={(e) => { const v = Number(e.target.value); setV({ push: v || undefined }); }}>
+              {[0, 1.05, 1.1].map((v) => <option key={v} value={String(v)}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</option>)}
+            </Select>
           </div>
           {settings.push && (
-            <div className="row" title={t("Inside the video: the picture zooms inside its frame, which keeps its place and size (the bars and the texts around do not move).")}>
-              <span className="label">{t("Zooms")}</span>
-              <button className={"btn sm" + (!settings.pushIn ? " on" : "")} aria-pressed={!settings.pushIn} onClick={() => setV({ pushIn: undefined })}>{t("The whole frame")}</button>
-              <button className={"btn sm" + (settings.pushIn ? " on" : "")} aria-pressed={!!settings.pushIn} onClick={() => setV({ pushIn: true })}>{t("Inside the video")}</button>
+            <div className="row" role="group" aria-label={t("Progressive zoom")}
+              title={t("Inside the video: the picture zooms inside its frame, which keeps its place and size (the bars and the texts around do not move).")}>
+              <button className={"btn sm grow" + (!settings.pushIn ? " on" : "")} aria-pressed={!settings.pushIn} onClick={() => setV({ pushIn: undefined })}>{t("The whole frame")}</button>
+              <button className={"btn sm grow" + (settings.pushIn ? " on" : "")} aria-pressed={!!settings.pushIn} onClick={() => setV({ pushIn: true })}>{t("Inside the video")}</button>
             </div>
           )}
           </Section>

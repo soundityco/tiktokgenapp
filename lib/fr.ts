@@ -702,7 +702,6 @@ export const FR: Record<string, string> = {
   "Resync the video": "Resynchroniser la vidéo",
   "Resync": "Resynchroniser",
   "Inside the video: the picture zooms inside its frame, which keeps its place and size (the bars and the texts around do not move).": "Dans la vidéo : l'image zoome à l'intérieur de son cadre, qui garde sa place et sa taille (les bandes et les textes autour ne bougent pas).",
-  "Zooms": "Zoome",
   "The whole frame": "Tout le cadre",
   "Inside the video": "Dans la vidéo",
   "Syncing the video… {n}%": "Synchronisation de la vidéo… {n} %",
