@@ -80,7 +80,8 @@ export interface PhotoAdjust {
 export type TextSource =
   | { kind: "none" }
   | { kind: "pool"; poolId: string; /** Only the texts of this theme of the list (see lib/themes). */ theme?: string;
-      /** Only the texts with one of these tags (replaces `theme`, see lib/generate poolTags). */ tags?: string[] }
+      /** Only the texts with one of these tags (replaces `theme`, see lib/generate poolTags). */ tags?: string[];
+      /** Never the texts with one of these tags (excluded with the − of a tag). */ notTags?: string[] }
   | { kind: "lyrics"; sectionId?: string; sectionIds?: string[]; header?: string };
 
 export interface SlideCfg {
@@ -226,6 +227,8 @@ export interface VideoHook {
   pool?: string;
   /** Only the texts with one of these tags ([] = all; none: the video's tags). */
   tags?: string[];
+  /** Never the texts with one of these tags (excluded with the − of a tag). */
+  notTags?: string[];
 }
 
 /** Colour grade of a camera clip (see lib/grade.ts). Sliders are applied in linear light / DaVinci Intermediate. */
@@ -374,9 +377,6 @@ export interface VideoSetup extends VideoSettings {
 export interface Project {
   id: string;
   name: string;
-  /** Tags of the text lists this release puts aside (e.g. the pre-release hooks once it is out): their texts are never
-   *  drawn here (carousels, video hooks), they stay in the lists. */
-  hiddenTags?: string[];
   /** Retouched texts already offered to keep in their list ("pool|key"): never asked twice (see lib/variants). */
   variantsAsked?: string[];
   slides: SlideCfg[];

@@ -12,7 +12,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawPictureAt, framedAt, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
-import { followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
+import { followLists, hookLink, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
@@ -30,7 +30,7 @@ import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
 import { themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
+import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch, TagChip } from "./ui";
 import { createPortal } from "react-dom";
 import { FullView } from "./FullView";
 import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from "./StyleSheet";
@@ -333,7 +333,7 @@ export default function VideoStudio({
   /** Hook lists of the release (the same as the carousel's). */
   hookPools: TextPool[];
   /** Draw a hook from a list (shared shuffle bag with the carousel); `exclude`: hooks already on this video. */
-  onDrawHook: (poolId: string, exclude: string[], tags?: string[]) => string | null;
+  onDrawHook: (poolId: string, exclude: string[], tags?: string[], notTags?: string[]) => string | null;
   onProject: (fn: (p: Project) => Project) => void;
   /** Another release uses this Drive file as its official audio (it is then kept when this one is replaced). */
   audioUsedElsewhere?: (driveId: string) => boolean;
@@ -3042,15 +3042,15 @@ export default function VideoStudio({
     const own = h?.pool && h.pool === poolId ? h.tags : undefined;
     const ticked = (own ?? (poolId === hookPoolId ? sourceTags(settings.hookTags, settings.hookTheme) : undefined) ?? []).filter((x) => groups.some((g) => g.id === x));
     const all = pool ? textItems(pool) : [];
-    // The texts with a tag the release put aside are not offered (nor drawn: see Studio's onDrawHook).
-    const hidden = project.hiddenTags ?? [];
-    const items = all.filter((_, i) => !tagsOf[i]?.some((x) => hidden.includes(x)) && (!ticked.length || tagsOf[i]?.some((x) => ticked.includes(x))));
-    return { poolId, pool, groups, ticked, items, count: tagsOf.filter((tg) => !tg.some((x) => hidden.includes(x))).length, hidden };
+    // Its excluded tags (their −): never their texts, neither offered nor drawn.
+    const notTicked = (h?.pool && h.pool === poolId ? h.notTags ?? [] : []).filter((x) => groups.some((g) => g.id === x));
+    const items = all.filter((_, i) => !tagsOf[i]?.some((x) => notTicked.includes(x)) && (!ticked.length || tagsOf[i]?.some((x) => ticked.includes(x))));
+    return { poolId, pool, groups, ticked, notTicked, items, count: tagsOf.length };
   };
   /** A hook drawn from its list (and tags), different from the ones already on the video. */
   const drawFor = (h: VideoHook | undefined, taken: string[]) => {
     const s = srcOf(h);
-    return s.poolId ? onDrawHook(s.poolId, taken, s.ticked.length ? s.ticked : undefined) : null;
+    return s.poolId ? onDrawHook(s.poolId, taken, s.ticked.length ? s.ticked : undefined, s.notTicked.length ? s.notTicked : undefined) : null;
   };
   /** A text of the list in a hook: linked to its line, so editing it in the list follows here. */
   const fromList = (h: VideoHook | undefined, text: string): Partial<VideoHook> => ({ text, link: hookLink(srcOf(h).pool, text) });
@@ -3941,7 +3941,8 @@ export default function VideoStudio({
               {!hookPools.length && <p className="muted xs">{t("Make a hook list in the carousel (Import hooks): the video draws from the same lists.")}</p>}
               {hooks.map((h, i) => {
                 const src = srcOf(h);
-                const setSrc = (patch: Partial<VideoHook>) => editHook(h.id, { pool: src.poolId, tags: src.ticked, ...patch });
+                const setSrc = (patch: Partial<VideoHook>) => editHook(h.id, { pool: src.poolId, tags: src.ticked, notTags: src.notTicked.length ? src.notTicked : undefined, ...patch });
+                const setTags = (next: { tags: string[]; not: string[] }) => setSrc({ tags: next.tags, notTags: next.not.length ? next.not : undefined });
                 return (
                 <div key={h.id} className="hook-item">
                   {/* Its name, where it is drawn from (list · tags), then its actions as icons: another one, one picked in the list, remove. */}
@@ -3972,15 +3973,12 @@ export default function VideoStudio({
                               <span className="pick-k">{t("Tags")}</span>
                               {src.groups.length > 1 ? (
                                 <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                                  <button className={"pick-chip" + (!src.ticked.length ? " on" : "")} onClick={() => setSrc({ tags: [] })}>{t("All ({n})", { n: src.count })}</button>
-                                  {src.groups.map((g) => {
-                                    const on = src.ticked.includes(g.id);
-                                    if (src.hidden.includes(g.id)) return <button key={g.id || "other"} className="pick-chip aside" disabled title={t("Put aside in this release")}>{themeLabel(g.id, t)}</button>;
-                                    return (
-                                      <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
-                                        onClick={() => setSrc({ tags: on ? src.ticked.filter((x) => x !== g.id) : [...src.ticked, g.id] })}>{themeLabel(g.id, t)} · {g.items.length}</button>
-                                    );
-                                  })}
+                                  <button className={"pick-chip" + (!src.ticked.length && !src.notTicked.length ? " on" : "")} onClick={() => setTags({ tags: [], not: [] })}>{t("All ({n})", { n: src.count })}</button>
+                                  {src.groups.map((g) => (
+                                    <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length}
+                                      state={src.ticked.includes(g.id) ? "on" : src.notTicked.includes(g.id) ? "not" : undefined}
+                                      onTick={() => setTags(tagStep(src.ticked, src.notTicked, g.id, "tick"))} onNot={() => setTags(tagStep(src.ticked, src.notTicked, g.id, "not"))} />
+                                  ))}
                                 </div>
                               ) : <p className="muted xs">{t("No tags in this list yet.")}</p>}
                             </div>

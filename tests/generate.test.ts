@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultWorkspace } from "../lib/defaults";
-import { drawableItems, drawHook, followLists, generateAll, hookKey, hookLink, pick, pickText, poolTags, tagGroups, taggedItems, textItems, weightedPick, weightedPickBag } from "../lib/generate";
+import { drawableItems, drawHook, followLists, tagStep, generateAll, hookKey, hookLink, pick, pickText, poolTags, tagGroups, taggedItems, textItems, weightedPick, weightedPickBag } from "../lib/generate";
 import type { TextPool, Workspace } from "../lib/types";
 
 const pool = (kind: TextPool["kind"], text: string): TextPool => ({ id: "p", name: "p", scope: "shared", kind, text });
@@ -234,13 +234,17 @@ describe("tags of a hooks list", () => {
     const g = tagGroups(poolTags(p));
     expect(g.find((x) => x.id === "teaser")!.items).toEqual([0, 1]);
   });
-  it("a tag the release put aside: its texts are never drawn (even under another ticked tag), the rest is", () => {
+  it("an excluded tag (its −): its texts are never drawn (even under another ticked tag), the rest is", () => {
     const p = { ...hooks, tags: { [hookKey("Ce son va te hanter")]: ["émotion", "pre-release"], [hookKey("Nouveau son vendredi")]: ["pre-release"], [hookKey("Écoute jusqu'au bout")]: ["out-now"] } };
     expect(drawableItems(p, ["pre-release"])).toEqual(["Écoute jusqu'au bout"]);
     expect(taggedItems(p, ["émotion"], ["pre-release"])).toEqual([]);
     const ws = { textPools: [p], noRepeat: true, bags: {} } as unknown as Workspace;
     for (let i = 0; i < 5; i++) expect(drawHook(ws, "h", {}, [], undefined, ["pre-release"])).toBe("Écoute jusqu'au bout");
-    // Everything put aside: nothing drawn (never the hidden ones as a fallback).
+    // A tag is ticked or excluded, never both; a second − frees it.
+    expect(tagStep(["teaser"], [], "teaser", "not")).toEqual({ tags: [], not: ["teaser"] });
+    expect(tagStep([], ["teaser"], "teaser", "tick")).toEqual({ tags: ["teaser"], not: [] });
+    expect(tagStep([], ["teaser"], "teaser", "not")).toEqual({ tags: [], not: [] });
+    // Everything excluded: nothing drawn (never the excluded ones as a fallback).
     expect(drawHook(ws, "h", {}, [], undefined, ["pre-release", "out-now"])).toBeNull();
   });
 });

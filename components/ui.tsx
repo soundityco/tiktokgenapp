@@ -309,6 +309,26 @@ export function Range(p: { label: string; value: number; display?: string; min: 
 }
 
 /**
+ * A tag to draw from, Splice-like: a click ticks it (only the texts with a ticked tag), its − (on hover, always there
+ * on a touch screen) excludes it (never its texts), struck through; a click on an excluded tag frees it.
+ */
+export function TagChip({ label, count, state, onTick, onNot }: {
+  label: string; count?: number; state?: "on" | "not"; onTick: () => void; onNot: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <span className={"pick-tagchip" + (state ? " " + state : "")}>
+      <button className={"pick-chip" + (state === "on" ? " on" : "")} aria-pressed={state === "on"} onClick={state === "not" ? onNot : onTick}
+        title={state === "not" ? t("Excluded: click to draw it again") : undefined}>
+        {label}{count !== undefined && state !== "not" ? ` · ${count}` : ""}
+      </button>
+      <button className="tag-not" aria-pressed={state === "not"} aria-label={t("Exclude “{tag}”", { tag: label })}
+        title={state === "not" ? t("Excluded: click to draw it again") : t("Exclude: never its texts")} onClick={onNot}>−</button>
+    </span>
+  );
+}
+
+/**
  * Horizontal wheel, like the photo editors of phones: drag it left or right, the value under the centre mark
  * changes. Stops at 0 on the way; double-click (or Home) puts it back to 0; arrows move by 1, Shift + arrows by 10.
  */

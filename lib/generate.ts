@@ -105,14 +105,14 @@ export function weightedPickBag(
  * on one side does not come back on the other before the list has been used up. Mutates `bags`.
  */
 export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = [], tags?: string[] | string,
-  /** Tags the release put aside: their texts are never drawn. */
-  hidden?: string[]): string | null {
+  /** Tags excluded (the − of a tag): their texts are never drawn. */
+  not?: string[]): string | null {
   const pool = ws.textPools.find((p) => p.id === poolId);
   if (!pool) return null;
   // Some tags of the list only (their own shuffle bag), as for a slide; none (or none matching): the whole list.
   const want = typeof tags === "string" ? [tags] : tags;
-  const inTags = want?.length ? taggedItems(pool, want, hidden) : [];
-  const items = inTags.length ? inTags : drawableItems(pool, hidden);
+  const inTags = want?.length ? taggedItems(pool, want, not) : [];
+  const items = inTags.length ? inTags : drawableItems(pool, not);
   const bag = inTags.length ? bagOf(pool.id, want) : pool.id;
   if (!items.length) return null;
   const skip = new Set(exclude);
@@ -170,9 +170,9 @@ export function pickText(project: Project, ws: Workspace, slideIdx: number, bags
     const pool = ws.textPools.find((p) => p.id === src.poolId);
     if (!pool) return "";
     // Some tags of the list only (their own shuffle bag); none ticked, or none matching: the whole list.
-    const all = drawableItems(pool, project.hiddenTags);
+    const all = drawableItems(pool, src.notTags);
     const want = sourceTags(src.tags, src.theme);
-    const inTags = want ? taggedItems(pool, want, project.hiddenTags) : all;
+    const inTags = want ? taggedItems(pool, want, src.notTags) : all;
     const items = inTags.length ? inTags : all;
     const bag = want && inTags.length ? bagOf(pool.id, want) : pool.id;
     if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length && items.length) {
@@ -242,17 +242,25 @@ export function tagGroups(tags: string[][]): { id: string; items: number[] }[] {
   tags.forEach((list, i) => list.forEach((id) => m.set(id, [...(m.get(id) ?? []), i])));
   return [...m.entries()].map(([id, items]) => ({ id, items })).sort((a, b) => (a.id === "") === (b.id === "") ? b.items.length - a.items.length : a.id === "" ? 1 : -1);
 }
-/** The texts of a list with at least one of `tags`, none of the `hidden` ones. */
-export function taggedItems(pool: TextPool, tags: string[], hidden?: string[]): string[] {
+/** The texts of a list with at least one of `tags`, none of the excluded ones (`not`). */
+export function taggedItems(pool: TextPool, tags: string[], not?: string[]): string[] {
   const items = textItems(pool), tg = poolTags(pool);
-  return items.filter((_, i) => tg[i].some((x) => tags.includes(x)) && !tg[i].some((x) => hidden?.includes(x)));
+  return items.filter((_, i) => tg[i].some((x) => tags.includes(x)) && !tg[i].some((x) => not?.includes(x)));
 }
-/** The texts of a list a release can draw: none with a tag it put aside (`Project.hiddenTags`). */
-export function drawableItems(pool: TextPool, hidden?: string[]): string[] {
+/** The texts of a list that can be drawn: none with an excluded tag (the − of a tag: `notTags`). */
+export function drawableItems(pool: TextPool, not?: string[]): string[] {
   const items = textItems(pool);
-  if (!hidden?.length || !isLineList(pool)) return items;
+  if (!not?.length || !isLineList(pool)) return items;
   const tg = poolTags(pool);
-  return items.filter((_, i) => !tg[i].some((x) => hidden.includes(x)));
+  return items.filter((_, i) => !tg[i].some((x) => not.includes(x)));
+}
+/**
+ * A tag's next state, Splice-like: a click ticks it or not (only the texts with a ticked tag), its − excludes it or not
+ * (never its texts). A tag is never ticked and excluded at once.
+ */
+export function tagStep(tags: string[], not: string[], id: string, act: "tick" | "not"): { tags: string[]; not: string[] } {
+  if (act === "tick") return { tags: tags.includes(id) ? tags.filter((x) => x !== id) : [...tags, id], not: not.filter((x) => x !== id) };
+  return { tags: tags.filter((x) => x !== id), not: not.includes(id) ? not.filter((x) => x !== id) : [...not, id] };
 }
 /** The tags a source draws from: its own, else its older single theme, else none (the whole list). */
 export const sourceTags = (tags?: string[], theme?: string): string[] | undefined => (tags?.length ? tags : theme !== undefined ? [theme] : undefined);

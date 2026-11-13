@@ -36,7 +36,6 @@ import { merge3 } from "@/lib/merge";
 import { isDemo } from "@/lib/demo";
 import PicStack from "./PicStack";
 import StorageDialog from "./StorageDialog";
-import HiddenTagsDialog from "./HiddenTagsDialog";
 import VariantsDialog from "./VariantsDialog";
 import ShortcutsDialog from "./ShortcutsDialog";
 import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
@@ -66,7 +65,6 @@ type Overlay =
   | { k: "renameCarousel" }
   | { k: "newProject" }
   | { k: "rename" }
-  | { k: "hiddenTags" }
   | { k: "variants"; list: Variant[] }
   | { k: "confirm"; title: string; message: string; label: string; run: () => void };
 
@@ -1582,7 +1580,6 @@ export default function Studio({ userName }: { userName: string }) {
           <button onClick={() => { close(); setOverlay({ k: "newProject" }); }}><Icon name="plus" size={14} />{t("New release")}</button>
           <div className="sep" />
           <button onClick={() => { close(); setOverlay({ k: "rename" }); }}>{t("Rename")}</button>
-          <button onClick={() => { close(); setOverlay({ k: "hiddenTags" }); }}>{project.hiddenTags?.length ? t("Tags put aside ({n})", { n: project.hiddenTags.length }) : t("Put tags aside…")}</button>
           <button onClick={() => { close(); duplicateProject(); }}>{t("Duplicate")}</button>
           <div className="sep" />
           <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setOverlay({ k: "confirm", title: t("Delete project"), label: t("Delete"), message: t("Are you sure you want to delete “{name}”? Its slide setup and project-only lists will be deleted too. This can't be undone.", { name: project.name }), run: deleteProject }); }}>{t("Delete")}</button>
@@ -1594,7 +1591,7 @@ export default function Studio({ userName }: { userName: string }) {
   // One slide card (the deck's, or on a phone the selected slide's fields under the deck).
   const cardFor = (cfg: SlideCfg, i: number, part?: "fields") => (
               <SlideCard key={(part ?? "") + cfg.id} part={part} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={slideTexts} hiddenTags={project.hiddenTags} picPools={vPics} zones={isPhone ? phoneZones : ws.zones} onZones={isPhone ? togglePhoneZones : () => upd((w) => ({ ...w, zones: !w.zones }))} onFull={() => setPreview(true)} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
+                textPools={slideTexts} picPools={vPics} zones={isPhone ? phoneZones : ws.zones} onZones={isPhone ? togglePhoneZones : () => upd((w) => ({ ...w, zones: !w.zones }))} onFull={() => setPreview(true)} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
                 lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
@@ -1720,11 +1717,11 @@ export default function Studio({ userName }: { userName: string }) {
             canUndo={!!history.past} canRedo={!!history.future} onUndo={undo} onRedo={redo}
             project={project}
             hookPools={poolsVisible(ws.textPools, project.id).filter((p) => p.kind === "hooks")}
-            onDrawHook={(poolId, exclude, theme) => {
+            onDrawHook={(poolId, exclude, theme, notTags) => {
               // The latest workspace (not the one of this render): several hooks drawn in a row each take theirs out of the bag.
               const cur = wsRef.current ?? ws;
               const bags = { ...cur.bags };
-              const hook = drawHook(cur, poolId, bags, exclude, theme, cur.projects.find((x) => x.id === cur.currentProjectId)?.hiddenTags);
+              const hook = drawHook(cur, poolId, bags, exclude, theme, notTags);
               // The bag drawn from (the list's, or one theme's) keeps what is left.
               if (hook !== null) upd((w) => ({ ...w, bags: { ...w.bags, ...Object.fromEntries(Object.entries(bags).filter(([k]) => k === poolId || k.startsWith(poolId + "#"))) } }));
               return hook;
@@ -1988,10 +1985,6 @@ export default function Studio({ userName }: { userName: string }) {
       )}
       {overlay?.k === "renameCarousel" && <PromptDialog title={t("Rename carousel")} label={t("Name")} initial={carouselName(carouselsOf(project).find((c) => c.id === currentCarouselId(project))!)} confirmLabel={t("Rename")} onSubmit={(n) => updProject((p) => renameCarousel(p, n))} onClose={() => setOverlay(null)} />}
       {overlay?.k === "rename" && <PromptDialog title={t("Rename project")} label={t("Name")} initial={project.name} confirmLabel={t("Rename")} onSubmit={(n) => { void renameDriveFolder(["Releases", project.name || "Release"], n); updProject((p) => ({ ...p, name: n })); }} onClose={() => setOverlay(null)} />}
-      {overlay?.k === "hiddenTags" && (
-        <HiddenTagsDialog release={project.name} pools={slideTexts} hidden={project.hiddenTags ?? []}
-          onChange={(tags) => updProject((p) => ({ ...p, hiddenTags: tags.length ? tags : undefined }))} onClose={() => setOverlay(null)} />
-      )}
       {overlay?.k === "variants" && (
         <VariantsDialog list={overlay.list} pools={vText} onClose={() => setOverlay(null)}
           onKeep={(kept) => { upd((w) => ({ ...w, textPools: addVariants(w.textPools, kept) })); say(kept.length > 1 ? t("{n} texts added to your lists", { n: kept.length }) : t("Text added to your list")); }} />

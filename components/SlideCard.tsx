@@ -2,11 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
-import { Hint, Menu, Select, Switch, Wheel } from "./ui";
+import { Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
 import { clamp, clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
-import { poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
+import { poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
 import { themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { isLineList } from "@/lib/defaults";
@@ -45,8 +45,6 @@ interface Props {
   gen: GenSlide | undefined;
   selected: boolean;
   textPools: TextPool[];
-  /** Tags the release put aside: their texts are not offered (nor drawn). */
-  hiddenTags?: string[];
   picPools: PicPool[];
   /** The release's lyrics, cut into sections: a lyrics slide ticks the ones it shows. */
   lyrics: LyricSection[];
@@ -344,9 +342,12 @@ export default function SlideCard(p: Props) {
   const itemTags = listPool && isLineList(listPool) ? poolTags(listPool) : [];
   const groups = tagGroups(itemTags);
   const ticked = (cfg.textSource.kind === "pool" ? sourceTags(cfg.textSource.tags, cfg.textSource.theme) : undefined)?.filter((x) => groups.some((g) => g.id === x));
-  const aside = (i: number) => !!p.hiddenTags?.length && !!itemTags[i]?.some((x) => p.hiddenTags!.includes(x));
-  const listItems = allItems.filter((_, i) => !aside(i) && (!ticked?.length || itemTags[i].some((x) => ticked.includes(x))));
-  const setTicked = (list: string[]) => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: undefined, tags: list.length ? list : undefined } } : c));
+  // Its excluded tags (their −): never their texts.
+  const notTicked = (cfg.textSource.kind === "pool" ? cfg.textSource.notTags : undefined)?.filter((x) => groups.some((g) => g.id === x)) ?? [];
+  const excluded = (i: number) => !!notTicked.length && !!itemTags[i]?.some((x) => notTicked.includes(x));
+  const listItems = allItems.filter((_, i) => !excluded(i) && (!ticked?.length || itemTags[i].some((x) => ticked.includes(x))));
+  const setTags = (next: { tags: string[]; not: string[] }) => p.onCfg((c) => (c.textSource.kind === "pool"
+    ? { ...c, textSource: { ...c.textSource, theme: undefined, tags: next.tags.length ? next.tags : undefined, notTags: next.not.length ? next.not : undefined } } : c));
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
   // A lyrics slide: its sections ticked (picked like a hook, under "Text from"), and its optional header line.
@@ -425,7 +426,8 @@ export default function SlideCard(p: Props) {
               <Menu float left trigger={(open, toggle) => (
                 <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Pick from the list")}>
                   <span className="truncate">{listItems.includes(text) ? text.replace(/\|/g, " ") : text.trim() ? t("Text retouched") : t("Pick a text")}</span>
-                  {!!ticked?.length && <span className="pick-tag">{ticked.length === 1 ? themeLabel(ticked[0], t) : t("{n} tags", { n: ticked.length })}</span>}
+                  {ticked?.length ? <span className="pick-tag">{ticked.length === 1 ? themeLabel(ticked[0], t) : t("{n} tags", { n: ticked.length })}</span>
+                    : notTicked.length > 0 && <span className="pick-tag">{notTicked.length === 1 ? t("1 excluded") : t("{n} excluded", { n: notTicked.length })}</span>}
                   <Icon name="chevron" size={13} />
                 </button>
               )}>
@@ -433,17 +435,12 @@ export default function SlideCard(p: Props) {
                   <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
                     {groups.length > 1 && (
                       <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                        <button className={"pick-chip" + (!ticked?.length ? " on" : "")} onClick={() => setTicked([])}>{t("All ({n})", { n: allItems.filter((_, i) => !aside(i)).length })}</button>
-                        {groups.map((g) => {
-                          const on = !!ticked?.includes(g.id);
-                          // Put aside for the release: shown struck through, not to be ticked here.
-                          if (p.hiddenTags?.includes(g.id)) return <button key={g.id || "other"} className="pick-chip aside" disabled title={t("Put aside in this release")}>{themeLabel(g.id, t)}</button>;
-                          return (
-                            <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
-                              onClick={() => setTicked(on ? (ticked ?? []).filter((x) => x !== g.id) : [...(ticked ?? []), g.id])}>
-                              {themeLabel(g.id, t)} · {g.items.length}</button>
-                          );
-                        })}
+                        <button className={"pick-chip" + (!ticked?.length && !notTicked.length ? " on" : "")} onClick={() => setTags({ tags: [], not: [] })}>{t("All ({n})", { n: allItems.length })}</button>
+                        {groups.map((g) => (
+                          <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length}
+                            state={ticked?.includes(g.id) ? "on" : notTicked.includes(g.id) ? "not" : undefined}
+                            onTick={() => setTags(tagStep(ticked ?? [], notTicked, g.id, "tick"))} onNot={() => setTags(tagStep(ticked ?? [], notTicked, g.id, "not"))} />
+                        ))}
                       </div>
                     )}
                     <div className="pick-list">
