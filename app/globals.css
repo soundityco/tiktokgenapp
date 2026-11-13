@@ -700,6 +700,8 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .share-page { min-height: 100dvh; display: grid; place-items: start center; padding: var(--s5) var(--s4) var(--s6); background: var(--bg); }
 .share-card { width: min(100%, 460px); gap: var(--s4); }
 .share-card .display { font-size: 30px; line-height: 1.05; margin: 0; }
+/* The error page: the message as it is, to copy and report. */
+.error-text { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); max-height: 40dvh; overflow: auto; }
 .share-preview { width: 100%; max-height: 60vh; border-radius: var(--r); background: #000; }
 .share-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .share-thumbs img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: var(--r); }
@@ -2183,8 +2185,7 @@ details.sec:first-of-type { background-image: none; }
   .pv-full-cv { max-height: 100dvh; }
   html.pv-full, html.pv-full body { overflow: hidden; }
   html.pv-full .mobile-tabs { z-index: 85; transition: opacity .3s; }
-  html.pv-full .mobile-tabs > :not(.dock-player):not(.dock-thumb) { visibility: hidden; pointer-events: none; } /* hidden in place: the player does not move */
-  html.pv-full .mobile-tabs .dock-thumb { opacity: 0 !important; }
+  html.pv-full .mobile-tabs > :not(.dock-player) { display: none; } /* the dock is the player alone, at the bottom */
   html.pv-dim .mobile-tabs { opacity: .38; }
   html.pv-noplayer .mobile-tabs { opacity: 0; pointer-events: none; transform: translateY(12px); }
 }
@@ -2407,9 +2408,9 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .pv-full-cv { cursor: grab; }
 @media (max-width: 1000px) {
   .pv-full-layer { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px); }
-  .pv-full-layer.has-player { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 172px); }
+  .pv-full-layer.has-player { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); } /* the dock, the player alone */
   .pv-full-cv { max-width: 100%; max-height: calc(100dvh - 66px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
-  .has-player .pv-full-cv { max-height: calc(100dvh - 226px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+  .has-player .pv-full-cv { max-height: calc(100dvh - 146px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 }
 /* The video full screen: the picture leaves its frame (as if it moved there), so the frame stays, empty, where it
    was; nothing else of the page moves. It comes back in as the full screen closes. */

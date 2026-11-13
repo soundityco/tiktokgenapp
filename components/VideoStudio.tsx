@@ -2724,6 +2724,18 @@ export default function VideoStudio({
     clearTimeout(controlsTimer.current);
     controlsTimer.current = window.setTimeout(() => setControlsOn(false), 3000);
   };
+  // An icon over the picture acts only when the press began on it while it was shown. Hidden, it takes no press at
+  // all; the tap that shows the icons must not also press the one under the finger (its click comes right after).
+  const pressedOn = useRef<EventTarget | null>(null);
+  const shownPress = (act: () => void) => ({
+    onPointerDown: (e: React.PointerEvent) => { pressedOn.current = e.currentTarget; },
+    onClick: (e: React.MouseEvent) => {
+      const own = pressedOn.current === e.currentTarget;
+      pressedOn.current = null;
+      if (e.detail !== 0 && !own) return; // a pointer click that did not start here (the keyboard: detail 0)
+      act();
+    },
+  });
   const wheelRef = useRef<(e: WheelEvent) => void>(() => {});
   wheelRef.current = (e) => {
     if (!videoBlob) return;
@@ -3296,9 +3308,9 @@ export default function VideoStudio({
             {/* Over the picture: TikTok's zones (bottom left) and the full screen (bottom right); on a computer they show on hover. */}
             {videoBlob && !full && settings.format !== "16:9" && (
               <button className={"pv-zones" + (aids.zones ? " on" : "")} aria-pressed={aids.zones} aria-label={t("Zones")} title={t("TikTok's interface zones on the video")}
-                onClick={() => { setAids({ zones: !aids.zones }); revealControls(); }}><Icon name={aids.zones ? "zones" : "zones-off"} size={18} /></button>
+                {...shownPress(() => { setAids({ zones: !aids.zones }); revealControls(); })}><Icon name={aids.zones ? "zones" : "zones-off"} size={18} /></button>
             )}
-            {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} onClick={() => toggleFull(true)}><Icon name="expand" size={18} /></button>}
+            {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} {...shownPress(() => toggleFull(true))}><Icon name="expand" size={18} /></button>}
             {/* The full screen (the same as the carousel's): the preview's picture as it is drawn, over the app. */}
             {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onTap={fullTap} player label={clipName(clip)}
               bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("Esc to close")}</span></>} />}

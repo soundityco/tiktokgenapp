@@ -959,4 +959,8 @@ export const FR: Record<string, string> = {
   "Lyrics of the song": "Paroles du morceau",
   "Edit": "Modifier",
   "Fold": "Replier",
+  "Something went wrong": "Un problème est survenu",
+  "The page stopped because of an error. Reload it to go on.": "La page s'est arrêtée à cause d'une erreur. Recharge-la pour continuer.",
+  "Reload": "Recharger",
+  "Copy the error": "Copier l'erreur",
 };
