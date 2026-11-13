@@ -143,6 +143,26 @@ export default function Studio({ userName }: { userName: string }) {
   const togglePhoneZones = () => setPhoneZones((v) => { try { localStorage.setItem("tktgen-phone-zones", v ? "0" : "1"); } catch { /* private mode */ } return !v; });
   // Phone: the slides are a deck swiped sideways; the one in the middle is the selected one (and the other way round).
   const deckRef = useRef<HTMLDivElement>(null);
+  // The caption block as wide as the slides above it (their first row), never wider: 3 slides, 3 slides' width.
+  const postRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const deck = deckRef.current, post = postRef.current;
+    if (!deck || !post || typeof ResizeObserver === "undefined") return;
+    const fit = () => {
+      const cards = [...deck.children].filter((x): x is HTMLElement => x instanceof HTMLElement && x.classList.contains("card"));
+      // Only the computer's grid: the phone's deck is a row that scrolls (the block takes the page's width there).
+      if (getComputedStyle(deck).display !== "grid" || !cards.length) { post.style.maxWidth = ""; return; }
+      const row = cards.filter((x) => x.offsetTop === cards[0].offsetTop);
+      const last = row[row.length - 1];
+      post.style.maxWidth = `${last.offsetLeft + last.offsetWidth - cards[0].offsetLeft}px`;
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(deck);
+    const mo = new MutationObserver(fit); // a slide added or removed (same grid size when the row is not full)
+    mo.observe(deck, { childList: true });
+    return () => { ro.disconnect(); mo.disconnect(); };
+  }, [studio, !!ws]);
   const deckWrapRef = useRef<HTMLDivElement>(null);
   /** Where the deck bar goes (the top of the room kept under the middle slide's picture), or null off the phone. */
   const [deckTop, setDeckTop] = useState<number | null>(null);
@@ -1786,7 +1806,7 @@ export default function Studio({ userName }: { userName: string }) {
               <div className={"deck-fields" + (deckSwiping && shown === sel ? " leaving" : "")}>{cardFor(project.slides[shown], shown, "fields")}</div>
             );
           })()}
-          <section className="post-box">
+          <section ref={postRef} className="post-box">
             <h3 className="label">{t("Caption and hashtags")}</h3>
             <PostCaption auto value={project.caption ?? ""} poolId={project.captionPoolId} pools={captionPools}
               onChange={(caption) => updProject((p) => ({ ...p, caption }))}

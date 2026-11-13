@@ -377,7 +377,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .hook-item .nudge .btn { width: 24px; padding: 0; justify-content: center; }
 .hook-item .nudge .mono { min-width: 46px; text-align: center; }
 .lyric-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
-details.fine > summary { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: var(--s1) 0; }
+/* Its line as tall as its text (no room under it): the block's bottom edge as far from it as its left edge. */
+details.fine > summary { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: var(--s1) 0 0; line-height: 1; }
 details.fine > summary:hover { color: var(--text); }
 details.fine[open] > summary { margin-bottom: var(--s2); }
 .tab-body { display: grid; gap: var(--s4); padding-top: var(--s2); }
@@ -629,7 +630,7 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 @keyframes studio-in { from { opacity: .3; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .main > .col, .main .video-shell { animation: none; } }
 /* The text of the post (caption and hashtags), under the slides of a carousel and in the video's left column. */
-.post-box { display: grid; gap: var(--s2); margin-top: var(--s5); max-width: 720px; }
+.post-box { display: grid; gap: var(--s2); margin-top: var(--s5); } /* as wide as the slides above it (Studio measures them) */
 .post-caption textarea { resize: vertical; min-height: 92px; line-height: 1.45; }
 .post-caption .row .btn { flex: none; }
 /* A captions list: one box per caption, numbered. */
