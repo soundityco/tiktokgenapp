@@ -4,7 +4,7 @@
  * through our server (/api/share), never the files.
  */
 import type { ShareMeta } from "./shareStore";
-import { RELAY_CHUNK, RELAY_MAX } from "./shareLimits";
+import { RELAY_CHUNK, RELAY_MAX, SHARE_MINUTES } from "./shareLimits";
 import { safeType } from "./safeFile";
 
 const ICE: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
@@ -262,7 +262,29 @@ export async function receiveFiles(code: string, onState: (s: ReceiveState) => v
   }
 }
 
-/** Plan B, on the computer: the files on the user's Drive, readable by link, the links handed to the phone. */
+// The files of plan B are readable by link only while the share lasts (and a little more for the last download):
+// then the link is closed. Kept on this device, so a tab closed meanwhile closes them at the next start.
+const OPEN_LINKS = "rollout-open-links";
+const LINK_MS = (SHARE_MINUTES + 5) * 60_000;
+const openLinks = (): { id: string; at: number }[] => { try { return JSON.parse(localStorage.getItem(OPEN_LINKS) ?? "[]"); } catch { return []; } };
+const keepLinks = (l: { id: string; at: number }[]) => { try { if (l.length) localStorage.setItem(OPEN_LINKS, JSON.stringify(l)); else localStorage.removeItem(OPEN_LINKS); } catch { /* private mode */ } };
+
+/** Closes the links of plan B whose share is over (the files stay private in the Drive). */
+export async function closeOpenLinks() {
+  const due = openLinks().filter((l) => Date.now() - l.at >= LINK_MS);
+  if (!due.length) return;
+  const { getToken } = await import("./drive");
+  const closed = new Set<string>();
+  for (const l of due) {
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${l.id}/permissions/anyoneWithLink`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${await getToken()}` },
+    }).catch(() => null);
+    if (r && (r.ok || r.status === 404)) closed.add(l.id); // closed, or the file is gone
+  }
+  keepLinks(openLinks().filter((l) => !closed.has(l.id)));
+}
+
+/** Plan B, on the computer: the files on the user's Drive, readable by link while the share lasts, the links handed to the phone. */
 export async function shareThroughDrive(code: string, files: { name: string; blob: Blob }[], onProgress: (p: number) => void, signal: AbortSignal,
   /** Where it goes in the Drive: Rollout / Exports / <release> / <what · date> (Rollout itself without it). */
   place?: { release: string; what: string }) {
@@ -276,7 +298,8 @@ export async function shareThroughDrive(code: string, files: { name: string; blo
   for (const f of files) {
     const id = await uploadToDrive(f.blob, f.name, (p) => onProgress((before + p * f.blob.size) / total), signal, f.blob.type || undefined, { tktgen: "export" }, path);
     before += f.blob.size;
-    // Readable by whoever has the link (the phone, not signed in); the file stays in the Rollout folder of the Drive.
+    // Readable by whoever has the link (the phone, not signed in) until the share is over; the file stays in the Drive.
+    keepLinks([...openLinks().filter((l) => l.id !== id), { id, at: Date.now() }]);
     await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
       method: "POST", signal,
       headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
@@ -284,6 +307,7 @@ export async function shareThroughDrive(code: string, files: { name: string; blo
     });
     drive.push({ name: f.name, id });
   }
+  setTimeout(() => void closeOpenLinks(), LINK_MS + 1000);
   const r = await fetch("/api/share", { method: "PUT", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, drive }) });
   if (!r.ok) throw new Error(`share ${r.status}`);
 }

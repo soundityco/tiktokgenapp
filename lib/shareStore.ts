@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { randomBytes } from "node:crypto";
+import { SHARE_MINUTES } from "./shareLimits";
 
 /**
  * The meeting point of a share between the computer and a phone (WebRTC signalling): the computer's offer, the
@@ -30,7 +31,6 @@ const ensureChunks = () =>
     PRIMARY KEY (code, f, n)
   )`));
 
-export const SHARE_MINUTES = 10;
 export interface ShareMeta {
   kind: "video" | "images"; title: string; caption?: string; files: { name: string; size: number; type: string }[];
   drive?: { name: string; id: string }[];

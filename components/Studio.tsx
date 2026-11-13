@@ -334,6 +334,7 @@ export default function Studio({ userName }: { userName: string }) {
       });
     }).then((n) => { console.info(`[drive] tree ready${n ? `, ${n} files tidied` : ""}`); })
       .then(() => tidyTwins())
+      .then(() => import("@/lib/shareP2P").then((m) => m.closeOpenLinks())) // plan B's links of a share that is over
       .catch((e) => console.warn("[drive] tree", e));
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
   // The header's height (phone: the Style page holds the preview right under it).
