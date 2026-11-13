@@ -1120,7 +1120,8 @@ export default function VideoStudio({
     const cp = settings.drive?.copy;
     const q = cp?.tenBit ? t("10-bit, as filmed") : t("1080p+, as filmed");
     if (onCopy && cp) return { text: t("You work on the Drive copy ({from} → {to})", { from: fmtTime(cp.from), to: fmtTime(cp.to) }), p: 1,
-      hint: t("The camera file is on another device: you work here on its copy from your Drive ({quality}, the passage used). The export here uses it; on the device that has the camera file, the export uses the original.", { quality: q }) };
+      action: { label: t("Use the original"), run: () => document.getElementById("video-original")?.click() },
+      hint: t("The camera file is not in this browser (imported on another device, in another browser, or at another address of the app: a website never sees your files by itself). You work here on its copy from your Drive ({quality}, the passage used). If the original is on this computer, “Use the original” plugs it back: the sync and the settings are kept.", { quality: q }) };
     if (copyJob?.clip === clip.id) return { text: copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) }),
       p: copyJob.p, busy: true, hint: t("Keep this page open until it is done: leaving it stops the copy (it starts again next time).") };
     if (copyJob) return { text: t("Another video's copy first: {video}", { video: copyJob.label }), p: 0, busy: true };
@@ -1289,13 +1290,14 @@ export default function VideoStudio({
     }
   };
 
-  const pickVideo = async (f: File) => {
-    syncRef.current?.abort();
-    stop();
-    setErr(null);
-    // The same camera file again (another browser, data cleared): plug it back, keep the sync and every setting.
+  /**
+   * The same camera file again (another browser, another address of the app, data cleared): plugged back, the sync and
+   * every setting kept. `anyName`: the user said it is the original (its size decides, the name may have changed).
+   */
+  const relinkVideo = async (f: File, anyName = false): Promise<boolean> => {
     const cur = settingsRef.current;
-    if ((!videoBlob || onCopy) && cur.videoName === f.name) {
+    if (!((!videoBlob || onCopy) && (cur.videoName === f.name || (anyName && cur.videoSize)))) return false;
+    {
       const info = await probeVideo(f);
       const same = cur.videoSize ? cur.videoSize === f.size
         : !!info.duration && !!cur.source?.duration && Math.abs(info.duration - cur.source.duration) < 0.05;
@@ -1308,9 +1310,25 @@ export default function VideoStudio({
         void askPersistentStorage();
         try { await putMedia(`video:${mediaId}`, f); } catch { /* private mode: keep it in memory */ }
         setNote(t("Camera file found again: the sync and the settings are kept."));
-        return;
+        return true;
       }
     }
+    return false;
+  };
+  /** "Use the original file": only the same camera file is taken (never a new take by mistake). */
+  const pickOriginal = async (f: File) => {
+    syncRef.current?.abort();
+    stop();
+    setErr(null);
+    if (!(await relinkVideo(f, true))) setErr(t("This is not the same camera file ({name}). Pick the original, or use “Replace” for another take.", { name: settingsRef.current.videoName ?? "" }));
+  };
+
+  const pickVideo = async (f: File) => {
+    syncRef.current?.abort();
+    stop();
+    setErr(null);
+    const cur = settingsRef.current;
+    if (await relinkVideo(f)) return;
     // A new take: the working copy of the previous one leaves the Drive and this device.
     stopCopyOf(clip.id);
     if (cur.drive?.copy?.id) void deleteDriveFile(cur.drive.copy.id);
@@ -3268,6 +3286,7 @@ export default function VideoStudio({
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
             <input id="audio-file" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
             <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
+            <input id="video-original" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickOriginal(f); e.target.value = ""; }} />
             {/* The release holds the audio (shared by all its videos); this video holds its camera file and its framing. */}
             <div className="tree-head" title={t("The audio and the lyrics belong to the release: every video of it uses them.")}>
               <span className="label">{t("Release")}</span>
@@ -3328,6 +3347,7 @@ export default function VideoStudio({
                       {copyStatusEl(true)}
                     </>)}
                   menu={settings.videoName && ((close) => (<>
+                    {(onCopy || missing) && settings.videoSize && <button onClick={() => { close(); document.getElementById("video-original")?.click(); }}>{t("Use the original file (on this computer)")}</button>}
                     <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}>{t("Replace from this computer")}</button>
                     {videoBlob && !onCopy && !d.originalId && driveWrite && !driveJob && <button onClick={() => { close(); void sendToDrive(videoBlob); }}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>}
                     {driveWrite === false && !d.originalId && <button onClick={() => { close(); void signIn("google", { redirectTo: "/studio" }); }}>{t("Reconnect Google to put it on my Drive")}</button>}
