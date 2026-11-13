@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
 import Icon from "./Icon";
+import PhotoView from "./PhotoView";
 import { Menu, Modal, RoleSelect, ScopeSelect } from "./ui";
 
 export function Thumb({ id, name }: { id: string; name: string }) {
@@ -286,6 +287,9 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   };
   const pick = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  // A photo opened full screen (the carousel's own full screen: swipe, ← →, dragged down to close).
+  const [viewing, setViewing] = useState<number | null>(null);
+  const grid = useRef<HTMLDivElement>(null);
   const images = (list: FileList | null) => [...(list ?? [])].filter((f) => looksLikeImage(f.name, f.type));
   const remove = (pic: PicRef) => p.onChange((x) => ({ ...x, pics: x.pics.filter((y) => y.id !== pic.id) }));
   return (
@@ -317,16 +321,22 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
         ) : t("Kept on this device only (no Google Drive access).")}
       </p>
       {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them.")}</p>}
-      <div className="thumbs" style={{ maxHeight: "46dvh", overflow: "auto" }}>
-        {pool.pics.map((pic) => (
+      <div className="thumbs" ref={grid} style={{ maxHeight: "46dvh", overflow: "auto" }}>
+        {pool.pics.map((pic, i) => (
           <div key={pic.id} className="thumb-wrap">
-            <Thumb id={pic.id} name={pic.name} />
+            <button className="thumb-open" aria-label={t("Open {name} full screen", { name: pic.name })} onClick={() => setViewing(i)}>
+              <Thumb id={pic.id} name={pic.name} />
+            </button>
             <button className="x" aria-label={t("Remove {name}", { name: pic.name })}
               onClick={() => remove(pic)}><Icon name="x" size={12} /></button>
           </div>
         ))}
       </div>
       {over && <div className="pic-drop-hint">{t("Drop the photos: they go to your Drive")}</div>}
+      {viewing !== null && pool.pics[viewing] && (
+        <PhotoView pics={pool.pics} index={viewing} onNav={(i) => { setViewing(i); grid.current?.querySelectorAll(".thumb-wrap")[i]?.scrollIntoView({ block: "nearest" }); }}
+          onClose={() => setViewing(null)} thumb={(i) => grid.current?.querySelectorAll<HTMLElement>(".thumb-wrap")[i] ?? null} />
+      )}
       </div>
       <div className="modal-foot">
         <button className="btn quiet danger left" onClick={p.onDelete}>{t("Delete list")}</button>

@@ -18,8 +18,9 @@ const CLOSE_MS = 280;
  * The picture is the page's own canvas copied as it is drawn (the video playing, scrubbing…), or drawn by `draw`.
  */
 export function FullView({ source, draw, drawSide, sideKey, onClose, onLeave, onTap, onSide, sideOk, closeOnSpace, player, label, bar, children }: {
-  /** The page's canvas: where the picture glides from and back to (and what is copied when there is no `draw`). */
-  source: () => HTMLCanvasElement | null;
+  /** Where the picture glides from and back to in the page (a list's thumbnail…); a canvas is copied when there is
+   *  no `draw`. */
+  source: () => HTMLElement | null;
   /** Draws the picture itself (a slide at its full size); called again when it changes. */
   draw?: (c: HTMLCanvasElement) => void;
   /** Draws the previous (-1) / next (1) one, shown beside it while swiped (the carousel): the next one slides in
@@ -102,7 +103,7 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onLeave, on
       if (side) for (const [el, dir] of [[prevCv.current, -1], [nextCv.current, 1]] as const) if (el && can(dir)) side(el, dir);
       return;
     }
-    if (small && small.width) {
+    if (small instanceof HTMLCanvasElement && small.width) {
       if (c.width !== small.width || c.height !== small.height) { c.width = small.width; c.height = small.height; }
       c.getContext("2d")?.drawImage(small, 0, 0);
     }
@@ -151,14 +152,16 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onLeave, on
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable);
-      if (e.key === "Escape" || (!typing && !e.metaKey && !e.ctrlKey && (e.key.toLowerCase() === "f" || (closeOnSpace && e.key === " ")))) { e.preventDefault(); closeRef.current(); }
-      else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      // Its keys are its own (caught first, kept): Escape never also closes the window it was opened from.
+      if (e.key === "Escape" || (!typing && !e.metaKey && !e.ctrlKey && (e.key.toLowerCase() === "f" || (closeOnSpace && e.key === " ")))) {
+        e.preventDefault(); e.stopImmediatePropagation(); closeRef.current();
+      } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         const dir: 1 | -1 = e.key === "ArrowRight" ? 1 : -1;
-        if (can(dir)) { e.preventDefault(); props.current.onSide!(dir); }
+        if (can(dir)) { e.preventDefault(); e.stopImmediatePropagation(); props.current.onSide!(dir); }
       }
     };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const down = (e: React.PointerEvent<HTMLCanvasElement>) => {

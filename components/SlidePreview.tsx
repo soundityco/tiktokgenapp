@@ -8,8 +8,9 @@ import type { GenSlide, SlideCfg } from "@/lib/types";
 import { FullView } from "./FullView";
 import Icon from "./Icon";
 
-/** The photos of these slides, kept once loaded (the next one's is ready when it becomes the one shown: no flash). */
-function usePhotos(ids: (string | null | undefined)[]) {
+/** The photos of these slides (or of a list), kept once loaded (the next one's is ready when it becomes the one shown:
+ *  no flash). */
+export function usePhotos(ids: (string | null | undefined)[]) {
   const [got, setGot] = useState<Map<string, Img>>(() => new Map());
   const key = ids.filter(Boolean).join("|");
   useEffect(() => {
