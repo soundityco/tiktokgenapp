@@ -215,8 +215,12 @@ export default function SlideCard(p: Props) {
     const pad = 30;
     return !!b && x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad;
   };
-  const fit = (pic: SlideCfg["pic"]) =>
-    img && cv.current ? clampPic(pic, img.width, img.height, cv.current.width, cv.current.height) : pic;
+  // Kept in bounds: covering the slide, or only the part between its black bars (the matte is not kept in the photo).
+  const fit = (pic: SlideCfg["pic"]) => {
+    if (!img || !cv.current) return pic;
+    const r = clampPic({ ...pic, matte: cfg.matte }, img.width, img.height, cv.current.width, cv.current.height);
+    return r.ox === pic.ox && r.oy === pic.oy ? pic : { ...pic, ox: r.ox, oy: r.oy };
+  };
 
   const down = (e: React.PointerEvent) => {
     p.onSelect();

@@ -63,7 +63,7 @@ function clipsOf(p: Project): VideoSetup[] {
 const OUT_SIZE = (f?: VideoSettings["format"]): [number, number] => (f === "16:9" ? [1920, 1080] : [1080, 1920]);
 const EXPORT_FPS = 30;
 /** The video frame settings in the carousel's photo terms, so both are drawn by the same code. */
-const picOf = (f: VideoFrame): PicSettings => ({ framing: f.framing ?? "fill", bars: f.bars ?? "blur", zoom: f.zoom, ox: f.ox, oy: f.oy, darken: 0 });
+const picOf = (f: VideoFrame, matte?: number): PicSettings => ({ framing: f.framing ?? "fill", bars: f.bars ?? "blur", zoom: f.zoom, ox: f.ox, oy: f.oy, darken: 0 , matte });
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** The hook on screen at official time `time` (the first one when several overlap). */
 const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
@@ -668,7 +668,7 @@ export default function VideoStudio({
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
       pic = desqueeze(pic, cfg.desqueeze);
-      let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame);
+      let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame, cfg.matte);
       // Progressive zoom: ×1 at the start of the segment, `push` on its last frame. The whole framed picture around the
       // centre, or (`pushIn`) only what is inside its frame, around the frame's centre (below).
       const push = cfg.push ?? 1;
@@ -2637,7 +2637,7 @@ export default function VideoStudio({
         let detail = source?.codec ?? "";
         // Log / HDR graded: on the GPU from the decoded 10-bit frames (seconds), else by ffmpeg below (minutes).
         if (bake && videoBlob && ow && oh && cfg.grade && !ac.signal.aborted) {
-          const crop = cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze);
+          const crop = cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame, cfg.matte), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze);
           const lut = buildGradeLut(cfg.grade, cfg.grade.lut ? look : null, 65);
           const t0 = performance.now();
           const gpu = await gpuGradedSource(videoBlob, Math.max(0, from - cfg.offset), until - cfg.offset, crop, ow, oh, lut, 65,
@@ -2657,7 +2657,7 @@ export default function VideoStudio({
           if (ve > vs) {
             try {
               // Only what the post shows, at the camera's resolution (unknown size: the whole picture, not scaled).
-              const crop = ow && oh ? cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze) : undefined;
+              const crop = ow && oh ? cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame, cfg.matte), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze) : undefined;
               const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}|${JSON.stringify(crop ?? null)}|${bake ? gradeKey(cfg.grade) : ""}`;
               let proxy = proxyRef.current?.key === key ? proxyRef.current.blob : null;
               if (!proxy) {
@@ -2828,7 +2828,7 @@ export default function VideoStudio({
   const fitFrame = (f: VideoFrame, squeeze = settingsRef.current.desqueeze ?? 1): VideoFrame => {
     const el = videoRef.current, c = canvasRef.current;
     if (!el?.videoWidth || !c) return f;
-    const p = clampPic(picOf(f), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
+    const p = clampPic(picOf(f, settingsRef.current.matte), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
     return { ...f, ox: p.ox, oy: p.oy };
   };
   const pdrag = useRef<null | { kind: "text" | "hook" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number }>(null);

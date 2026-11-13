@@ -59,6 +59,9 @@ export interface PicSettings {
   oy: number; // offset, fraction of canvas height
   /** Photo edits (carousel), each -100 to 100 (vignette and grain 0 to 100); none: the photo as it is. */
   adjust?: PhotoAdjust;
+  /** Only while drawing or moving it, never kept: the frame is masked by black bars to this format (the slide's or the
+   *  video's `matte`), so the picture only has to cover the part between the bars (see clampPic). */
+  matte?: number;
 }
 
 /** A photo's own edits, kept for when it comes back on a slide (its framing only for the same format). */

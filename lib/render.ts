@@ -67,7 +67,9 @@ const tmp = (w: number, h: number) => {
  */
 export function clampPic(pic: PicSettings, iw: number, ih: number, W: number, H: number): PicSettings {
   const s = (pic.framing === "fill" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih)) * pic.zoom;
-  const mx = Math.abs(iw * s - W) / 2 / W, my = Math.abs(ih * s - H) / 2 / H;
+  // Black bars over the frame (pic.matte): only the part between them has to be covered (it moves further).
+  const [Wv, Hv] = matteSize(W, H, pic.matte);
+  const mx = Math.abs(iw * s - Wv) / 2 / W, my = Math.abs(ih * s - Hv) / 2 / H;
   const ox = Math.max(-mx, Math.min(mx, pic.ox)), oy = Math.max(-my, Math.min(my, pic.oy));
   return ox === pic.ox && oy === pic.oy ? pic : { ...pic, ox, oy };
 }
@@ -161,13 +163,13 @@ function drawPicture(ctx: CanvasRenderingContext2D, img: Img, cfg: SlideCfg, W: 
     let lut = photoLuts.get(key);
     if (!lut) { lut = buildGradeLut(g, null, 33); photoLuts.set(key, lut); if (photoLuts.size > 40) photoLuts.delete(photoLuts.keys().next().value!); }
     grader.setLut(lut, 33);
-    const pic = clampPic(cfg.pic, img.width, img.height, W, H);
+    const pic = clampPic({ ...cfg.pic, matte: cfg.matte }, img.width, img.height, W, H);
     const region = visibleRegion(pic, img.width, img.height, W, H);
     const s = (pic.framing === "fill" ? Math.max(W / img.width, H / img.height) : Math.min(W / img.width, H / img.height)) * pic.zoom;
     const graded = grader.grade({ src: img, w: img.width, h: img.height }, region, Math.min(4096, region.w * s), Math.min(4096, region.h * s));
-    drawFramed(ctx, graded.src, img.width, img.height, { ...cfg.pic, darken: 0 }, W, H, graded.part);
+    drawFramed(ctx, graded.src, img.width, img.height, { ...cfg.pic, matte: cfg.matte, darken: 0 }, W, H, graded.part);
   } else {
-    drawFramed(ctx, img, img.width, img.height, { ...cfg.pic, darken: 0 }, W, H);
+    drawFramed(ctx, img, img.width, img.height, { ...cfg.pic, matte: cfg.matte, darken: 0 }, W, H);
   }
   if (g) drawLook(ctx, W, H, g, 0);
   if (cfg.pic.darken > 0) {
@@ -320,6 +322,12 @@ export function drawStyledText(
   if (nativeTracking(ctx)) (ctx as Ctx2D).letterSpacing = "0px";
   tracking = 0;
   return box;
+}
+
+/** The part of a W×H frame left between black bars at `ratio` (the whole frame without). */
+export function matteSize(W: number, H: number, ratio?: number): [number, number] {
+  if (!ratio || Math.abs(ratio - W / H) < 0.005) return [W, H];
+  return ratio > W / H ? [W, W / ratio] : [H * ratio, H];
 }
 
 /** The picture formats a post can be masked to (black bars, as the output blanking of an editing app): width / height. */
