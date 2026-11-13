@@ -704,6 +704,8 @@ export const FR: Record<string, string> = {
   "Inside the video: the picture zooms inside its frame, which keeps its place and size (the bars and the texts around do not move).": "Dans la vidéo : l'image zoome à l'intérieur de son cadre, qui garde sa place et sa taille (les bandes et les textes autour ne bougent pas).",
   "The whole frame": "Tout le cadre",
   "Playback": "Lecture",
+  "Custom…": "Personnalisé…",
+  "Strength": "Intensité",
   "Play, pause, play again: it starts again from the same point. Off: it goes on from where it stopped.": "Lecture, pause, lecture : ça repart du même point. Décoché : ça reprend là où ça s'est arrêté.",
   "Pause goes back to where play started": "La pause revient au point de départ",
   "Inside the video": "Dans la vidéo",

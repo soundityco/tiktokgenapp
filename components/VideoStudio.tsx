@@ -79,6 +79,8 @@ const LYRICS_ALIGN_V = 3;
 
 /** What each version of a video keeps for itself: every choice of the post. The rest is the video's: the camera file
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
+/** The menu's progressive zooms (0: off); any other factor is a custom one. */
+const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
@@ -2799,6 +2801,10 @@ export default function VideoStudio({
     if (clip.id !== batch.back && clips.some((c) => c.id === batch.back)) onProject((p) => ({ ...p, videoId: batch.back }));
   }, [batchDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- progressive zoom: a preset of the menu, or its own factor ("Custom…", on a slider) ----
+  const [pushCustom, setPushCustom] = useState(false);
+  const pushIsCustom = pushCustom || (!!settings.push && !PUSH_PRESETS.includes(settings.push));
+  const timesText = (v: number) => `×${String(Math.round(v * 100) / 100).replace(".", lang === "fr" ? "," : ".")}`;
   // ---- framing on the preview: drag the video or the lyrics, wheel to zoom / resize, double-click to reset ----
   const frame = settings.frame ?? DEFAULT_VIDEO.frame;
   const setFrame = (patch: Partial<VideoFrame>) => setV({ frame: { ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ...patch } });
@@ -4075,11 +4081,22 @@ export default function VideoStudio({
           {/* Progressive zoom: its factor on one line (like the lens), then, when on, what it zooms. */}
           <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>
             <span className="label">{t("Progressive zoom")}</span>
-            <Select className="input sm grow" aria-label={t("Progressive zoom")} value={String(settings.push ?? 0)}
-              onChange={(e) => { const v = Number(e.target.value); setV({ push: v || undefined }); }}>
-              {[0, 1.05, 1.1].map((v) => <option key={v} value={String(v)}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</option>)}
+            <Select className="input sm grow" aria-label={t("Progressive zoom")} value={pushIsCustom ? "custom" : String(settings.push ?? 0)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "custom") { setPushCustom(true); if (!settings.push) setV({ push: 1.15 }); return; }
+                setPushCustom(false);
+                setV({ push: Number(v) || undefined });
+              }}>
+              {PUSH_PRESETS.map((v) => <option key={v} value={String(v)}>{v ? timesText(v) : t("Off")}</option>)}
+              <option value="custom">{t("Custom…")}</option>
             </Select>
           </div>
+          {/* Custom: its own factor, on a slider under the menu (up to ×1.3: beyond, it is no longer a slow push). */}
+          {pushIsCustom && settings.push && (
+            <Range label={t("Strength")} value={settings.push} display={timesText(settings.push)} min={1.01} max={1.3} step={0.01}
+              onChange={(v) => setV({ push: Math.round(v * 100) / 100 })} onReset={() => setV({ push: 1.15 })} />
+          )}
           {settings.push && (
             <div className="row" role="group" aria-label={t("Progressive zoom")}
               title={t("Inside the video: the picture zooms inside its frame, which keeps its place and size (the bars and the texts around do not move).")}>
