@@ -200,6 +200,9 @@ export interface VideoVersion {
   id: string;
   name?: string;
   v: Partial<VideoSettings>;
+  /** It holds its own framing, format and grade too (older versions: only the segment and the texts, the rest
+   *  the video's). */
+  all?: boolean;
 }
 
 export interface VideoTake {
@@ -308,8 +311,9 @@ export interface VideoSettings {
   format?: "9:16" | "16:9";
   /** Audio and video locked together: the offset does not move and the segment stays inside the synced video. */
   linked?: boolean;
-  /** Versions of this video to compare (A/B): each keeps its own segment, hooks, lyrics and post text; the
-   *  camera file, sync, framing and grade are shared. The one shown lives in the fields above (`activeVersion`). */
+  /** Versions of this video to compare (A/B): each keeps every choice of the post (segment, hooks, lyrics, post
+   *  text, their styles, framing, format, grade); only the camera file and what depends on it (sync, takes, the
+   *  camera profile of the grade) are the video's. The one shown lives in the fields above (`activeVersion`). */
   versions?: VideoVersion[];
   activeVersion?: string;
   /** Burn the timed lyrics on the video. */
@@ -354,6 +358,9 @@ export interface CarouselSetup {
 export interface VideoSetup extends VideoSettings {
   id: string;
   name: string;
+  /** Its files on the device (camera file, its picture) are those kept under this key: a duplicate reads the ones of
+   *  the video it was made from (never copied: a camera file weighs gigabytes). None: its own id. */
+  media?: string;
 }
 
 export interface Project {

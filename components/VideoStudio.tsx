@@ -75,9 +75,12 @@ const FADE = 0.15;
 /** The way the lyrics are placed on the audio: raised when it changes, so lyrics placed before are placed again once. */
 const LYRICS_ALIGN_V = 3;
 
-/** What each version of a video keeps for itself (the rest is the video's: camera file, sync, framing, grade). */
+/** What each version of a video keeps for itself: every choice of the post. The rest is the video's: the camera file
+ *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade"] as const satisfies readonly (keyof VideoSettings)[];
+/** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
+const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade"];
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
 
 
@@ -490,7 +493,7 @@ export default function VideoStudio({
     return ctxRef.current;
   }, []);
 
-  const setV = useCallback((patch: Partial<VideoSettings>) => {
+  const setV = useCallback((patch: Partial<Omit<VideoSetup, "id" | "name">>) => {
     onProject((p) => {
       const list = clipsOf(p);
       const target = list.find((c) => c.id === clip.id) ?? list[0];
@@ -595,7 +598,11 @@ export default function VideoStudio({
   // ---- poster: the last graded picture of the clip, shown at once while a big camera file opens ----
   const posterRef = useRef<ImageBitmap | HTMLCanvasElement | null>(null);
   const posterTimer = useRef(0);
-  const posterKey = `poster:${clip.id}`;
+  // This video's files on the device: its own, or the ones of the video it duplicates (see VideoSetup.media).
+  const mediaId = clip.media ?? clip.id;
+  /** Another video of the release reads these device files too (a duplicate, or the video it was made from). */
+  const sharedFiles = (key = mediaId) => clips.some((c) => c.id !== clip.id && (c.media ?? c.id) === key);
+  const posterKey = `poster:${mediaId}`;
   const posterKeyRef = useRef(posterKey);
   posterKeyRef.current = posterKey;
   /** Copy the picture just drawn (before the texts) and save it a moment after the preview stops moving. */
@@ -770,11 +777,11 @@ export default function VideoStudio({
         stillRef.current?.bmp.close();
         stillRef.current = null;
         stillWant.current = null;
-        void getMedia(`poster:${clip.id}`).then(async (p) => {
+        void getMedia(posterKey).then(async (p) => {
           if (!p || off || token !== ioRef.current) return;
           try { posterRef.current = await createImageBitmap(p); drawAt(settingsRef.current.crop.start); } catch { /* not a picture */ }
         });
-        const [shared, legacy, b] = await Promise.all([getMedia(projectAudioKey), getMedia(`audio:${clip.id}`), getMedia(`video:${clip.id}`)]);
+        const [shared, legacy, b] = await Promise.all([getMedia(projectAudioKey), getMedia(`audio:${clip.id}`), getMedia(`video:${mediaId}`)]);
         if (off || token !== ioRef.current) return;
         console.debug(`[load] files read from the device in ${Math.round(performance.now() - t0)} ms (video ${b ? Math.round(b.size / 1e6) + " MB" : "none"})`);
         loadT0.current = t0;
@@ -937,7 +944,7 @@ export default function VideoStudio({
     setDriveJob({ kind: "fetch", p: 0 });
     try {
       const blob = await downloadDriveFileProgress(id, (p) => setDriveJob({ kind: "fetch", p }), ac.signal);
-      await putMedia(`video:${clip.id}`, blob).catch(() => {});
+      await putMedia(`video:${mediaId}`, blob).catch(() => {});
       fileClip.current = clip.id;
       setVideoBlob(blob);
     } catch (e) {
@@ -1258,7 +1265,7 @@ export default function VideoStudio({
         setVideoBlob(f);
         if (!cur.videoSize) setV({ videoSize: f.size });
         void askPersistentStorage();
-        try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
+        try { await putMedia(`video:${mediaId}`, f); } catch { /* private mode: keep it in memory */ }
         setNote(t("Camera file found again: the sync and the settings are kept."));
         return;
       }
@@ -1271,15 +1278,20 @@ export default function VideoStudio({
     // The light copy and the picture of the previous file go first, so they are never shown for this one.
     posterRef.current = null;
     stillRef.current = null;
-    await delMedia(posterKey).catch(() => {});
+    // Its own files from now on: the ones read by another video (its duplicate, or the one it duplicates) stay.
+    if (!sharedFiles()) {
+      await delMedia(posterKey).catch(() => {});
+      if (clip.media) await delMedia(`video:${clip.media}`).catch(() => {}); // the files it was reading, nobody's now
+    }
+    const media = sharedFiles(clip.id) ? uid() : undefined; // its own key is still another video's: a new one
     fileClip.current = clip.id;
     setVideoBlob(f);
     setVideoDur(0);
-    setV({ videoName: f.name, videoSize: f.size, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+    setV({ media, videoName: f.name, videoSize: f.size, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
     void askPersistentStorage();
     void describeVideo(f, true);
-    try { await putMedia(`video:${clip.id}`, f); } catch { /* private mode: keep it in memory */ }
+    try { await putMedia(`video:${media ?? clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
   };
 
@@ -1350,21 +1362,46 @@ export default function VideoStudio({
     void delMedia(`copy:${clip.id}`).catch(() => {});
     setVideoBlob(null);
     setVideoDur(0);
-    setV({ videoName: undefined, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+    // Another video still reads these files: they stay, this one stops reading them (a duplicate: its own key, empty;
+    // the video it was made from: a new, empty one).
+    const shared = sharedFiles();
+    setV({ ...(shared ? { media: clip.media ? undefined : uid() } : {}), videoName: undefined, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     setHead(settingsRef.current.crop.start);
     posterRef.current = null;
-    await delMedia(`video:${clip.id}`);
-    await delMedia(posterKey);
+    if (!shared) { await delMedia(`video:${mediaId}`); await delMedia(posterKey); }
     onSaveNow();
   };
 
+  /** "Video 3": the next free number (after a deletion, clips.length + 1 could repeat a name). */
+  const nextClipName = () => `Video ${Math.max(clips.length, ...clips.map((c) => Number(/^Video (\d+)$/.exec(c.name)?.[1] ?? 0))) + 1}`;
+  /** The same video again: same camera file (read, not copied), sync and every version. To try other choices without
+   *  touching this one; its Drive working copy is made for it (one per video: each one's passage). */
+  const duplicateClip = () => {
+    syncRef.current?.abort();
+    stop();
+    const cur = settingsRef.current;
+    const id = uid();
+    onProject((p) => ({
+      ...p,
+      videos: [...clipsOf(p), {
+        ...cur,
+        id,
+        name: nextClipName(),
+        media: mediaId,
+        versions: cur.versions?.length ? withShown(cur) : undefined,
+        drive: cur.drive ? { ...cur.drive, copy: undefined } : undefined,
+      }],
+      videoId: id,
+    }));
+    onSaveNow();
+    onToast?.(t("Video duplicated: change anything on it, the first one stays as it was"));
+  };
   /** New clip on the same release: same song and segment, fresh camera take. */
   const addVideo = async () => {
     syncRef.current?.abort();
     stop();
     const id = uid();
-    // Next free number: after a deletion, clips.length + 1 could repeat a name.
-    const name = `Video ${Math.max(clips.length, ...clips.map((c) => Number(/^Video (\d+)$/.exec(c.name)?.[1] ?? 0))) + 1}`;
+    const name = nextClipName();
     const copied = !!audioBlob; // the audio is the project's: the new video uses it as is
     const cur = settingsRef.current;
     onProject((p) => ({
@@ -1413,11 +1450,15 @@ export default function VideoStudio({
     const rest = clips.filter((c) => c.id !== id);
     onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => c.id !== id), videoId: rest[Math.max(0, clips.indexOf(clip) - 1)].id }));
     onSaveNow();
-    if (clip.drive?.copy?.id) void deleteDriveFile(clip.drive.copy.id);
+    // Its Drive copy and its files on the device, unless another video still uses them (a duplicate).
+    const copyId = clip.drive?.copy?.id;
+    if (copyId && !rest.some((c) => c.drive?.copy?.id === copyId)) void deleteDriveFile(copyId);
     stopCopyOf(id);
-    await delMedia(`video:${id}`).catch(() => {});
+    if (!sharedFiles()) {
+      await delMedia(`video:${mediaId}`).catch(() => {});
+      await delMedia(`poster:${mediaId}`).catch(() => {});
+    }
     await delMedia(`copy:${id}`).catch(() => {});
-    await delMedia(`poster:${id}`).catch(() => {});
     await delMedia(`strip:${id}`).catch(() => {});
     await delMedia(`audio:${id}`).catch(() => {});
   };
@@ -1675,12 +1716,19 @@ export default function VideoStudio({
   }, [settings.takes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Use one take of the video: audio and video get linked on it, and the segment moves inside it if needed. */
-  // ---- versions of the video (A/B): segment, hooks, lyrics and post text of their own ----
+  // ---- versions of the video (A/B): every choice of the post of their own (segment, texts, styles, framing, grade) ----
   const versions = settings.versions ?? [];
   const versionName = (v: VideoVersion, i: number) => v.name?.trim() || t("Version {x}", { x: String.fromCharCode(65 + i) });
   /** The shown version's values put back in its entry (they are edited in the video's own fields). */
-  const withShown = (cur: VideoSettings) => (cur.versions ?? []).map((x) => (x.id === cur.activeVersion ? { ...x, v: versionOf(cur) } : x));
-  const valuesOf = (v: VideoVersion) => Object.fromEntries(VERSION_KEYS.map((k) => [k, v.v[k]])) as Partial<VideoSettings>;
+  const withShown = (cur: VideoSettings) => (cur.versions ?? []).map((x) => (x.id === cur.activeVersion ? { ...x, v: versionOf(cur), all: true } : x));
+  /** A version's values to show. An older one (no framing, format, grade of its own) keeps the video's as they are;
+   *  the camera profile is the file's, the same in every version. */
+  const valuesOf = (v: VideoVersion) => {
+    const cur = settingsRef.current;
+    const own = Object.fromEntries(VERSION_KEYS.filter((k) => v.all || !LOOK_KEYS.includes(k)).map((k) => [k, v.v[k]])) as Partial<VideoSettings>;
+    if (own.grade && cur.grade) own.grade = { ...own.grade, profile: cur.grade.profile, sdrOverride: cur.grade.sdrOverride };
+    return own;
+  };
   const switchVersion = (id: string) => {
     const cur = settingsRef.current;
     if (cur.activeVersion === id) return;
@@ -1695,11 +1743,11 @@ export default function VideoStudio({
   /** A new version, a copy of the one shown (the first time: the video as it is becomes A, its copy B). */
   const addVersion = () => {
     const cur = settingsRef.current;
-    const list = cur.versions?.length ? withShown(cur) : [{ id: uid(), v: versionOf(cur) }];
-    const next = { id: uid(), v: versionOf(cur) };
+    const list = cur.versions?.length ? withShown(cur) : [{ id: uid(), v: versionOf(cur), all: true }];
+    const next = { id: uid(), v: versionOf(cur), all: true };
     setV({ versions: [...list, next], activeVersion: next.id });
     onSaveNow();
-    onToast?.(t("{name} made: change its segment, hooks or lyrics to compare", { name: versionName(next, list.length) }));
+    onToast?.(t("{name} made: change anything on it (segment, texts, framing, grade) to compare", { name: versionName(next, list.length) }));
   };
   const renameVersion = (id: string, name: string) => setV({ versions: (settingsRef.current.versions ?? []).map((x) => (x.id === id ? { ...x, name: name.trim() || undefined } : x)) });
   const removeVersion = (id: string) => {
@@ -1843,7 +1891,7 @@ export default function VideoStudio({
     const name = raw.trim();
     const cur = settingsRef.current;
     if (cur.versions?.[0]) renameVersion(cur.versions[0].id, name);
-    else if (name) { const id = uid(); setV({ versions: [{ id, name, v: versionOf(cur) }], activeVersion: id }); onSaveNow(); }
+    else if (name) { const id = uid(); setV({ versions: [{ id, name, v: versionOf(cur), all: true }], activeVersion: id }); onSaveNow(); }
   };
   /** Every version exported, one after the other (file names end with the version's name); the one shown comes back. */
   const exportVersions = async () => {
@@ -3257,6 +3305,7 @@ export default function VideoStudio({
           <div className="slot h-new"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
             {(closeMenu) => (<>
               <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
+              <button onClick={() => { closeMenu(); duplicateClip(); }} title={t("Same camera file, sync and versions: to change anything on a copy")}>{t("Duplicate")}</button>
               <div className="sep" />
               <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
                 onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
@@ -3289,6 +3338,9 @@ export default function VideoStudio({
               <div className="sep" />
               <button className="ver-new" title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => { close(); void addVideo(); }}>
                 <Icon name="plus" size={12} />{t("New video")}
+              </button>
+              <button className="ver-new" title={t("Same camera file, sync and versions: to change anything on a copy")} onClick={() => { close(); duplicateClip(); }}>
+                <Icon name="copy" size={12} />{t("Duplicate this video")}
               </button>
             </div>)}
           </Menu></div>
@@ -3519,7 +3571,7 @@ export default function VideoStudio({
                           <div className="sep" />
                           <button className="ver-new" onClick={() => { close(); addVersion(); }}
                             title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
-                            <Icon name="plus" size={12} />{t("New version")}
+                            <Icon name="plus" size={12} />{t("Duplicate this version")}
                           </button>
                         </div>)}
                       </Menu>

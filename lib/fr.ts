@@ -80,8 +80,8 @@ export const FR: Record<string, string> = {
   "Versions": "Versions",
   "Version": "Version",
   "Version {x}": "Version {x}",
-  "New version": "Nouvelle version",
-  "{name} made: change its segment, hooks or lyrics to compare": "{name} créée : change son segment, ses hooks ou ses paroles pour comparer",
+  "Duplicate this version": "Dupliquer cette version",
+  "{name} made: change anything on it (segment, texts, framing, grade) to compare": "{name} créée : change ce que tu veux (segment, textes, cadrage, étalonnage) pour comparer",
   "Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)": "Une autre version de cette vidéo, pour comparer : son propre segment, ses hooks, ses paroles et sa légende (la prise, la synchro, le cadrage et la couleur sont partagés)",
   "Every version of this video ({n})": "Toutes les versions de cette vidéo ({n})",
   "colour grade applied on the graphics card (10-bit)": "étalonnage appliqué par la carte graphique (10 bits)",
@@ -978,4 +978,7 @@ export const FR: Record<string, string> = {
   "Space, F or Esc to close · ← → to browse": "Espace, F ou Échap pour fermer · ← → pour naviguer",
   "or": "ou",
   "Edit the selected slide's photo (exposure, contrast…)": "Retoucher la photo de la slide sélectionnée (exposition, contraste…)",
+  "Video duplicated: change anything on it, the first one stays as it was": "Vidéo dupliquée : change ce que tu veux dessus, la première reste telle quelle",
+  "Same camera file, sync and versions: to change anything on a copy": "Même fichier caméra, même synchro, mêmes versions : pour tout changer sur une copie",
+  "Duplicate this video": "Dupliquer cette vidéo",
 };
