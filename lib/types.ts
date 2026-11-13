@@ -331,6 +331,9 @@ export interface VideoSettings {
   captionStyle?: TextStyle;
   /** Progressive zoom over the segment: ×1 on the first frame, this factor on the last (e.g. 1.05). None: off. */
   push?: number;
+  /** The progressive zoom moves inside the picture's frame (a mask: the frame, the bars and the texts around stay put)
+   *  instead of zooming the whole framed picture. */
+  pushIn?: boolean;
   /** Colour grade of the camera picture. None: the picture as recorded. */
   grade?: VideoGrade;
   /** Hook list the titles are drawn from; none: the list of the first carousel slide of the release. */

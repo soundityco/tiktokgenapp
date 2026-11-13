@@ -97,6 +97,19 @@ export function visibleRegion(pic: PicSettings, iw: number, ih: number, W: numbe
 
 let blurCanvas: HTMLCanvasElement | null = null;
 
+/** Where a picture (iw×ih) lands on a W×H canvas with these settings: its top-left corner and its scale. */
+export function framedAt(pic: PicSettings, iw: number, ih: number, W: number, H: number) {
+  const { framing, zoom, ox, oy } = clampPic(pic, iw, ih, W, H);
+  const s = (framing === "fill" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih)) * zoom;
+  return { x: (W - iw * s) / 2 + ox * W, y: (H - ih * s) / 2 + oy * H, s };
+}
+
+/** A picture (iw×ih, or only its region `part` held by `src`) drawn with its top-left corner at x, y, `s` times its size. */
+export function drawPictureAt(ctx: CanvasRenderingContext2D, src: CanvasImageSource, iw: number, ih: number, x: number, y: number, s: number, part?: Region) {
+  if (part) ctx.drawImage(src, x + part.x * s, y + part.y * s, part.w * s, part.h * s);
+  else ctx.drawImage(src, x, y, iw * s, ih * s);
+}
+
 /**
  * Draw a picture (photo, video frame) framed like a slide: fill (crop), or fit with blurred or black
  * bars, zoomed around the centre and moved by the offset. Shared by the carousel and the video studio.
@@ -107,11 +120,7 @@ export function drawFramed(
   part?: Region
 ) {
   const { framing, bars, zoom, ox, oy, darken } = clampPic(pic, iw, ih, W, H);
-  const put = (s: number) => {
-    const x = (W - iw * s) / 2 + ox * W, y = (H - ih * s) / 2 + oy * H;
-    if (part) ctx.drawImage(src, x + part.x * s, y + part.y * s, part.w * s, part.h * s);
-    else ctx.drawImage(src, x, y, iw * s, ih * s);
-  };
+  const put = (s: number) => drawPictureAt(ctx, src, iw, ih, (W - iw * s) / 2 + ox * W, (H - ih * s) / 2 + oy * H, s, part);
   if (framing === "fill") {
     put(Math.max(W / iw, H / ih) * zoom);
   } else {

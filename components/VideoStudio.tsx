@@ -9,7 +9,7 @@ import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloa
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
-import { clamp, clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
+import { clamp, clampPic, drawFramed, drawHelpers, drawPictureAt, framedAt, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
 import { followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
@@ -79,7 +79,7 @@ const LYRICS_ALIGN_V = 3;
 
 /** What each version of a video keeps for itself: every choice of the post. The rest is the video's: the camera file
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
-const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade"];
@@ -653,9 +653,12 @@ export default function VideoStudio({
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
       pic = desqueeze(pic, cfg.desqueeze);
       let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame);
-      // Progressive zoom: ×1 at the start of the segment, `push` on its last frame, around the centre.
+      // Progressive zoom: ×1 at the start of the segment, `push` on its last frame. The whole framed picture around the
+      // centre, or (`pushIn`) only what is inside its frame, around the frame's centre (below).
       const push = cfg.push ?? 1;
-      if (push > 1) f = zoomPic(f, f.zoom * (1 + (push - 1) * clamp((time - cfg.crop.start) / Math.max(0.1, cfg.crop.duration), 0, 1)));
+      const k = push > 1 ? 1 + (push - 1) * clamp((time - cfg.crop.start) / Math.max(0.1, cfg.crop.duration), 0, 1) : 1;
+      const inside = !!cfg.pushIn && k > 1;
+      if (k > 1 && !inside) f = zoomPic(f, f.zoom * k);
       const grader = graderRef.current;
       const wantGrade = !raw && !pic.graded && gradesColour(cfg.grade);
       if (wantGrade && !grader?.ready && gradePendingRef.current) { console.debug("[grade] waiting for the grade (LUT loading)"); pic = null; }
@@ -663,7 +666,7 @@ export default function VideoStudio({
         grader.setLut(videoLut.current, 33);
         // Grade only what the post shows, at the size it is drawn.
         const region = visibleRegion(f, pic.w, pic.h, W, H);
-        const s = (f.framing === "fill" ? Math.max(W / pic.w, H / pic.h) : Math.min(W / pic.w, H / pic.h)) * f.zoom;
+        const s = (f.framing === "fill" ? Math.max(W / pic.w, H / pic.h) : Math.min(W / pic.w, H / pic.h)) * f.zoom * (inside ? k : 1);
         const ow = Math.min(4096, region.w * s), oh = Math.min(4096, region.h * s);
         const paused = pic.src instanceof HTMLVideoElement && pic.src.paused;
         const graded = grader.grade(pic, region, ow, oh);
@@ -674,6 +677,18 @@ export default function VideoStudio({
       }
       if (pic) {
         drawFramed(g, pic.src, pic.w, pic.h, f, W, H, pic.part);
+        if (inside) {
+          // The frame stays where it is (a mask); the picture grows inside it from the frame's centre.
+          const { x, y, s } = framedAt(f, pic.w, pic.h, W, H);
+          const w = pic.w * s, h = pic.h * s;
+          const x0 = Math.max(0, x), y0 = Math.max(0, y), x1 = Math.min(W, x + w), y1 = Math.min(H, y + h);
+          g.save();
+          g.beginPath();
+          g.rect(x0, y0, x1 - x0, y1 - y0);
+          g.clip();
+          drawPictureAt(g, pic.src, pic.w, pic.h, x + (w * (1 - k)) / 2, y + (h * (1 - k)) / 2, s * k, pic.part);
+          g.restore();
+        }
         if (!raw && cfg.grade) drawLook(g, W, H, cfg.grade, Math.round(time * EXPORT_FPS));
         if (preview?.keep && !raw) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
@@ -4050,6 +4065,13 @@ export default function VideoStudio({
                 onClick={() => setV({ push: v })}>{v ? `×${String(v).replace(".", lang === "fr" ? "," : ".")}` : t("Off")}</button>
             ))}
           </div>
+          {settings.push && (
+            <div className="row" title={t("Inside the video: the picture zooms inside its frame, which keeps its place and size (the bars and the texts around do not move).")}>
+              <span className="label">{t("Zooms")}</span>
+              <button className={"btn sm" + (!settings.pushIn ? " on" : "")} aria-pressed={!settings.pushIn} onClick={() => setV({ pushIn: undefined })}>{t("The whole frame")}</button>
+              <button className={"btn sm" + (settings.pushIn ? " on" : "")} aria-pressed={!!settings.pushIn} onClick={() => setV({ pushIn: true })}>{t("Inside the video")}</button>
+            </div>
+          )}
           </Section>
           {tab === "hook" ? (
             <div className="stack sheet-text">
