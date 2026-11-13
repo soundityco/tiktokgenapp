@@ -1,7 +1,7 @@
 /**
  * Photo AI on the device (public/photoai/worker.js), a test: a picture made sharper (×4), or the slide's frame filled
  * around it (the empty bands of a photo that does not cover the slide, invented by LaMa). The models are downloaded
- * once (22 MB, 208 MB), then kept by the browser; nothing is sent anywhere.
+ * once (54 MB, 208 MB), then kept by the browser; nothing is sent anywhere.
  */
 import { framedAt } from "./render";
 import type { PicSettings } from "./types";
@@ -41,10 +41,10 @@ const toBlob = (img: ImageData | OffscreenCanvas) => {
 /** Pictures this big or more are sharp enough for a slide (1080 wide): nothing to gain. */
 export const sharpEnough = (w: number, h: number) => Math.min(w, h) >= 1080;
 
-/** The picture four times bigger, its details rebuilt (Swin2SR). */
+/** The picture four times bigger, its details rebuilt (Swin2SR, trained on real-world blurry pictures). */
 export async function sharper(img: CanvasImageSource & { width: number; height: number }, onStep: AIProgress): Promise<Blob> {
-  // Kept under 1 MPx in (16 MPx out): beyond, a phone runs out of memory and nothing is gained for a slide.
-  const k = Math.min(1, Math.sqrt(1_000_000 / (img.width * img.height)));
+  // At most 540 px on the short side in (2160 out, twice a slide's width): beyond, only slower, nothing gained.
+  const k = Math.min(1, 540 / Math.min(img.width, img.height));
   const w = Math.round(img.width * k), h = Math.round(img.height * k);
   const px = pixels(img, w, h);
   return toBlob(await call({ type: "upscale", width: w, height: h, data: px.data.buffer }, [px.data.buffer], onStep));

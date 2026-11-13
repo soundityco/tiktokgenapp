@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
 import { Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
@@ -142,9 +142,11 @@ export default function SlideCard(p: Props) {
   // ---- photo AI (a test, lib/photoAI): the result comes in as a new photo (the same way as a dropped one) ----
   const [aiBusy, setAiBusy] = useState<null | { kind: "sharp" | "fill"; step: AIStep; pct?: number }>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
-  const aiLabel = (b: { step: AIStep; pct?: number }) => b.step === "model"
-    ? t("Downloading the model… {n}%", { n: Math.round((b.pct ?? 0) * 100) })
-    : b.step === "start" ? t("Starting…") : b.pct !== undefined ? t("Working… {n}%", { n: Math.round(b.pct * 100) }) : t("Working…");
+  // Short and steady while it works (the button itself fills up): the model's download, then the work.
+  const aiLabel = (b: { step: AIStep; pct?: number }) => b.step === "model" ? t("Model {n}%", { n: Math.round((b.pct ?? 0) * 100) })
+    : b.step === "start" ? t("Starting…") : `${Math.round((b.pct ?? 0) * 100)} %`;
+  const aiBtn = (kind: "sharp" | "fill") => "btn sm" + (aiBusy?.kind === kind ? " filling" : "");
+  const aiFill = (kind: "sharp" | "fill") => (aiBusy?.kind === kind ? { "--p": aiBusy.step === "start" ? 1 : aiBusy.pct ?? 0 } as CSSProperties : undefined);
   const runAI = async (kind: "sharp" | "fill") => {
     if (!img || !cv.current) return;
     setAiNote(null);
@@ -615,9 +617,9 @@ export default function SlideCard(p: Props) {
               </div>
               {/* AI on the device (a test): the photo sharper, or the empty part of the slide filled around it. */}
               <div className="adjust-ai">
-                <button className="btn sm" disabled={!!aiBusy} title={t("Four times more pixels, details rebuilt (on this device)")} onClick={() => void runAI("sharp")}>
+                <button className={aiBtn("sharp")} style={aiFill("sharp")} disabled={!!aiBusy} title={t("Four times more pixels, details rebuilt (on this device)")} onClick={() => void runAI("sharp")}>
                   <Icon name="sparkle" size={13} />{aiBusy?.kind === "sharp" ? aiLabel(aiBusy) : t("Sharper")}</button>
-                <button className="btn sm" disabled={!!aiBusy} title={t("Invents the empty part of the slide around the photo (zoom out or move it first; on this device)")} onClick={() => void runAI("fill")}>
+                <button className={aiBtn("fill")} style={aiFill("fill")} disabled={!!aiBusy} title={t("Invents the empty part of the slide around the photo (zoom out or move it first; on this device)")} onClick={() => void runAI("fill")}>
                   <Icon name="sparkle" size={13} />{aiBusy?.kind === "fill" ? aiLabel(aiBusy) : t("Fill the frame")}</button>
               </div>
               {aiNote && <p className="adjust-note xs">{aiNote}</p>}

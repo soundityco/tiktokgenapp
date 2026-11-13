@@ -617,6 +617,11 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .btn.primary.filling::before { content: ""; position: absolute; inset: 0; z-index: -1; transform-origin: left; transform: scaleX(var(--p, 0));
   background: color-mix(in srgb, var(--on-accent) 16%, transparent); transition: transform .3s ease; }
 .btn.primary.filling:disabled { opacity: 1; cursor: progress; }
+/* The same on a plain button (the photo AI's): a light fill under its label. */
+.btn.filling:not(.primary) { position: relative; overflow: hidden; isolation: isolate; font-variant-numeric: tabular-nums; }
+.btn.filling:not(.primary)::before { content: ""; position: absolute; inset: 0; z-index: -1; transform-origin: left; transform: scaleX(var(--p, 0));
+  background: color-mix(in srgb, var(--text) 14%, transparent); transition: transform .3s ease; }
+.btn.filling:not(.primary):disabled { opacity: 1; cursor: progress; }
 .btn.primary.shine-box::after { background-image: linear-gradient(110deg, transparent 38%, rgba(11,11,16,.06) 44%, rgba(11,11,16,.2) 50%, rgba(11,11,16,.06) 56%, transparent 62%); }
 .shine-bar { position: relative; overflow: hidden; }
 .job-bar i.shine-bar::after, .bar.shine-bar > div::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 38%, rgba(11,11,16,.35) 50%, transparent 62%) 0 0 / 300% 100% no-repeat; animation: shine-sweep 1.8s linear infinite; }
