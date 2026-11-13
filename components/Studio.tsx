@@ -1675,13 +1675,6 @@ export default function Studio({ userName }: { userName: string }) {
       {appCtx && project && (
         <ContextMenu x={appCtx.x} y={appCtx.y} onClose={() => setAppCtx(null)} className="app-ctx">
           <div className="label cap truncate">{project.name}</div>
-          {/* The studio first: the two studios side by side, each with its own colour, the open one lit. */}
-          <div className="ctx-studios" role="group" aria-label={t("Studio")}>
-            <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
-              <span className="ctx-studio-ico carousel"><Icon name="deck" size={13} /></span>{t("Carousel")}</button>
-            <button className={studio === "video" ? "on" : ""} aria-pressed={studio === "video"} onClick={() => switchStudio("video")}>
-              <span className="ctx-studio-ico video"><Icon name="reel" size={13} /></span>{t("Video")}</button>
-          </div>
           <div className="label cap">{t("Create")}</div>
           {studio === "carousel" && <button onClick={() => generate()}><Icon name="sparkle" size={14} />{t("Generate")}<kbd>R</kbd></button>}
           <button onClick={() => setOverlay({ k: "newProject" })}><Icon name="plus" size={14} />{t("New release")}</button>
