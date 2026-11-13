@@ -187,16 +187,18 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onTap, onSi
     const o = String(Math.max(0.25, 1 - dy / 500));
     for (const el of fades()) el.style.opacity = o;
   };
+  /** Let go: a tap, a swipe or a pull far enough, else back in the middle. Cancelled (the browser took the gesture
+   *  back, a call came in…): only back in the middle, never taken for a tap. */
   const up = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const d = drag.current, c = e.currentTarget;
+    const d = drag.current, c = e.currentTarget, cancelled = e.type === "pointercancel";
     drag.current = null;
     if (!d) return;
-    if (!d.axis) { c.style.transform = ""; onTap?.(); return; } // a tap
-    if (d.axis === "y" && d.dy > 90) { close(); return; } // let go far enough: back to its place
+    if (!d.axis) { c.style.transform = ""; if (!cancelled) onTap?.(); return; } // a tap
+    if (!cancelled && d.axis === "y" && d.dy > 90) { close(); return; } // let go far enough: back to its place
     const dir: 1 | -1 = d.dx < 0 ? 1 : -1;
     if (d.axis === "x") {
       const tr = track.current!;
-      if (Math.abs(d.dx) > 60 && can(dir)) {
+      if (!cancelled && Math.abs(d.dx) > 60 && can(dir)) {
         // The next one slides in beside it, then becomes the one shown (see `settle`).
         const a = tr.animate([{ transform: tr.style.transform }, { transform: `translateX(${-dir * (c.offsetWidth + GAP)}px)` }], { duration: 220, easing: EASE, fill: "forwards" });
         a.onfinish = () => {

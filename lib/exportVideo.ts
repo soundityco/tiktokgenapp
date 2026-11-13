@@ -1,4 +1,3 @@
-import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 
 /**
  * MP4 export (H.264 video, AAC audio) with the browser's own encoders (WebCodecs). Frames are drawn
@@ -64,6 +63,7 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
   const codecs = await mp4Support(width, height, sr, channels);
   if (!codecs) throw new Error("unsupported");
 
+  const { ArrayBufferTarget, Muxer } = await import("mp4-muxer");
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
     video: { codec: "avc", width, height, frameRate: fps },

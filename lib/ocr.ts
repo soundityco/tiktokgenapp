@@ -1,4 +1,3 @@
-import { createScheduler, createWorker } from "tesseract.js";
 import { norm } from "./generate";
 
 export interface Crop { top: number; bottom: number; right: number } // percentages to ignore
@@ -51,6 +50,7 @@ export function cleanLines(lines: { text: string; confidence: number }[]): OcrLi
 }
 
 export async function createOcr(parallel: number) {
+  const { createScheduler, createWorker } = await import("tesseract.js"); // loaded for the first import, not with the page
   const scheduler = createScheduler();
   for (let i = 0; i < parallel; i++) scheduler.addWorker(
       await createWorker("eng", 1, { workerPath: "/ocr/worker.min.js", corePath: "/ocr/core", langPath: "/ocr/lang" })

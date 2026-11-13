@@ -1,4 +1,10 @@
-import { createFile, DataStream, Endianness, MP4BoxBuffer, type Sample, type Track } from "mp4box";
+import type { Sample, Track } from "mp4box";
+
+type MP4Box = typeof import("mp4box");
+type Mp4File = ReturnType<MP4Box["createFile"]>;
+let lib: MP4Box | null = null;
+/** mp4box, loaded the first time a video file is read (not with the page). */
+const mp4box = async () => (lib ??= await import("mp4box"));
 import type { Region } from "./render";
 
 /**
@@ -26,7 +32,8 @@ const CHUNK = 16 * 1024 * 1024;
 const AHEAD = 20;
 
 /** avcC / hvcC / vpcC / av1C box of the track: the decoder's `description`. */
-export function describe(file: ReturnType<typeof createFile>, track: Track): Uint8Array | undefined {
+export function describe(file: Mp4File, track: Track): Uint8Array | undefined {
+  const { DataStream, Endianness } = lib!; // loaded: the file was read with it
   const trak = file.getTrackById(track.id) as any;
   for (const entry of trak?.mdia?.minf?.stbl?.stsd?.entries ?? []) {
     const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
@@ -105,7 +112,7 @@ export class VideoSource {
     if (typeof VideoDecoder === "undefined") return fail("no WebCodecs");
     // The index only (where each picture is in the file), then each picture read when it is decoded: a camera
     // file of several GB is never loaded whole (that froze the page for a minute before the export).
-    let file: ReturnType<typeof createFile>;
+    let file: Mp4File;
     let tk: Track | null = null;
     let kept: Sample[] = [];
     let scale = 1, shift = 0, lazy = false;
@@ -255,9 +262,10 @@ export class VideoSource {
 
 /** The old way, for files whose index is in pieces: the whole file read, the samples of [from, to] kept. */
 async function readWhole(blob: Blob, from: number, to: number, onProgress?: (p: number) => void, signal?: AbortSignal):
-  Promise<string | { file: ReturnType<typeof createFile>; track: Track; kept: Sample[]; scale: number; shift: number }> {
+  Promise<string | { file: Mp4File; track: Track; kept: Sample[]; scale: number; shift: number }> {
     // Keep the media data: phone videos put their index (moov) AFTER the data, which would
     // otherwise be thrown away before the samples can be read.
+    const { createFile, MP4BoxBuffer } = await mp4box();
     const file = createFile(true);
     let track: Track | null = null;
     let ready = false;
@@ -329,6 +337,7 @@ export async function readIndex(blob: Blob) {
   const boxes = await topBoxes(blob);
   const moov = boxes.find((b) => b.type === "moov");
   if (!moov || moov.size > 400 * 1024 * 1024) return null;
+  const { createFile, MP4BoxBuffer } = await mp4box();
   const file = createFile();
   let info: Parameters<NonNullable<typeof file.onReady>>[0] | null = null;
   file.onReady = (i) => { info = i; };

@@ -1,5 +1,4 @@
 "use client";
-import JSZip from "jszip";
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
@@ -1275,6 +1274,7 @@ export default function Studio({ userName }: { userName: string }) {
     const failures: string[] = [];
     try {
       const release = safe(project.name);
+      const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       const root = all ? zip.folder(`${release} ${stamp()}`)! : null;
       let made = 0, single = "";

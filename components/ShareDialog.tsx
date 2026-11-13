@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import QRCode from "qrcode";
 import { useT } from "@/lib/i18n";
 import { sendFiles, shareThroughDrive, type SendState } from "@/lib/shareP2P";
 import Icon from "./Icon";
@@ -50,7 +49,7 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
     try {
       await sendFiles(files.current, { kind, title, caption }, (s) => {
         setState(s);
-        if (s.step === "waiting") void QRCode.toDataURL(s.url, { margin: 1, width: 480, color: { dark: "#0b0b10", light: "#f0eee8" } }).then(setQr);
+        if (s.step === "waiting") void import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL(s.url, { margin: 1, width: 480, color: { dark: "#0b0b10", light: "#f0eee8" } })).then(setQr);
       }, a.signal);
     } catch (e) {
       if (!a.signal.aborted) setState({ step: "error", why: e instanceof Error ? e.message : String(e) });

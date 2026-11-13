@@ -11,7 +11,8 @@ const I18n = createContext<Ctx>({ lang: "en", setLang: () => {}, t: (k) => k });
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
   useEffect(() => {
-    const saved = localStorage.getItem("tktgen-lang") as Lang | null;
+    let saved: string | null = null;
+    try { saved = localStorage.getItem("tktgen-lang"); } catch { /* storage blocked: the browser's language */ }
     setLangState(saved === "fr" || saved === "en" ? saved : detectLang(navigator.language));
   }, []);
   const setLang = (l: Lang) => { setLangState(l); try { localStorage.setItem("tktgen-lang", l); } catch { /* private mode */ } document.documentElement.lang = l; };

@@ -1,5 +1,4 @@
 import type { Sample } from "mp4box";
-import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { ffmpegAlone, type CopyPlan } from "./convert";
 import { aacConfig } from "./exportVideo";
 import { describe, readIndex, readSamples, rotationOf } from "./videoSource";
@@ -88,6 +87,7 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
   if (signal.aborted) throw aborted();
   const tSound = performance.now();
 
+  const { ArrayBufferTarget, Muxer } = await import("mp4-muxer");
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
     video: { codec: econf.codec.startsWith("hvc1") ? "hevc" : econf.codec.startsWith("vp09") ? "vp9" : "avc", width, height, frameRate: Math.round(fps), ...(tenBit && rotation ? { rotation } : {}) },

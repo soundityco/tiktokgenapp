@@ -1387,8 +1387,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* Under the video (its page): "Shown" over its two eyes, the size at their right, the Drive copy's state under. */
   .video-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s3); row-gap: 10px; }
   .video-stage > * { grid-column: 1 / -1; }
-  .video-stage > .shown-on { flex-wrap: wrap; row-gap: 8px; }
-  .video-stage > .shown-on > .label { flex-basis: 100%; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; font-weight: 500; }
   /* The segment's title sits at the top of its block, not in the middle of the badge's height. */
   .seg-top { align-items: flex-start !important; }
 
@@ -1652,7 +1650,6 @@ details.sec:first-of-type { background-image: none; }
   .main[data-studio="carousel"][data-mobile-tab="lists"] > .col.side.l { display: none; }
   .main[data-mobile-tab="lists"] .video-shell > .col.side.l { display: grid; border-top: 0; }
   /* Nothing in it is wider than the screen (long file and list names end with "…"). */
-  .video-shell > .col.side { grid-template-columns: minmax(0, 1fr); }
   .lib-phone > *, .lib-desk > * { min-width: 0; max-width: 100%; }
   /* The library's square opens into a pill with its name, like Create and Style: one word shown out of three. */
   .mobile-tabs > .dock-lib { gap: 0; }
@@ -2026,14 +2023,7 @@ details.sec:first-of-type { background-image: none; }
   .video-stage > .stage-meta { background-image: none; }
   /* The segment's block, top to bottom: its title and the sync, the takes, the tracks (waveform, hook, lyrics),
      then the tools that act on them (range, length, lock, sync; versions and zoom), then the rest. */
-  .video-side .timeline > * { order: 8; }
-  .video-side .timeline > .seg-top { order: 1; }
 
-  .video-side .timeline > .wave-wrap { order: 3; }
-  .video-side .timeline > .hook-track { order: 4; }
-  .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
-  .video-side .timeline > .transport { order: 6; }
-  .video-side .timeline > .seg-versions { order: 7; }
   /* The sync's quality: plain text with its dot, on the line of the "Segment" title (no pill). */
   .seg-top .video-status { border: 0; padding: 0; background: none; min-height: 0; height: auto; }
   .app .video-center .seg-top { align-items: center !important; }
@@ -2045,14 +2035,11 @@ details.sec:first-of-type { background-image: none; }
   .video-side .timeline > .seg-top .video-status { height: auto; line-height: 1.2; }
   /* More room between the tracks and the tools below them. */
   /* The segment's length: a plain control like the version and sync buttons (no filled field). */
-  .video-side .transport .seg-len { height: var(--h-sm); min-height: var(--h-sm); background: none; padding: 0 10px; font-size: 12px; }
 }
 /* Phone: the lock first, then the passage and its length. */
 @media (max-width: 1000px) { .app:has(.dock-player:not(:empty)) .transport .tr-lock { order: -2; } }
 /* Phone: the zoom's −, + and Fit like the version and sync buttons (32 px, the same border, no fill). */
 @media (max-width: 1000px) {
-  .seg-versions .wave-zoom .btn { height: var(--h-sm); min-height: var(--h-sm); padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
-  .seg-versions .wave-zoom .btn.icon { width: var(--h-sm); padding: 0; }
 
 }
 /* The segment's controls, phone and computer alike: 32 px, the same thin border, no fill, 12 px text
@@ -2193,12 +2180,7 @@ details.sec:first-of-type { background-image: none; }
 /* Phone: the preview full screen. The picture fills the screen on black (it glides there, and back); the dock's
    player stays over it (faint while playing, a tap brings it back), a tap on the picture hides it. */
 @media (max-width: 1000px) {
-  .pv-expand { display: grid; place-items: center; position: absolute; right: 2px; bottom: 2px; width: 40px; height: 40px; padding: 0; border: 0; background: none;
-    color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 2; }
-  .pv-full-layer { position: fixed; inset: 0; z-index: 80; background: #000; display: grid; place-items: center; touch-action: none; }
-  .pv-full-cv { display: block; max-height: 100dvh; width: auto; height: auto; touch-action: none; }
-  .pv-close { display: grid; place-items: center; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px; width: 44px; height: 44px; padding: 0; border: 0; background: none;
-    color: #fff; z-index: 82; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+  .pv-full-cv { max-height: 100dvh; }
   html.pv-full, html.pv-full body { overflow: hidden; }
   html.pv-full .mobile-tabs { z-index: 85; transition: opacity .3s; }
   html.pv-full .mobile-tabs > :not(.dock-player):not(.dock-thumb) { visibility: hidden; pointer-events: none; } /* hidden in place: the player does not move */
