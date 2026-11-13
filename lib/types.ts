@@ -307,6 +307,9 @@ export interface VideoSettings {
   anchors?: number;
   /** When the video holds the passage several times: every take found by the sync (the user picks one). */
   takes?: VideoTake[];
+  /** Filmed through an anamorphic lens: the picture is drawn this many times wider (1.33, 1.5…). The lens goes with
+   *  the camera file, so it is the video's, not a version's. None: a normal lens. */
+  desqueeze?: number;
   /** Shape of the exported video: vertical 1080×1920 (default) or horizontal 1920×1080. */
   format?: "9:16" | "16:9";
   /** Audio and video locked together: the offset does not move and the segment stays inside the synced video. */

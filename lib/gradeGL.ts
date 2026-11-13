@@ -134,9 +134,7 @@ export class Grader {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.img);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, pic.src as TexImageSource);
-    const src = pic.src as { videoWidth?: number; videoHeight?: number; width?: number; height?: number; displayWidth?: number; displayHeight?: number };
-    this.texW = src.videoWidth || src.displayWidth || Number(src.width) || 1;
-    this.texH = src.videoHeight || src.displayHeight || Number(src.height) || 1;
+    [this.texW, this.texH] = sourceSize(pic.src);
     const part = pic.part ?? { x: 0, y: 0, w: pic.w, h: pic.h };
     gl.uniform4f(this.uRect, (region.x - part.x) / part.w, (region.y - part.y) / part.h, region.w / part.w, region.h / part.h);
     gl.uniform1f(this.uN, this.size);
@@ -168,12 +166,21 @@ export class Grader {
 
 let copy: HTMLCanvasElement | null = null;
 
+/** Pixel size of a picture source (a video, a decoded frame, an image, a canvas). */
+const sourceSize = (s: CanvasImageSource): [number, number] => {
+  const src = s as { videoWidth?: number; videoHeight?: number; width?: number; height?: number; displayWidth?: number; displayHeight?: number };
+  return [src.videoWidth || src.displayWidth || Number(src.width) || 1, src.videoHeight || src.displayHeight || Number(src.height) || 1];
+};
+
 /** The region of a picture copied on a 2D canvas at the given size (the path that always works). */
 export function copyRegion(pic: Picture, region: Region, outW: number, outH: number): Picture {
   const c = (copy ??= document.createElement("canvas"));
   const w = Math.max(1, Math.round(outW)), h = Math.max(1, Math.round(outH));
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   const part = pic.part ?? { x: 0, y: 0, w: pic.w, h: pic.h };
-  c.getContext("2d")!.drawImage(pic.src, region.x - part.x, region.y - part.y, region.w, region.h, 0, 0, w, h);
+  // Source pixels per picture unit (not 1 for a desqueezed picture, see desqueeze).
+  const [sw, sh] = sourceSize(pic.src);
+  const kx = sw / part.w, ky = sh / part.h;
+  c.getContext("2d")!.drawImage(pic.src, (region.x - part.x) * kx, (region.y - part.y) * ky, region.w * kx, region.h * ky, 0, 0, w, h);
   return { src: c, w: pic.w, h: pic.h, part: region };
 }

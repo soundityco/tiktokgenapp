@@ -20,16 +20,19 @@ export interface ConvertCrop { x: number; y: number; w: number; h: number; out: 
  * What to keep of an iw×ih camera picture for a W×H export: the region seen in the post, with no more
  * pixels than the export can show (`push`: the progressive zoom reaches this factor, so it needs that much more).
  */
-export function cropFor(pic: PicSettings, iw: number, ih: number, W: number, H: number, push = 1): ConvertCrop {
-  const r = visibleRegion(pic, iw, ih, W, H);
+export function cropFor(pic: PicSettings, iw: number, ih: number, W: number, H: number, push = 1,
+  /** Anamorphic lens: the picture is seen this many times wider (see desqueeze); the copy is made that wide. */
+  squeeze = 1): ConvertCrop {
+  const sw = iw * squeeze;
+  const r = visibleRegion(pic, sw, ih, W, H);
   const down = (n: number) => Math.floor(n / 2) * 2;
-  const x = down(r.x), y = down(r.y);
-  const w = Math.min(down(iw) - x, Math.ceil((r.x + r.w - x) / 2) * 2);
+  const x = down(r.x / squeeze), y = down(r.y);
+  const w = Math.min(down(iw) - x, Math.ceil(((r.x + r.w) / squeeze - x) / 2) * 2);
   const h = Math.min(down(ih) - y, Math.ceil((r.y + r.h - y) / 2) * 2);
-  // Export pixels per camera pixel at the strongest zoom; never upscaled.
-  const s = (pic.framing === "fill" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih)) * pic.zoom * push;
+  // Export pixels per camera pixel at the strongest zoom; never upscaled (beyond the desqueeze itself).
+  const s = (pic.framing === "fill" ? Math.max(W / sw, H / ih) : Math.min(W / sw, H / ih)) * pic.zoom * push;
   const k = Math.min(1, s * 1.05);
-  return { x, y, w, h, out: { w: Math.max(2, down(w * k)), h: Math.max(2, down(h * k)) } };
+  return { x, y, w, h, out: { w: Math.max(2, down(w * squeeze * k)), h: Math.max(2, down(h * k)) } };
 }
 
 let worker: Worker | null = null;
@@ -97,6 +100,8 @@ export function convertSegment(
           "scale=flags=accurate_rnd:out_color_matrix=bt709:out_range=tv", "format=yuv420p",
         ]
         : [`scale=${size}${crop ? ":flags=lanczos" : ""}`, "format=yuv420p"]),
+      // Square pixels: a desqueezed copy is already stretched (ffmpeg would otherwise mark it to be squeezed back).
+      "setsar=1",
     ].join(",");
     w.postMessage({
       type: "convert",

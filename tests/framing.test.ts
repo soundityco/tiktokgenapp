@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { aacConfig } from "../lib/exportVideo";
-import { codecLabel, rotationOf } from "../lib/videoSource";
+import { codecLabel, desqueeze, rotationOf } from "../lib/videoSource";
 import { clampPic, visibleRegion, zoomPic } from "../lib/render";
 import { cropFor } from "../lib/convert";
 import { defaultPic } from "../lib/defaults";
@@ -76,6 +76,22 @@ describe("cropped copy of a camera video for the export", () => {
     expect(c.w).toBe(3840);
     expect(c.out.w).toBeGreaterThanOrEqual(1920 * 1.1);
     expect(c.out.w).toBeLessThan(3840);
+  });
+
+  it("desqueezes an anamorphic picture: wider, its cropped part too", () => {
+    const src = {} as CanvasImageSource;
+    expect(desqueeze({ src, w: 3840, h: 2160 }, 1)).toEqual({ src, w: 3840, h: 2160 });
+    expect(desqueeze({ src, w: 3840, h: 2160, part: { x: 100, y: 10, w: 1000, h: 500 } }, 1.5))
+      .toEqual({ src, w: 5760, h: 2160, part: { x: 150, y: 10, w: 1500, h: 500 } });
+  });
+
+  it("crops an anamorphic picture in camera pixels and makes the copy as wide as it is seen", () => {
+    // ×2 on a 16:9 camera: seen 7680×2160 (32:9); a vertical post keeps a narrow column of the middle.
+    const c = cropFor(fill, 3840, 2160, 1080, 1920, 1, 2);
+    const seen = (2160 * 1080) / 1920; // width of the column in the desqueezed picture
+    expect(c.w).toBeCloseTo(seen / 2, -1);
+    expect(c.x + c.w / 2).toBeCloseTo(1920, -1);
+    expect(c.out.w / c.out.h).toBeCloseTo(1080 / 1920, 1);
   });
 
   it("keeps the whole picture when it is fitted with bars", () => {

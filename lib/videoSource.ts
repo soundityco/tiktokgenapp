@@ -27,6 +27,16 @@ export interface Picture {
   graded?: boolean;
 }
 
+/** Squeeze factors of the anamorphic lenses (×1 = a normal lens). */
+export const DESQUEEZE = [1.33, 1.5, 1.55, 1.6, 1.8, 2] as const;
+
+/**
+ * The picture as it is meant to be seen: an anamorphic lens squeezes the scene `k` times across, so it is drawn `k`
+ * times wider. The source pixels stay as they are (`part` and `w` are in the wider picture's units).
+ */
+export const desqueeze = (pic: Picture, k = 1): Picture =>
+  k === 1 ? pic : { ...pic, w: pic.w * k, part: pic.part && { ...pic.part, x: pic.part.x * k, w: pic.part.w * k } };
+
 const CHUNK = 16 * 1024 * 1024;
 /** Chunks fed beyond the frames already decoded: covers the reordering of B-frames (at most 16). */
 const AHEAD = 20;

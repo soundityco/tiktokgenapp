@@ -16,7 +16,7 @@ import { followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } fro
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
-import { type Picture, VideoSource } from "@/lib/videoSource";
+import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { convertSegment, copyPlanFor, cropFor, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
@@ -646,6 +646,8 @@ export default function VideoStudio({
     // Preview, before the video is ready (a big camera file takes a while to open): its last picture.
     if (preview && !pic && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
     if (pic && pic.w && pic.h) {
+      // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
+      pic = desqueeze(pic, cfg.desqueeze);
       let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame);
       // Progressive zoom: ×1 at the start of the segment, `push` on its last frame, around the centre.
       const push = cfg.push ?? 1;
@@ -2560,7 +2562,7 @@ export default function VideoStudio({
         let detail = source?.codec ?? "";
         // Log / HDR graded: on the GPU from the decoded 10-bit frames (seconds), else by ffmpeg below (minutes).
         if (bake && videoBlob && ow && oh && cfg.grade && !ac.signal.aborted) {
-          const crop = cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1);
+          const crop = cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze);
           const lut = buildGradeLut(cfg.grade, cfg.grade.lut ? look : null, 65);
           const t0 = performance.now();
           const gpu = await gpuGradedSource(videoBlob, Math.max(0, from - cfg.offset), until - cfg.offset, crop, ow, oh, lut, 65,
@@ -2580,7 +2582,7 @@ export default function VideoStudio({
           if (ve > vs) {
             try {
               // Only what the post shows, at the camera's resolution (unknown size: the whole picture, not scaled).
-              const crop = ow && oh ? cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1) : undefined;
+              const crop = ow && oh ? cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze) : undefined;
               const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}|${JSON.stringify(crop ?? null)}|${bake ? gradeKey(cfg.grade) : ""}`;
               let proxy = proxyRef.current?.key === key ? proxyRef.current.blob : null;
               if (!proxy) {
@@ -2741,10 +2743,10 @@ export default function VideoStudio({
   const frame = settings.frame ?? DEFAULT_VIDEO.frame;
   const setFrame = (patch: Partial<VideoFrame>) => setV({ frame: { ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ...patch } });
   /** Offsets kept in bounds, as for the carousel photos (a drag reacts at once in the other direction). */
-  const fitFrame = (f: VideoFrame): VideoFrame => {
+  const fitFrame = (f: VideoFrame, squeeze = settingsRef.current.desqueeze ?? 1): VideoFrame => {
     const el = videoRef.current, c = canvasRef.current;
     if (!el?.videoWidth || !c) return f;
-    const p = clampPic(picOf(f), el.videoWidth, el.videoHeight, c.width, c.height);
+    const p = clampPic(picOf(f), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
     return { ...f, ox: p.ox, oy: p.oy };
   };
   const pdrag = useRef<null | { kind: "text" | "hook" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number }>(null);
@@ -2893,7 +2895,8 @@ export default function VideoStudio({
     const from = settings.crop.start, len = segLen, offset = settings.offset;
     // Already made for this video's file and this passage: at once, from memory or from this device (kept there,
     // one strip per video: switching videos or reloading never makes it again).
-    const key = `${clip.id}|${videoBlob?.size ?? videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}`;
+    const squeeze = settings.desqueeze ?? 1;
+    const key = `${clip.id}|${videoBlob?.size ?? videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}${squeeze === 1 ? "" : `|${squeeze}`}`;
     const disk = `strip:${clip.id}`;
     const known = STRIPS.get(key);
     if (known) { setStrip(known); return; }
@@ -2919,7 +2922,7 @@ export default function VideoStudio({
           v.currentTime = clamp(from + ((i + 0.5) / N) * len - offset, 0, Math.max(0, v.duration - 0.05));
           await new Promise<void>((ok) => { v.onseeked = () => ok(); window.setTimeout(ok, 2000); });
           if (!v.videoWidth) break;
-          cv.width = Math.round((H * v.videoWidth) / v.videoHeight); cv.height = H;
+          cv.width = Math.round((H * v.videoWidth * squeeze) / v.videoHeight); cv.height = H;
           cv.getContext("2d")!.drawImage(v, 0, 0, cv.width, cv.height);
           out.push(cv.toDataURL("image/jpeg", 0.82));
           // Each picture takes its place as soon as it is made (the strip is at its full height from the start).
@@ -2934,7 +2937,7 @@ export default function VideoStudio({
       finally { v.removeAttribute("src"); v.load(); }
     }, wait);
     return () => { off = true; clearTimeout(timer); };
-  }, [active, videoUrl, settings.crop.start, segLen, settings.offset]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, videoUrl, settings.crop.start, segLen, settings.offset, settings.desqueeze]); // eslint-disable-line react-hooks/exhaustive-deps
   const placed = (project.lyricWords?.length ?? 0) > 0;
   /** Nothing synced yet: one button does both. Afterwards each has its own, so changing the video never touches the lyrics. */
   const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
@@ -3570,7 +3573,7 @@ export default function VideoStudio({
                           })}
                           <div className="sep" />
                           <button className="ver-new" onClick={() => { close(); addVersion(); }}
-                            title={t("Another version of this video, to compare: its own segment, hooks, lyrics and post text (the take, sync, framing and colour are shared)")}>
+                            title={t("Another version of this video, to compare: its own segment, texts, styles, framing and colour (the camera file and its sync are shared)")}>
                             <Icon name="plus" size={12} />{t("Duplicate this version")}
                           </button>
                         </div>)}
@@ -3994,6 +3997,14 @@ export default function VideoStudio({
               <option value="fill">{t("Fill (crop)")}</option>
               <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
               <option value="fit-black">{t("Fit whole, black bars")}</option>
+            </Select>
+          </div>
+          <div className="row" title={t("An anamorphic lens squeezes the picture across: pick its factor to see it as filmed. It goes with the camera file (all its versions).")}>
+            <span className="label">{t("Anamorphic lens")}</span>
+            <Select className="input sm grow" aria-label={t("Anamorphic lens")} value={String(settings.desqueeze ?? 1)}
+              onChange={(e) => { const k = Number(e.target.value); setV({ desqueeze: k === 1 ? undefined : k, frame: fitFrame(frame, k) }); }}>
+              <option value="1">{t("None")}</option>
+              {DESQUEEZE.map((k) => <option key={k} value={String(k)}>{`×${String(k).replace(".", lang === "fr" ? "," : ".")}`}</option>)}
             </Select>
           </div>
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
