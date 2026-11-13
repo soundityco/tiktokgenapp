@@ -50,15 +50,21 @@ export async function sharper(img: CanvasImageSource & { width: number; height: 
   return toBlob(await call({ type: "upscale", width: w, height: h, data: px.data.buffer }, [px.data.buffer], onStep));
 }
 
+/** The photo, framed so, already covers the whole slide (nothing to fill). */
+export function coversFrame(img: { width: number; height: number }, pic: PicSettings, W: number, H: number) {
+  const { x, y, s } = framedAt(pic, img.width, img.height, W, H);
+  return x <= 0.5 && y <= 0.5 && x + img.width * s >= W - 0.5 && y + img.height * s >= H - 0.5;
+}
+
 /**
  * The slide (W×H) filled: the photo where the framing puts it, and around it, where the slide was empty, a picture
  * invented to continue it. Made at 512 on the short side (LaMa's size), the photo itself put back on top at its own
  * resolution. Null when the photo already covers the whole slide.
  */
 export async function fillFrame(img: CanvasImageSource & { width: number; height: number }, pic: PicSettings, W: number, H: number, onStep: AIProgress): Promise<Blob | null> {
+  if (coversFrame(img, pic, W, H)) return null;
   const { x, y, s } = framedAt(pic, img.width, img.height, W, H);
   const pw = img.width * s, ph = img.height * s;
-  if (x <= 0.5 && y <= 0.5 && x + pw >= W - 0.5 && y + ph >= H - 0.5) return null;
   // The work picture: 512 on its short side.
   const k = 512 / Math.min(W, H);
   const ws = Math.round(W * k), hs = Math.round(H * k);
