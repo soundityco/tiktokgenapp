@@ -9,7 +9,7 @@ import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloa
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
-import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
+import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
 import { followLists, hookLink, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
@@ -2868,7 +2868,12 @@ export default function VideoStudio({
       if (d.kind === "hook") setV({ hookStyle: { ...hookStyleRef.current, x, y } });
       else setV({ captionStyle: { ...styleRef.current, x, y } });
     } else {
-      setV({ frame: fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: d.ox + dx / c.width, oy: d.oy + dy / c.height }) });
+      // Its centre snaps to the middle lines, as a text does (the blue guides show).
+      const sn = snapPic(d.ox + dx / c.width, d.oy + dy / c.height);
+      const room = fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: 1, oy: 1 });
+      const gv = sn.v && room.ox > 0.001, gh = sn.h && room.oy > 0.001; // a guide only where it can move
+      if (gv !== snap.v || gh !== snap.h) setSnap({ v: gv, h: gh });
+      setV({ frame: fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: sn.ox, oy: sn.oy }) });
     }
   };
   const cvUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {

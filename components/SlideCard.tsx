@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
 import { ContextMenu, Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
-import { clamp, clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
+import { clamp, clampPic, renderSlide, snapPic, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
 import { type AIProgress, type AIStep, coversFrame, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
@@ -250,7 +250,11 @@ export default function SlideCard(p: Props) {
     if (d.kind === "text") {
       placeText(d.ox, d.oy, dx, dy, 1.5);
     } else {
-      p.onCfg((c) => ({ ...c, pic: fit({ ...c.pic, ox: d.ox + dx / W, oy: d.oy + dy / H }) }));
+      // Its centre snaps to the middle lines, as a text does (the blue guides show).
+      const sn = snapPic(d.ox + dx / W, d.oy + dy / H), room = fit({ ...cfg.pic, ox: 1, oy: 1 });
+      const gv = sn.v && room.ox > 0.001, gh = sn.h && room.oy > 0.001; // a guide only where it can move
+      if (gv !== guides.v || gh !== guides.h) setGuides({ v: gv, h: gh });
+      p.onCfg((c) => ({ ...c, pic: fit({ ...c.pic, ox: sn.ox, oy: sn.oy }) }));
     }
   };
   const up = () => { drag.current = null; setGuides({ v: false, h: false }); };
@@ -347,7 +351,10 @@ export default function SlideCard(p: Props) {
       const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
       const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
       const z = zoomPic(g.pic, clamp(+(g.pic.zoom * (d / g.d)).toFixed(3), 0.5, 4));
-      p.onCfg((s) => ({ ...s, pic: fit({ ...z, ox: z.ox + ((mx - g.mx) * g.k) / W, oy: z.oy + ((my - g.my) * g.k) / H }) }));
+      const sn = snapPic(z.ox + ((mx - g.mx) * g.k) / W, z.oy + ((my - g.my) * g.k) / H, 0.025), room = fit({ ...z, ox: 1, oy: 1 });
+      const gv = sn.v && room.ox > 0.001, gh = sn.h && room.oy > 0.001;
+      if (gv !== guides.v || gh !== guides.h) setGuides({ v: gv, h: gh });
+      p.onCfg((s) => ({ ...s, pic: fit({ ...z, ox: sn.ox, oy: sn.oy }) }));
     }
   };
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampPic, drawMatte, matteName } from "../lib/render";
+import { clampPic, drawMatte, matteName, snapPic } from "../lib/render";
 import { defaultPic } from "../lib/defaults";
 
 const bars = (W: number, H: number, r?: number) => {
@@ -32,5 +32,9 @@ describe("black bars to a picture format", () => {
     // 2.39:1 bars: 452 px shown out of 1920, it can go up or down by (1920 - 452) / 2.
     expect(clampPic({ ...pic, matte: 2.39 }, 1080, 1920, 1080, 1920).oy).toBeCloseTo(0.3);
     expect(clampPic({ ...pic, oy: 0.5, matte: 2.39 }, 1080, 1920, 1080, 1920).oy).toBeCloseTo((1920 - 1080 / 2.39) / 2 / 1920, 3);
+  });
+  it("a dragged picture's centre snaps to the middle lines", () => {
+    expect(snapPic(0.01, 0.2)).toEqual({ ox: 0, oy: 0.2, v: true, h: false });
+    expect(snapPic(0.1, -0.012)).toEqual({ ox: 0.1, oy: 0, v: false, h: true });
   });
 });

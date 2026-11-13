@@ -74,6 +74,15 @@ export function clampPic(pic: PicSettings, iw: number, ih: number, W: number, H:
   return ox === pic.ox && oy === pic.oy ? pic : { ...pic, ox, oy };
 }
 
+/**
+ * A picture dragged (its offsets, fractions of the frame): its centre snaps to the frame's middle lines within `within`
+ * (as the texts do), `v` / `h` telling which guide to show.
+ */
+export function snapPic(ox: number, oy: number, within = 0.015): { ox: number; oy: number; v: boolean; h: boolean } {
+  const v = Math.abs(ox) < within, h = Math.abs(oy) < within;
+  return { ox: v ? 0 : ox, oy: h ? 0 : oy, v, h };
+}
+
 /** Change the zoom around the centre of the canvas: the point in the middle stays in the middle. */
 export function zoomPic(pic: PicSettings, zoom: number): PicSettings {
   const k = zoom / (pic.zoom || 1);
