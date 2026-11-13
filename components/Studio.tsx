@@ -272,19 +272,27 @@ export default function Studio({ userName }: { userName: string }) {
     if (merged || drops) say(t("Drive tidied: {n} duplicates removed (in the Drive's bin for 30 days)", { n: merged + drops }));
   };
   // Each photo keeps its own edits (colour, framing): whatever is changed on a slide is remembered for its photo.
+  // Only a slide changed since the last look writes: the same photo on two slides with different edits made each
+  // write its own in turn, for ever (the page stopped: "Maximum update depth exceeded").
+  const slideEditsSeen = useRef(new Map<string, string>());
   useEffect(() => {
     const cur = wsRef.current;
     const p = cur?.projects.find((x) => x.id === cur.currentProjectId);
     if (!cur || !p?.generated) return;
     const edits = cur.picEdits ?? {};
     let changed: Record<string, PicEdit | null> | null = null;
+    const seen = slideEditsSeen.current;
     p.slides.forEach((s, i) => {
       const id = p.generated?.[i]?.picId;
       if (!id) return;
       const plain = !s.pic.adjust && s.pic.zoom === 1 && !s.pic.ox && !s.pic.oy;
       const now: PicEdit | null = plain ? null : { adjust: s.pic.adjust, zoom: s.pic.zoom, ox: s.pic.ox, oy: s.pic.oy, format: s.format };
-      const was = edits[id] ?? null;
-      if (JSON.stringify(now) !== JSON.stringify(was)) (changed ??= {})[id] = now;
+      const json = JSON.stringify(now), key = `${p.id}|${s.id}|${id}`;
+      const moved = seen.get(key) !== json;
+      seen.set(key, json);
+      // A slide not changed since the last look writes nothing; two slides of the same photo changed at once: the first.
+      if (!moved || (changed && id in changed)) return;
+      if (json !== JSON.stringify(edits[id] ?? null)) (changed ??= {})[id] = now;
     });
     if (!changed) return;
     const diff: Record<string, PicEdit | null> = changed;
