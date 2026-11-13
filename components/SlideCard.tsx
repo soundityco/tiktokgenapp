@@ -572,7 +572,7 @@ export default function SlideCard(p: Props) {
           </>)}
         </Menu>
       </div>
-      <div ref={picWrap} className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "")} data-drop={t("Drop here")}>
+      <div ref={picWrap} className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "") + (adjusting ? " adjusting" : "")} data-drop={t("Drop here")}>
         {dropHere && <div className="drop-hint">{t("Drop the picture here")}</div>}
         <canvas ref={cv} className="cv" width={1080} height={1920}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />

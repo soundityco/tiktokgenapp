@@ -2425,6 +2425,12 @@ html.pv-full, html.pv-full body { overflow: hidden; }
   /* Computer: the icons over a slide only under the pointer, the photo's settings too, even once changed (its dot then shows). */
   .card:not(:hover) .pv-expand.card-full:not(:focus-visible), .card:not(:hover) .adjust-open:not(:focus-visible),
   .card:not(:hover) .ai-open:not(:focus-visible):not(.on):not(.busy) { opacity: 0; }
+  /* Under the pointer, a dark veil over the photo (deeper at the top and the bottom, where the icons are) shows them
+     on any picture: the icons need no shadow of their own. Not while the photo's edits panel is open. */
+  .card .cv-wrap::before { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .2s;
+    background: linear-gradient(180deg, rgba(0,0,0,.5) 0%, rgba(0,0,0,.14) 24%, rgba(0,0,0,.14) 72%, rgba(0,0,0,.55) 100%); }
+  .card:hover .cv-wrap:not(.adjusting)::before { opacity: 1; }
+  .card .adjust-open, .card .zones-open, .card .pv-expand.card-full, .card .ai-open { filter: none; }
 }
 /* Phone (no pointer to hover with): the three icons over every slide, all the time, also while the deck is swiped. */
 @media (hover: none), (max-width: 1000px) {
