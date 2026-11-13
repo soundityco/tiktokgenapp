@@ -322,6 +322,29 @@ export function drawStyledText(
   return box;
 }
 
+/** The picture formats a post can be masked to (black bars, as the output blanking of an editing app): width / height. */
+export const MATTES = [2.39, 1.85, 16 / 9, 4 / 3, 1, 4 / 5] as const;
+/** "2.39:1", "16:9"… */
+export const matteName = (r: number) => (Math.abs(r - 16 / 9) < 0.01 ? "16:9" : Math.abs(r - 4 / 3) < 0.01 ? "4:3" : Math.abs(r - 4 / 5) < 0.01 ? "4:5" : `${+r.toFixed(2)}:1`);
+
+/**
+ * Black bars over the picture so it shows at `ratio` (width / height), centred: above and under it when the format is
+ * wider than the frame, on its sides when narrower. Drawn over the picture, under the texts (a title can sit in a bar).
+ */
+export function drawMatte(ctx: CanvasRenderingContext2D, W: number, H: number, ratio?: number) {
+  if (!ratio || Math.abs(ratio - W / H) < 0.005) return;
+  ctx.fillStyle = "#000";
+  if (ratio > W / H) {
+    const bar = (H - W / ratio) / 2;
+    ctx.fillRect(0, 0, W, Math.round(bar));
+    ctx.fillRect(0, Math.round(H - bar), W, H);
+  } else {
+    const bar = (W - H * ratio) / 2;
+    ctx.fillRect(0, 0, Math.round(bar), H);
+    ctx.fillRect(Math.round(W - bar), 0, W, H);
+  }
+}
+
 export function renderSlide(
   canvas: HTMLCanvasElement,
   cfg: SlideCfg,
@@ -337,6 +360,7 @@ export function renderSlide(
   ctx.fillStyle = "#16161c";
   ctx.fillRect(0, 0, W, H);
   if (img) drawPicture(ctx, img, cfg, W, H);
+  drawMatte(ctx, W, H, cfg.matte);
 
   const st = cfg.style;
   const box = drawStyledText(ctx, text, st, W, H);

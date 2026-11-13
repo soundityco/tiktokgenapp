@@ -92,6 +92,9 @@ export interface SlideCfg {
   textSource: TextSource;
   picPoolId: string | null;
   pic: PicSettings;
+  /** Black bars masking the slide to this picture format (width / height, e.g. 2.39): the slide's, not the photo's
+   *  (another photo keeps them). None: the whole slide. */
+  matte?: number;
   style: TextStyle;
 }
 
@@ -315,6 +318,9 @@ export interface VideoSettings {
   /** Filmed through an anamorphic lens: the picture is drawn this many times wider (1.33, 1.5…). The lens goes with
    *  the camera file, so it is the video's, not a version's. None: a normal lens. */
   desqueeze?: number;
+  /** Black bars masking the video to this picture format (width / height, e.g. 2.39), over the picture, under the
+   *  texts. None: the whole frame. */
+  matte?: number;
   /** Shape of the exported video: vertical 1080×1920 (default) or horizontal 1920×1080. */
   format?: "9:16" | "16:9";
   /** Audio and video locked together: the offset does not move and the segment stays inside the synced video. */

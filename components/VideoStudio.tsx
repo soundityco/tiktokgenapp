@@ -9,7 +9,7 @@ import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloa
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
-import { clamp, clampPic, drawFramed, drawHelpers, drawPictureAt, framedAt, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
+import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
 import { followLists, hookLink, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
@@ -30,7 +30,7 @@ import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
 import { themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { ConfirmDialog, ContextMenu, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch, TagChip } from "./ui";
+import { ConfirmDialog, ContextMenu, Hint, MatteSelect, Menu, Modal, PromptDialog, Range, Section, Select, Switch, TagChip } from "./ui";
 import { createPortal } from "react-dom";
 import { FullView } from "./FullView";
 import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from "./StyleSheet";
@@ -84,9 +84,9 @@ const LYRICS_ALIGN_V = 3;
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade", "matte"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
-const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade"];
+const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
 
 
@@ -709,6 +709,8 @@ export default function VideoStudio({
         if (preview?.keep && !raw) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
+    // Black bars to a picture format (the post's choice): over the picture, under the texts.
+    drawMatte(g, W, H, cfg.matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
     const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / EXPORT_FPS);
@@ -4125,6 +4127,10 @@ export default function VideoStudio({
               <option value="1">{t("None")}</option>
               {DESQUEEZE.map((k) => <option key={k} value={String(k)}>{`×${String(k).replace(".", lang === "fr" ? "," : ".")}`}</option>)}
             </Select>
+          </div>
+          <div className="row">
+            <span className="label">{t("Black bars")}</span>
+            <MatteSelect className="input sm grow" value={settings.matte} onChange={(v) => setV({ matte: v })} />
           </div>
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
             onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}

@@ -1100,9 +1100,9 @@ export default function Studio({ userName }: { userName: string }) {
       const src = p.slides[p.selectedSlide];
       return { ...p, slides: p.slides.map((s) => {
         if (part === "text") return { ...s, style: { ...src.style, x: s.style.x, y: s.style.y } };
-        if (part === "photo") return { ...s, format: src.format, pic: { ...src.pic } };
+        if (part === "photo") return { ...s, format: src.format, pic: { ...src.pic }, matte: src.matte };
         if (part === "position") return { ...s, style: { ...s.style, x: src.style.x, y: src.style.y } };
-        return { ...s, format: src.format, pic: { ...src.pic }, style: { ...src.style } };
+        return { ...s, format: src.format, pic: { ...src.pic }, matte: src.matte, style: { ...src.style } };
       }) };
     });
     say(part === "text" ? t("Text style copied to all slides") : part === "photo" ? t("Photo settings copied to all slides")

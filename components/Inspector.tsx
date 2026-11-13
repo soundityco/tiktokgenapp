@@ -4,7 +4,7 @@ import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
 import type { FormatId, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
 import { caseOptions, FontPicker, LookExtras, presetOf, StylePresets, TextColors } from "./TextControls";
-import { Range, Section, Select, Hint } from "./ui";
+import { Hint, MatteSelect, Range, Section, Select } from "./ui";
 
 interface Props {
   index: number;
@@ -62,6 +62,10 @@ export default function Inspector({
               <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
               <option value="fit-black">{t("Fit whole, black bars")}</option>
             </Select>
+          </label>
+          {/* The slide's own (another photo keeps them): bars masking it to a picture format. */}
+          <label className="field">{t("Black bars")}
+            <MatteSelect value={cfg.matte} onChange={(v) => onCfg((c) => ({ ...c, matte: v }))} />
           </label>
           <Range label={t("Zoom")} value={pic.zoom} display={`${pic.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05} onChange={(v) => onCfg((c) => ({ ...c, pic: zoomPic(c.pic, v) }))}
             onReset={() => setP({ zoom: 1, ox: 0, oy: 0 })} />

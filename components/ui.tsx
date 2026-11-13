@@ -3,6 +3,7 @@ import { Children, type CSSProperties, Fragment, isValidElement, ReactNode, useE
 import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
+import { MATTES, matteName } from "@/lib/render";
 
 const stack: symbol[] = [];
 
@@ -311,6 +312,17 @@ export function Range(p: { label: string; value: number; display?: string; min: 
       <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={back ? t("Double-click to reset") : undefined}
         style={{ "--fill": `${((p.value - p.min) / Math.max(1e-9, p.max - p.min)) * 100}%` } as CSSProperties} />
     </label>
+  );
+}
+
+/** The black bars of a post (a slide, a video): none, or one of the picture formats of `MATTES`. */
+export function MatteSelect({ value, onChange, className = "input" }: { value?: number; onChange: (v: number | undefined) => void; className?: string }) {
+  const { t } = useT();
+  return (
+    <Select className={className} aria-label={t("Black bars")} value={value ? String(value) : ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}>
+      <option value="">{t("None")}</option>
+      {MATTES.map((r) => <option key={r} value={String(r)}>{matteName(r)}{r === 2.39 ? ` · ${t("cinema")}` : ""}</option>)}
+    </Select>
   );
 }
 

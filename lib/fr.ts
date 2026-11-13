@@ -706,6 +706,8 @@ export const FR: Record<string, string> = {
   "Previous photo": "Photo précédente",
   "Move to": "Déplacer vers",
   "Help": "Aide",
+  "Black bars": "Bandes noires",
+  "cinema": "cinéma",
   "Start of the segment here": "Début du segment ici",
   "End of the segment here": "Fin du segment ici",
   "No other photo list yet.": "Pas encore d'autre liste de photos.",
