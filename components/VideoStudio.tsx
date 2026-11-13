@@ -1719,9 +1719,7 @@ export default function VideoStudio({
   // puts it back). The dock's player stays over it, faint while playing; a tap on the picture hides or shows it. ----
   const [full, setFull] = useState(false);
   fullRef.current = full;
-  const [playerLit, setPlayerLit] = useState(false);
-  const [playerOff, setPlayerOff] = useState(false);
-  const toggleFull = (on: boolean) => { setPlayerOff(false); setFullLeaving(false); setFull(on); };
+  const toggleFull = (on: boolean) => { setFullLeaving(false); setFull(on); };
   /** The full screen is gliding back (it closes once there): the dock opens again meanwhile. */
   const [fullLeaving, setFullLeaving] = useState(false);
   const slimDock = full && !fullLeaving;
@@ -1741,10 +1739,8 @@ export default function VideoStudio({
     }
     if (!full) root.classList.remove("pv-pinned");
     root.classList.toggle("pv-full", full);
-    root.classList.toggle("pv-dim", full && playing && !playerLit);
-    root.classList.toggle("pv-noplayer", full && playerOff);
-    return () => { root.classList.remove("pv-full", "pv-dim", "pv-noplayer"); };
-  }, [full, playing, playerLit, playerOff]);
+    return () => { root.classList.remove("pv-full"); };
+  }, [full]);
   // Phone: into the full screen, the dock closes on its player (its icons go down and out, the block gets shorter),
   // and opens again on the way out; the same movement as the picture's glide, at the same time.
   const dockWas = useRef(false);
@@ -1760,6 +1756,7 @@ export default function VideoStudio({
     if (slimDock === was || !dock || !player || !player.childElementCount || getComputedStyle(dock).display === "none"
       || matchMedia("(prefers-reduced-motion: reduce)").matches) { settle(); return; }
     const icons = [...dock.children].filter((x): x is HTMLElement => x instanceof HTMLElement && !x.classList.contains("dock-player"));
+    // The pill behind the open page's button keeps its place (its own translate): it only fades.
     const cs = getComputedStyle(dock);
     const slim = player.getBoundingClientRect().height + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
     root.classList.remove("pv-dock-slim"); // the icons laid out while they go
@@ -1776,8 +1773,10 @@ export default function VideoStudio({
     const go = dock.animate([{ height: `${from}px` }, { height: `${slimDock ? slim : whole}px` }],
       { duration: BLOCK, delay: slimDock ? ICONS - OVERLAP : 0, easing: "cubic-bezier(.4,0,.2,1)", fill: "both" });
     const out = [{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: "0 16px" }];
-    const fades = icons.map((el) => el.animate(slimDock ? out : out.slice().reverse(),
-      { duration: ICONS, delay: slimDock ? 0 : BLOCK - OVERLAP, easing: ease, fill: "both" }));
+    const fades = icons.map((el) => {
+      const frames = el.classList.contains("dock-thumb") ? out.map(({ opacity }) => ({ opacity })) : out;
+      return el.animate(slimDock ? frames : [...frames].reverse(), { duration: ICONS, delay: slimDock ? 0 : BLOCK - OVERLAP, easing: ease, fill: "both" });
+    });
     const done = () => { dock.style.overflow = ""; for (const a of fades) a.cancel(); go.cancel(); };
     let live = true;
     void Promise.all([go.finished, ...fades.map((a) => a.finished)]).then(() => { if (live) { settle(); done(); } }, () => {});
@@ -1806,21 +1805,8 @@ export default function VideoStudio({
     return () => { window.removeEventListener("mousemove", wake); document.documentElement.removeEventListener("mouseleave", away); clearTimeout(timer); };
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.documentElement.classList.toggle("pv-idle", full && idle); return () => document.documentElement.classList.remove("pv-idle"); }, [full, idle]);
-  // A tap on the faint player brings it back to full colour for a few seconds.
-  useEffect(() => {
-    if (!full) return;
-    const dock = document.querySelector(".mobile-tabs");
-    let timer = 0;
-    const lit = () => { setPlayerLit(true); clearTimeout(timer); timer = window.setTimeout(() => setPlayerLit(false), 3000); };
-    dock?.addEventListener("pointerdown", lit);
-    return () => { dock?.removeEventListener("pointerdown", lit); clearTimeout(timer); };
-  }, [full]);
-  /** A tap on the full-screen picture: on a phone the player hides, or comes back; on a computer (the player
-   *  stays) it plays or pauses. */
-  const fullTap = () => {
-    if (phone) setPlayerOff((v) => !v);
-    else if (playing) stop(); else void play();
-  };
+  /** A tap on the full-screen picture plays or pauses (the player stays, under the picture, on a phone too). */
+  const fullTap = () => { if (playing) stop(); else void play(); };
   /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and under the phone's
    *  picture. */
   const shownToggles = (cls: string, reachable = true) => {

@@ -172,11 +172,13 @@ export default function Studio({ userName }: { userName: string }) {
     const place = (slide: boolean) => {
       const on = nav.querySelector<HTMLElement>(mobileTab === "lists" ? ".dock-lib" : `.dock-pair > button:nth-of-type(${mobileTab === "style" ? 2 : 1})`);
       if (!on || !on.offsetParent) return;
-      const n = nav.getBoundingClientRect(), b = on.getBoundingClientRect();
-      // (Placed inside the dock's border: its padding box is the pill's frame.)
+      // Its place in the dock's layout (inside the dock's border: its padding box is the pill's frame), not on screen:
+      // a button moving for a moment (the dock's own animations, pressed) does not move the pill.
+      let x = 0, y = 0;
+      for (let el: HTMLElement | null = on; el && el !== nav; el = el.offsetParent as HTMLElement | null) { x += el.offsetLeft; y += el.offsetTop; }
       // It slides sideways only: its height place follows at once (the video's player row comes and goes with the
       // library, the dock's buttons move up or down then).
-      setDockThumb((cur) => ({ translate: `${b.left - n.left - nav.clientLeft}px 0`, top: b.top - n.top - nav.clientTop, width: b.width, height: b.height, ...(cur && slide ? {} : { transition: "none" }) }));
+      setDockThumb((cur) => ({ translate: `${x}px 0`, top: y, width: on.offsetWidth, height: on.offsetHeight, ...(cur && slide ? {} : { transition: "none" }) }));
     };
     place(true);
     if (typeof ResizeObserver === "undefined") return;

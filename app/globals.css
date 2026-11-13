@@ -2195,8 +2195,6 @@ details.sec:first-of-type { background-image: none; }
   html.pv-full, html.pv-full body { overflow: hidden; }
   html.pv-full .mobile-tabs { z-index: 85; transition: opacity .3s; }
   html.pv-full.pv-dock-slim .mobile-tabs > :not(.dock-player) { display: none; } /* the dock is the player alone, at the bottom (VideoStudio animates it there) */
-  html.pv-dim .mobile-tabs { opacity: .38; }
-  html.pv-noplayer .mobile-tabs { opacity: 0; pointer-events: none; transform: translateY(12px); }
 }
 
 /* A hooks list by tag: each text with its tags as chips (a tap removes one), "+" adds or creates one. */
