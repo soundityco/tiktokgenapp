@@ -977,4 +977,5 @@ export const FR: Record<string, string> = {
   "F or Esc to close": "F ou Échap pour fermer",
   "Space, F or Esc to close · ← → to browse": "Espace, F ou Échap pour fermer · ← → pour naviguer",
   "or": "ou",
+  "Edit the selected slide's photo (exposure, contrast…)": "Retoucher la photo de la slide sélectionnée (exposition, contraste…)",
 };

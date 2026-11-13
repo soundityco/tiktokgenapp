@@ -140,6 +140,26 @@ export default function SlideCard(p: Props) {
   }, [adjusting]);
   const adj = cfg.pic.adjust ?? {};
   const hasAdjust = Object.values(adj).some((x) => x);
+  // E: the selected slide's photo edits open or close (the same as its button); Escape closes them. Not while typing,
+  // over a window or the full screen, nor when the carousel is hidden (the video studio). See ShortcutsDialog.
+  const keyNow = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyNow.current = (e) => {
+    if (!p.selected || e.metaKey || e.ctrlKey || e.altKey || !cv.current?.offsetParent) return;
+    const el = e.target as HTMLElement;
+    if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable || document.querySelector(".ov, .pv-full-layer")) return;
+    if (e.key === "Escape" && adjusting) { e.preventDefault(); setCompare(false); setAdjusting(false); return; }
+    if (e.key.toLowerCase() !== "e") return;
+    e.preventDefault();
+    if (adjusting) { setCompare(false); setAdjusting(false); return; }
+    if (!img || p.locked) return;
+    setAdjusting(true);
+    window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current }));
+  };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => keyNow.current(e);
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
 
   useEffect(() => {
     if (!cv.current) return;
@@ -534,7 +554,7 @@ export default function SlideCard(p: Props) {
           </button>
         )}
         {!adjusting && img && !p.locked && (
-          <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)")} aria-label={t("Adjust the photo")}
+          <button className={"adjust-open" + (hasAdjust ? " set" : "")} title={t("Adjust the photo (exposure, contrast, saturation…)") + " (E)"} aria-label={t("Adjust the photo")}
             onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); setAdjusting(true); window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current })); }}>
             <Icon name="tune" size={18} />
           </button>

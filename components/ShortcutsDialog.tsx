@@ -12,6 +12,7 @@ const SHORTCUTS: { part: string; keys: string[][]; what: string; pair?: boolean 
   { part: "Both studios", keys: [["⇧", "mod", "Z"], ["mod", "Y"]], what: "Redo" },
   { part: "Both studios", keys: [["Esc"]], what: "Close a window or the full screen" },
   { part: "Carousel", keys: [["R"]], what: "Generate" },
+  { part: "Carousel", keys: [["E"]], what: "Edit the selected slide's photo (exposure, contrast…)" },
   { part: "Carousel", keys: [["Space"]], what: "Full screen (Space again closes it)" },
   { part: "Carousel", keys: [["←"], ["→"]], what: "Full screen: previous / next slide", pair: true },
   { part: "Video", keys: [["Space"]], what: "Play / pause" },
