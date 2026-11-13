@@ -35,6 +35,7 @@ import { merge3 } from "@/lib/merge";
 import { isDemo } from "@/lib/demo";
 import PicStack from "./PicStack";
 import StorageDialog from "./StorageDialog";
+import ShortcutsDialog from "./ShortcutsDialog";
 import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 /** The generated slides of a carousel, one per slide (a slide not generated yet: empty). */
@@ -111,6 +112,7 @@ export default function Studio({ userName }: { userName: string }) {
   const [preview, setPreview] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
   /** A working copy of a take on its way to the Drive (shown in the top bar, whatever is open). */
   const [copyJob, setCopyJob] = useState<CopyJob | null>(null);
   const [fonts, setFonts] = useState<string[]>([]);
@@ -933,14 +935,17 @@ export default function Studio({ userName }: { userName: string }) {
     const k = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (studio !== "carousel" || document.querySelector(".ov")) return;
-      if (e.key.toLowerCase() === "g") generate();
-      // Space: clean full-size preview of the selected slide (and no page scroll / button press).
-      else if (e.key === " " && !el.isContentEditable) { e.preventDefault(); setPreview(true); }
+      if (studio !== "carousel" || document.querySelector(".ov") || el.isContentEditable) return;
+      // The list of them all: ShortcutsDialog.
+      const key = e.key.toLowerCase();
+      if (key === "r") generate();
+      else if (key === "g") { if (isPhone) togglePhoneZones(); else upd((w) => ({ ...w, zones: !w.zones })); }
+      // Space or F: clean full-size preview of the selected slide (and no page scroll / button press).
+      else if (key === " " || key === "f") { e.preventDefault(); setPreview(true); }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [generate, studio]);
+  }, [generate, studio, isPhone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -1573,10 +1578,11 @@ export default function Studio({ userName }: { userName: string }) {
               </div>
             )}
             <div className="sep" />
-            <button onClick={() => { close(); backup(); }}>{t("Back up my data")}</button>
-            <button onClick={() => { close(); restoreInput.current?.click(); }}>{t("Restore a backup")}</button>
-            <button onClick={() => { close(); setVersionsOpen(true); }}>{t("Version history")}</button>
-            <button onClick={() => { close(); setStorageOpen(true); }}>{t("Storage")}</button>
+            <button onClick={() => { close(); backup(); }}><Icon name="download" size={14} />{t("Back up my data")}</button>
+            <button onClick={() => { close(); restoreInput.current?.click(); }}><Icon name="upload" size={14} />{t("Restore a backup")}</button>
+            <button onClick={() => { close(); setVersionsOpen(true); }}><Icon name="history" size={14} />{t("Version history")}</button>
+            <button onClick={() => { close(); setStorageOpen(true); }}><Icon name="storage" size={14} />{t("Storage")}</button>
+            <button onClick={() => { close(); setKeysOpen(true); }}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
             {/* The installed app: nothing here. The browser: installed, or the install, standing out. */}
             {canInstall && <><div className="sep" /><button className="menu-primary" onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
             {installed && <><div className="sep" /><div className="menu-note"><Icon name="check" size={14} /><span>{t("App installed")}<small>{t("Open it from your dock or home screen.")}</small></span></div></>}
@@ -1887,6 +1893,7 @@ export default function Studio({ userName }: { userName: string }) {
           <div className="modal-foot"><button className="btn primary" onClick={closeIosHelp}>{t("Got it")}</button></div>
         </Modal>
       )}
+      {keysOpen && <ShortcutsDialog onClose={() => setKeysOpen(false)} />}
       {storageOpen && (
         <StorageDialog onClose={() => setStorageOpen(false)}
           usedCopies={new Set(ws.projects.flatMap((p) => (p.videos ?? []).map((v) => v.drive?.copy?.id).filter((x): x is string => !!x)))} />

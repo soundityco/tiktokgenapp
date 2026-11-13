@@ -35,7 +35,7 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onLeave, on
   onSide?: (dir: 1 | -1) => void;
   /** Whether there is one that way (else the picture resists). */
   sideOk?: (dir: 1 | -1) => boolean;
-  /** Space closes it too (the carousel: Space opened it). */
+  /** Space closes it too (the carousel: Space opened it). F and Escape always do. */
   closeOnSpace?: boolean;
   /** A player stays under the picture (the video's): room is kept for it. */
   player?: boolean;
@@ -150,7 +150,8 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onLeave, on
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || (closeOnSpace && e.key === " ")) { e.preventDefault(); closeRef.current(); }
+      const typing = e.target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable);
+      if (e.key === "Escape" || (!typing && !e.metaKey && !e.ctrlKey && (e.key.toLowerCase() === "f" || (closeOnSpace && e.key === " ")))) { e.preventDefault(); closeRef.current(); }
       else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         const dir: 1 | -1 = e.key === "ArrowRight" ? 1 : -1;
         if (can(dir)) { e.preventDefault(); props.current.onSide!(dir); }

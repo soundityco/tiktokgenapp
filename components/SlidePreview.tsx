@@ -56,7 +56,7 @@ export default function SlidePreview({
         <button className="btn sm quiet icon" aria-label={t("Previous slide")} disabled={index === 0} onClick={() => onNav(index - 1)}><Icon name="back" size={14} /></button>
         <span className="mono xs">{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</span>
         <button className="btn sm quiet icon flip" aria-label={t("Next slide")} disabled={index === total - 1} onClick={() => onNav(index + 1)}><Icon name="back" size={14} /></button>
-        <span className="muted xs grow preview-hint">{t("Space or Esc to close · ← → to browse")}</span>
+        <span className="muted xs grow preview-hint">{t("Space, F or Esc to close · ← → to browse")}</span>
       </>} />
   );
 }

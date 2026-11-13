@@ -1748,6 +1748,8 @@ export default function VideoStudio({
   // Phone: into the full screen, the dock closes on its player (its icons go down and out, the block gets shorter),
   // and opens again on the way out; the same movement as the picture's glide, at the same time.
   const dockWas = useRef(false);
+  /** Where the dock's height was when a move was taken over by the opposite one (it goes on from there). */
+  const dockFrom = useRef<number | null>(null);
   useEffect(() => {
     const root = document.documentElement;
     const dock = document.querySelector<HTMLElement>(".mobile-tabs");
@@ -1762,17 +1764,25 @@ export default function VideoStudio({
     const slim = player.getBoundingClientRect().height + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
     root.classList.remove("pv-dock-slim"); // the icons laid out while they go
     const whole = dock.getBoundingClientRect().height;
-    const opt = { duration: 300, easing: "cubic-bezier(.2,.8,.2,1)" };
+    const ease = "cubic-bezier(.2,.8,.2,1)";
     for (const a of dock.getAnimations()) a.cancel();
     dock.style.overflow = "hidden";
-    const go = dock.animate([{ height: `${slimDock ? whole : slim}px` }, { height: `${slimDock ? slim : whole}px` }], opt);
-    const out = [{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: "0 18px" }];
-    // Going: they stay out until the dock lets them go (no flash at the end).
-    const fades = icons.map((el) => el.animate(slimDock ? out : out.slice().reverse(), { ...opt, duration: slimDock ? 220 : 300, fill: "forwards" }));
-    const done = () => { dock.style.overflow = ""; for (const a of fades) a.cancel(); };
-    go.onfinish = () => { done(); settle(); };
+    // Two steps, one after the other: going, the icons leave (down, fading), then the block closes on the player (it
+    // goes down with it); coming back, the block opens, then the icons come up into it.
+    const ICONS = 180, BLOCK = 320, OVERLAP = 60;
+    const from = dockFrom.current ?? (slimDock ? whole : slim);
+    dockFrom.current = null;
+    // The block: soft at both ends (the player glides down, no jolt at the start).
+    const go = dock.animate([{ height: `${from}px` }, { height: `${slimDock ? slim : whole}px` }],
+      { duration: BLOCK, delay: slimDock ? ICONS - OVERLAP : 0, easing: "cubic-bezier(.4,0,.2,1)", fill: "both" });
+    const out = [{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: "0 16px" }];
+    const fades = icons.map((el) => el.animate(slimDock ? out : out.slice().reverse(),
+      { duration: ICONS, delay: slimDock ? 0 : BLOCK - OVERLAP, easing: ease, fill: "both" }));
+    const done = () => { dock.style.overflow = ""; for (const a of fades) a.cancel(); go.cancel(); };
+    let live = true;
+    void Promise.all([go.finished, ...fades.map((a) => a.finished)]).then(() => { if (live) { settle(); done(); } }, () => {});
     // Taken over by the next one (in or out again): it starts from where this one is, without this one's end.
-    return () => { go.onfinish = null; go.cancel(); done(); };
+    return () => { if (live && go.playState === "running") dockFrom.current = dock.getBoundingClientRect().height; live = false; done(); };
   }, [slimDock]);
   useEffect(() => () => document.documentElement.classList.remove("pv-dock-slim"), []);
   // The window resized while full screen: the player goes back to its centred place.
@@ -3043,7 +3053,7 @@ export default function VideoStudio({
     onProject((p) => ({ ...p, lyricWords: out }));
   };
 
-  // ---- keyboard: Space play, ←/→ previous/next line, Alt+←/→ offset, I/O segment start/end ----
+  // ---- keyboard: Space play, ←/→ previous/next line, Alt+←/→ offset, I/O segment start/end, F full screen, G zones ----
   const stepTo = (dir: 1 | -1) => {
     const lo = settingsRef.current.crop.start;
     let to = head + dir;
@@ -3068,8 +3078,12 @@ export default function VideoStudio({
     if (!active) return; // hidden behind the carousel: its shortcuts are the carousel's
     const el = e.target as HTMLElement;
     if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable || e.metaKey || e.ctrlKey) return;
-    if (!audioBuf || document.querySelector(".ov")) return;
+    if (document.querySelector(".ov")) return;
     const k = e.key;
+    // The list of them all: ShortcutsDialog. F and G need the video only (in the full screen, F closes it: FullView).
+    if (!e.altKey && k.toLowerCase() === "f") { if (videoBlob && !full) { e.preventDefault(); toggleFull(true); } return; }
+    if (!e.altKey && k.toLowerCase() === "g") { if (videoBlob && settings.format !== "16:9") setAids({ zones: !aids.zones }); return; }
+    if (!audioBuf) return;
     if (k === " ") { e.preventDefault(); if (playing) stop(); else void play(); }
     else if ((k === "ArrowLeft" || k === "ArrowRight") && e.altKey) {
       e.preventDefault();
@@ -3346,7 +3360,7 @@ export default function VideoStudio({
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} {...shownPress(() => toggleFull(true))}><Icon name="expand" size={18} /></button>}
             {/* The full screen (the same as the carousel's): the preview's picture as it is drawn, over the app. */}
             {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onLeave={() => setFullLeaving(true)} onTap={fullTap} player label={clipName(clip)}
-              bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("Esc to close")}</span></>} />}
+              bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("F or Esc to close")}</span></>} />}
           </div>
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (

@@ -22,6 +22,14 @@ const P: Record<string, string> = {
   refresh: "M4 12a8 8 0 0113.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 01-13.7 5.6L4 15.5M4 20v-4.5h4.5",
   download: "M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14",
   share: "M12 15V4M8 7.5L12 4l4 3.5M5 13v6h14v-6",
+  // A file back into the app (the opposite of download).
+  upload: "M12 15V4M7.5 8.5L12 4l4.5 4.5M5 20h14",
+  // The kept versions: a clock with the arrow going back.
+  history: "M4.5 12a7.5 7.5 0 102.2-5.3L4.5 9M4.5 4.5V9H9M12 8v4.2l2.8 1.8",
+  // The space used on the Drive: stacked disks.
+  storage: "M4.5 6.5c0-1.4 3.4-2.5 7.5-2.5s7.5 1.1 7.5 2.5-3.4 2.5-7.5 2.5-7.5-1.1-7.5-2.5zM4.5 6.5v11c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-11M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5",
+  // The shortcuts: a keyboard.
+  keyboard: "M3.5 6.5h17v11h-17zM7 10v.01M10.3 10v.01M13.7 10v.01M17 10v.01M8 14h8",
   trash: "M4 7h16M9 7V4.5h6V7M6.5 7l.8 12a2 2 0 002 1.9h5.4a2 2 0 002-1.9l.8-12M10 11v6M14 11v6",
   folder: "M3 7.5A2 2 0 015 5.5h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z",
   list: "M4 6.5h16M4 12h10M4 17.5h13",
