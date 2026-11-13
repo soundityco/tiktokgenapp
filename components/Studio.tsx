@@ -9,6 +9,7 @@ import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
 import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
+import { addVariants, carouselVariants, type Variant } from "@/lib/variants";
 import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, saveBlobs, stamp } from "@/lib/files";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
@@ -36,6 +37,7 @@ import { isDemo } from "@/lib/demo";
 import PicStack from "./PicStack";
 import StorageDialog from "./StorageDialog";
 import HiddenTagsDialog from "./HiddenTagsDialog";
+import VariantsDialog from "./VariantsDialog";
 import ShortcutsDialog from "./ShortcutsDialog";
 import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
@@ -65,6 +67,7 @@ type Overlay =
   | { k: "newProject" }
   | { k: "rename" }
   | { k: "hiddenTags" }
+  | { k: "variants"; list: Variant[] }
   | { k: "confirm"; title: string; message: string; label: string; run: () => void };
 
 
@@ -738,6 +741,17 @@ export default function Studio({ userName }: { userName: string }) {
   const slideTexts = useMemo(() => vText.filter((p) => p.kind !== "captions"), [vText]);
   const captionPools = useMemo(() => vText.filter((p) => p.kind === "captions"), [vText]);
   const carouselName = (c: { name: string }) => { const m = /^Carousel (\d+)$/.exec(c.name); return m ? t("Carousel {n}", { n: m[1] }) : c.name; };
+  /** After an export: the retouched texts their lists do not have yet, offered once each (see lib/variants). */
+  const offerVariants = (list: Variant[]) => {
+    const p = project;
+    if (!p) return;
+    const keyOf = (v: Variant) => `${v.pool}|${hookKey(v.text)}`;
+    const asked = new Set(p.variantsAsked ?? []);
+    const fresh = list.filter((v, i) => !asked.has(keyOf(v)) && list.findIndex((w) => keyOf(w) === keyOf(v)) === i);
+    if (!fresh.length) return;
+    updProject((x) => ({ ...x, variantsAsked: [...(x.variantsAsked ?? []), ...fresh.map(keyOf)].slice(-300) }));
+    setOverlay({ k: "variants", list: fresh });
+  };
   /** Another caption from the list of the open carousel (or of a video, with `apply`). */
   const drawCaptionFrom = (poolId: string | undefined, current: string | undefined, apply: (text: string) => void) => {
     const cur = wsRef.current ?? ws;
@@ -1335,6 +1349,7 @@ export default function Studio({ userName }: { userName: string }) {
         if (caption) dir.file("caption.txt", caption);
       }
       if (!made) throw new Error(t("Export failed"));
+      offerVariants(ready.flatMap((p) => carouselVariants(p, vText)));
       if (zip) saveBlob(await zip.generateAsync({ type: "blob" }), `${release} ${stamp()}.zip`);
       else await saveBlobs(direct);
       if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: made, m: total, f: failures.length }));
@@ -1583,7 +1598,7 @@ export default function Studio({ userName }: { userName: string }) {
                 lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}
-                onCfg={(fn) => updSlide(i, fn)} onText={(txt) => setGen(i, { text: txt, edited: true })}
+                onCfg={(fn) => updSlide(i, fn)} onText={(txt) => { const g = project.generated?.[i]; setGen(i, { text: txt, edited: true, from: g?.edited ? g.from : g?.text }); }}
                 onLyricsBack={() => setGen(i, { text: cfg.textSource.kind === "lyrics" ? slideLyrics(project, cfg.textSource) : "", edited: false })}
                 onRerollPic={() => rerollPic(i)} onChoosePic={(id, name) => choosePic(i, id, name)} onRerollText={() => rerollText(i)} onSave={() => saveOne(i)}
                 onWebPic={(img) => setGen(i, { picId: webPicId(img.full), picName: img.author || img.license,
@@ -1720,6 +1735,7 @@ export default function Studio({ userName }: { userName: string }) {
             releaseTitle={releaseTitle}
             onCopyJob={setCopyJob}
             onToast={say}
+            onVariants={offerVariants}
             playReturn={ws.playReturn !== false}
             library={textGroups(["hooks", "captions"])}
             libraryPhone={<>{textGroups(["hooks", "texts", "captions"])}{photosFamily()}</>}
@@ -1975,6 +1991,10 @@ export default function Studio({ userName }: { userName: string }) {
       {overlay?.k === "hiddenTags" && (
         <HiddenTagsDialog release={project.name} pools={slideTexts} hidden={project.hiddenTags ?? []}
           onChange={(tags) => updProject((p) => ({ ...p, hiddenTags: tags.length ? tags : undefined }))} onClose={() => setOverlay(null)} />
+      )}
+      {overlay?.k === "variants" && (
+        <VariantsDialog list={overlay.list} pools={vText} onClose={() => setOverlay(null)}
+          onKeep={(kept) => { upd((w) => ({ ...w, textPools: addVariants(w.textPools, kept) })); say(kept.length > 1 ? t("{n} texts added to your lists", { n: kept.length }) : t("Text added to your list")); }} />
       )}
       {overlay?.k === "confirm" && <ConfirmDialog title={overlay.title} message={overlay.message} confirmLabel={overlay.label} onConfirm={overlay.run} onClose={() => setOverlay(null)} danger />}
       {overlay?.k === "lyrics" && (

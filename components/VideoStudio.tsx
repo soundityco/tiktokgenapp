@@ -17,6 +17,7 @@ import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
+import { type Variant, videoVariants } from "@/lib/variants";
 import { fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
@@ -308,6 +309,7 @@ export default function VideoStudio({
   lyricsRow,
   onCopyJob,
   onToast,
+  onVariants,
   playReturn = true,
   active = true,
   stylePage = false,
@@ -342,6 +344,8 @@ export default function VideoStudio({
   onCopyJob?: (job: CopyJob | null) => void;
   /** A short message, wherever the user is (the copy is done, or failed). */
   onToast?: (msg: string) => void;
+  /** After an export: the hooks retouched into texts their list does not have (see lib/variants), to offer keeping. */
+  onVariants?: (list: Variant[]) => void;
   /** A pause puts the playhead back where play started (the app's setting, on unless turned off). */
   playReturn?: boolean;
   /** The library's shared part (the text lists, the same as the carousel's), under the release's files. */
@@ -1978,6 +1982,7 @@ export default function VideoStudio({
     }
     if (back) switchVersion(back);
     notify(t("Videos exported"), t("{n} of {m} videos are in your downloads.", { n: done, m: list.length }));
+    if (done) onVariants?.(list.flatMap((v) => videoVariants(v.id === settingsRef.current.activeVersion ? settingsRef.current.hooks : v.v.hooks, hookPools)));
   };
 
   const applyTake = (k: VideoTake, takes = settingsRef.current.takes) => {
@@ -2728,7 +2733,10 @@ export default function VideoStudio({
       // The text of the post next to it, ready to paste in TikTok (when the video has one).
       if (cfg.caption?.trim()) saveBlob(new Blob([cfg.caption.trim() + "\n"], { type: "text/plain" }), `${name} caption.txt`);
       setExp({ p: 1, step: "finish", done: true, file });
-      if (!inBatch) notify(t("Video exported"), t("{name} is in your downloads.", { name: file }));
+      if (!inBatch) {
+        notify(t("Video exported"), t("{name} is in your downloads.", { name: file }));
+        onVariants?.(videoVariants(cfg.hooks, hookPools));
+      }
       return "done";
     } catch (e) {
       const cancelled = ac.signal.aborted || (e instanceof DOMException && e.name === "AbortError");

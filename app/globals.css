@@ -2174,6 +2174,11 @@ details.sec:first-of-type { background-image: none; }
 /* A tag put aside for the release (its texts are not drawn here): struck through, dashed; in its window, one per chip. */
 .menu .pick-chips .pick-chip.aside, .hidden-tags .pick-chip.aside { color: var(--muted); text-decoration: line-through; border-style: dashed; }
 .hidden-tags .pick-chips { padding: 0; }
+/* After an export: the retouched texts to keep, one per line, their list under them. */
+.variants { gap: var(--s3); margin: var(--s3) 0; }
+.variants .variant { align-items: flex-start; }
+.variants .variant input { margin-top: 3px; }
+.variants .variant .stack { gap: 2px; }
 .hidden-tags .pick-chip { height: 30px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: var(--r); background: none; font-size: var(--fs-sm); color: var(--text); cursor: pointer; }
 .hidden-tags .pick-chip:hover { border-color: var(--muted); }
 .pick-list { display: flex; flex-direction: column; gap: 1px; max-height: 280px; overflow-y: auto; } /* a column, not a grid: the grid squeezed the long lines onto each other */

@@ -170,6 +170,8 @@ export interface GenSlide {
   text: string;
   /** Text retouched on the slide (line breaks, cuts…): a copy, it no longer follows the release's lyrics. */
   edited?: boolean;
+  /** The text as drawn from its list, before it was retouched (its tags go with the variant kept, see lib/variants). */
+  from?: string;
   /** The lyrics retouched on this slide, kept aside while it shows another source (they come back with the lyrics). */
   lyricsDraft?: string;
   picId: string | null;
@@ -375,6 +377,8 @@ export interface Project {
   /** Tags of the text lists this release puts aside (e.g. the pre-release hooks once it is out): their texts are never
    *  drawn here (carousels, video hooks), they stay in the lists. */
   hiddenTags?: string[];
+  /** Retouched texts already offered to keep in their list ("pool|key"): never asked twice (see lib/variants). */
+  variantsAsked?: string[];
   slides: SlideCfg[];
   lyrics: LyricSection[];
   lyricsSectionId: string | null;
