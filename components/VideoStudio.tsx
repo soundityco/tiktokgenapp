@@ -704,9 +704,12 @@ export default function VideoStudio({
         if (preview?.keep && !raw) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
-    const text = cfg.captions ? activeRef.current(time) : null;
+    // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
+    // last frame, as in the export: a hook running to the end must not vanish there.
+    const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / EXPORT_FPS);
+    const text = cfg.captions ? activeRef.current(at) : null;
     const caption = text ? drawStyledText(g, text, styleRef.current, W, H) : null;
-    const hook = cfg.showHooks === false ? undefined : hookAt(cfg, time);
+    const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
     return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
   }, []);
   const captionBox = useRef<TextBox | null>(null);
