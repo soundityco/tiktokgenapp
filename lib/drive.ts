@@ -345,7 +345,7 @@ export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: nu
   if (isDemo()) throw new Error("Demo mode: nothing is saved to your Drive.");
   const folder = folderPath ? await driveFolder(folderPath) : await appFolder();
   // Already in this folder (the same bytes)? That file is used: never a twin of a photo, an audio, a LUT…
-  const sum = blob.size <= SUM_LIMIT ? (await import("./md5")).md5(new Uint8Array(await blob.arrayBuffer())) : null;
+  const sum = blob.size <= SUM_LIMIT ? await (await import("./md5")).md5Blob(blob) : null;
   const same = await sameInFolder(folder, blob, name, sum);
   if (same) { onProgress(1); return same; }
   const id = await sendFile(blob, name, onProgress, signal, mime, appProperties, folder);
@@ -657,8 +657,7 @@ const readSums = (): Record<string, string> => { try { return JSON.parse(localSt
  * The checksums of the list photos are asked once, then kept on this device. Null when none matches.
  */
 export async function findSamePicture(blob: Blob, ids: string[]): Promise<string | null> {
-  const { md5 } = await import("./md5");
-  const sum = md5(new Uint8Array(await blob.arrayBuffer()));
+  const sum = await (await import("./md5")).md5Blob(blob);
   try {
     const mine = await listAppFiles("photo");
     const hit = mine.find((f) => f.md5Checksum === sum);

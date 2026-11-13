@@ -490,14 +490,18 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
   const offset = chosen ? refine(cluster.off, chosen.bs, chosen.be) : cluster.off;
   const chosenFocus = focusMatch(offset);
 
-  // ---- confidence: agreeing chunks, how clean their matches are, and how much of the clip is music
+  // ---- confidence that the offset is the right one: the excerpts agree on it and it clearly beats every other
+  //      place of the track. How much the sound resembles the track counts little once it is past a low bar: a
+  //      voice alone (the music in headphones), another performance or a far phone are less alike, as surely placed.
   const best = group.reduce((m, v) => Math.max(m, v.score), 0);
   const bestMargin = group.reduce((m, v) => Math.max(m, v.margin), 0);
   const agree = group.length / Math.max(1, Math.min(usable, 4));
   const musicFrac = kept.length ? kept.reduce((n, r) => n + r.be - r.bs, 0) / clip.frames : 0.5;
   // Identical repeats leave no margin: then the segment itself must match well.
-  const clean = Math.max(Math.min(1, bestMargin / 0.15), chosenFocus !== null && chosenFocus > 0.3 ? 1 : 0);
-  const score = Math.max(0, Math.min(1, 0.45 * Math.min(1, best / 0.4) + 0.3 * clean + 0.25 * Math.min(1, agree)));
+  const clean = Math.max(Math.min(1, bestMargin / 0.15), chosenFocus !== null && chosenFocus > 0.2 ? 1 : 0);
+  const score = Math.max(0, Math.min(1, (0.55 * clean + 0.45 * Math.min(1, agree)) * Math.min(1, best / 0.2)));
+  // A match on a small part of the clip only could be chance (the camera rolling long before the music is not).
+  const covered = Math.min(1, 0.7 + musicFrac);
 
   const round = (x: number) => Math.round(x * 1000) / 1000;
   const strongest = kept[0]?.strength || 1;
@@ -512,7 +516,7 @@ export function syncAudio(clipSamples: Float32Array, clipRate: number, refSample
 
   return {
     offset: round(offset),
-    score: score * (0.7 + 0.3 * Math.min(1, musicFrac * 1.5)),
+    score: score * covered,
     musicStart: chosen ? chosen.bs / FPS : null,
     musicEnd: chosen ? chosen.be / FPS : null,
     anchors: group.length,

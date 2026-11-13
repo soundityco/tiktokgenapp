@@ -12,7 +12,7 @@ const rng = (seed: number) => {
 };
 const SR = 16000;
 
-function song(seconds: number, seed: number, opts: { repeat?: { from: number; to: number; copyAt: number } } = {}): Float32Array {
+function song(seconds: number, seed: number, opts: { repeat?: { from: number; to: number; copyAt: number }; melodyOnly?: boolean } = {}): Float32Array {
   const r = rng(seed);
   const out = new Float32Array(Math.round(seconds * SR));
   const bpm = 90 + Math.floor(r() * 30);
@@ -21,6 +21,8 @@ function song(seconds: number, seed: number, opts: { repeat?: { from: number; to
   const prog = [0, 5, 3, 4];
   const scale = [0, 2, 4, 5, 7, 9, 11];
   const f = (n: number) => 440 * 2 ** ((n - 69) / 12);
+  // The melody alone (a voice recorded with the music in headphones): the rest is drawn silent, same random numbers.
+  const mute = opts.melodyOnly ? 0 : 1;
   const add = (freq: number, at: number, dur: number, amp: number, harmonics = 6) => {
     const i0 = Math.round(at * SR), n = Math.round(dur * SR);
     for (let i = 0; i < n && i0 + i < out.length; i++) {
@@ -38,13 +40,13 @@ function song(seconds: number, seed: number, opts: { repeat?: { from: number; to
   for (let b = 0; b < bars; b++) {
     const t0 = b * 4 * beat;
     const chord = root + scale[prog[b % 4]];
-    for (const k of [0, 4, 7]) add(f(chord + 12 + k), t0, 4 * beat, 0.05);
-    for (let k = 0; k < 8; k++) add(f(chord - 12), t0 + (k * beat) / 2, beat / 2, 0.14, 3);
+    for (const k of [0, 4, 7]) add(f(chord + 12 + k), t0, 4 * beat, 0.05 * mute);
+    for (let k = 0; k < 8; k++) add(f(chord - 12), t0 + (k * beat) / 2, beat / 2, 0.14 * mute, 3);
     for (let k = 0; k < 4; k++) {
-      if (k % 2 === 0) burst(t0 + k * beat, 0.12, 0.6, 30);
-      else burst(t0 + k * beat, 0.15, 0.4, 25);
+      if (k % 2 === 0) burst(t0 + k * beat, 0.12, 0.6 * mute, 30);
+      else burst(t0 + k * beat, 0.15, 0.4 * mute, 25);
     }
-    for (let k = 0; k < 8; k++) burst(t0 + (k * beat) / 2, 0.04, 0.12, 80);
+    for (let k = 0; k < 8; k++) burst(t0 + (k * beat) / 2, 0.04, 0.12 * mute, 80);
     for (let k = 0; k < 4; k++) add(f(root + 24 + scale[Math.floor(r() * 7)]), t0 + k * beat, beat * 0.9, 0.1, 4); // new melody every bar
   }
   if (opts.repeat) {
@@ -165,7 +167,7 @@ describe("syncAudio (camera recording on the official audio)", () => {
     const other = song(40, 999);
     const rec = phone(other.slice(5 * SR, 25 * SR), 2, 4);
     const r = syncAudio(rec, SR, REF, SR);
-    expect(r.score).toBeLessThan(0.6);
+    expect(r.score).toBeLessThan(0.4); // below what the app accepts
   });
 
   it("gives up on silence and on clips that are too short", () => {
@@ -233,4 +235,30 @@ describe("syncAudio (camera recording on the official audio)", () => {
     expect(Math.abs(r.offset - 49)).toBeLessThan(0.05);
     expect(r.musicEnd! - r.musicStart!).toBeGreaterThan(45);
   });
+
+  it("is sure of a voice recorded alone (the music in headphones): another performance, another timbre", () => {
+    const voice = song(70, 11, { melodyOnly: true });
+    for (const [p0, len] of [[20, 15], [10, 30], [30, 8]]) {
+      // A different performance: each half second a little early or late, another timbre (duller), breaths.
+      const src = voice.slice(p0 * SR, (p0 + len) * SR);
+      const take = new Float32Array(src.length);
+      const jr = rng(p0);
+      const B = SR / 2;
+      for (let b = 0; b * B < src.length; b++) {
+        const sh = Math.round((jr() * 2 - 1) * 0.04 * SR);
+        for (let i = b * B; i < Math.min(src.length, (b + 1) * B); i++) take[i] = src[Math.min(src.length - 1, Math.max(0, i + sh))] ?? 0;
+      }
+      let lp = 0;
+      for (let i = 0; i < take.length; i++) { lp += 0.25 * (take[i] - lp); take[i] = lp * 1.5 + (jr() * 2 - 1) * 0.03; }
+      const lead = 1.5;
+      const rec = new Float32Array(take.length + lead * SR);
+      rec.set(take, lead * SR);
+      const r2 = rng(5);
+      for (let i = 0; i < rec.length; i++) rec[i] += (r2() * 2 - 1) * 0.01;
+      const r = syncAudio(rec, SR, REF, SR, { from: p0 + 1, to: p0 + 6 });
+      expect(Math.abs(r.offset - (p0 - lead))).toBeLessThan(0.03);
+      expect(r.score).toBeGreaterThan(0.95);
+    }
+  });
 });
+

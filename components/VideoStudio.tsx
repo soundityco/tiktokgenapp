@@ -19,7 +19,7 @@ import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo"
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
-import { convertSegment, copyPlanFor, cropFor, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
+import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -38,6 +38,8 @@ const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
 /** Longest stretch of a video listened to in real time when the browser cannot decode its audio (10 min). */
 const MAX_CAPTURE = 600;
+/** Above this, the camera file's sound is not decoded by the browser from the whole file in memory (ffmpeg reads it). */
+const SYNC_DECODE_MAX = 400 * 1024 * 1024;
 /** The lyrics are heard in windows of this length (s), overlapping a little so no word is cut. */
 const LYRICS_WIN = 28;
 const LYRICS_LAP = 2;
@@ -416,6 +418,8 @@ export default function VideoStudio({
   const [videoDur, setVideoDur] = useState(0);
   const [head, setHead] = useState(settings.crop.start);
   const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(false);
+  playingRef.current = playing;
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncPct, setSyncPct] = useState(0);
   const [exporting, setExporting] = useState(false);
@@ -986,10 +990,16 @@ export default function VideoStudio({
       const name = driveName(t("copy"));
       // The device's video chip first (seconds), ffmpeg when it cannot (minutes).
       const t0 = performance.now();
-      const onP = (p: number) => setCopyJob({ step: "make", p, ...job });
+      // The progress redraws the studio: once per percent, not once per picture (that made the playback stutter).
+      const every = (step: CopyJob["step"]) => { let shown = -1; return (p: number) => { const n = Math.floor(p * 100); if (n !== shown) { shown = n; setCopyJob({ step, p, ...job }); } }; };
+      const onP = every("make");
+      // While the video plays, the copy leaves the video chip to the player (it goes on once paused).
+      const whilePlaying = () => !playingRef.current ? undefined : new Promise<void>((resolve) => {
+        const id = window.setInterval(() => { if (!playingRef.current || ac.signal.aborted) { clearInterval(id); resolve(); } }, 250);
+      });
       let copy: Blob | null = null, chip = false;
       try {
-        const fast = await fastWorkCopy(blob, plan, from, to, onP, ac.signal);
+        const fast = await fastWorkCopy(blob, plan, from, to, onP, ac.signal, whilePlaying);
         if (fast) { copy = fast.blob; chip = true; }
       } catch (e) {
         if (ac.signal.aborted) throw e;
@@ -998,7 +1008,7 @@ export default function VideoStudio({
       copy ??= await makeWorkCopy(blob, plan, from, to, onP, ac.signal);
       const tMade = performance.now();
       setCopyJob({ step: "send", p: 0, ...job });
-      const id = await uploadToDrive(copy, name, (p) => setCopyJob({ step: "send", p, ...job }), ac.signal, "video/mp4",
+      const id = await uploadToDrive(copy, name, every("send"), ac.signal, "video/mp4",
         { tktgen: "copy", clip: clipId, project: project.id, from: from.toFixed(3), to: to.toFixed(3), of: String(blob.size), bits: plan.tenBit ? "10" : "8" },
         DRIVE_PATHS.videos(project.name || "Release"));
       if (ac.signal.aborted) { void deleteDriveFile(id); return; }
@@ -1608,22 +1618,43 @@ export default function VideoStudio({
     syncRef.current = ac;
     const capAc = new AbortController();
     ac.signal.addEventListener("abort", () => capAc.abort());
+    // Its progress shows only once it is the way used (the faster ways below show theirs meanwhile).
+    let captureShown = false;
     const capture = videoUrl
-      ? capturePcm(videoUrl, MAX_CAPTURE, (p) => setSyncPct(p), capAc.signal)
+      ? capturePcm(videoUrl, MAX_CAPTURE, (p) => { if (captureShown) setSyncPct(p); }, capAc.signal)
       : null;
     if (capture) void capture.catch(() => {});
     try {
-      let clip: { samples: Float32Array; rate: number };
-      try {
-        const vbuf = await Promise.race([
-          decodeAudio(getCtx(), recording),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
-        ]);
-        clip = { samples: monoOf(vbuf), rate: vbuf.sampleRate };
-        capAc.abort(); // the fast path worked: no need for the real-time capture
-      } catch {
-        // Phone MOV/MP4 often decode fine in the <video> but not through decodeAudioData.
+      let clip: { samples: Float32Array; rate: number } | null = null;
+      // 1. The browser's decoder, on the whole file: quick, but only for a file that fits in memory.
+      if (recording.size <= SYNC_DECODE_MAX) {
+        try {
+          const vbuf = await Promise.race([
+            decodeAudio(getCtx(), recording),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
+          ]);
+          clip = { samples: monoOf(vbuf), rate: vbuf.sampleRate };
+        } catch { /* next way */ }
+      }
+      // 2. ffmpeg reading the sound track only (a camera file of several GB, sound in PCM…): seconds.
+      if (!clip && !ac.signal.aborted) {
+        try {
+          const RATE = 22050;
+          const raw = await ffmpegAlone(recording, ["-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "1", "-ar", String(RATE), "-f", "f32le", "sound.raw"],
+            "sound.raw", Math.max(1, videoRef.current?.duration || videoDur || 60), (p) => setSyncPct(p), ac.signal);
+          const bytes = raw.byteOffset % 4 ? raw.slice() : raw;
+          const samples = new Float32Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
+          if (samples.length > RATE) clip = { samples, rate: RATE };
+        } catch (e) {
+          if (ac.signal.aborted) throw e;
+          console.info("[sync] sound not read by ffmpeg", e);
+        }
+      }
+      if (clip) capAc.abort(); // read: no need for the real-time capture
+      else {
+        // 3. Last resort: the sound captured while the video plays (real time). Phone MOV/MP4 the others refused.
         if (!capture) throw new Error("no-url");
+        captureShown = true;
         clip = await capture;
       }
       // Let the spinner paint before the (CPU-heavy) analysis blocks the main thread for a moment.
