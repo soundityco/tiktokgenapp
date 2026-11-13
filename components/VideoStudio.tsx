@@ -1955,7 +1955,7 @@ export default function VideoStudio({
     <div className={"wave-zoom " + where} role="group" aria-label={t("Zoom of the waveform")}>
       <button className="btn icon sm" aria-label={t("Zoom out")} disabled={!view} onClick={() => { const v = viewOf(); zoomTo(v.d * 2, v.s + v.d / 2); }}><Icon name="minus" size={12} /></button>
       <button className="btn icon sm" aria-label={t("Zoom in")} onClick={() => { const v = viewOf(), c = settingsRef.current.crop; const mid = view ? v.s + v.d / 2 : c.start + c.duration / 2; zoomTo(v.d / 2, mid); }}><Icon name="plus" size={12} /></button>
-      <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("All") : t("Fit")}</span></button>
+      <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("Track") : t("Segment")}</span></button>
     </div>
   );
   /** The only version named (it becomes a version of its own, ready for a B). Once, from Enter or leaving the field. */
