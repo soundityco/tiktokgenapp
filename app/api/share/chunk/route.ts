@@ -1,5 +1,5 @@
-import { auth } from "@/auth";
-import { RELAY_CHUNK } from "@/lib/shareLimits";
+import { sessionEmail } from "@/auth";
+import { RELAY_CHUNK, isShareCode } from "@/lib/shareLimits";
 import { fileHeaders } from "@/lib/safeFile";
 import { dropChunks, getChunk, putChunk, shareInfo } from "@/lib/shareStore";
 
@@ -11,7 +11,7 @@ async function target(req: Request) {
   const code = q.get("code") ?? "";
   const f = Number(q.get("f"));
   const n = Number(q.get("n"));
-  if (!/^[A-Za-z0-9_-]{12,40}$/.test(code)) return { error: 400 } as const;
+  if (!isShareCode(code)) return { error: 400 } as const;
   const s = await shareInfo(code);
   if (!s || !s.meta.relay) return { error: 410 } as const;
   return { code, f, n, s };
@@ -25,7 +25,7 @@ export async function PUT(req: Request) {
   try {
     const t = await target(req);
     if ("error" in t) return new Response(null, { status: t.error });
-    const email = (await auth())?.user?.email?.toLowerCase();
+    const email = await sessionEmail();
     if (!email || email !== t.s.email) return new Response(null, { status: 401 });
     if (!sliceOk(t.s, t.f, t.n)) return new Response(null, { status: 400 });
     const data = Buffer.from(await req.arrayBuffer());

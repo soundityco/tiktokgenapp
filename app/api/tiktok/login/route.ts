@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
-import { auth } from "@/auth";
+import { sessionEmail } from "@/auth";
 import { appUrl, authorizeUrl, pkcePair, publicOrigin, tiktokConfigured } from "@/lib/tiktok";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  if (!(await auth())?.user?.email) return Response.redirect(appUrl(req, "/"));
+  if (!(await sessionEmail())) return Response.redirect(appUrl(req, "/"));
   if (!tiktokConfigured()) return Response.redirect(appUrl(req, "/studio?tiktok=notconfigured"));
   const state = randomBytes(16).toString("hex");
   const { verifier, challenge } = pkcePair();

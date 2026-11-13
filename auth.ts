@@ -90,3 +90,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+/** The signed-in user's email (lower case), the key of everything stored for them; null when signed out. */
+export const sessionEmail = async () => (await auth())?.user?.email?.toLowerCase() ?? null;

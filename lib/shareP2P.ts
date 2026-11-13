@@ -6,6 +6,7 @@
 import type { ShareMeta } from "./shareStore";
 import { RELAY_CHUNK, RELAY_MAX, SHARE_MINUTES } from "./shareLimits";
 import { safeType } from "./safeFile";
+import { stamp } from "./files";
 
 const ICE: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
 const CHUNK = 64 * 1024;
@@ -289,8 +290,7 @@ export async function shareThroughDrive(code: string, files: { name: string; blo
   /** Where it goes in the Drive: Rollout / Exports / <release> / <what · date> (Rollout itself without it). */
   place?: { release: string; what: string }) {
   const { getToken, uploadToDrive, DRIVE_PATHS } = await import("./drive");
-  const d = new Date();
-  const when = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
+  const when = stamp("h");
   const path = place ? DRIVE_PATHS.exports(place.release || "Release", `${place.what} · ${when}`) : undefined;
   const total = files.reduce((n, f) => n + f.blob.size, 0) || 1;
   let before = 0;

@@ -1,16 +1,14 @@
-import { auth } from "@/auth";
-import { RELAY_MAX } from "@/lib/shareLimits";
+import { sessionEmail } from "@/auth";
+import { RELAY_MAX, isShareCode } from "@/lib/shareLimits";
 import { answerShare, createShare, getShare, setShareDrive, type ShareMeta } from "@/lib/shareStore";
 
 export const dynamic = "force-dynamic";
 
 const MAX = 64_000; // an offer / answer with its network candidates is a few kB
-const email = async () => (await auth())?.user?.email?.toLowerCase() ?? null;
-const codeOk = (c: unknown): c is string => typeof c === "string" && /^[A-Za-z0-9_-]{12,40}$/.test(c);
 
 /** The computer opens a share: { offer, meta } → { code }. Signed in only. */
 export async function POST(req: Request) {
-  const e = await email();
+  const e = await sessionEmail();
   if (!e) return Response.json({ error: "unauthorized" }, { status: 401 });
   const raw = await req.text();
   if (raw.length > MAX) return Response.json({ error: "too_large" }, { status: 413 });
@@ -31,7 +29,7 @@ export async function POST(req: Request) {
 /** The phone reads the share (offer, what is shared), the computer waits for the answer. Anyone with the code. */
 export async function GET(req: Request) {
   const code = new URL(req.url).searchParams.get("code");
-  if (!codeOk(code)) return Response.json({ error: "invalid" }, { status: 400 });
+  if (!isShareCode(code)) return Response.json({ error: "invalid" }, { status: 400 });
   try {
     const s = await getShare(code);
     return s ? Response.json(s, { headers: { "Cache-Control": "no-store" } }) : Response.json({ error: "expired" }, { status: 404 });
@@ -44,10 +42,10 @@ export async function PUT(req: Request) {
   if (raw.length > MAX) return Response.json({ error: "too_large" }, { status: 413 });
   let body: { code?: unknown; answer?: unknown; drive?: unknown };
   try { body = JSON.parse(raw); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
-  if (!codeOk(body.code)) return Response.json({ error: "invalid" }, { status: 400 });
+  if (!isShareCode(body.code)) return Response.json({ error: "invalid" }, { status: 400 });
   try {
     if (Array.isArray(body.drive)) {
-      const e = await email();
+      const e = await sessionEmail();
       if (!e) return Response.json({ error: "unauthorized" }, { status: 401 });
       const drive = body.drive.slice(0, 40).map((d: any) => ({ name: String(d.name).slice(0, 200), id: String(d.id).replace(/[^\w-]/g, "") }));
       return (await setShareDrive(body.code, e, drive)) ? Response.json({ ok: true }) : Response.json({ error: "not_found" }, { status: 404 });

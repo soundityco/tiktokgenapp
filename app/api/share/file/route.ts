@@ -1,6 +1,8 @@
 import { fileHeaders } from "@/lib/safeFile";
 import { getShare } from "@/lib/shareStore";
 
+import { isShareCode } from "@/lib/shareLimits";
+
 export const dynamic = "force-dynamic";
 
 /** Small enough to go through a server function (bigger files: the phone opens them on the Drive). */
@@ -14,7 +16,7 @@ export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
   const code = q.get("code");
   const i = Number(q.get("i"));
-  if (!code || !/^[A-Za-z0-9_-]{12,40}$/.test(code) || !Number.isInteger(i) || i < 0) return new Response("invalid", { status: 400 });
+  if (!isShareCode(code) || !Number.isInteger(i) || i < 0) return new Response("invalid", { status: 400 });
   const s = await getShare(code).catch(() => null);
   const d = s?.meta.drive?.[i];
   const f = s?.meta.files.find((x) => x.name === d?.name) ?? s?.meta.files[i];

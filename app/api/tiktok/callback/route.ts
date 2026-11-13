@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { sessionEmail } from "@/auth";
 import { saveTikTok } from "@/lib/db";
 import { appUrl, exchangeCode, fetchDisplayName } from "@/lib/tiktok";
 
@@ -14,7 +14,7 @@ const cookieOf = (req: Request, name: string) =>
   new RegExp(`(?:^|;\\s*)${name}=([^;]+)`).exec(req.headers.get("cookie") ?? "")?.[1];
 
 export async function GET(req: Request) {
-  const email = (await auth())?.user?.email?.toLowerCase();
+  const email = await sessionEmail();
   if (!email) return Response.redirect(appUrl(req, "/"));
   const url = new URL(req.url);
   const code = url.searchParams.get("code");

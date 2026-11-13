@@ -10,7 +10,7 @@ import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
 import Icon from "./Icon";
-import { Menu, Modal, ScopeSelect, Select } from "./ui";
+import { Menu, Modal, RoleSelect, ScopeSelect } from "./ui";
 
 export function Thumb({ id, name }: { id: string; name: string }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -209,13 +209,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <ScopeSelect value={pool.scope} onChange={(v) => p.onChange((x) => ({ ...x, scope: v }))} />
       </div>
       <label className="field">{t("Role")}
-        <Select className="input" value={pool.kind} onChange={(e) => p.onChange((x) => ({ ...x, kind: e.target.value as TextPool["kind"] }))}>
-          <option value="hooks">{t("Hooks · the opening of a post (slide 1, the videos)")}</option>
-          <option value="texts">{t("Texts · the other slides (transitions…)")}</option>
-          {/* Lyrics now live in the release (Lyrics button): an older block list keeps its type, no new one. */}
-          {pool.kind === "block" && <option value="block">{t("Lyrics block")}</option>}
-          <option value="captions">{t("Captions · the post's text, with its hashtags")}</option>
-        </Select>
+        <RoleSelect value={pool.kind} onChange={(kind) => p.onChange((x) => ({ ...x, kind }))} />
       </label>
       {isLineList(pool) && n > 1 && (
         <div className="row seg-tabs" role="tablist">

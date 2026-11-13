@@ -10,6 +10,7 @@ import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
 import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
+import { safeName, saveBlob, stamp } from "@/lib/files";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
@@ -36,6 +37,8 @@ import PicStack from "./PicStack";
 import StorageDialog from "./StorageDialog";
 import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
+/** The generated slides of a carousel, one per slide (a slide not generated yet: empty). */
+const gensOf = (p: Project): GenSlide[] => Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
 const VERSION = "v0.5";
 const HISTORY_KEY = "tktgen-undo";
 const MAX_SLIDES = 35;
@@ -61,18 +64,6 @@ type Overlay =
   | { k: "rename" }
   | { k: "confirm"; title: string; message: string; label: string; run: () => void };
 
-const stamp = () => {
-  const d = new Date(), z = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}-${z(d.getMinutes())}`;
-};
-const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, "-").trim() || "Rollout";
-const download = (blob: Blob, name: string) => {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-};
 
 export default function Studio({ userName }: { userName: string }) {
   const { t, lang, setLang } = useT();
@@ -897,7 +888,7 @@ export default function Studio({ userName }: { userName: string }) {
     });
   const setGen = (i: number, patch: Partial<GenSlide>) =>
     updProject((p) => {
-      const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
+      const g = gensOf(p);
       // Another photo (dropped, pasted, found on the web): the edits made on the previous one do not follow it.
       const newPic = patch.picId !== undefined && patch.picId !== g[i].picId;
       g[i] = { ...g[i], ...patch };
@@ -974,7 +965,7 @@ export default function Studio({ userName }: { userName: string }) {
       const bags = { ...w.bags };
       const others = new Set((p.generated ?? []).filter((_, k) => k !== i).map((g) => g?.picId).filter(Boolean) as string[]);
       const pic = pickPic(p.slides[i].picPoolId, w, bags, others);
-      const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
+      const g = gensOf(p);
       g[i] = { ...g[i], picId: pic?.id ?? null, picName: pic?.name, picCredit: undefined }; // a photo of the list: no web credit
       const cfgs = p.slides.map((s, k) => (k === i ? reframe(s, pic?.id) : s));
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g, slides: cfgs } : x)) };
@@ -985,7 +976,7 @@ export default function Studio({ userName }: { userName: string }) {
     if (project?.slides[i]?.locked) return;
     upd((w) => {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
-      const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
+      const g = gensOf(p);
       g[i] = { ...g[i], picId: id, picName: name, picCredit: undefined };
       const cfgs = p.slides.map((s, k) => (k === i ? reframe(s, id) : s));
       return { ...w, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g, slides: cfgs } : x)) };
@@ -997,7 +988,7 @@ export default function Studio({ userName }: { userName: string }) {
       const p = w.projects.find((x) => x.id === w.currentProjectId)!;
       const bags = { ...w.bags };
       const text = pickText(p, w, i, bags);
-      const g = Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
+      const g = gensOf(p);
       g[i] = { ...g[i], text, edited: false };
       return { ...w, bags, projects: w.projects.map((x) => (x.id === p.id ? { ...x, generated: g } : x)) };
     });
@@ -1022,7 +1013,7 @@ export default function Studio({ userName }: { userName: string }) {
       const slides = [...p.slides];
       slides.splice(from + 1, 0, s);
       const generated = p.generated
-        ? Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null })
+        ? gensOf(p)
         : null;
       if (generated) generated.splice(from + 1, 0, copyGenerated && gsrc ? { ...gsrc } : { text: "", picId: null });
       return { ...w, projects: w.projects.map((x) => (x.id === p.id ? { ...x, slides, generated, selectedSlide: from + 1 } : x)) };
@@ -1034,7 +1025,7 @@ export default function Studio({ userName }: { userName: string }) {
       if (p.slides.length <= 1) return p;
       const slides = p.slides.filter((_, k) => k !== i);
       const generated = p.generated
-        ? Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null }).filter((_, k) => k !== i)
+        ? gensOf(p).filter((_, k) => k !== i)
         : null;
       return { ...p, slides, generated, selectedSlide: Math.min(i, slides.length - 1) };
     });
@@ -1045,7 +1036,7 @@ export default function Studio({ userName }: { userName: string }) {
       const [s] = slides.splice(from, 1);
       slides.splice(to, 0, s);
       const generated = p.generated
-        ? Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null })
+        ? gensOf(p)
         : null;
       if (generated) { const [g] = generated.splice(from, 1); generated.splice(to, 0, g); }
       return { ...p, slides, generated, selectedSlide: to };
@@ -1274,7 +1265,7 @@ export default function Studio({ userName }: { userName: string }) {
     setExportProgress({ done: 0, total });
     const failures: string[] = [];
     try {
-      const release = safe(project.name);
+      const release = safeName(project.name);
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       const root = all ? zip.folder(`${release} ${stamp()}`)! : null;
@@ -1288,7 +1279,7 @@ export default function Studio({ userName }: { userName: string }) {
         made += files.length;
         const c = carouselsOf(p).find((x) => x.id === currentCarouselId(p))!;
         const many = carouselsOf(project).length > 1;
-        const name = all ? safe(carouselName(c)) : `${safe(project.name + (many ? ` - ${carouselName(c)}` : ""))} ${stamp()}`;
+        const name = all ? safeName(carouselName(c)) : `${safeName(project.name + (many ? ` - ${carouselName(c)}` : ""))} ${stamp()}`;
         if (!all) single = name;
         // Two carousels of the same name get two folders (never one over the other).
         let folderName = name;
@@ -1300,7 +1291,7 @@ export default function Studio({ userName }: { userName: string }) {
         if (p.caption?.trim()) dir.file("caption.txt", p.caption.trim() + "\n");
       }
       if (!made) throw new Error(t("Export failed"));
-      download(await zip.generateAsync({ type: "blob" }), `${all ? `${release} ${stamp()}` : single}.zip`);
+      saveBlob(await zip.generateAsync({ type: "blob" }), `${all ? `${release} ${stamp()}` : single}.zip`);
       if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: made, m: total, f: failures.length }));
       else if (all && ready.length < list.length) say(t("{n} carousels not generated yet were left out", { n: list.length - ready.length }));
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
@@ -1311,12 +1302,12 @@ export default function Studio({ userName }: { userName: string }) {
       const p = project!, g = p.generated?.[i];
       const img = g?.picId ? await loadDriveImage(g.picId) : null;
       const ext = ws!.exportFormat;
-      download(await slideToBlob(p.slides[i], img, g?.text ?? "", ext), `${safe(p.name)} slide${i + 1} ${stamp()}.${ext}`);
+      saveBlob(await slideToBlob(p.slides[i], img, g?.text ?? "", ext), `${safeName(p.name)} slide${i + 1} ${stamp()}.${ext}`);
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
   }
 
   // ---- backup / restore ----
-  const backup = () => download(new Blob([JSON.stringify(ws)], { type: "application/json" }), `Rollout backup ${stamp()}.json`);
+  const backup = () => saveBlob(new Blob([JSON.stringify(ws)], { type: "application/json" }), `Rollout backup ${stamp()}.json`);
   const restore = async (file: File) => {
     try {
       const data = JSON.parse(await file.text());

@@ -16,6 +16,8 @@ const FONTS: Record<FontId, { family: string; weight: number; italic?: boolean }
   typewriter: { family: '"Courier New", Courier, monospace', weight: 700 },
 };
 
+export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
 /** A #rrggbb colour with an opacity (0-1). */
 export function withAlpha(hex: string, a: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);

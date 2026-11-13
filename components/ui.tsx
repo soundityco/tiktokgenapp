@@ -110,11 +110,7 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" |
       </label>
       {p.kind === "text" && (
         <label className="field">{t("Role")}
-          <Select className="input" value={kind} onChange={(e) => setKind(e.target.value as "hooks" | "texts" | "block" | "captions")}>
-            <option value="hooks">{t("Hooks · the opening of a post (slide 1, the videos)")}</option>
-            <option value="texts">{t("Texts · the other slides (transitions…)")}</option>
-            <option value="captions">{t("Captions · the post's text, with its hashtags")}</option>
-          </Select>
+          <RoleSelect value={kind} onChange={setKind} />
         </label>
       )}
       <ScopeSelect value={scope} onChange={setScope} />
@@ -126,6 +122,20 @@ export function NewPoolDialog(p: { kind: "text" | "photos"; textKind?: "hooks" |
         <button className="btn primary" onClick={go} disabled={!name.trim()}>{t("Create")}</button>
       </div>
     </Modal>
+  );
+}
+
+type Role = "hooks" | "texts" | "block" | "captions";
+/** What a text list is for. "block" (lyrics, now in the release) only for an older list that still has it. */
+export function RoleSelect({ value, onChange }: { value: Role; onChange: (v: Role) => void }) {
+  const { t } = useT();
+  return (
+    <Select className="input" value={value} onChange={(e) => onChange(e.target.value as Role)}>
+      <option value="hooks">{t("Hooks · the opening of a post (slide 1, the videos)")}</option>
+      <option value="texts">{t("Texts · the other slides (transitions…)")}</option>
+      {value === "block" && <option value="block">{t("Lyrics block")}</option>}
+      <option value="captions">{t("Captions · the post's text, with its hashtags")}</option>
+    </Select>
   );
 }
 

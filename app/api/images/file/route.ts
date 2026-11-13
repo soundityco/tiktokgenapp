@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { sessionEmail } from "@/auth";
 import { IMAGE_HOSTS } from "@/lib/imageSearch";
 import { fileHeaders, isPicture } from "@/lib/safeFile";
 
@@ -9,7 +9,7 @@ const MAX = 5_800_000;
 
 // The pictures found by the search, relayed so the slide canvas may use them (most hosts send no CORS headers).
 export async function GET(req: Request) {
-  if (!(await auth())?.user?.email) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await sessionEmail())) return Response.json({ error: "unauthorized" }, { status: 401 });
   let target: URL;
   try { target = new URL(new URL(req.url).searchParams.get("u") ?? ""); } catch { return Response.json({ error: "bad url" }, { status: 400 }); }
   if (target.protocol !== "https:" || !IMAGE_HOSTS.test(target.hostname)) return Response.json({ error: "host not allowed" }, { status: 400 });

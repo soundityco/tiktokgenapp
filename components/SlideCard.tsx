@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
 import { Hint, Menu, Select, Switch, Wheel } from "./ui";
-import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
+import { clamp, clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
 import { poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
@@ -91,7 +91,6 @@ interface Props {
   dragOver?: boolean;
 }
 
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 /** Window event: a card opened its photo edits (the others close theirs). */
 const ADJUST_OPEN = "rollout:adjust-open";

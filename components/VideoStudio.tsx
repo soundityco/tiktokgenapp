@@ -2,13 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
+import { safeName, saveBlob, stamp } from "@/lib/files";
 import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
 import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
-import { clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
+import { clamp, clampPic, drawFramed, drawHelpers, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
 import { followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
@@ -55,7 +56,6 @@ function clipsOf(p: Project): VideoSetup[] {
     : [{ ...DEFAULT_VIDEO, id: p.id, name: "Video 1", ...(p.video ?? {}) }];
 }
 
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 /** Export size for each shape of video. */
 const OUT_SIZE = (f?: VideoSettings["format"]): [number, number] => (f === "16:9" ? [1920, 1080] : [1080, 1920]);
 const EXPORT_FPS = 30;
@@ -68,11 +68,6 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
   return cfg.hooks?.find((h) => h.text.trim() && rel >= h.from - 0.001 && rel < (h.to ?? cfg.crop.duration));
 };
 
-/** "2026-11-12 14-05": the date and time put at the end of an exported file's name. */
-const stampNow = () => {
-  const d = new Date(), z = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}-${z(d.getMinutes())}`;
-};
 
 /** Fade of the sound when playback starts or stops (seconds). */
 const FADE = 0.15;
@@ -85,13 +80,6 @@ const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "pus
   "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId"] as const satisfies readonly (keyof VideoSettings)[];
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
 
-function saveBlob(blob: Blob, name: string) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-}
 
 /**
  * Last resort when `decodeAudioData` refuses the container (typical of phone MOV/MP4):
@@ -829,18 +817,7 @@ export default function VideoStudio({
           // Its working copy instead (kept on this device, else fetched from the Drive): work goes on here.
           const cp = clip.drive?.copy;
           if (cp) {
-            let cb = await getMedia(`copy:${clip.id}`);
-            if (cb && cb.size !== cp.size) cb = null;
-            if (!cb) {
-              setDriveJob({ kind: "fetch", p: 0 });
-              try {
-                cb = await downloadDriveFileProgress(cp.id, (p) => { if (!off) setDriveJob({ kind: "fetch", p }); }, new AbortController().signal);
-                void putMedia(`copy:${clip.id}`, cb).catch(() => {});
-              } catch (e) {
-                console.warn("[copy] download failed", e);
-                if (!off) setErr(t("The Drive copy of this video could not be fetched. Check your connection, or pick the camera file."));
-              } finally { if (!off) setDriveJob(null); }
-            }
+            const cb = await copyBlob(cp, () => off);
             if (cb && !off && token === ioRef.current) { fileClip.current = clip.id; copyShown.current = cp.id; setOnCopy(true); setVideoBlob(cb); }
           }
         }
@@ -874,7 +851,22 @@ export default function VideoStudio({
   // ---- Google Drive: the camera file, on request, to open the clip on another device ----
   useEffect(() => { void canWriteDrive().then(setDriveWrite).catch(() => setDriveWrite(false)); }, []);
   useEffect(() => () => driveAc.current?.abort(), []);
-  const driveName = (what: string) => `${project.name || "Rollout"} - ${clip.name} - ${what}.mp4`.replace(/[\\/:*?"<>|]+/g, "-");
+  /** This video's working copy: kept on this device, else fetched from the Drive (and kept). Null when it cannot be. */
+  const copyBlob = async (cp: { id: string; size?: number }, gone: () => boolean): Promise<Blob | null> => {
+    const kept = await getMedia(`copy:${clip.id}`);
+    if (kept && (!cp.size || kept.size === cp.size)) return kept; // an older copy (other size) is fetched again
+    setDriveJob({ kind: "fetch", p: 0 });
+    try {
+      const cb = await downloadDriveFileProgress(cp.id, (p) => { if (!gone()) setDriveJob({ kind: "fetch", p }); }, new AbortController().signal);
+      void putMedia(`copy:${clip.id}`, cb).catch(() => {});
+      return cb;
+    } catch (e) {
+      console.warn("[copy] download failed", e);
+      if (!gone()) setErr(t("The Drive copy of this video could not be fetched. Check your connection, or pick the camera file."));
+      return null;
+    } finally { setDriveJob(null); } // even when gone: never a fetch shown forever
+  };
+  const driveName = (what: string) => safeName(`${project.name || "Rollout"} - ${clip.name} - ${what}.mp4`);
   const setDrive = (patch: Partial<NonNullable<VideoSettings["drive"]>>) => setV({ drive: { ...(settingsRef.current.drive ?? {}), ...patch } });
   const sendToDrive = async (blob: Blob) => {
     if (driveJob) return;
@@ -925,7 +917,7 @@ export default function VideoStudio({
     const key = `${project.id}|${audioBlob.size}`;
     if (audioUp.current === key) return;
     audioUp.current = key;
-    const name = `${project.name || "Rollout"} - ${t("official audio")} - ${project.audioName ?? "audio"}`.replace(/[\\/:*?"<>|]+/g, "-");
+    const name = safeName(`${project.name || "Rollout"} - ${t("official audio")} - ${project.audioName ?? "audio"}`);
     void uploadToDrive(audioBlob, name, () => {}, new AbortController().signal, audioBlob.type || "application/octet-stream", { tktgen: "audio", project: project.id }, DRIVE_PATHS.audios(project.name || "Release"))
       .then((id) => {
         // Still the same file of the same release: remember where it is.
@@ -1133,18 +1125,7 @@ export default function VideoStudio({
         if (a.to && a.of) onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id && !c.drive?.copy
           ? { ...c, drive: { ...(c.drive ?? {}), copy: { id: f.id, from: Number(a.from ?? 0), to: Number(a.to), of: Number(a.of), size: Number(f.size ?? 0), tenBit: a.bits === "10" } } } : c)) }));
       }
-      let cb = await getMedia(`copy:${clip.id}`);
-      if (cb && cp.size && cb.size !== cp.size) cb = null;
-      if (!cb) {
-        setDriveJob({ kind: "fetch", p: 0 });
-        try {
-          cb = await downloadDriveFileProgress(cp.id, (p) => { if (!off) setDriveJob({ kind: "fetch", p }); }, new AbortController().signal);
-          void putMedia(`copy:${clip.id}`, cb).catch(() => {});
-        } catch (e) {
-          console.warn("[copy] download failed", e);
-          if (!off) setErr(t("The Drive copy of this video could not be fetched. Check your connection, or pick the camera file."));
-        } finally { setDriveJob(null); }
-      }
+      const cb = await copyBlob(cp, () => off);
       if (cb && !off && openClip.current === clip.id) { fileClip.current = clip.id; copyShown.current = cp.id; setOnCopy(true); setVideoBlob(cb); }
     })();
     return () => { off = true; };
@@ -2473,7 +2454,7 @@ export default function VideoStudio({
     setErr(null); setNote(null); setExporting(true); setExpMode(null); setExp({ p: 0, step: "audio" });
     const [W, H] = OUT_SIZE(cfg.format);
     // The date and time at the end: two exports of the same video never take each other's name.
-    const name = `${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""} ${stampNow()}`.replace(/[\\/:*?"<>|]+/g, "-");
+    const name = safeName(`${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""} ${stamp()}`);
     let source: { frameAt: (t: number) => Promise<Picture | null>; close: () => void; codec: string } | null = null;
     let stopPlayer = () => {};
     const el = document.createElement("video");
@@ -2814,6 +2795,8 @@ export default function VideoStudio({
     : syncBusy || genBusy ? { text: t("Syncing…"), tone: "" }
     : settings.score === undefined ? { text: t("Not synced yet"), tone: "warn" }
     : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };
+  /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
+  const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
   useEffect(() => {
     if (!active || !videoUrl) { if (!videoUrl) setStrip([]); return; }
@@ -3267,7 +3250,7 @@ export default function VideoStudio({
 
           {/* Where the release stands (sync, lyrics…), titled like the carousel's Slides, right after the video picker. */}
           <div className="field h-status"><span className="field-k">{t("Sync status")}</span>
-            <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+            {statusBadge}
           </div>
           {(clips.length > 1 || versions.length > 1) && !exporting && !batch ? (
             <div className="slot h-dl"><Menu trigger={(_, toggle) => (
@@ -3387,7 +3370,7 @@ export default function VideoStudio({
                 <div className="row seg-top">
                   <span className="label">{t("Segment")}</span>
                   <span className="grow" />
-                  <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>
+                  {statusBadge}
                 </div>
                 <div className="row transport">
                   <button className="btn icon tr-play" aria-label={playing ? t("Pause") : t("Play")} title={(playing ? t("Pause") : t("Play")) + " (Espace)"}

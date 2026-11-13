@@ -1,11 +1,11 @@
-import { auth } from "@/auth";
+import { sessionEmail } from "@/auth";
 import { searchFlickr, searchOpenverse, searchPexels, type ImageSource } from "@/lib/imageSearch";
 
 export const dynamic = "force-dynamic";
 
 /** GET ?q=&page=&source=openverse|pexels → { results, more } */
 export async function GET(req: Request) {
-  if (!(await auth())?.user?.email) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await sessionEmail())) return Response.json({ error: "unauthorized" }, { status: 401 });
   const u = new URL(req.url);
   const q = (u.searchParams.get("q") ?? "").trim().slice(0, 120);
   const page = Math.max(1, Math.min(20, Number(u.searchParams.get("page")) || 1));

@@ -1,13 +1,12 @@
-import { auth } from "@/auth";
+import { sessionEmail } from "@/auth";
 import { listVersions, loadVersion } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const email = async () => (await auth())?.user?.email?.toLowerCase() ?? null;
 
 /** GET → the kept versions of the user's workspace; GET ?id=… → one of them (to restore it). */
 export async function GET(req: Request) {
-  const e = await email();
+  const e = await sessionEmail();
   if (!e) return Response.json({ error: "unauthorized" }, { status: 401 });
   try {
     const id = new URL(req.url).searchParams.get("id");

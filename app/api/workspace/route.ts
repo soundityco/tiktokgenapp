@@ -1,14 +1,13 @@
-import { auth } from "@/auth";
+import { sessionEmail } from "@/auth";
 import { loadWorkspace, saveWorkspaceCas } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const email = async () => (await auth())?.user?.email?.toLowerCase() ?? null;
 // Netlify functions take up to 6 MB per request; the timed lyrics of many releases need room.
 const MAX_BODY = 5_000_000;
 
 export async function GET() {
-  const e = await email();
+  const e = await sessionEmail();
   if (!e) return Response.json({ error: "unauthorized" }, { status: 401 });
   try {
     return Response.json({ data: await loadWorkspace(e) });
@@ -20,7 +19,7 @@ export async function GET() {
 
 /** Body: { data: Workspace, baseRev: number }. 409 + current revision if someone else saved in between. */
 export async function PUT(req: Request) {
-  const e = await email();
+  const e = await sessionEmail();
   if (!e) return Response.json({ error: "unauthorized" }, { status: 401 });
   try {
     const raw = await req.text();

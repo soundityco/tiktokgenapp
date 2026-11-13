@@ -1,10 +1,10 @@
-import { auth } from "@/auth";
+import { sessionEmail } from "@/auth";
 import { listPosts, validToken } from "@/lib/tiktok";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const email = (await auth())?.user?.email?.toLowerCase();
+  const email = await sessionEmail();
   if (!email) return Response.json({ error: "unauthorized" }, { status: 401 });
   const token = await validToken(email);
   if (!token) return Response.json({ error: "not_connected" }, { status: 409 });
