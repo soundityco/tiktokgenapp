@@ -393,7 +393,7 @@ export default function VideoStudio({
   /** The user let the app create files in their Drive (null: not known yet). */
   const [driveWrite, setDriveWrite] = useState<boolean | null>(null);
   /** Transfer with Drive in progress. */
-  const [driveJob, setDriveJob] = useState<null | { kind: "send" | "fetch"; p: number }>(null);
+  const [driveJob, setDriveJob] = useState<null | { kind: "fetch"; p: number }>(null);
   /** The video open here is the Drive working copy (the camera file is on another device). */
   const [onCopy, setOnCopy] = useState(false);
   /** The working copy being made, then sent to the Drive. */
@@ -909,28 +909,6 @@ export default function VideoStudio({
     } finally { setDriveJob(null); } // even when gone: never a fetch shown forever
   };
   const driveName = (what: string) => safeName(`${project.name || "Rollout"} - ${clip.name} - ${what}.mp4`);
-  const setDrive = (patch: Partial<NonNullable<VideoSettings["drive"]>>) => setV({ drive: { ...(settingsRef.current.drive ?? {}), ...patch } });
-  const sendToDrive = async (blob: Blob) => {
-    if (driveJob) return;
-    const ac = new AbortController();
-    driveAc.current = ac;
-    setDriveErr(null);
-    setDriveJob({ kind: "send", p: 0 });
-    try {
-      const id = await uploadToDrive(blob, driveName(t("original")), (p) => setDriveJob({ kind: "send", p }), ac.signal, undefined,
-        { tktgen: "original", clip: clip.id, project: project.id }, DRIVE_PATHS.videos(project.name || "Release"));
-      setDrive({ originalId: id });
-      onSaveNow();
-    } catch (e) {
-      if (!ac.signal.aborted) {
-        console.warn("[drive] upload failed", e);
-        setDriveErr(t("Sending to Google Drive failed. Check your connection and try again."));
-      }
-    } finally {
-      if (driveAc.current === ac) driveAc.current = null;
-      setDriveJob(null);
-    }
-  };
   // The look LUT is small: it goes to Drive by itself, so every browser and device finds it (see the LUT loading above).
   const lutUp = useRef<string | null>(null);
   useEffect(() => {
@@ -3347,13 +3325,11 @@ export default function VideoStudio({
                       {copyStatusEl(true)}
                     </>)}
                   menu={settings.videoName && ((close) => (<>
-                    {(onCopy || missing) && <button onClick={() => { close(); document.getElementById("video-original")?.click(); }}>{t("Link the original file")}</button>}
+                    {/* Two ways to the file: another take for this video (Replace), or, on the Drive copy or without the
+                        file here, the same camera file found again on this computer (Link: the sync and settings kept). */}
                     <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}>{t("Replace from this computer")}</button>
-                    {videoBlob && !onCopy && !d.originalId && driveWrite && !driveJob && <button onClick={() => { close(); void sendToDrive(videoBlob); }}>{t("Put it on my Drive ({size})", { size: gb(videoBlob.size) })}</button>}
-                    {driveWrite === false && !d.originalId && <button onClick={() => { close(); void signIn("google", { redirectTo: "/studio" }); }}>{t("Reconnect Google to put it on my Drive")}</button>}
+                    {(!videoBlob || onCopy) && <button onClick={() => { close(); document.getElementById("video-original")?.click(); }}>{t("Link the original file")}</button>}
                     {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}>{t("Stop the transfer")}</button>}
-                    {/* The copy for the other devices, now (it is made by itself otherwise, once the take is synced). */}
-                    {videoBlob && !onCopy && driveWrite && !copyJob && settings.score !== undefined && <button onClick={() => { close(); copyFailed.current = null; void makeCopy(); }}>{settings.drive?.copy ? t("Make the Drive copy again") : t("Make the Drive copy now")}</button>}
                     {copyJob && <button onClick={() => { close(); copyAc.current?.abort(); }}>{t("Stop the Drive copy")}</button>}
                     {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}>{t("Remove video")}</button></>}
                   </>))}>
@@ -3532,7 +3508,7 @@ export default function VideoStudio({
           {(() => {
             // One line for the work done in the background on the video, one step after the other.
             const job = driveJob
-              ? { p: driveJob.p, text: driveJob.kind === "send" ? t("Sending the camera file to your Drive") : t("Getting the camera file from your Drive") }
+              ? { p: driveJob.p, text: t("Getting the camera file from your Drive") }
               : null;
             if (job) return (
               <div className="job" title={t("Keep this tab open until it is done. The export always uses the original file.")}>
