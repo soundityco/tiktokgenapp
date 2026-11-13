@@ -1721,7 +1721,10 @@ export default function VideoStudio({
   fullRef.current = full;
   const [playerLit, setPlayerLit] = useState(false);
   const [playerOff, setPlayerOff] = useState(false);
-  const toggleFull = (on: boolean) => { setPlayerOff(false); setFull(on); };
+  const toggleFull = (on: boolean) => { setPlayerOff(false); setFullLeaving(false); setFull(on); };
+  /** The full screen is gliding back (it closes once there): the dock opens again meanwhile. */
+  const [fullLeaving, setFullLeaving] = useState(false);
+  const slimDock = full && !fullLeaving;
   // Into or out of the full screen: the picture drawn again, with or without the zones.
   useEffect(() => { if (!playing) drawAt(headRef.current); }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -1742,6 +1745,36 @@ export default function VideoStudio({
     root.classList.toggle("pv-noplayer", full && playerOff);
     return () => { root.classList.remove("pv-full", "pv-dim", "pv-noplayer"); };
   }, [full, playing, playerLit, playerOff]);
+  // Phone: into the full screen, the dock closes on its player (its icons go down and out, the block gets shorter),
+  // and opens again on the way out; the same movement as the picture's glide, at the same time.
+  const dockWas = useRef(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    const dock = document.querySelector<HTMLElement>(".mobile-tabs");
+    const player = dock?.querySelector<HTMLElement>(".dock-player");
+    const was = dockWas.current;
+    dockWas.current = slimDock;
+    const settle = () => root.classList.toggle("pv-dock-slim", slimDock);
+    if (slimDock === was || !dock || !player || !player.childElementCount || getComputedStyle(dock).display === "none"
+      || matchMedia("(prefers-reduced-motion: reduce)").matches) { settle(); return; }
+    const icons = [...dock.children].filter((x): x is HTMLElement => x instanceof HTMLElement && !x.classList.contains("dock-player"));
+    const cs = getComputedStyle(dock);
+    const slim = player.getBoundingClientRect().height + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    root.classList.remove("pv-dock-slim"); // the icons laid out while they go
+    const whole = dock.getBoundingClientRect().height;
+    const opt = { duration: 300, easing: "cubic-bezier(.2,.8,.2,1)" };
+    for (const a of dock.getAnimations()) a.cancel();
+    dock.style.overflow = "hidden";
+    const go = dock.animate([{ height: `${slimDock ? whole : slim}px` }, { height: `${slimDock ? slim : whole}px` }], opt);
+    const out = [{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: "0 18px" }];
+    // Going: they stay out until the dock lets them go (no flash at the end).
+    const fades = icons.map((el) => el.animate(slimDock ? out : out.slice().reverse(), { ...opt, duration: slimDock ? 220 : 300, fill: "forwards" }));
+    const done = () => { dock.style.overflow = ""; for (const a of fades) a.cancel(); };
+    go.onfinish = () => { done(); settle(); };
+    // Taken over by the next one (in or out again): it starts from where this one is, without this one's end.
+    return () => { go.onfinish = null; go.cancel(); done(); };
+  }, [slimDock]);
+  useEffect(() => () => document.documentElement.classList.remove("pv-dock-slim"), []);
   // The window resized while full screen: the player goes back to its centred place.
   useEffect(() => {
     if (!full) return;
@@ -3312,7 +3345,7 @@ export default function VideoStudio({
             )}
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} {...shownPress(() => toggleFull(true))}><Icon name="expand" size={18} /></button>}
             {/* The full screen (the same as the carousel's): the preview's picture as it is drawn, over the app. */}
-            {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onTap={fullTap} player label={clipName(clip)}
+            {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onLeave={() => setFullLeaving(true)} onTap={fullTap} player label={clipName(clip)}
               bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("Esc to close")}</span></>} />}
           </div>
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}

@@ -17,7 +17,7 @@ const CLOSE_MS = 280;
  * carousel) the next or previous one comes in. A tap on it: `onTap`.
  * The picture is the page's own canvas copied as it is drawn (the video playing, scrubbing…), or drawn by `draw`.
  */
-export function FullView({ source, draw, drawSide, sideKey, onClose, onTap, onSide, sideOk, closeOnSpace, player, label, bar, children }: {
+export function FullView({ source, draw, drawSide, sideKey, onClose, onLeave, onTap, onSide, sideOk, closeOnSpace, player, label, bar, children }: {
   /** The page's canvas: where the picture glides from and back to (and what is copied when there is no `draw`). */
   source: () => HTMLCanvasElement | null;
   /** Draws the picture itself (a slide at its full size); called again when it changes. */
@@ -28,6 +28,8 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onTap, onSi
   /** Which one is shown (the slide's number): when it changes after a swipe, the strip is put back in the middle. */
   sideKey?: number;
   onClose: () => void;
+  /** It starts going back to its place (`onClose` comes once it is there): what moves with it can start too. */
+  onLeave?: () => void;
   onTap?: () => void;
   /** Sideways: 1 the next one, -1 the previous one. */
   onSide?: (dir: 1 | -1) => void;
@@ -60,8 +62,8 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onTap, onSi
   const fades = () => [bg.current, barEl.current, xBtn.current].filter((x): x is HTMLDivElement | HTMLButtonElement => !!x);
   const closing = useRef(false);
   const drag = useRef<{ x: number; y: number; dx: number; dy: number; axis: "x" | "y" | null } | null>(null);
-  const props = useRef({ onSide, sideOk, onClose, draw, drawSide });
-  props.current = { onSide, sideOk, onClose, draw, drawSide };
+  const props = useRef({ onSide, sideOk, onClose, onLeave, draw, drawSide });
+  props.current = { onSide, sideOk, onClose, onLeave, draw, drawSide };
   const can = (dir: 1 | -1) => !!props.current.onSide && (props.current.sideOk?.(dir) ?? true);
 
   /** The transform (origin top left) that puts the picture over `to` (page pixels). */
@@ -76,6 +78,7 @@ export function FullView({ source, draw, drawSide, sideKey, onClose, onTap, onSi
   const close = () => {
     if (closing.current) return;
     closing.current = true;
+    props.current.onLeave?.();
     const c = big.current, small = source();
     if (!c || !small) { props.current.onClose(); return; }
     const from = getComputedStyle(c).transform;
