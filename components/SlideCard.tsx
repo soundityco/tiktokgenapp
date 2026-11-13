@@ -2,13 +2,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
-import { Hint, Menu, Select, Switch } from "./ui";
+import { Hint, Menu, Select, Switch, Wheel } from "./ui";
 import { clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
+import { looksLikeImage } from "@/lib/imageFormat";
 import { poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
-import { themeGroups, themeLabel } from "@/lib/themes";
+import { themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
-import { Wheel } from "./ui";
 import { isLineList } from "@/lib/defaults";
 import ImageFinder from "./ImageFinder";
 import { Thumb } from "./PoolEditors";
@@ -19,7 +19,7 @@ const FIND_PHOTOS = false;
 
 /** The picture of a drop from another tab (Pinterest…): the file itself, else its address. */
 async function droppedImage(dt: DataTransfer): Promise<{ blob: Blob; name: string } | null> {
-  const file = Array.from(dt.files).find((f) => f.type.startsWith("image/"));
+  const file = Array.from(dt.files).find((f) => looksLikeImage(f.name, f.type));
   if (file) return { blob: file, name: file.name };
   let url = dt.getData("text/uri-list").split("\n").find((l) => l && !l.startsWith("#"))?.trim() ?? "";
   if (!url) url = /<img[^>]+src="([^"]+)"/i.exec(dt.getData("text/html"))?.[1] ?? "";

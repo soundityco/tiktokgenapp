@@ -54,8 +54,7 @@ a { color: inherit; }
 .muted { color: var(--muted); } .xs { font-size: var(--fs-sm); }
 
 /* ---------- Buttons: primary / default / quiet ---------- */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: var(--h); padding: 0 14px; border-radius: var(--r);
-  border: 1px solid var(--line-2); background: transparent; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: var(--h); padding: 0 14px; border-radius: var(--r); border: 1px solid var(--line-2); background: transparent; font-weight: 500; white-space: nowrap; cursor: pointer; }
 .btn:hover:not(:disabled) { background: var(--raised); border-color: #3b3b46; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .btn.primary:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
@@ -104,10 +103,9 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-family: var(--mono); font-size: var(--fs-xs);
   border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
 .badge.ok { color: var(--ok); border-color: #21482f; } .badge.warn { color: var(--warn); border-color: #55441c; } .badge.bad { color: var(--danger); border-color: #5a2230; }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dot { background: currentColor; }
 .notice { padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-left: 2px solid var(--muted); border-radius: var(--r); font-size: var(--fs-sm); }
 .notice.bad { border-left-color: var(--danger); color: var(--danger); } .notice.warn { border-left-color: var(--warn); color: var(--warn); }
-.hr { height: 1px; background: var(--line); border: 0; margin: 0; }
 
 /* ---------- Login ---------- */
 .login { min-height: 100dvh; display: grid; grid-template-rows: 1fr auto; padding: var(--s5);
@@ -133,14 +131,13 @@ input[type=color] { width: 100%; height: var(--h); padding: 3px; background: var
 .group-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--s2); border-bottom: 1px solid var(--line); margin-bottom: var(--s1); }
 /* Its small button does not make the row taller: the title sits on the same line as the video studio's "Release". */
 .group-head .btn.icon.sm { margin-block: calc((var(--h-sm) - 16px) / -2); }
-.item { display: flex; align-items: center; gap: var(--s3); padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); background: none; cursor: pointer; width: 100%; text-align: left; }
+.item { display: flex; align-items: center; gap: var(--s3); padding: 9px 0; border: 0; background: none; cursor: pointer; width: 100%; text-align: left; }
 .item:hover .item-name { color: #fff; }
 .item .idx { font-family: var(--mono); font-size: var(--fs-xs); color: var(--faint); width: 18px; flex: none; }
 .item-name { color: #d9d7d0; }
 .item .del { opacity: 0; } .item:hover .del, .item:focus-within .del { opacity: 1; }
 @media (hover: none) { .item .del { opacity: .6; } }
 
-.toolbar { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s5); }
 .stepper { display: inline-flex; align-items: center; height: var(--h); border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
 .stepper span { min-width: 84px; text-align: center; font-family: var(--mono); font-size: var(--fs-sm); }
 .stepper .btn { border-radius: 0; height: calc(var(--h) - 2px); }
@@ -174,11 +171,11 @@ canvas.cv { width: 100%; height: auto; display: block; touch-action: pan-x pan-y
 /* Inspector */
 .insp-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s4); }
 .insp-title h2 { font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1; }
-details.sec { border-top: 1px solid var(--line); padding: var(--s3) 0; } /* same top and bottom */
+details.sec { padding: var(--s3) 0; } /* same top and bottom */
 details.sec:first-of-type { border-top: 0; padding-top: 0; }
 details.sec > summary { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--text); font-weight: 500; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; padding: var(--s1) 0; }
 details.sec > summary::-webkit-details-marker { display: none; }
-details.sec > summary::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); margin-right: 3px; transition: transform .15s; }
+details.sec > summary::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); margin-right: 3px; }
 details.sec:not([open]) > summary::after { transform: rotate(-45deg); }
 details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 
@@ -190,10 +187,10 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .menu.up { top: auto; bottom: calc(100% + 6px); }
 .menu button { display: flex; align-items: center; gap: var(--s2); width: 100%; text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: var(--r); min-height: 32px; cursor: pointer; }
 .menu button:hover { background: #1d1d23; }
-.menu .sep { height: 1px; background: var(--line); margin: var(--s1) 0; }
+.menu .sep { margin: var(--s1) 0; }
 .menu .cap { padding: 8px 10px 4px; }
-.ov { position: fixed; inset: 0; background: rgba(4,4,6,.72); backdrop-filter: blur(3px); display: grid; place-items: center; padding: var(--s4); z-index: 50; }
-.modal { background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg); padding: var(--s5); width: min(460px, 100%); max-height: 92dvh; overflow: auto; display: grid; gap: var(--s4); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+.ov { position: fixed; inset: 0; display: grid; place-items: center; padding: var(--s4); z-index: 50; }
+.modal { border: 1px solid var(--line-2); width: min(460px, 100%); max-height: 92dvh; }
 .modal.wide { width: min(820px, 100%); }
 .modal-foot { display: flex; gap: var(--s2); justify-content: flex-end; align-items: center; flex-wrap: wrap; padding-top: var(--s3); border-top: 1px solid var(--line); }
 .modal-foot .left { margin-right: auto; }
@@ -208,16 +205,10 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .tab.on { color: var(--text); border-bottom-color: var(--accent-hi); }
 /* Two families of tabs side by side: content | style. */
 .tabs.grouped { flex-wrap: wrap; gap: 0 var(--s5); }
-.tab-group { display: inline-flex; align-items: center; gap: var(--s4); }
-.tab-group + .tab-group { padding-left: var(--s5); border-left: 1px solid var(--line); }
-.tab-group-label { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .toast { position: fixed; bottom: var(--s5); left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line-2); border-left: 2px solid var(--accent-hi); padding: 10px 16px; border-radius: var(--r); z-index: 80; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
 .preflight { margin-bottom: var(--s5); }
 .preflight summary { cursor: pointer; }
 .preflight ul { margin: var(--s2) 0 0; padding-left: 18px; display: grid; gap: 4px; }
-.crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; font-family: var(--mono); font-size: var(--fs-sm); color: var(--muted); }
-.crumbs button { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crumbs button:hover { color: var(--text); }
 .mobile-tabs { display: none; }
 
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: var(--s2); }
@@ -230,7 +221,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .crop-prev { position: relative; max-width: 220px; margin: 0 auto; }
 .crop-prev img { width: 100%; display: block; border-radius: 2px; }
 .crop-prev .z { position: absolute; background: color-mix(in srgb, var(--accent) 35%, transparent); pointer-events: none; }
-.res { display: grid; grid-template-columns: 56px 1fr; gap: var(--s3); align-items: start; padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
+.res { display: grid; grid-template-columns: 56px 1fr; gap: var(--s3); align-items: start; padding: var(--s2) 0; }
 .res img { width: 56px; height: 80px; object-fit: cover; border-radius: 2px; cursor: zoom-in; }
 .bar { height: 3px; background: var(--line); overflow: hidden; } .bar > div { height: 100%; background: var(--accent-hi); transition: width .2s; }
 .drop { border: 1px dashed var(--line-2); border-radius: var(--r); padding: var(--s5); text-align: center; cursor: pointer; color: var(--muted); }
@@ -245,7 +236,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 @media (max-width: 1000px) {
   .app { height: auto; min-height: 100dvh; grid-template-rows: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; }
   .top { height: auto; flex-wrap: wrap; padding: var(--s3) var(--s4); }
-  .main { display: block; min-height: 0; padding-bottom: 76px; }
+  .main { display: block; min-height: 0; }
   .col.side { padding: var(--s4); }
   .col.side.l, .col.side.r { border: 0; border-top: 1px solid var(--line); }
   .col.center { padding: var(--s4); }
@@ -256,12 +247,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   .main[data-mobile-tab="style"] .col.center,
   .main[data-mobile-tab="style"] .col.side.l { display: none; }
   .main[data-mobile-tab="lists"] .col.side.l { border-top: 0; }
-  .main[data-mobile-tab="style"] .col.side.r { border-top: 0; }
-  .mobile-tabs { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; min-height: 60px; padding: 6px var(--s4) calc(6px + env(safe-area-inset-bottom)); gap: var(--s2); background: rgba(8,8,10,.96); border-top: 1px solid var(--line-2); backdrop-filter: blur(8px); }
-  .toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
-  .mobile-tabs > button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: none; border: 0; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
-  .mobile-tabs > button.on { color: var(--text); }
-  .mobile-tabs > button.on svg { color: var(--accent-hi); }
+  .mobile-tabs { display: flex; position: fixed; z-index: 40; border-top: 1px solid var(--line-2); }
+  .mobile-tabs > button { display: flex; align-items: center; justify-content: center; background: none; border: 0; cursor: pointer; }
   .login-main .display { font-size: 40px; }
 }
 @media (pointer: coarse) {
@@ -277,14 +264,11 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .card.drop-target .cv-wrap { outline: 2px dashed var(--accent-hi); }
 
 /* ---------- Studio switch ---------- */
-.studio-switch { position: relative; display: inline-flex; align-items: center; padding: 3px; gap: 2px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 999px; }
-.studio-switch button { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
-  transition: color .3s cubic-bezier(.65,0,.35,1), background-color .2s; }
+.studio-switch { position: relative; align-items: center; padding: 3px; gap: 2px; background: var(--panel); border: 1px solid var(--line-2); }
+.studio-switch button { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 0; background: none; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
 .studio-switch button:hover:not(.on) { color: var(--text); background: var(--raised); }
-.studio-switch button.on { color: var(--on-accent); }
 /* The pill slides under the chosen studio (position and width measured on it), with an ease in and out. */
-.studio-thumb { position: absolute; top: 3px; left: 0; height: 26px; border-radius: 999px; background: var(--accent); z-index: 0;
-  transition: transform .42s cubic-bezier(.65,0,.35,1), width .42s cubic-bezier(.65,0,.35,1); }
+.studio-thumb { position: absolute; top: 3px; left: 0; height: 26px; z-index: 0; }
 @media (prefers-reduced-motion: reduce) { .studio-thumb, .studio-switch button { transition: none; } }
 
 /* ---------- Video studio ---------- */
@@ -338,7 +322,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .post-cover { width: 27px; height: 48px; object-fit: cover; border-radius: 2px; background: var(--line); flex: none; }
 /* No transition: restarted on every update, an eased width never caught up with the real percentage. */
 .export-bar > div, .bar.live > div { transition: none; }
-.video-side { display: grid; gap: var(--s2); min-width: 0; }
+.video-side { display: grid; gap: var(--s2); }
 /* The player stays on screen (under the preview, nearly invisible): Safari does not load a video hidden off screen. */
 .video-src { position: absolute; left: 0; top: 0; width: 2px; height: 2px; opacity: .01; pointer-events: none; z-index: 0; }
 .cv-wrap > canvas.cv { position: relative; z-index: 1; }
@@ -388,7 +372,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .hook-track .cue.on { border-left-color: var(--blue); }
 /* A track whose text is not shown on the video (lyrics or hook switched off): dimmed in the timeline. */
 .lyric-track.off { opacity: .45; }
-.hook-item { display: grid; gap: var(--s2); padding-bottom: var(--s3); border-bottom: 1px solid var(--line); }
+.hook-item { display: grid; gap: var(--s2); padding-bottom: var(--s3); }
 .hook-item .nudge { display: inline-flex; align-items: center; gap: 2px; }
 .hook-item .nudge .btn { width: 24px; padding: 0; justify-content: center; }
 .hook-item .nudge .mono { min-width: 46px; text-align: center; }
@@ -450,16 +434,14 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .adjust-tools button.on { background: var(--raised); color: var(--text); }
 .adjust-tools button.set::after { content: ""; display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent-hi); margin-left: 4px; vertical-align: middle; }
 .adjust-value { text-align: center; font-family: var(--mono); font-size: 12px; color: var(--text); }
-.adjust-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.adjust-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .adjust-actions .btn { min-width: 0; padding: 0 6px; justify-content: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adjust-panel { box-sizing: border-box; min-width: 0; }
 .btn.quiet.on { color: var(--accent-hi); }
 /* Button on the photo that opens its edits: shown on the selected slide and on hover (always on touch screens). */
-.adjust-open { position: absolute; right: 8px; bottom: 8px; z-index: 2; width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18);
-  background: rgba(8,8,10,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: #fff; display: grid; place-items: center; cursor: pointer;
-  opacity: 0; transition: opacity .15s; }
+.adjust-open { position: absolute; z-index: 2; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .15s; }
 .card:hover .adjust-open, .card.sel .adjust-open, .adjust-open:focus-visible, .adjust-open.set { opacity: 1; }
-.adjust-open.set::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-hi); }
+.adjust-open.set::after { content: ""; position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-hi); }
 @media (hover: none) { .adjust-open { opacity: 1; } }
 
 /* Photo search. */
@@ -530,11 +512,8 @@ button.link { background: none; border: 0; padding: 0; color: var(--text); text-
 /* A short line that unfolds into the details (media panel). */
 details.more > summary { list-style: none; display: flex; align-items: center; gap: var(--s2); cursor: pointer; min-width: 0; }
 details.more > summary::-webkit-details-marker { display: none; }
-.more-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 details.more > summary::after { content: "+"; font-family: var(--mono); color: var(--faint); font-size: 12px; }
 details.more[open] > summary::after { content: "−"; }
-.more-body { display: grid; gap: 4px; padding-top: 6px; }
-.more-body p { margin: 0; }
 .btn.preset.on .muted { color: var(--muted); }
 
 /* ---------- Video studio, lighter: red only for the actions, quieter names of the settings ---------- */
@@ -598,13 +577,8 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
    only if it still does not fit does it wrap itself. */
 .studio-head .video-tools { flex: 1 1 800px; flex-wrap: wrap; row-gap: var(--s3); }
 .studio-head .video-title { flex: 0 1 auto; }
-.field-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
-.field-link { background: none; border: 0; padding: 0; font: inherit; color: var(--faint); cursor: pointer; }
-.field-link:hover { color: var(--text); }
 .studio-head .head-actions { margin-left: auto; align-items: flex-end; gap: var(--s3); flex: none; }
 .studio-head .stepper span { text-transform: none; color: var(--text); }
-.carousel-head { margin-bottom: var(--s5); }
-.carousel-release { margin-bottom: var(--s5); }
 /* The release's name, the title of both studios: it opens the menu of the releases. */
 .release-title { gap: 6px; min-width: 0; }
 .release-pick { display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; height: var(--h); padding: 0; background: none; border: 0; color: var(--text); cursor: pointer; text-align: left; }
@@ -666,7 +640,6 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 /* Export of several videos: one line per video, its state on the right. */
 .batch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border: 1px solid var(--line); border-radius: var(--r); }
 .batch-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: 8px 12px; min-width: 0; font-size: var(--fs-sm); }
-.batch-list li + li { border-top: 1px solid var(--line); }
 .batch-list li.now { background: var(--raised); }
 .batch-list li > span:last-child { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); }
 .batch-list .ok { color: var(--ok); } .batch-list .bad { color: var(--danger); } .batch-list .warn { color: var(--warn); }
@@ -682,12 +655,6 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .lyric-grip:hover { color: var(--text); }
 .lyric-card textarea { resize: vertical; line-height: 1.45; }
 .lyric-card-tools { gap: var(--s2); }
-/* On a lyrics slide: the sections it shows. */
-.lyric-checks { display: grid; gap: 2px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r); padding: 4px 8px; }
-.lyric-checks .check { display: grid; grid-template-columns: auto minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 8px; text-transform: none; letter-spacing: normal; font-family: var(--sans); color: var(--text); font-size: var(--fs-sm); padding: 3px 0; }
-.lyric-pick .check { text-transform: none; letter-spacing: normal; font-family: var(--sans); }
-/* A lyrics slide: the sections it shows (a menu of ticks) and its optional header, under its sources. */
-
 .menu .menu-check { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--r); cursor: pointer; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs-sm); color: var(--text); }
 .menu .menu-check:hover { background: #1d1d23; }
 
@@ -696,20 +663,19 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .btn.needs:hover:not(:disabled) { border-color: var(--warn); }
 /* The release's lyrics, right of its name in both studios. */
 .studio-head .video-title { gap: var(--s5); align-items: flex-end; }
-.release-lyrics { flex: none; }
 /* A hooks list by theme. */
 .seg-tabs { gap: var(--s2); align-items: center; }
 .theme-groups { display: grid; gap: var(--s4); max-height: 56vh; overflow-y: auto; padding-right: 2px; }
 .theme-group { display: grid; gap: 4px; }
 .theme-group h4 { margin: 0 0 4px; }
-.theme-item { gap: var(--s2); padding: 4px 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); }
+.theme-item { gap: var(--s2); padding: 4px 0; font-size: var(--fs-sm); }
 .theme-item .dd { width: 190px; flex: none; }
 
 /* ---------- Select: the app's own drop-down (components/ui.tsx), not the browser's ---------- */
 .dd { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; min-width: 0; color: var(--text); font-family: var(--sans); letter-spacing: normal; text-transform: none; }
 .dd:disabled { opacity: .5; cursor: not-allowed; }
 .dd-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dd-chev { flex: none; color: var(--muted); transition: transform .18s; }
+.dd-chev { flex: none; color: var(--muted); }
 .dd.open { border-color: var(--muted); }
 .dd.open .dd-chev { transform: rotate(180deg); }
 .dd-list { position: fixed; z-index: 120; display: grid; gap: 1px; padding: 4px; overflow-y: auto; max-width: min(440px, calc(100vw - 16px));
@@ -722,7 +688,7 @@ details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-
 .dd-check { font-size: 12px; color: var(--text); }
 .dd-opt.off { opacity: .4; cursor: default; }
 .dd-group { padding: 8px 10px 4px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
-.ai-row { gap: var(--s2); align-items: center; padding-bottom: var(--s2); border-bottom: 1px solid var(--line); }
+.ai-row { gap: var(--s2); align-items: center; padding-bottom: var(--s2); }
 .post-box.in-tab { margin-top: 0; }
 /* ---------- Send to my phone: the QR code on the computer, the page on the phone ---------- */
 .share-send { text-align: center; justify-items: center; }
@@ -778,7 +744,6 @@ html:has(.ov) { overflow: hidden; }
    the screen, room for the notch and the home bar.
    ===================================================================== */
 @media (display-mode: standalone) { html, body { overscroll-behavior-y: none; } }
-.mobile-tabs-pill { display: none; }
 @media (max-width: 1000px) {
   .top { padding-top: calc(var(--s3) + env(safe-area-inset-top)); padding-left: max(var(--s4), env(safe-area-inset-left)); padding-right: max(var(--s4), env(safe-area-inset-right)); }
   .main { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
@@ -791,16 +756,8 @@ html:has(.ov) { overflow: hidden; }
   .main[data-studio="video"] .video-shell > .col.side { border-top: 0; }
   .main[data-studio="video"] { overflow: visible; }
   /* The tab bar: a floating dock, the current tab on a sliding pill. */
-  .mobile-tabs { left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); min-height: 58px;
-    padding: 5px; gap: 0; border: 1px solid var(--line-2); border-radius: 18px; background: rgba(14,14,18,.82);
-    backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
-  .mobile-tabs-pill { display: block; position: absolute; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 10px) / 3); border-radius: 13px;
-    background: var(--raised); border: 1px solid var(--line-2); transition: transform .34s cubic-bezier(.3,1.3,.5,1); }
-  .mobile-tabs[data-tab="lists"] .mobile-tabs-pill { transform: translateX(100%); }
-  .mobile-tabs[data-tab="style"] .mobile-tabs-pill { transform: translateX(200%); }
-  .mobile-tabs > button { position: relative; z-index: 1; border-radius: 13px; transition: color .2s, scale .12s; }
+  .mobile-tabs > button { position: relative; z-index: 1; }
   .mobile-tabs > button svg { transition: transform .3s cubic-bezier(.3,1.3,.5,1), color .2s; }
-  .mobile-tabs > button.on svg { transform: translateY(-1px) scale(1.08); }
   .toast { bottom: calc(84px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); }
   /* Rows that never wrapped on a computer. */
   .video-side > *, .video-center > *, .tab-body > * { min-width: 0; }
@@ -822,21 +779,18 @@ html:has(.ov) { overflow: hidden; }
   .top .version { display: none; }
 }
 @keyframes sheet-up { from { translate: 0 100%; } }
-@media (prefers-reduced-motion: reduce) { .ov > .modal { animation: none; } .mobile-tabs-pill { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ov > .modal { animation: none; } }
 .install-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s3); counter-reset: s; }
 .install-steps li { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: var(--s3); }
 .install-steps li svg { width: 34px; height: 34px; padding: 8px; border: 1px solid var(--line-2); border-radius: 10px; }
 @media (max-width: 640px) {
   .top { flex-wrap: nowrap; gap: var(--s2); }
-  .top .brand small, .top-import, .save-badge .badge-text { display: none; }
+  .top .brand small, .save-badge .badge-text { display: none; }
   .save-badge { padding: 0; width: 22px; height: 22px; justify-content: center; border-color: transparent; background: none; }
   .studio-switch button { padding: 0 9px; gap: 5px; }
   .top .brand { margin-right: 0; }
-  .top .brand svg { height: 15px; width: auto; }
 }
 @media (max-width: 380px) { .studio-switch button svg { display: none; } }
-.mobile-only { display: none !important; }
-@media (max-width: 640px) { .menu .mobile-only { display: flex !important; } .menu .sep.mobile-only { display: block !important; } }
 
 /* Desktop finish: panels that unfold, hovers that answer. */
 details.sec[open] > .body { animation: unfold .26s cubic-bezier(.2,.8,.2,1); }
@@ -854,11 +808,7 @@ details.sec > summary::after { transition: transform .22s cubic-bezier(.3,1.3,.5
    that widens to show its name, the others just their icon. */
 @media (max-width: 1000px) {
   .top { position: sticky; top: 0; z-index: 45; background: rgba(8,8,10,.78); backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); }
-  .mobile-tabs-pill { display: none !important; }
-  .mobile-tabs { left: 50%; right: auto; translate: -50% 0; bottom: calc(14px + env(safe-area-inset-bottom)); min-height: 0; width: auto; padding: 6px; gap: 4px;
-    border-radius: 999px; border: 1px solid rgba(255,255,255,.09); background: rgba(22,22,28,.66);
-    backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7);
-    box-shadow: 0 18px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.07); }
+  .mobile-tabs { left: 50%; right: auto; translate: -50% 0; bottom: calc(14px + env(safe-area-inset-bottom)); min-height: 0; padding: 6px; gap: 4px; border-radius: 999px; border: 1px solid rgba(255,255,255,.09); background: rgba(22,22,28,.66); backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7); box-shadow: 0 18px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.07); }
   .mobile-tabs > button { flex: none; flex-direction: row; gap: 0; height: 48px; min-width: 56px; padding: 0 17px; border-radius: 999px;
     font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: -.005em; text-transform: none; color: var(--muted);
     transition: background .35s cubic-bezier(.3,1.2,.5,1), color .25s, gap .35s cubic-bezier(.3,1.2,.5,1), padding .35s cubic-bezier(.3,1.2,.5,1), scale .12s; }
@@ -913,22 +863,18 @@ details.sec > summary::after { transition: transform .22s cubic-bezier(.3,1.3,.5
 
 /* Phone, the bars. Top: the app's icon, the studio switch in the middle, undo / redo and the saved dot always at
    hand. Bottom: the panels, then the settings and account (a round initial). */
-.brand-icon, .mobile-me, .mobile-tabs-sep { display: none; }
+.brand-icon, .mobile-tabs-sep { display: none; }
 .top .top-hist:disabled { opacity: .3; }
 .studio-head .hist { display: none; } /* undo / redo live in the top bar */
 canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 @media (max-width: 640px) {
   .top .brand-full, .top .top-settings, .top > .grow, .studio-head .hist { display: none; }
-  .top .brand-icon { display: inline-flex; }
   .top .brand-icon img { display: block; border-radius: 7px; }
   .top .studio-switch { margin: 0 auto; }
   .top .top-hist { display: inline-flex; }
   .top .top-hist:disabled { opacity: .3; }
   .mobile-tabs .menu-wrap { display: flex; align-items: center; }
   .mobile-tabs-sep { display: block; width: 1px; align-self: stretch; margin: 10px 4px; background: rgba(255,255,255,.1); }
-  .mobile-me { display: grid; place-items: center; width: 40px; height: 40px; margin: 0 4px 0 2px; border-radius: 50%; border: 1px solid var(--line-2);
-    background: linear-gradient(145deg, #2a2a33, #15151a); color: var(--text); font-weight: 700; font-size: 15px; cursor: pointer; transition: scale .12s, border-color .15s; }
-  .mobile-me:active { scale: .94; }
   .mobile-tabs .menu { right: 0; left: auto; top: auto; bottom: calc(100% + 14px); max-height: 70dvh; overflow-y: auto; }
 }
 .brand-full { display: inline-flex; align-items: center; gap: 10px; }
@@ -946,7 +892,6 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .studio-head .video-title, .studio-head .video-tools, .studio-head .head-actions, .studio-head .slot { display: contents; }
   .studio-head .release-title { grid-column: 1 / 4; grid-row: 1; min-width: 0; }
   .studio-head .release-title .menu-wrap, .studio-head .release-pick { min-width: 0; max-width: 100%; }
-  .studio-head .release-pick .display { min-width: 0; }
   .studio-head .release-pick .display { font-size: 26px; }
   .studio-head .h-share { grid-column: 4; grid-row: 1; }
   .studio-head .h-dl { grid-column: 5; grid-row: 1; }
@@ -964,19 +909,14 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .studio-head .h-more.on svg { transform: rotate(180deg); }
   .studio-head .badge:not(.h-status), .studio-head > .video-tools > .btn:not(.h-gen):not(.h-more):not(.h-new):not(.h-share):not(.h-dl) { grid-column: 1 / -1; }
   /* Folded away until "More". */
-  .studio-head .release-lyrics, .studio-head .h-pick, .studio-head .h-new, .studio-head .h-count, .studio-head .h-opts { display: none; }
-  .studio-head.more .release-lyrics, .studio-head.more .h-count { display: grid; }
-  /* No lyrics yet: the tile stays out (it is a step to do), even folded. */
-  .studio-head .release-lyrics.missing { display: grid; grid-column: 1 / -1; }
+  .studio-head .h-pick, .studio-head .h-new, .studio-head .h-count { display: none; }
+  .studio-head.more .h-count { display: grid; }
   .studio-head.more .h-pick { display: grid; grid-column: 1 / 4; }
   .studio-head.more .h-new { display: inline-flex; }
-  .studio-head.more .slot.h-new, .studio-head.more .slot.h-opts { display: block; }
+  .studio-head.more .slot.h-new { display: block; }
   .studio-head.more .h-pick .dd { width: 100% !important; }
-  .studio-head.more .release-lyrics { grid-column: 1 / -1; }
-  .studio-head.more .release-lyrics .btn, .studio-head .release-lyrics.missing .btn { width: 100%; justify-content: flex-start; }
   .studio-head.more .h-count { grid-column: 1 / 4; justify-self: start; }
-  .studio-head.more .slot.h-opts { grid-column: 4 / 6; align-self: end; justify-self: end; }
-  .studio-head.more .release-lyrics, .studio-head.more .h-pick, .studio-head.more .h-new, .studio-head.more .h-count, .studio-head.more .h-opts { animation: head-unfold .28s cubic-bezier(.2,.8,.2,1) backwards; }
+  .studio-head.more .h-pick, .studio-head.more .h-new, .studio-head.more .h-count { animation: head-unfold .28s cubic-bezier(.2,.8,.2,1) backwards; }
 }
 @keyframes head-unfold { from { opacity: 0; translate: 0 -6px; } }
 
@@ -995,13 +935,12 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .studio-head .h-cancel { grid-column: 7; grid-row: 1; }
   .studio-head .h-share { grid-column: 8; grid-row: 1; }
   .studio-head .h-dl { grid-column: 9; grid-row: 1; }
-  .studio-head .slot.h-dl, .studio-head .slot.h-new, .studio-head .slot.h-opts { display: block; }
+  .studio-head .slot.h-dl, .studio-head .slot.h-new { display: block; }
   .studio-head .h-gen { grid-column: 1; grid-row: 2; margin-right: var(--s4); }
   .studio-head .h-pick { grid-column: 2; grid-row: 2; }
   .studio-head button.h-new { grid-column: 3; grid-row: 2; }
   .studio-head .slot.h-new { grid-column: 4; grid-row: 2; }
   .studio-head .h-count { grid-column: 5; grid-row: 2; margin-left: var(--s4); }
-  .studio-head .slot.h-opts { grid-column: 7 / 10; grid-row: 2; justify-self: end; }
   .studio-head .h-status { grid-column: 6 / 10; grid-row: 2; justify-self: end; align-self: end; margin-bottom: calc((var(--h) - 22px) / 2); }
   /* The video has no generate: its picker starts the line. */
   .studio-head:not(.carousel-head) .h-pick { grid-column: 1 / 3; }
@@ -1010,7 +949,6 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
 @container (max-width: 720px) {
   @media (min-width: 641px) {
     .studio-head .h-count { grid-column: 1 / 3; grid-row: 3; margin-left: 0; }
-    .studio-head .slot.h-opts { grid-row: 3; }
   }
 }
 
@@ -1024,16 +962,9 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
 .top .top-settings { margin-left: var(--s1); }
 .mobile-tabs .me { width: 40px; height: 40px; font-size: 15px; margin: 0 4px 0 2px; }
 
-/* The lyrics of the release: a source, like the media. The same sharp button as the pickers, but a bright
-   outline and its count in bold; without lyrics, the amber "to do" of the app. */
 /* What feeds the release (its lyrics, the hooks imported from TikTok): a bright outline and bold text. */
-.lyrics-btn, .btn.source { border-color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs); color: var(--text); }
-.lyrics-btn:hover:not(:disabled), .btn.source:hover:not(:disabled) { border-color: var(--text); }
-/* The same in the account menu on a phone: a framed first row, apart from the settings. */
-.menu .menu-source { border: 1px solid var(--muted); font-weight: 600; color: var(--text); margin-bottom: var(--s1); }
-.menu .menu-source:hover { border-color: var(--text); }
-.lyrics-btn .lyrics-meta { font-weight: 400; color: var(--muted); }
-.lyrics-btn .lyrics-meta::before { content: "·"; margin-right: 7px; color: var(--faint); }
+.btn.source { border-color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: normal; font-family: var(--sans); font-size: var(--fs); color: var(--text); }
+.btn.source:hover:not(:disabled) { border-color: var(--text); }
 /* "Draw" over generate, like the pickers' names. */
 .h-gen.field { gap: 6px; }
 .field-k { display: block; }
@@ -1090,7 +1021,7 @@ button.media:hover { border-color: #3b3b46; }
 button.media.empty:hover { border-color: var(--muted); }
 button.media.warn .media-name { color: var(--warn); }
 .lib-lyrics .media-head > svg:last-child { flex: none; color: var(--faint); transform: rotate(-90deg); transition: color .15s; }
-.lib-lyrics.empty .media-head > svg:last-child { transform: none; color: var(--warn); }
+.lib-lyrics.empty .media-head > svg:last-child { transform: none; }
 .lib-lyrics:hover .media-head > svg:last-child { color: var(--text); }
 .col.side.l .group > .lib-lyrics { margin-top: var(--s1); }
 /* Video library: the shared texts come after the release's files, apart from them. */
@@ -1129,7 +1060,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 /* No hairline after the last list of a family (nor of a role). */
 .fam-body > .item:last-child, .fam-body .group.sub > .item:last-child { border-bottom: 0; }
 .fam-head .btn.icon.sm { margin-right: -6px; }
-.fam-body { position: relative; margin-left: 7px; padding-left: 14px; border-left: 1px solid var(--line-2); }
+.fam-body { position: relative; margin-left: 7px; padding-left: 14px; }
 .fam-body .group.sub { margin-bottom: var(--s3); }
 .fam-body .group.sub:last-child { margin-bottom: 0; }
 .fam-body .group.sub > .group-head { position: relative; padding-bottom: 2px; }
@@ -1174,11 +1105,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 
 @media (max-width: 640px) {
   /* Room for it on a 360px screen: slimmer tabs. */
-  .mobile-tabs { padding: 5px; gap: 2px; }
+  .mobile-tabs { gap: 2px; }
   .mobile-tabs > button:not(.dock-studio) { min-width: 46px; padding: 0 13px; }
   .mobile-tabs > button.on:not(.dock-studio) { padding: 0 16px 0 13px; }
-  .mobile-tabs > .mobile-tabs-sep { margin: 10px 3px; }
-  .mobile-tabs .me { margin: 0 2px 0 1px; }
 }
 
 /* Phone: the studio switch, first in the dock. One squircle with the open studio's icon on its gradient (orange
@@ -1187,9 +1116,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @media (max-width: 640px) {
   .top .studio-switch { display: none; }
   .top > .grow { display: block; }
-  .mobile-tabs > .dock-studio { position: relative; display: grid; place-items: center; flex: none; width: 46px; min-width: 0; height: 46px; padding: 0;
-    margin: 1px 2px 1px 1px; border: 0; border-radius: 15px; overflow: hidden; isolation: isolate; color: #fff;
-    box-shadow: 0 6px 18px color-mix(in srgb, #ff8a3d 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35); transition: box-shadow .5s, scale .12s; }
+  .mobile-tabs > .dock-studio { position: relative; display: grid; place-items: center; flex: none; width: 46px; min-width: 0; height: 46px; padding: 0; border: 0; overflow: hidden; isolation: isolate; color: #fff; box-shadow: 0 6px 18px color-mix(in srgb, #ff8a3d 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35); transition: box-shadow .5s, scale .12s; }
   .dock-studio::before, .dock-studio::after { content: ""; position: absolute; inset: 0; z-index: -1; transition: opacity .5s cubic-bezier(.4,0,.2,1); }
   .dock-studio::before { background: var(--grad-carousel); }
   .dock-studio::after { background: var(--grad-video); opacity: 0; }
@@ -1203,7 +1130,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 /* Phone dock: the corners of the desktop studio switch (8px around, 5px for each button, the studio tile and the
    account included), concentric with the dock's 5px padding. */
 @media (max-width: 640px) {
-  .mobile-tabs { border-radius: 15px; }
   .mobile-tabs > button, .mobile-tabs > .dock-studio, .mobile-tabs .me { border-radius: 10px; }
   /* Room on both sides of the two separators (studio | panels | account). */
   .mobile-tabs > .mobile-tabs-sep, .mobile-tabs > .mobile-tabs-sep:first-of-type { margin: 11px 7px; }
@@ -1280,7 +1206,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 
 /* Desktop studio switch: its sliding thumb wears the open studio's gradient (cross-fading as it slides), like the
    dock's tile on a phone. */
-.studio-thumb { background: none; overflow: hidden; box-shadow: 0 2px 10px var(--glow-carousel); transition: transform .38s cubic-bezier(.3,1.2,.5,1), width .38s cubic-bezier(.3,1.2,.5,1), box-shadow .45s; }
+.studio-thumb { background: none; overflow: hidden; box-shadow: 0 2px 10px var(--glow-carousel); }
 .studio-thumb::before, .studio-thumb::after { content: ""; position: absolute; inset: 0; transition: opacity .45s cubic-bezier(.4,0,.2,1); }
 .studio-thumb::before { background: var(--grad-carousel); }
 .studio-thumb::after { background: var(--grad-video); opacity: 0; }
@@ -1311,12 +1237,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .btn.warn-badge:hover:not(:disabled), .btn.warn-badge.open { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .preflight-pop { padding: var(--s2) var(--s3) var(--s3); max-width: 340px; }
 .preflight-pop .label { color: var(--warn); margin-bottom: 6px; }
-.preflight-pop ul { margin: 0; padding-left: 16px; display: grid; gap: 6px; color: var(--text); line-height: 1.45; }
+.preflight-pop ul { margin: 0; padding-left: 16px; display: grid; gap: 6px; line-height: 1.45; }
 /* The style column's help, in an (i). */
 .insp-help { gap: 6px; margin-top: var(--s2); }
 /* What the video shows: eyes, apart from the edit tabs. */
 .shown-on .btn svg { opacity: .9; }
-.shown-on .btn:not(.on) { color: var(--muted); }
 /* Phone, video studio: no camera take yet, a small preview (the import and the timeline come up). */
 @media (max-width: 640px) {
   .video-grid.no-take .cv-wrap { max-width: 120px; }
@@ -1340,7 +1265,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .dot.rest { background: #4a4a56; } .dot.free { background: var(--raised); outline: 1px solid var(--line-2); }
 .storage-list { display: grid; gap: 2px; }
 .storage-list .label { margin-bottom: 6px; }
-.storage-row { display: flex; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.storage-row { display: flex; padding: 8px 0; }
 .storage-row:last-child { border-bottom: 0; }
 /* A background job in the top bar: a ring that fills, the job's name and its percentage. */
 .bg-job { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px 0 6px; border: 1px solid color-mix(in srgb, var(--video) 45%, var(--line-2));
@@ -1352,10 +1277,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   -webkit-mask: radial-gradient(circle, transparent 4px, #000 4.5px); mask: radial-gradient(circle, transparent 4px, #000 4.5px); }
 @media (max-width: 640px) { .bg-job .bg-label { display: none; } .bg-job { padding: 0 8px 0 5px; gap: 5px; } }
 /* The Drive copy of the open video, under its preview (a phone does not show the library beside it). */
-.copy-status { display: flex; align-items: center; gap: 7px; color: var(--muted); margin: 0; }
+.copy-status { margin: 0; }
 /* The Drive copy's state, one look in both places (under the preview, the library's tile). */
-.copy-line { min-height: 22px; display: flex; align-items: center; }
-.copy-status { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 7px; color: var(--muted); }
+.copy-status { display: inline-flex; gap: 6px 7px; color: var(--muted); }
 .copy-status.ok { color: var(--ok); }
 .copy-status.bad { color: var(--danger); }
 .copy-status .copy-act { height: 22px; padding: 0 8px; color: var(--text); border: 1px solid var(--line-2); }
@@ -1384,8 +1308,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @keyframes hint-in { from { opacity: 0; } }
 
 /* Demo mode's mark in the top bar. */
-.demo-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-family: var(--mono); font-size: 10px;
-  letter-spacing: .1em; text-transform: uppercase; text-decoration: none; color: #1a1020; background: var(--grad-carousel); font-weight: 700; }
+.demo-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; text-decoration: none; font-weight: 700; }
 
 /* Hairlines between the rows of a list: softer, a darker grey fading in from the left and out to the right, so they
    never run into the column's edges nor the texts' tree. */
@@ -1411,8 +1334,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 
 /* ---------- Phone: the Style page (the preview on top, then the style part by part), the video's player on the dock ---------- */
 .style-tabs, .dock-fade { display: none; }
-/* The hook list's row: the Generate button on the same line as the selects' bottoms. */
-.hook-pick { align-items: flex-end; }
 .dock-player:empty { display: none; }
 @keyframes dp-in { from { opacity: 0; translate: 0 8px; } }
 @media (max-width: 1000px) {
@@ -1446,14 +1367,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* Its control: "Style" over the parts, in one row across the page, held right under the preview (the settings
      scroll under it). Its top line is a grip: dragged down, the preview grows. */
   .style-tabs { display: grid; gap: 8px; }
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { position: sticky; top: var(--pv-bottom, 400px); z-index: 7; min-width: 0; max-width: none;
-    margin: calc(-1 * var(--s2)) calc(-1 * var(--s4)) 0; padding: 14px var(--s4) 12px; background: var(--panel); border-radius: 18px 18px 0 0;
-    box-shadow: 0 -1px 0 rgba(255,255,255,.05); touch-action: none; cursor: grab; }
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 18px; pointer-events: none;
-    background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel) 0%, transparent)); }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { position: sticky; top: var(--pv-bottom, 400px); z-index: 7; min-width: 0; max-width: none; margin: calc(-1 * var(--s2)) calc(-1 * var(--s4)) 0; padding: 14px var(--s4) 12px; touch-action: none; cursor: grab; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; pointer-events: none; }
   .style-grip { position: absolute; top: 5px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: rgba(255,255,255,.18); }
-  .style-tabs-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); height: var(--h-sm); }
-  .style-tabs-top .style-of { color: var(--text); }
   /* "Slide 1 · Apply to all" moved up into the control: not twice. */
   .main[data-mobile-tab="style"] .insp-title { display: none; }
   /* The parts' titles (Format, Lyrics style, Colour…) all on the same line height, whatever sits at their right. */
@@ -1471,9 +1387,8 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* Under the video (its page): "Shown" over its two eyes, the size at their right, the Drive copy's state under. */
   .video-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s3); row-gap: 10px; }
   .video-stage > * { grid-column: 1 / -1; }
-  .video-stage > .shown-on { grid-column: 1; grid-row: 2; flex-wrap: wrap; row-gap: 8px; }
+  .video-stage > .shown-on { flex-wrap: wrap; row-gap: 8px; }
   .video-stage > .shown-on > .label { flex-basis: 100%; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; font-weight: 500; }
-  .video-stage > .stage-fmt { grid-column: 2; grid-row: 2; align-self: end; margin: 0; min-height: var(--h-sm); }
   /* The segment's title sits at the top of its block, not in the middle of the badge's height. */
   .seg-top { align-items: flex-start !important; }
 
@@ -1489,7 +1404,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .dp-strip { position: relative; display: flex; width: 100%; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.14);
     transition: height .3s cubic-bezier(.2,.9,.25,1), border-radius .3s; }
   .dp-strip.on { height: 38px; border-radius: 8px; background: #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
-  .dp-strip img { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; pointer-events: none; animation: dp-in .3s backwards; }
+  .dp-strip img { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; pointer-events: none; }
   /* What is already played: the plain rail fills in white (the strip has the head alone). */
   .dp-played { position: absolute; top: 0; bottom: 0; left: 0; background: var(--text); }
   .dp-strip.on .dp-played { display: none; }
@@ -1498,7 +1413,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
     box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.5); pointer-events: none; }
   .dp-strip:not(.on) + .dp-head { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 3px; }
   .dp-time { flex: none; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
-  .app:has(.dock-player:not(:empty)) .main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .app:has(.dock-player:not(:empty)) .toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
   .app:has(.dock-player:not(:empty)) .main { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
   /* Behind the dock, the page fades to black (the header's gradient, upside down). */
@@ -1546,7 +1460,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .app:has(.dock-player:not(:empty)) .main[data-mobile-tab="style"] { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .main[data-mobile-tab="style"] .col.side.r { padding-bottom: 0; }
   /* Its control: a hairline on top with the grip, it can be pulled up and down. */
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { box-shadow: none; border-top: 1px solid var(--line-2); }
 }
 @media (max-width: 1000px) {
   /* The presets' panel starts flush: the same 13px as the other parts. */
@@ -1555,7 +1468,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @media (max-width: 1000px) {
   /* Style page, carousel: held like the video's. The column is no scroll box of its own, nothing in it repaints
      while the page scrolls, and a finger on the slides only swipes them sideways (up and down is the settings'). */
-  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center { overflow: visible; contain: layout paint; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] .col.center { contain: layout paint; }
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center { contain: layout paint; }
   .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides,
   .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides canvas.cv { touch-action: pan-x; }
@@ -1572,10 +1485,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   /* Style page, second pass: the part that slides is black (true black), rounder, its grip further from its top
      edge and bigger; the video uses the room the slides' dots take in the carousel (the control stays put). */
   .main[data-mobile-tab="style"] .col.side.r { background: #000; }
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { background: #000; border-radius: 26px 26px 0 0; border-top-color: rgba(255,255,255,.1);
-    padding-top: 26px; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { border-top-color: rgba(255,255,255,.1); }
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { background: linear-gradient(180deg, #000, rgba(0,0,0,0)); }
-  .main[data-mobile-tab="style"] .style-grip { top: 10px; width: 42px; height: 5px; margin-left: -21px; border-radius: 3px; background: rgba(255,255,255,.28); }
+  .main[data-mobile-tab="style"] .style-grip { width: 42px; height: 5px; margin-left: -21px; border-radius: 3px; background: rgba(255,255,255,.28); }
   /* (The picture is --pv-h tall like the slides, the Zones bar under it like theirs.) */
 }
 @media (max-width: 1000px) {
@@ -1584,7 +1496,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 @media (max-width: 1000px) {
   /* The part that slides: its hairline on top (the studio-coloured glow was tried, the line kept). */
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { border-top: 1px solid rgba(255,255,255,.1); box-shadow: none; }
+  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { box-shadow: none; }
 }
 @media (max-width: 1000px) {
   /* No scrollbars on a phone or a tablet, anywhere (the content still scrolls). */
@@ -1601,9 +1513,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 @media (max-width: 1000px) {
   /* Style page, carousel: each part opens on its title like the video's (Text, Format & photo…): the panel's own
      title, shown as the video's heads are (same type, same height, same distance under the control), not foldable. */
-  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary {
-    display: flex; align-items: center; min-height: var(--h-sm); margin: 0; padding: 0; border: 0; pointer-events: none;
-    font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary { align-items: center; min-height: var(--h-sm); margin: 0; padding: 0; border: 0; pointer-events: none; }
   .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary::after,
   .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] > summary::before { display: none; }
   .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec^="slide-"] { border: 0; margin: 0 !important; padding: 0 !important; }
@@ -1613,8 +1523,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 @media (max-width: 1000px) {
   /* Style page, the panel that slides: "Style" up near its top (the grip just above it, no black gap). */
-  .main[data-mobile-tab="style"] .col.side.r > .style-tabs { padding-top: 16px; }
-  .main[data-mobile-tab="style"] .style-grip { top: 6px; }
   /* Hierarchy: each part's title (Text, Format, Lyrics style, Colour…) is a heading, in the app's serif like the
      other titles; the panels inside stay in mono capitals, the fields' names in muted mono below them. */
   .main[data-mobile-tab="style"] .video-col-r > .sheet-text > .col-head > .label,
@@ -1626,7 +1534,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 /* Style page (phone), third pass: no title row in the control (the parts say it), the grip with more room above;
    the carousel's slide number in the deck bar, across from Zones; "Apply to all slides" at the end of the page. */
-.apply-all-m { display: none; }
 /* The slide number keeps its cell in the deck bar everywhere (the dots stay centred, Zones on the right), seen only
    on the Style page. */
 .deck-num { visibility: hidden; }
@@ -1635,7 +1542,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-mobile-tab="style"] .style-grip { top: 10px; }
   .main[data-mobile-tab="style"] .deck-num { visibility: visible; justify-self: start; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em;
     text-transform: uppercase; color: var(--text); padding-left: 2px; }
-  .main[data-studio="carousel"][data-mobile-tab="style"] .apply-all-m { display: flex; justify-content: center; padding: var(--s4) 0 var(--s2); }
   /* The fade under the control: shorter, it no longer dims the first lines before they scroll. */
   .main[data-mobile-tab="style"] .col.side.r > .style-tabs::after { height: 8px; }
 }
@@ -1652,23 +1558,11 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 }
 @media (max-width: 1000px) {
   /* The carousel's column is not a grid like the video's: the same 16px under the control, set here. */
-  .main[data-studio="carousel"][data-mobile-tab="style"] .col.side.r > .style-tabs { margin-bottom: var(--s4); }
 }
 @media (max-width: 1000px) {
   /* Framing and presets start 4px lower (their panel's own spacing): the same 16px as the rest. */
   .main[data-mobile-tab="style"] .video-col-r > details.sec[data-sec="video-render"] > .body > .style-only + *,
   .main[data-studio="carousel"][data-mobile-tab="style"] details.sec[data-sec="slide-presets"] > .body > :first-child { margin-top: -4px; }
-}
-/* Video preview, phone: the aids (TikTok zones, guides) behind a small glass button on the picture, like the
-   carousel's photo adjustments; the computer keeps its two boxes in Framing. */
-.video-aids, .aids-pop { display: none !important; }
-@media (max-width: 1000px) {
-  .video-aids { display: grid !important; opacity: 1; }
-  .aids-pop { display: grid !important; gap: 10px; position: absolute; right: 8px; bottom: 48px; z-index: 3; padding: 12px 14px; border-radius: 12px;
-    background: rgba(8,8,10,.78); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.14);
-    box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: dp-in .2s cubic-bezier(.2,.9,.25,1) backwards; }
-  .aids-pop .check { color: #fff; white-space: nowrap; }
-  .aids-row { display: none !important; }
 }
 @media (max-width: 1000px) {
   /* The aids' bubble may be wider than a small preview: it can go past the picture's edge. */
@@ -1680,11 +1574,6 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   input[type=range] { pointer-events: none; touch-action: pan-y; }
   input[type=range]::-webkit-slider-thumb { pointer-events: auto; }
   input[type=range]::-moz-range-thumb { pointer-events: auto; }
-  /* The preview's aids button: a little smaller. */
-  .video-aids.adjust-open { width: 26px; height: 26px; right: 7px; bottom: 7px; }
-  .video-aids.adjust-open svg { width: 13px; height: 13px; }
-  .video-aids.adjust-open.set::after { top: 2px; right: 2px; width: 6px; height: 6px; }
-  .aids-pop { bottom: 40px; right: 7px; }
 }
 @media (max-width: 1000px) {
   /* The knob alone takes the finger: big enough to land on it. */
@@ -1707,7 +1596,6 @@ details.sec, .batch-list li + li, .theme-item { border-top: 0; background-image:
   /* Style page, video: laid out like the carousel's (a plain column, the 16px under the control set on it), not
      through the grid's gap that Safari lets the sticky control eat. */
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.side.r { display: block !important; }
-  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.side.r > .style-tabs { margin-bottom: var(--s4); }
 }
 @media (max-width: 1000px) {
   /* Room under the control (both studios): the fade below it stays clear of the first setting. */
@@ -1749,10 +1637,8 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 1000px) {
   .top .top-settings { display: block !important; margin-left: 2px; }
   .top .top-settings .me { width: 34px; height: 34px; border-radius: 10px; font-size: 14px; }
-  .mobile-tabs > .dock-lib { display: grid; place-items: center; flex: none; width: 46px; height: 46px; min-width: 0; padding: 0; margin: 1px 1px 1px 0;
-    border: 1px solid var(--line-2); border-radius: 10px; background: var(--raised); color: var(--muted); cursor: pointer; transition: background .25s, color .2s, scale .12s; }
+  .mobile-tabs > .dock-lib { place-items: center; flex: none; width: 46px; height: 46px; min-width: 0; padding: 0; margin: 1px 1px 1px 0; border: 1px solid var(--line-2); border-radius: 10px; color: var(--muted); cursor: pointer; }
   .mobile-tabs > .dock-lib:active { scale: .94; }
-  .mobile-tabs > .dock-lib.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 }
 /* One library for the release on a phone (both studios show it all); a computer keeps each studio's own. */
 .lib-desk { display: contents; }
@@ -1761,9 +1647,6 @@ details.sec:first-of-type { background-image: none; }
   .lib-desk { display: none; }
   .lib-phone { display: contents; }
 }
-.lib-sum { display: grid; gap: 8px; padding: 2px 0 var(--s2); }
-.lib-sum-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--s3); align-items: baseline; font-size: var(--fs-sm); }
-.lib-sum-row .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1000px) {
   /* The Library (phone) is the video studio's library column in both studios: the carousel's own is put away. */
   .main[data-studio="carousel"][data-mobile-tab="lists"] > .col.side.l { display: none; }
@@ -1772,10 +1655,9 @@ details.sec:first-of-type { background-image: none; }
   .video-shell > .col.side { grid-template-columns: minmax(0, 1fr); }
   .lib-phone > *, .lib-desk > * { min-width: 0; max-width: 100%; }
   /* The library's square opens into a pill with its name, like Create and Style: one word shown out of three. */
-  .mobile-tabs > .dock-lib { gap: 0; transition: background .35s cubic-bezier(.3,1.2,.5,1), color .25s, gap .35s cubic-bezier(.3,1.2,.5,1), padding .35s cubic-bezier(.3,1.2,.5,1), width .35s cubic-bezier(.3,1.2,.5,1), scale .12s; }
-  .mobile-tabs > .dock-lib .tab-name { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; font: 600 14px/1 var(--sans);
-    transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .2s; }
-  .mobile-tabs > .dock-lib.on { display: flex; align-items: center; width: auto; gap: 8px; padding: 0 16px 0 13px; }
+  .mobile-tabs > .dock-lib { gap: 0; }
+  .mobile-tabs > .dock-lib .tab-name { max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; font: 600 14px/1 var(--sans); transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .2s; }
+  .mobile-tabs > .dock-lib.on { display: flex; align-items: center; }
   .mobile-tabs > .dock-lib.on .tab-name { max-width: 130px; opacity: 1; transition: max-width .35s cubic-bezier(.3,1.2,.5,1), opacity .25s .08s; }
 }
 @media (max-width: 1000px) {
@@ -1785,20 +1667,18 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 1000px) {
   /* Carousel Style page: the preview shows the slides only, with Zones (like the video's eye); the photo edits
      (exposure, contrast…) belong to the studio's own page. */
-  .main[data-studio="carousel"][data-mobile-tab="style"] .adjust-open:not(.video-aids),
   .main[data-studio="carousel"][data-mobile-tab="style"] .adjust-panel { display: none !important; }
 }
 /* Video (phone and tablet): the carousel's Zones button under the picture, at the same place; the computer keeps
    its box in Framing. The Style page shows it too (the picture's block keeps its height in both studios). */
 @media (max-width: 1000px) {
-  .video-stage > .video-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin: 0; grid-column: 1 / -1; }
+  .video-stage > .video-bar { margin: 0; grid-column: 1 / -1; }
 
-  .main[data-studio="video"][data-mobile-tab="style"] .video-stage > .video-bar { display: grid !important; margin-top: 10px; }
+  .main[data-studio="video"][data-mobile-tab="style"] .video-stage > .video-bar { display: grid !important; }
 }
 @media (max-width: 1000px) {
   /* Under the picture first (like the slides' bar), then "Shown" and the size. */
   .video-stage > .video-bar { grid-row: 2; }
-  .video-stage > .shown-on, .video-stage > .stage-fmt { grid-row: 3; }
   .main[data-studio="video"][data-mobile-tab="style"] .video-stage > .video-bar { margin-top: 14px; }
 }
 @media (max-width: 1000px) {
@@ -1815,10 +1695,6 @@ details.sec:first-of-type { background-image: none; }
 .dock-pair { display: none; }
 @media (max-width: 1000px) {
   .mobile-tabs > .dock-pair { position: relative; display: grid; grid-template-columns: 1fr 1fr; flex: 1 1 0; min-width: 0; height: 46px; align-self: center; }
-  .dock-pair-thumb { position: absolute; top: 0; bottom: 0; left: 0; width: 50%; border-radius: 10px; background: var(--accent);
-    transition: translate .42s cubic-bezier(.65,0,.35,1), opacity .25s; will-change: translate; }
-  .dock-pair[data-on="1"] .dock-pair-thumb { translate: 100% 0; }
-  .dock-pair[data-on="none"] .dock-pair-thumb { opacity: 0; }
   .dock-pair > button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; height: 46px; padding: 0 8px;
     border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px/1 var(--sans); cursor: pointer;
     transition: color .42s cubic-bezier(.65,0,.35,1), scale .12s; }
@@ -1827,14 +1703,13 @@ details.sec:first-of-type { background-image: none; }
   .dock-pair > button .tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dock-pair > button svg { flex: none; }
 }
-@media (prefers-reduced-motion: reduce) { .dock-pair-thumb, .dock-pair > button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .dock-pair > button { transition: none; } }
 /* Phone dock, one pill for the three pages: it slides (and resizes) from Create to Style to the library. */
 .dock-thumb { display: none; }
 @media (max-width: 1000px) {
   .mobile-tabs > .dock-thumb { display: block; position: absolute; top: 0; left: 0; z-index: 0; border-radius: 10px; background: var(--accent); pointer-events: none;
     transition: translate .42s cubic-bezier(.65,0,.35,1), width .42s cubic-bezier(.65,0,.35,1); }
   .mobile-tabs > :not(.dock-thumb) { position: relative; z-index: 1; }
-  .dock-pair-thumb { display: none !important; }
   .mobile-tabs > .dock-lib, .mobile-tabs > .dock-lib.on { background: transparent; transition: color .42s cubic-bezier(.65,0,.35,1), border-color .42s, scale .12s; }
   .mobile-tabs > .dock-lib.on { color: var(--on-accent); border-color: transparent; }
   .mobile-tabs > .mobile-tabs-sep { z-index: 2; }
@@ -1874,7 +1749,6 @@ details.sec:first-of-type { background-image: none; }
   .carousel-head .h-dl, .carousel-head .slot.h-dl { grid-column: 4; grid-row: 1; }
   .carousel-head.more .h-pick { grid-column: 1 / 2; }
   .carousel-head.more .h-count { grid-column: 1 / 2; }
-  .carousel-head.more .slot.h-opts { grid-column: 2 / -1; }
   .carousel-head .h-gen { display: none !important; } /* (floats over the dock: .gen-fab) */
   /* Room for it at the end of the page. */
   .main[data-studio="carousel"][data-mobile-tab="slides"] { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
@@ -1886,18 +1760,14 @@ details.sec:first-of-type { background-image: none; }
 @media (max-width: 640px) {
   .gen-fab { display: block; position: fixed; z-index: 42; right: max(16px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom)); }
   .gen-fab .gen-row { flex-direction: row-reverse; gap: 8px; align-items: center; }
-  .gen-fab .btn.primary { height: 50px; padding: 0 22px; border: 0; border-radius: 15px; font-size: 15px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.35);
-    background: var(--grad-oil); background-size: 260% 100%; animation: oil-drift 9s ease-in-out infinite alternate;
-    box-shadow: 0 12px 30px rgba(0,0,0,.6), 0 4px 22px rgba(106,61,240,.35), inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(0,0,0,.25); }
-  .gen-fab .btn.primary svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  .gen-fab .btn.primary { height: 50px; padding: 0 22px; border: 0; border-radius: 15px; font-size: 15px; }
   .gen-fab .btn.primary:active { scale: .96; }
   .gen-fab .warn-badge { height: 40px; border-radius: 12px; background: rgba(14,14,18,.88); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 8px 22px rgba(0,0,0,.5); }
   /* The carousel head: a little less room under it. */
-  .carousel-head.studio-head { margin-bottom: calc(-1 * var(--s2)); }
 }
 @keyframes oil-drift { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
-@media (prefers-reduced-motion: reduce) { .gen-fab .btn.primary { animation: none; } }
+@media (prefers-reduced-motion: reduce) { }
 /* Generate (phone), second pass: a pastel holographic gradient (lavender, periwinkle, mint, pale yellow, peach)
    melting into white at the bottom, dark text; the band drifts slowly. */
 :root { --grad-holo: linear-gradient(90deg, #dcc3f6 0%, #c7cdf8 22%, #c2e9f0 42%, #d3f1c8 60%, #f1edbf 78%, #f7d9bd 100%); }
@@ -1923,7 +1793,6 @@ details.sec:first-of-type { background-image: none; }
   background: radial-gradient(120% 90% at 50% 125%, #fff 0%, rgba(255,255,255,.92) 38%, rgba(255,255,255,0) 72%), var(--grad-holo);
   background-size: 100% 100%, 220% 100%; background-position: 50% 50%, 0% 50%; animation: holo-drift 10s ease-in-out infinite alternate;
   box-shadow: 0 6px 20px rgba(199,205,248,.18), inset 0 1px 0 rgba(255,255,255,.7); }
-.btn.primary.gen-btn:hover:not(:disabled) { filter: brightness(1.04); }
 .btn.primary.gen-btn::after { display: none; }
 @media (prefers-reduced-motion: reduce) { .btn.primary.gen-btn { animation: none; } }
 /* Generate's hover: no flat colour nor shine sweep over its gradient (that flickered), a slight lift and glow. */
@@ -1933,16 +1802,11 @@ details.sec:first-of-type { background-image: none; }
   background-size: 100% 100%, 220% 100%; box-shadow: 0 8px 28px rgba(199,205,248,.38), 0 0 0 1px rgba(255,255,255,.25), inset 0 1px 0 rgba(255,255,255,.7); }
 .btn.primary.gen-btn:hover:not(:disabled)::after { animation: none; display: none; }
 .btn.primary.gen-btn:active:not(:disabled) { scale: .98; }
-/* Computer: the Zones toggle beside Options (the same look as the phone's deck button). */
-.opts-row { gap: var(--s2); align-items: center; }
-
 @media (max-width: 640px) {
 
   /* The deck under the carousel head: 16px to the slide's own head line. */
   .main[data-mobile-tab="slides"] .carousel-head + .board-empty + .deck-wrap, .main[data-mobile-tab="slides"] .carousel-head + .deck-wrap { margin-top: 12px; }
 }
-/* Zones, on: like every active toggle of the app (white outline and text), so its state reads at a glance. */
-
 /* Style page (phone): the same release head as the Create page, in both studios. It scrolls away under the app's
    header (the block sticks --style-head higher) while the preview and the control hold still. */
 @media (max-width: 1000px) {
@@ -1980,22 +1844,10 @@ details.sec:first-of-type { background-image: none; }
 /* The video's tabs (lyrics, hook, caption) never grow past the board: their one column can shrink, so a long hook in
    "Pick from the list" ends with "…" instead of pushing the timeline under the right column. */
 .video-side .tab-body, .video-side .timeline { grid-template-columns: minmax(0, 1fr); }
-.video-side .tab-body > *, .hook-item > *, .hook-item .row > *, .hook-pick > * { min-width: 0; }
-.hook-item .row .dd, .hook-pick .dd { max-width: 100%; }
-/* The Options menu (both studios): titled parts (Draw, Preview, Export format). */
-.opts-pop { padding: var(--s2) var(--s3); min-width: 280px; gap: var(--s3); }
-.opts-part { gap: 8px; }
-.opts-part + .opts-part { padding-top: var(--s3); background-image: var(--soft-line); background-size: 100% 1px; background-repeat: no-repeat; background-position: top; }
-
-@media (max-width: 640px) { .desk-only-640 { display: none !important; } }
-@media (max-width: 1000px) { .desk-only-1000 { display: none !important; } }
-/* Video head: the status, then Options at the end of the second line (computer); in "More" on a phone. */
+.video-side .tab-body > *, .hook-item > *, .hook-item .row > * { min-width: 0; }
+.hook-item .row .dd { max-width: 100%; }
+/* Video head, computer: the status at the end of the second line. */
 @media (min-width: 641px) {
-  .video-head .h-status { grid-column: 6 / 9; }
-  .video-head .slot.h-opts { grid-column: 9; grid-row: 2; justify-self: end; }
-}
-@media (max-width: 640px) {
-  .video-head.more .slot.h-opts { display: block; grid-column: 1 / -1; justify-self: end; }
 }
 /* Video head, computer: the release's state as a titled field (like the carousel's Slides), right after the video
    picker and its buttons, the badge centred on the controls' line. */
@@ -2018,7 +1870,7 @@ details.sec:first-of-type { background-image: none; }
 .pic-drop.over::after { content: ""; position: absolute; inset: -6px; border: 1.5px dashed var(--muted); border-radius: var(--r-lg); pointer-events: none; }
 .pic-drop-hint { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8,8,10,.72); border-radius: var(--r-lg);
   color: var(--text); font-size: var(--fs-sm); pointer-events: none; }
-.pic-saved { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); }
+.pic-saved { display: flex; gap: 6px; margin: 0; color: var(--muted); }
 .pic-saved svg { flex: none; color: var(--ok, #6fcf97); }
 .pic-saved.local svg { color: var(--warn); }
 /* The video board, at the root: none of its columns can be widened by what is in it (a long hook, file name, lyric
@@ -2060,20 +1912,18 @@ details.sec:first-of-type { background-image: none; }
    wider); play and time live there, the timeline above keeps the segment, its length, the lock and the sync. */
 .board-player { display: none; }
 @media (min-width: 1001px) {
-  .board-player { display: block; position: sticky; bottom: 18px; z-index: 20; justify-self: center; width: min(640px, 100%); margin-top: var(--s2);
-    padding: 7px; border-radius: 17px; border: 1px solid rgba(255,255,255,.09); background: rgba(22,22,28,.72);
-    backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7); box-shadow: 0 18px 50px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07); }
+  .board-player { display: block; position: sticky; bottom: 18px; z-index: 20; justify-self: center; width: min(640px, 100%); padding: 7px; border-radius: 17px; border: 1px solid rgba(255,255,255,.09); background: rgba(22,22,28,.72); backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7); box-shadow: 0 18px 50px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07); }
   .board-player .dp { display: flex; align-items: center; gap: 12px; padding: 0 10px 0 0; }
   .board-player .dp-play { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: scale .12s; }
   .board-player .dp-play:active { scale: .94; } .board-player .dp-play:disabled { opacity: .5; }
   .board-player .dp-track { position: relative; flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; touch-action: none; cursor: pointer; }
   .board-player .dp-strip { position: relative; display: flex; width: 100%; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.14); }
-  .board-player .dp-strip.on { height: 38px; border-radius: 8px; background: #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+  .board-player .dp-strip.on { background: #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
   .board-player .dp-strip img, .board-player .dp-strip .dp-slot { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; pointer-events: none; }
   .board-player .dp-strip .dp-slot { background: #111116; }
   .board-player .dp-played { position: absolute; top: 0; bottom: 0; left: 0; background: var(--text); }
   .board-player .dp-strip.on .dp-played { display: none; }
-  .board-player .dp-head { position: absolute; top: 50%; width: 6px; height: 46px; margin: -23px 0 0 -3px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.5); pointer-events: none; }
+  .board-player .dp-head { position: absolute; top: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.5); pointer-events: none; }
   .board-player .dp-strip:not(.on) + .dp-head { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 3px; }
   .board-player .dp-time { flex: none; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
   /* The timeline: no play nor time any more (they are in the player); the segment's span shows instead. */
@@ -2114,7 +1964,6 @@ details.sec:first-of-type { background-image: none; }
 /* Versions of a video (A/B): one selector, each line with rename and delete; "New version" beside it. */
 .seg-versions { gap: 6px; flex-wrap: wrap; align-items: center; }
 .ver-pick { gap: 8px; white-space: nowrap; }
-.ver-pick .ver-k { color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
 .ver-list { display: grid; gap: 2px; min-width: 260px; }
 .ver-line { display: flex; align-items: center; gap: 4px; }
 
@@ -2155,7 +2004,7 @@ details.sec:first-of-type { background-image: none; }
   /* Under the picture: Create shows what the video shows (lyrics, hook) next to Zones; Style keeps the Edits switch. */
 
   .main:not([data-mobile-tab="style"]) .video-bar > .switch,
-  .main:not([data-mobile-tab="style"]) .video-bar > .bar-noswitch{ display: none; }
+  .main:not([data-mobile-tab="style"]) .video-bar > .bar-noswitch { display: none; }
   /* Lyrics and Hook: exactly the Zones button (same class). */
   .video-stage > .shown-on { display: none; }
   /* Format and take: one quiet line, no titles. */
@@ -2163,9 +2012,8 @@ details.sec:first-of-type { background-image: none; }
   .video-stage > .stage-meta .meta-row { display: flex; min-height: 0; gap: 0; }
   .video-stage > .stage-meta .meta-k { display: none; }
   /* The segment's tools: one row (version, new version as an icon, zoom), short labels. */
-  .ver-pick .ver-k, .wave-fit .lbl-long { display: none; }
+  .wave-fit .lbl-long { display: none; }
   .wave-fit .lbl-short { display: inline; }
-  .seg-versions { flex-wrap: nowrap; }
   .ver-pick { min-width: 0; overflow: hidden; }
 
   .wave-zoom { flex: none; }
@@ -2184,7 +2032,7 @@ details.sec:first-of-type { background-image: none; }
   .video-side .timeline > .wave-wrap { order: 3; }
   .video-side .timeline > .hook-track { order: 4; }
   .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
-  .video-side .timeline > .transport { order: 6; margin-top: 4px; }
+  .video-side .timeline > .transport { order: 6; }
   .video-side .timeline > .seg-versions { order: 7; }
   /* The sync's quality: plain text with its dot, on the line of the "Segment" title (no pill). */
   .seg-top .video-status { border: 0; padding: 0; background: none; min-height: 0; height: auto; }
@@ -2196,7 +2044,6 @@ details.sec:first-of-type { background-image: none; }
   .app:has(.dock-player:not(:empty)) .video-side .timeline > .seg-top { min-height: 0; line-height: 1.2; margin-bottom: 8px; }
   .video-side .timeline > .seg-top .video-status { height: auto; line-height: 1.2; }
   /* More room between the tracks and the tools below them. */
-  .video-side .timeline > .transport { margin-top: 12px; }
   /* The segment's length: a plain control like the version and sync buttons (no filled field). */
   .video-side .transport .seg-len { height: var(--h-sm); min-height: var(--h-sm); background: none; padding: 0 10px; font-size: 12px; }
 }
@@ -2227,16 +2074,11 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .wave-wrap { order: 3; }
 .video-side .timeline > .hook-track { order: 4; }
 .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
-.video-side .timeline > .transport { order: 6; margin-top: 12px; }
-.video-side .timeline > .seg-versions { order: 7; }
-.video-side .transport .tr-lock { order: -1; }
 /* Takes, everywhere: "Takes" then "Take 1 0:04–0:34"… on one line (the full detail stays in each one's tooltip). */
 
 /* The segment's tools, everywhere: lock, length, then the passage. */
 .video-side .transport .tr-lock { order: -2; }
 .video-side .transport .seg-len { order: -1; }
-/* The version selector shows the version's name only (no "Version" title), everywhere. */
-.ver-pick .ver-k { display: none; }
 /* The take selector, before the version's: its "i" right beside it. */
 .take-slot { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 @media (max-width: 1000px) {
@@ -2315,7 +2157,7 @@ details.sec:first-of-type { background-image: none; }
 
 /* Under a slide's sources: the text and photo pickers, side by side, each opening a list that scrolls. */
 
-.pick-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; text-align: left; cursor: pointer; font-size: 12px; }
+.pick-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; text-align: left; cursor: pointer; }
 .pick-btn > .truncate { flex: 1; min-width: 0; }
 .pick-btn.on { border-color: var(--muted); }
 .pick-tag { flex: none; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -2343,7 +2185,7 @@ details.sec:first-of-type { background-image: none; }
 .pick-sec > .pick-chips { padding: 4px 4px 4px; }
 /* A slide's photo chosen by hand: the list's photos in a grid that scrolls (about three rows in sight). */
 .pic-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 290px; overflow-y: auto; padding: 2px; }
-.menu .pic-grid .pic-cell { display: block; width: 100%; aspect-ratio: 3 / 4; height: auto; min-height: 0; padding: 0; border-radius: var(--r); overflow: hidden; border: 2px solid transparent; }
+.menu .pic-grid .pic-cell { display: block; width: 100%; min-height: 0; padding: 0; border-radius: var(--r); overflow: hidden; border: 2px solid transparent; }
 .menu .pic-grid .pic-cell.on { border-color: var(--text); }
 .pic-cell > * { width: 100%; height: 100%; }
 .pic-cell img, .pic-cell canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -2354,7 +2196,7 @@ details.sec:first-of-type { background-image: none; }
   .pv-expand { display: grid; place-items: center; position: absolute; right: 2px; bottom: 2px; width: 40px; height: 40px; padding: 0; border: 0; background: none;
     color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 2; }
   .pv-full-layer { position: fixed; inset: 0; z-index: 80; background: #000; display: grid; place-items: center; touch-action: none; }
-  .pv-full-cv { display: block; max-width: 100vw; max-height: 100dvh; width: auto; height: auto; touch-action: none; }
+  .pv-full-cv { display: block; max-height: 100dvh; width: auto; height: auto; touch-action: none; }
   .pv-close { display: grid; place-items: center; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px; width: 44px; height: 44px; padding: 0; border: 0; background: none;
     color: #fff; z-index: 82; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
   html.pv-full, html.pv-full body { overflow: hidden; }
@@ -2376,10 +2218,6 @@ details.sec:first-of-type { background-image: none; }
 .tag-menu { display: grid; gap: 2px; min-width: 200px; max-height: 300px; overflow-y: auto; }
 .menu .tag-menu button.on { color: var(--text); }
 .tag-menu .input { margin: 4px 2px 2px; height: 30px; }
-/* The video's hook tags: the same chips as a slide's text picker (outside a menu). */
-.hook-tags .pick-chips { margin-top: 6px; }
-.hook-tags .pick-chip { height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
-.hook-tags .pick-chip.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 /* The photo grid: each cell as tall as its picture (3:4), never over the next one. */
 .menu .pic-grid .pic-cell { aspect-ratio: auto; height: auto; }
 .pic-cell .thumb { width: 100%; height: auto; aspect-ratio: 3 / 4; outline: 0; border-radius: 0; }
@@ -2391,14 +2229,14 @@ details.sec:first-of-type { background-image: none; }
 /* A slide's sources as two tiles: an icon of the kind (lyrics in their gold) or the photo on the slide, small;
    the title; where it comes from; then which one. */
 .src-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); margin-top: var(--s2); }
-.src-tile { display: grid; gap: 8px; align-content: start; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); min-width: 0; }
+.src-tile { display: grid; align-content: start; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); min-width: 0; }
 .src-tile.src-lyrics { border-color: color-mix(in srgb, var(--lyrics) 32%, var(--line)); }
-.src-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.src-head { display: flex; align-items: center; min-width: 0; }
 .src-ico { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r); background: var(--raised); color: var(--muted); overflow: hidden; }
-.src-lyrics .src-ico { color: var(--lyrics); background: color-mix(in srgb, var(--lyrics) 14%, transparent); }
+.src-lyrics .src-ico { background: color-mix(in srgb, var(--lyrics) 14%, transparent); }
 .src-pool .src-ico { color: var(--text); }
-.src-ico.has-pic { width: 22px; height: 30px; background: none; }
-.src-ico.has-pic .thumb { width: 100%; height: 100%; aspect-ratio: auto; outline: 0; border-radius: 3px; }
+.src-ico.has-pic { background: none; }
+.src-ico.has-pic .thumb { outline: 0; }
 .src-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .src-tile .pick-btn, .src-tile .pick-add { margin: 0; }
 .src-tile > *, .src-tile .menu-wrap { min-width: 0; }
@@ -2422,12 +2260,6 @@ details.sec:first-of-type { background-image: none; }
 .src-tile .pick-btn { color: var(--muted); font-size: 12px; }
 .src-tile .pick-btn:hover { color: var(--text); }
 .src-tile .pick-add { height: 30px; border-color: transparent; background: none; justify-content: flex-start; padding: 0 6px; color: var(--muted); }
-/* Phone only: the draw's settings in the account menu; the video studio's Options menu stays on the computer. */
-.phone-only { display: none; }
-@media (max-width: 1000px) {
-  .phone-only { display: block; }
-
-}
 /* The lyrics' icon exactly as in the library (its T, its gold, its ground). */
 .src-lyrics .src-ico { color: var(--lyrics); background: color-mix(in srgb, var(--lyrics) 10%, var(--bg)); }
 /* Phone: the sync status lives in the Segment block only, whatever the player is doing (it is empty for a moment
@@ -2461,22 +2293,20 @@ details.sec:first-of-type { background-image: none; }
   color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 2; cursor: pointer; transition: opacity .15s; }
 .pv-zones { left: 2px; }
 .pv-expand { right: 2px; }
-.zones-open { position: absolute; left: 8px; bottom: 8px; z-index: 2; width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18);
-  background: rgba(8,8,10,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: #fff; display: grid; place-items: center; cursor: pointer;
-  opacity: 0; transition: opacity .15s; }
+.zones-open { position: absolute; z-index: 2; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .15s; }
 .card:hover .zones-open, .card.sel .zones-open, .zones-open:focus-visible { opacity: 1; }
 @media (hover: hover) and (min-width: 1001px) {
   .video-stage .cv-wrap .pv-zones, .video-stage .cv-wrap .pv-expand { opacity: 0; }
   .video-stage .cv-wrap:hover .pv-zones, .video-stage .cv-wrap:hover .pv-expand { opacity: 1; }
 }
 /* The full screen, on a computer too: the picture on black, the cross; the board's player above it. */
-.pv-full-layer { position: fixed; inset: 0; z-index: 80; background: #000; display: grid; place-items: center; touch-action: none; }
-.pv-full-cv { display: block; max-width: 100vw; max-height: 100dvh; width: auto; height: auto; touch-action: none; }
+.pv-full-layer { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; touch-action: none; }
+.pv-full-cv { display: block; max-height: 100dvh; width: auto; height: auto; touch-action: none; }
 .pv-close { display: grid; place-items: center; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px; width: 44px; height: 44px; padding: 0; border: 0; background: none;
   color: #fff; z-index: 82; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); cursor: pointer; }
 html.pv-full, html.pv-full body { overflow: hidden; }
 @media (min-width: 1001px) {
-  html.pv-full .board-player { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 85; width: min(640px, calc(100vw - 48px)); transition: opacity .3s; }
+  html.pv-full .board-player { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 85; width: min(640px, calc(100vw - 48px)); }
   /* Exactly where it was before the full screen (measured as it opens): it does not move. */
   html.pv-full.pv-pinned .board-player { left: var(--fp-x); top: var(--fp-y); bottom: auto; translate: none; width: var(--fp-w); margin: 0; }
   /* Computer: the player always there; it fades when the mouse rests, comes back when it moves or is over it. */
@@ -2534,7 +2364,7 @@ html.pv-full, html.pv-full body { overflow: hidden; }
    The photo's settings, once changed, keep their small dot. */
 .adjust-open, .zones-open { width: 40px; height: 40px; border: 0; border-radius: 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
   color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.65)); }
-.adjust-open { right: 2px; bottom: 2px; }
+.adjust-open { bottom: 2px; }
 .zones-open { left: 2px; bottom: 2px; }
 .adjust-open.set::after { top: 6px; right: 6px; }
 .pv-zones, .pv-expand { filter: drop-shadow(0 1px 2px rgba(0,0,0,.65)); }
@@ -2576,9 +2406,6 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .cue-edit { animation: hint-in .16s ease-out; }
 @media (prefers-reduced-motion: reduce) { .adjust-panel, .adjust-panel.leaving, .font-menu, .cue-edit { animation: none; } }
 
-/* The video's hooks: one line on top (list, tags, Generate), each hook with its actions as small icons. */
-.hook-pick { gap: 8px; align-items: center; }
-.hook-pick > .dd { min-width: 0; }
 /* A hook = a card: its number, where it is drawn from, its actions; its text; its timing. */
 .video-side .hook-item { gap: 10px; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); background-image: none; }
 .hook-head { gap: 2px; align-items: center; }

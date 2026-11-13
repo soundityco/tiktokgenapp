@@ -21,7 +21,7 @@ export function sniff(b: Uint8Array): ImgKind {
   return "unknown";
 }
 
-/** Is this Drive entry worth listing as a picture? (decided on MIME type and extension; real format is checked on load) */
+/** Is this file a picture the app reads? (decided on MIME type and extension, a HEIC often has none; real format is checked on load) */
 export function looksLikeImage(name: string, mime: string): boolean {
   if (mime === "image/svg+xml") return false;
   if (mime.startsWith("image/")) return true;

@@ -4,9 +4,8 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, findDriveTwins, trashDriveFile, driveFolder, ensureDriveTree, moveDriveFolder, tidyDriveRoot, findSamePicture, keepPicture, renameDriveFolder, sendPictureToDrive, webPicId } from "@/lib/drive";
+import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
-import { DRIVE_AUTH_EVENT, loadDriveImage, prefetchDriveImages } from "@/lib/drive";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
@@ -18,7 +17,7 @@ import ShareDialog, { useHandheld } from "./ShareDialog";
 import LyricsEditor from "./LyricsEditor";
 import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf, sungOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
-import type { GenSlide, PicEdit, PicPool, PicRef, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
+import type { GenSlide, PicEdit, PicPool, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
 import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
 import Inspector from "./Inspector";
@@ -1799,9 +1798,9 @@ export default function Studio({ userName }: { userName: string }) {
 
         <aside className="col side r" ref={rightColRef}>
           <StyleTabs parts={carParts} part={carStyle.part} onPart={carStyle.pick} tone="carousel" />
-          <Inspector index={sel} cfg={project.slides[sel]} zones={ws.zones} onZones={(v) => upd((w) => ({ ...w, zones: v }))}
+          <Inspector index={sel} cfg={project.slides[sel]}
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
-            lyrics={project.lyrics} presets={presets} fonts={fonts} onFonts={setFonts} onPreview={setFontPreview}
+            presets={presets} fonts={fonts} onFonts={setFonts} onPreview={setFontPreview}
             onSavePreset={(name) => savePreset(name, project.slides[sel].style)} onApplyPreset={applyPreset} onDeletePreset={deletePreset} />
           {/* Phone's Style page: at the very end (a computer has it at the top of the column). */}
         </aside>

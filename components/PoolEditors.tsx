@@ -1,10 +1,11 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
 import { useEffect, useRef, useState } from "react";
-import { hookKey, joinCaptions, poolTags, poolThemes, splitCaptions, tagGroups, textItems } from "@/lib/generate";
-import { THEMES, themeGroups, themeLabel } from "@/lib/themes";
+import { hookKey, joinCaptions, poolTags, splitCaptions, tagGroups, textItems } from "@/lib/generate";
+import { THEMES, themeLabel } from "@/lib/themes";
 import { classifyThemes } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
+import { looksLikeImage } from "@/lib/imageFormat";
 import { useT } from "@/lib/i18n";
 import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
@@ -87,19 +88,6 @@ function CaptionsEditor({ text, onText }: { text: string; onText: (text: string)
 function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void }) {
   const { t } = useT();
   const items = textItems(pool);
-  const themes = poolThemes(pool);
-  const groups = themeGroups(themes);
-  // Every theme one can move a text to: the lexicon's, the groups and names already in the list.
-  const known = [...new Set([...THEMES.map((x) => x.id), ...themes.filter(Boolean)])];
-  const setTheme = (text: string, id: string) => {
-    if (id === "__new") {
-      const name = window.prompt(t("Name of the new theme"))?.trim();
-      if (!name) return;
-      id = name;
-    }
-    onChange((x) => ({ ...x, themes: { ...(x.themes ?? {}), [hookKey(text)]: id } }));
-  };
-  const handSet = (text: string) => pool.themes?.[hookKey(text)] !== undefined;
   // Tags: several per text. Without its own, a text has its theme as its only tag.
   const tagsNow = poolTags(pool);
   const tagGroupsNow = tagGroups(tagsNow);
@@ -304,19 +292,8 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   };
   const pick = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
-  const images = (list: FileList | null) => [...(list ?? [])].filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|avif)$/i.test(f.name));
-  const folders = pool.folders ?? [];
-  // Removing a folder also removes the photos it brought, so a list filled from the wrong folder can be cleaned.
-  const unlink = (id: string) => p.onChange((x) => ({
-    ...x,
-    folders: (x.folders ?? []).filter((f) => f.id !== id),
-    pics: x.pics.filter((y) => y.folder !== id),
-  }));
-  const remove = (pic: PicRef) => p.onChange((x) => ({
-    ...x,
-    pics: x.pics.filter((y) => y.id !== pic.id),
-    ...(pic.folder ? { excluded: [...(x.excluded ?? []), pic.id] } : {}),
-  }));
+  const images = (list: FileList | null) => [...(list ?? [])].filter((f) => looksLikeImage(f.name, f.type));
+  const remove = (pic: PicRef) => p.onChange((x) => ({ ...x, pics: x.pics.filter((y) => y.id !== pic.id) }));
   return (
     <Modal title={t("Photo list")} onClose={close} wide>
       <div className={"pic-drop" + (over ? " over" : "")}

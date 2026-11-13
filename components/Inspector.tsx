@@ -2,19 +2,16 @@
 import { defaultPic, defaultStyle } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { zoomPic } from "@/lib/render";
-import type { FormatId, LyricSection, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
+import type { FormatId, PicSettings, SlideCfg, StylePreset, TextStyle } from "@/lib/types";
 import { caseOptions, FontPicker, LookExtras, presetOf, StylePresets, TextColors } from "./TextControls";
 import { Range, Section, Select, Hint } from "./ui";
 
 interface Props {
   index: number;
   cfg: SlideCfg;
-  zones: boolean;
-  onZones: (v: boolean) => void;
   onCfg: (fn: (c: SlideCfg) => SlideCfg) => void;
   /** Copies one panel's settings (the text's look, the photo, the text's place) to every slide. */
   onApplyAll: (part: "text" | "photo" | "position") => void;
-  lyrics: LyricSection[];
   presets: StylePreset[];
   onSavePreset: (name: string) => void;
   onApplyPreset: (p: StylePreset) => void;
@@ -26,8 +23,8 @@ interface Props {
 }
 
 export default function Inspector({
-  index, cfg, zones, onZones, onCfg, onApplyAll,
-  lyrics, presets, onSavePreset, onApplyPreset, onDeletePreset, fonts, onFonts, onPreview,
+  index, cfg, onCfg, onApplyAll,
+  presets, onSavePreset, onApplyPreset, onDeletePreset, fonts, onFonts, onPreview,
 }: Props) {
   const { t } = useT();
   const st = cfg.style, pic = cfg.pic;

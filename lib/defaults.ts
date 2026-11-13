@@ -50,7 +50,7 @@ export const FONT_LABELS: Record<FontId, string> = {
 /** Default shared photo list of a slide. Older workspaces call it "pictures". */
 export const isSlidePhotoList = (name: string, n: number) => name === `Slide ${n} photos` || name === `Slide ${n} pictures`;
 
-export function newSlide(n: number, textPoolId: string | null, picPoolId: string | null, lyrics = false): SlideCfg {
+export function newSlide(textPoolId: string | null, picPoolId: string | null, lyrics = false): SlideCfg {
   return {
     id: uid(),
     format: "9:16",
@@ -72,7 +72,7 @@ export function slidePools(n: number): { text: TextPool; pics: PicPool } {
 export function newProject(name: string, textPools: TextPool[], picPools: PicPool[]): Project {
   // One slide per default pair of shared pools (slide 1 and 2), slide 3 reads the lyrics.
   const slides: SlideCfg[] = [0, 1, 2].map((i) =>
-    newSlide(i + 1, i < 2 ? textPools[i]?.id ?? null : null, picPools[i]?.id ?? null, i === 2)
+    newSlide(i < 2 ? textPools[i]?.id ?? null : null, picPools[i]?.id ?? null, i === 2)
   );
   const videoId = uid();
   return {

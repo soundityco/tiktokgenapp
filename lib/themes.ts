@@ -141,13 +141,6 @@ export function themeLabel(id: string, t: (s: string, p?: Record<string, string 
   return def ? t(def.label) : id;
 }
 
-/** The themes of a list, the biggest first ("other" last), with their texts' indexes. */
-export function themeGroups(themes: string[]): { id: string; items: number[] }[] {
-  const m = new Map<string, number[]>();
-  themes.forEach((id, i) => m.set(id, [...(m.get(id) ?? []), i]));
-  return [...m.entries()].map(([id, items]) => ({ id, items })).sort((a, b) => (a.id === "") === (b.id === "") ? b.items.length - a.items.length : a.id === "" ? 1 : -1);
-}
-
 // ---------- the local model (public/themes/worker.js) ----------
 
 /** How much a lexicon point weighs next to the model's score (tuned on promo hooks, see tests). */

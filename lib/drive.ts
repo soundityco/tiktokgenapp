@@ -1,6 +1,6 @@
 import { isDemo } from "./demo";
 import { getSession } from "next-auth/react";
-import { decodeImage, looksLikeImage } from "./imageFormat";
+import { decodeImage } from "./imageFormat";
 import type { Img } from "./render";
 import { delMedia, getMedia, listMedia, putMedia } from "./idb";
 
@@ -25,7 +25,6 @@ export async function getToken(): Promise<string> {
 
 export interface DriveItem { id: string; name: string; mimeType: string; thumbnailLink?: string }
 export const isFolder = (i: DriveItem) => i.mimeType === "application/vnd.google-apps.folder";
-export const isImage = (i: DriveItem) => !isFolder(i) && looksLikeImage(i.name, i.mimeType);
 /** Thumbnail links seen while listing folders: spares one request per thumbnail (see lib/thumb.ts). */
 export const thumbLinks = new Map<string, string>();
 

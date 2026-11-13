@@ -1,6 +1,6 @@
 import { slideLyrics } from "./lyricsSections";
 import { themesOf } from "./themes";
-import { GenSlide, LyricSection, PicPool, Project, TextPool, Workspace } from "./types";
+import { GenSlide, PicPool, Project, TextPool, Workspace } from "./types";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g, " ").trim();
 
@@ -160,20 +160,6 @@ export function followLists<T extends { text: string; link?: HookLink }>(hooks: 
   return changed ? out : hooks;
 }
 
-/** The section a lyrics slide reads: its own, else the project's, else the first one. */
-export function lyricsSection(project: Project, sectionId?: string | null): LyricSection | undefined {
-  return (
-    (sectionId ? project.lyrics.find((l) => l.id === sectionId) : undefined) ??
-    project.lyrics.find((l) => l.id === project.lyricsSectionId) ??
-    project.lyrics[0]
-  );
-}
-
-export function lyricsText(project: Project, sectionId?: string | null): string {
-  const s = lyricsSection(project, sectionId);
-  return s?.text.replace(/\r\n/g, "\n").replace(/\s+$/g, "") ?? "";
-}
-
 export function pickText(project: Project, ws: Workspace, slideIdx: number, bags: Record<string, string[]>): string {
   const src = project.slides[slideIdx].textSource;
   if (src.kind === "lyrics") return slideLyrics(project, src);
@@ -236,12 +222,6 @@ export const poolsVisible = <T extends { scope: string; projectId?: string }>(po
 
 /** The theme of every text of a list (set by hand first, else found locally). */
 export const poolThemes = (pool: TextPool): string[] => themesOf(textItems(pool), hookKey, pool.themes, pool.aiThemes);
-/** The texts of a list that speak of one theme. */
-export function themedItems(pool: TextPool, theme: string): string[] {
-  const items = textItems(pool), th = poolThemes(pool);
-  return items.filter((_, i) => th[i] === theme);
-}
-
 /**
  * The tags of every text of a list: the ones set by hand, else one, its theme (found by hand, the local model or
  * the lexicon). "" is the tag of the texts that have none ("Other").

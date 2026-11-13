@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { signIn } from "next-auth/react";
@@ -26,7 +26,7 @@ import { presetOf, StylePresets, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
-import { themeGroups, themeLabel } from "@/lib/themes";
+import { themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
@@ -1415,8 +1415,6 @@ export default function VideoStudio({
   };
 
   const [clipDialog, setClipDialog] = useState<null | "rename" | "delete">(null);
-  // Phone: the tools of the head folded under "More" (the release, the status and the export stay out).
-  const [headMore, setHeadMore] = useState(false);
   /** Shown name of a video: the automatic "Video 2" in the interface language. */
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
   const renameClip = (name: string) => {
@@ -3218,7 +3216,7 @@ export default function VideoStudio({
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
         <main className="col center video-center">
-      <div className={"video-head studio-head" + (headMore ? " more" : "")}>
+      <div className="video-head studio-head">
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
           <label className="field h-pick" style={{ margin: 0 }}>{t("Video")}
@@ -3956,7 +3954,6 @@ export default function VideoStudio({
                       onChange={(patch) => setV({ hookStyle: { ...hookStyle, ...patch } })}
                       onPreview={(patch) => setFontPreview(patch ? { which: "hook", patch } : null)}
                       onFonts={onFonts}
-                      onReset={() => setV({ hookStyle: undefined })}
                     />
                     {/* Phone's Style page: the reset at the end (the head that holds it is not shown there). */}
                     <div className="reset-m"><button className="btn sm quiet" onClick={() => setV({ hookStyle: undefined })} disabled={!settings.hookStyle}>{t("Reset")}</button></div>
@@ -4002,14 +3999,12 @@ export default function VideoStudio({
               </Section>
                 <CaptionStyle
                   sid="lyrics-style"
-                  firstOpen={false}
                   style={captionStyle}
                   defaults={slideStyle}
                   fonts={fonts}
                   onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
                   onPreview={(patch) => setFontPreview(patch ? { which: "caption", patch } : null)}
                   onFonts={onFonts}
-                  onReset={() => setV({ captionStyle: undefined })}
                 />
                 <div className="reset-m"><button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button></div>
                         </div>

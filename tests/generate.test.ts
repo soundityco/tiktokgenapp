@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultWorkspace } from "../lib/defaults";
-import { drawHook, followLists, generateAll, hookKey, hookLink, lyricsText, pick, pickText, poolTags, tagGroups, taggedItems, textItems, weightedPick, weightedPickBag } from "../lib/generate";
+import { drawHook, followLists, generateAll, hookKey, hookLink, pick, pickText, poolTags, tagGroups, taggedItems, textItems, weightedPick, weightedPickBag } from "../lib/generate";
 import type { TextPool } from "../lib/types";
 
 const pool = (kind: TextPool["kind"], text: string): TextPool => ({ id: "p", name: "p", scope: "shared", kind, text });
@@ -84,13 +84,6 @@ describe("generateAll", () => {
     const { slides } = generateAll(ws, project, (i) => (i === 0 ? locked : undefined));
     expect(slides[0]).toBe(locked);
     expect(slides.slice(1).map((s) => s.picId)).not.toContain("ph0");
-  });
-  it("lyricsText falls back to the first section", () => {
-    const ws = defaultWorkspace();
-    const p = ws.projects[0];
-    p.lyrics = [{ id: "v", name: "Verse", text: "verse text" }];
-    p.lyricsSectionId = null;
-    expect(lyricsText(p)).toBe("verse text");
   });
 });
 

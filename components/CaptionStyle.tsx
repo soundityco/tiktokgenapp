@@ -11,16 +11,12 @@ export default function CaptionStyle({
   fonts,
   onChange,
   onFonts,
-  onReset,
   onPreview,
   defaults = defaultStyle(),
   sid = "text",
-  firstOpen = true,
 }: {
   /** Name the folded panels are remembered under ("lyrics-style", "hook-style"). */
   sid?: string;
-  /** The first panel (font) is open the first time. */
-  firstOpen?: boolean;
   /** Font under the pointer in the font list, shown on the video at once. */
   onPreview?: (patch: Partial<TextStyle> | null) => void;
   style: TextStyle;
@@ -29,11 +25,9 @@ export default function CaptionStyle({
   fonts: string[];
   onChange: (patch: Partial<TextStyle>) => void;
   onFonts: (names: string[]) => void;
-  /** Reset of the whole style: shown by the panel (next to its title). */
-  onReset?: () => void;
 }) {
   const { t } = useT();
-  // Folding panels, remembered per text (lyrics / hook): only the first is open the first time.
+  // Folding panels, remembered per text (lyrics / hook).
   const sec = (name: string) => `${sid}-${name}`;
   // A fragment, not a box: its panels are siblings of the ones around it (one separator, one spacing between all).
   return (
