@@ -30,7 +30,7 @@ import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
 import { themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { ConfirmDialog, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch, TagChip } from "./ui";
+import { ConfirmDialog, ContextMenu, Hint, Menu, Modal, PromptDialog, Range, Section, Select, Switch, TagChip } from "./ui";
 import { createPortal } from "react-dom";
 import { FullView } from "./FullView";
 import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from "./StyleSheet";
@@ -3191,6 +3191,8 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     setV({ crop: fitCrop(cfg.crop.start, Math.max(1, head - cfg.crop.start), boundsOf(cfg)) });
   };
+  /** The preview's right-click menu, where it was opened. */
+  const [vctx, setVctx] = useState<{ x: number; y: number } | null>(null);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e) => {
     if (!active) return; // hidden behind the carousel: its shortcuts are the carousel's
@@ -3472,7 +3474,24 @@ export default function VideoStudio({
                 }} />
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
-              onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble} />
+              onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble}
+              onContextMenu={(e) => { e.preventDefault(); if (!matchMedia("(hover: none)").matches) setVctx({ x: e.clientX, y: e.clientY }); }} />
+            {/* The preview's own right-click menu: play, the segment at the playhead, full screen, zones, export. */}
+            {vctx && (
+              <ContextMenu x={vctx.x} y={vctx.y} onClose={() => setVctx(null)}>
+                <div className="label cap truncate">{clipName(clip)}</div>
+                <button disabled={!audioBuf || (!!videoUrl && !playerReady && !playing)} onClick={() => (playing ? pause() : void play())}>
+                  <Icon name={playing ? "pause" : "play"} size={14} />{playing ? t("Pause") : t("Play")}<kbd>{t("Space")}</kbd></button>
+                <button disabled={!audioBuf} onClick={markIn}><Icon name="arrowLeft" size={14} />{t("Start of the segment here")}<kbd>I</kbd></button>
+                <button disabled={!audioBuf} onClick={markOut}><Icon name="arrowRight" size={14} />{t("End of the segment here")}<kbd>O</kbd></button>
+                <div className="sep" />
+                <button disabled={!videoBlob} onClick={() => toggleFull(true)}><Icon name="expand" size={14} />{t("Full screen")}<kbd>F</kbd></button>
+                {settings.format !== "16:9" && <button disabled={!videoBlob} onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones ? "zones-off" : "zones"} size={14} />{t("TikTok zones")}<kbd>G</kbd></button>}
+                <div className="sep" />
+                {videoBlob && <button disabled={syncBusy} onClick={() => void autoSync()}><Icon name="film" size={14} />{settings.score === undefined ? t("Sync the video") : t("Resync the video")}</button>}
+                <button disabled={!audioBuf || !videoBlob || exporting} onClick={() => void exportVideo()}><Icon name="download" size={14} />{t("Export video (MP4)")}</button>
+              </ContextMenu>
+            )}
             {/* Phone: the preview full screen, and back. */}
             {/* Over the picture: TikTok's zones (bottom left) and the full screen (bottom right); on a computer they show on hover. */}
             {videoBlob && !full && settings.format !== "16:9" && (

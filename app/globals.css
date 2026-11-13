@@ -43,6 +43,10 @@ h1, h2, h3, p { margin: 0; }
 button, input, select, textarea { font: inherit; color: inherit; }
 ::selection { background: var(--accent); color: var(--on-accent); }
 :focus-visible { outline: 1px solid var(--blue); outline-offset: 2px; }
+/* An app, not a page: nothing gets selected by a click, a drag or a long press (nor the phone's callout over a picture),
+   except where text is typed or meant to be copied (fields, an error message, the legal pages). */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable="true"], .error-text, .prose { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 /* Used with the pointer (PointerHabits): no focus ring after a click or a tap, anywhere; Tab brings them back. */
 html.by-pointer :focus-visible { outline: none !important; }
 html.by-pointer .wheel:focus-visible { box-shadow: none; }
@@ -218,9 +222,10 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: var(--s2); }
 .thumb-wrap { position: relative; }
 /* A thumbnail opens its photo full screen. */
-/* A photo's menu (right click / long press), where it was clicked: its name, open it, move it, remove it. */
-.pic-menu { z-index: 90; min-width: 220px; max-width: min(300px, calc(100vw - 16px)); }
-.pic-menu .label { padding: 6px 12px 2px; }
+/* The app's right-click menus (ContextMenu): over everything, a title and parts in small capitals. */
+.ctx-menu { z-index: 90; min-width: 220px; max-width: min(300px, calc(100vw - 16px)); }
+.ctx-menu .label { padding: 6px 12px 2px; }
+.ctx-menu kbd { margin-left: auto; }
 .pic-menu-none { margin: 4px 12px 8px; }
 .thumb-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: inherit; }
 .thumb { aspect-ratio: 1; background: var(--bg); border-radius: 2px; overflow: hidden; outline: 1px solid var(--line-2); }
@@ -470,6 +475,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
   background: conic-gradient(#fff calc(var(--p, 0) * 360deg), rgba(255,255,255,.25) 0);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px)); mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px)); }
 @media (prefers-reduced-motion: reduce) { .ai-glyph { animation: none; } }
+.menu:has(.ai-item) { width: min(290px, calc(100vw - 16px)); }
 .menu .ai-item { display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: start; gap: 10px; height: auto; min-height: 44px; padding: 8px 12px; text-align: left; }
 .menu .ai-item > svg { margin-top: 2px; }
 .menu .ai-item > span { display: grid; gap: 2px; min-width: 0; }

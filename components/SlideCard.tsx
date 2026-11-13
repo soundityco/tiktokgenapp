@@ -2,11 +2,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
-import { Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
+import { ContextMenu, Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
 import { clamp, clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
-import { type AIProgress, type AIStep, fillFraming, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
+import { type AIProgress, type AIStep, coversFrame, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
 import { poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
 import { themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
@@ -145,6 +145,13 @@ export default function SlideCard(p: Props) {
   // Short and steady while it works (the button itself fills up): the model's download, then the work.
   const aiLabel = (b: { step: AIStep; pct?: number }) => b.step === "model" ? t("Model {n}%", { n: Math.round((b.pct ?? 0) * 100) })
     : b.step === "start" ? t("Starting…") : `${Math.round((b.pct ?? 0) * 100)} %`;
+  /** Which AI options this photo can take: sharper under 1600 px, fill only around empty edges of the slide. */
+  const aiCan = (im: { width: number; height: number }) => {
+    const W = cv.current?.width ?? 1080, H = cv.current?.height ?? 1920;
+    return { sharpOk: !sharpEnough(im.width, im.height), fillOk: !coversFrame(im, clampPic(cfg.pic, im.width, im.height, W, H), W, H) };
+  };
+  // The slide's own right-click menu (a computer: on a phone, a long press edits the text).
+  const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
   const runAI = async (kind: "sharp" | "fill") => {
     if (!img || !cv.current) return;
     setAiNote(null);
@@ -155,9 +162,8 @@ export default function SlideCard(p: Props) {
     try {
       const onStep: AIProgress = (step, pct) => setAiBusy({ kind, step, pct });
       const W = cv.current.width, H = cv.current.height;
-      const framing = fillFraming(img, clampPic(cfg.pic, img.width, img.height, W, H), W, H);
-      const blob = kind === "sharp" ? await sharper(img, onStep) : framing ? await fillFrame(img, framing, W, H, onStep) : null;
-      if (!blob) { setAiNote(t("The photo already has the slide's shape")); return; }
+      const blob = kind === "sharp" ? await sharper(img, onStep) : await fillFrame(img, clampPic(cfg.pic, img.width, img.height, W, H), W, H, onStep);
+      if (!blob) { setAiNote(t("The photo already fills the slide: zoom it out to leave edges")); return; }
       console.info(`[photoai] ${kind} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
       p.onImage(blob, `${base} ${kind === "sharp" ? "HD" : t("filled")}.jpg`);
     } catch (e) {
@@ -572,7 +578,36 @@ export default function SlideCard(p: Props) {
           </>)}
         </Menu>
       </div>
-      <div ref={picWrap} className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "") + (adjusting ? " adjusting" : "")} data-drop={t("Drop here")}>
+      <div ref={picWrap} className={"cv-wrap has-adjust" + (dropHere ? " drop-here" : "") + (adjusting ? " adjusting" : "")} data-drop={t("Drop here")}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (adjusting || matchMedia("(hover: none)").matches) return;
+          p.onSelect();
+          setCtx({ x: e.clientX, y: e.clientY });
+        }}>
+        {ctx && (() => {
+          const can = img ? aiCan(img) : { sharpOk: false, fillOk: false };
+          return (
+            <ContextMenu x={ctx.x} y={ctx.y} onClose={() => setCtx(null)}>
+              <div className="label cap">{t("Slide {n}", { n: p.index + 1 })}{p.locked ? ` · ${t("Locked")}` : ""}</div>
+              <button disabled={cfg.textSource.kind !== "pool" || p.locked} onClick={p.onRerollText}><Icon name="refresh" size={14} />{t("Pick another text")}</button>
+              <button disabled={!cfg.picPoolId || p.locked} onClick={p.onRerollPic}><Icon name="refresh" size={14} />{t("Pick another photo")}</button>
+              <div className="sep" />
+              <button disabled={!img || p.locked} onClick={() => { setAdjusting(true); window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current })); }}>
+                <Icon name="tune" size={14} />{t("Adjust the photo")}<kbd>E</kbd></button>
+              <button disabled={!img || p.locked || !can.sharpOk || !!aiBusy} onClick={() => void runAI("sharp")}><Icon name="sparkle" size={14} />{t("Sharper")}</button>
+              <button disabled={!img || p.locked || !can.fillOk || !!aiBusy} onClick={() => void runAI("fill")}><Icon name="sparkle" size={14} />{t("Fill the frame")}</button>
+              <div className="sep" />
+              {p.onFull && <button onClick={p.onFull}><Icon name="expand" size={14} />{t("Full screen")}<kbd>F</kbd></button>}
+              {p.onZones && <button onClick={p.onZones}><Icon name={p.zones ? "zones-off" : "zones"} size={14} />{t("TikTok zones")}<kbd>G</kbd></button>}
+              <button onClick={p.onSave}><Icon name="download" size={14} />{t("Save this slide")}</button>
+              <div className="sep" />
+              <button onClick={p.onDuplicate}><Icon name="copy" size={14} />{t("Duplicate slide")}</button>
+              <button onClick={p.onToggleLock}><Icon name={p.locked ? "unlock" : "lock"} size={14} />{p.locked ? t("Unlock slide") : t("Lock slide")}</button>
+              <button className="danger" style={{ color: "var(--danger)" }} onClick={p.onDelete}><Icon name="trash" size={14} />{t("Delete slide")}</button>
+            </ContextMenu>
+          );
+        })()}
         {dropHere && <div className="drop-hint">{t("Drop the picture here")}</div>}
         <canvas ref={cv} className="cv" width={1080} height={1920}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={dbl} />
@@ -593,7 +628,7 @@ export default function SlideCard(p: Props) {
             option says what it does, and why it cannot when it cannot. Its ring fills while one works. */}
         {!adjusting && img && !p.locked && (
           <div className={"ai-corner" + (aiBusy ? " busy" : "")}>
-          <Menu float trigger={(open, toggle) => (
+          <Menu float portal trigger={(open, toggle) => (
             <button className={"ai-open" + (open ? " on" : "") + (aiBusy ? " busy" : "")} aria-label={t("Photo AI")} title={t("Photo AI")} aria-haspopup="menu"
               style={aiBusy ? { "--p": aiBusy.step === "start" ? 0 : aiBusy.pct ?? 0 } as CSSProperties : undefined}
               onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); toggle(); }}>
@@ -601,9 +636,7 @@ export default function SlideCard(p: Props) {
             </button>
           )}>
             {(close) => {
-              const sharpOk = !sharpEnough(img.width, img.height);
-              const W = cv.current?.width ?? 1080, H = cv.current?.height ?? 1920;
-              const shown = clampPic(cfg.pic, img.width, img.height, W, H), framing = fillFraming(img, shown, W, H);
+              const { sharpOk, fillOk } = aiCan(img);
               const item = (kind: "sharp" | "fill", title: string, what: string, why: string | null) => (
                 <button className="ai-item" disabled={!!why || (!!aiBusy && aiBusy.kind !== kind)} onClick={() => { close(); if (!aiBusy) void runAI(kind); }}>
                   <Icon name="sparkle" size={14} />
@@ -612,8 +645,7 @@ export default function SlideCard(p: Props) {
               );
               return (<div onClick={(e) => e.stopPropagation()}>
                 {item("sharp", t("Sharper"), t("Four times more pixels, details rebuilt"), sharpOk ? null : t("Already in high definition"))}
-                {item("fill", t("Fill the frame"), framing === shown ? t("Invents the empty edges around the photo") : t("Shows the whole photo and invents the edges around it"),
-                  framing ? null : t("The photo already has the slide's shape"))}
+                {item("fill", t("Fill the frame"), t("Invents the empty edges around the photo"), fillOk ? null : t("The photo already fills the slide: zoom it out to leave edges"))}
                 <p className="ai-foot">{t("On this device, nothing is sent.")}</p>
               </div>);
             }}

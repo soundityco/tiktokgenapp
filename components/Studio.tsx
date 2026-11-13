@@ -38,7 +38,7 @@ import PicStack from "./PicStack";
 import StorageDialog from "./StorageDialog";
 import VariantsDialog from "./VariantsDialog";
 import ShortcutsDialog from "./ShortcutsDialog";
-import { ConfirmDialog, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
+import { ConfirmDialog, ContextMenu, Family, Menu, Modal, NewPoolDialog, PromptDialog, Select, Toast } from "./ui";
 
 /** The generated slides of a carousel, one per slide (a slide not generated yet: empty). */
 const gensOf = (p: Project): GenSlide[] => Array.from({ length: p.slides.length }, (_, k) => p.generated?.[k] ?? { text: "", picId: null });
@@ -116,6 +116,8 @@ export default function Studio({ userName }: { userName: string }) {
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
+  /** The app's quick right-click menu, where it was opened (see the app's root below). */
+  const [appCtx, setAppCtx] = useState<{ x: number; y: number } | null>(null);
   /** A working copy of a take on its way to the Drive (shown in the top bar, whatever is open). */
   const [copyJob, setCopyJob] = useState<CopyJob | null>(null);
   const [fonts, setFonts] = useState<string[]>([]);
@@ -1663,7 +1665,28 @@ export default function Studio({ userName }: { userName: string }) {
             <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>
           </>);
   return (
-    <div className="app">
+    <div className="app" onContextMenu={(e) => {
+      // A right click where nothing has its own menu (a slide, the video, a photo of a list…): the app's quick menu.
+      const el = e.target as HTMLElement;
+      if (e.defaultPrevented || el.closest("input, textarea, [contenteditable=true], .ov, .menu") || matchMedia("(hover: none)").matches) return;
+      e.preventDefault();
+      setAppCtx({ x: e.clientX, y: e.clientY });
+    }}>
+      {appCtx && project && (
+        <ContextMenu x={appCtx.x} y={appCtx.y} onClose={() => setAppCtx(null)}>
+          <div className="label cap truncate">{project.name}</div>
+          <button onClick={() => switchStudio("carousel")}>{studio === "carousel" ? <Icon name="check" size={14} /> : <Icon name="deck" size={14} />}{t("Carousel")}</button>
+          <button onClick={() => switchStudio("video")}>{studio === "video" ? <Icon name="check" size={14} /> : <Icon name="reel" size={14} />}{t("Video")}</button>
+          <div className="sep" />
+          {studio === "carousel" && <>
+            <button onClick={() => generate()}><Icon name="sparkle" size={14} />{t("Generate")}<kbd>R</kbd></button>
+            <button disabled={busy || !project.generated} onClick={() => void downloadAll()}><Icon name="download" size={14} />{t("Download all")}</button>
+            <div className="sep" />
+          </>}
+          <button onClick={() => setOverlay({ k: "newProject" })}><Icon name="plus" size={14} />{t("New release")}</button>
+          <button onClick={() => setKeysOpen(true)}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
+        </ContextMenu>
+      )}
       <header className="top">
         <div className="brand"><span className="brand-full"><Wordmark height={18} /> <small className="version">{VERSION}</small></span><span className="brand-icon"><Logo size={26} /></span></div>
         <div className="studio-switch" data-studio={studio} role="group" aria-label={t("Studio")} ref={switchRef}>

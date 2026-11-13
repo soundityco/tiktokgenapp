@@ -51,17 +51,6 @@ export async function sharper(img: CanvasImageSource & { width: number; height: 
   return toBlob(await call({ type: "upscale", width: w, height: h, data: px.data.buffer }, [px.data.buffer], onStep));
 }
 
-/**
- * The framing to fill from: the slide's own when it leaves empty edges, else the whole photo in the middle (the slide
- * set to fill hides nothing to invent: one click shows the photo whole and fills around it). Null: the photo has the
- * slide's own shape, nothing to fill either way.
- */
-export function fillFraming(img: { width: number; height: number }, pic: PicSettings, W: number, H: number): PicSettings | null {
-  if (!coversFrame(img, pic, W, H)) return pic;
-  const whole: PicSettings = { ...pic, framing: "fit", zoom: 1, ox: 0, oy: 0 };
-  return coversFrame(img, whole, W, H) ? null : whole;
-}
-
 /** The photo, framed so, already covers the whole slide (nothing to fill). */
 export function coversFrame(img: { width: number; height: number }, pic: PicSettings, W: number, H: number) {
   const { x, y, s } = framedAt(pic, img.width, img.height, W, H);

@@ -1,7 +1,6 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import { hookKey, joinCaptions, poolTags, splitCaptions, tagGroups, textItems } from "@/lib/generate";
 import { THEMES, themeLabel } from "@/lib/themes";
 import { classifyThemes } from "@/lib/themeAI";
@@ -12,7 +11,7 @@ import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
 import Icon from "./Icon";
 import PhotoView from "./PhotoView";
-import { Menu, Modal, RoleSelect, ScopeSelect } from "./ui";
+import { ContextMenu, Menu, Modal, RoleSelect, ScopeSelect } from "./ui";
 
 export function Thumb({ id, name }: { id: string; name: string }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -371,36 +370,17 @@ function PicMenu({ x, y, pic, lists, onClose, onOpen, onRemove, onMove }: {
   x: number; y: number; pic: PicRef; lists: PicPool[]; onClose: () => void; onOpen: () => void; onRemove: () => void; onMove: (to: string) => void;
 }) {
   const { t } = useT();
-  const box = useRef<HTMLDivElement>(null);
-  const [at, setAt] = useState({ left: x, top: y });
-  // Kept on the screen (opened near an edge, it goes the other way).
-  useLayoutEffect(() => {
-    const r = box.current?.getBoundingClientRect();
-    if (!r) return;
-    setAt({ left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) });
-  }, [x, y]);
-  useEffect(() => {
-    const away = (e: Event) => { if (!(e.target instanceof Node) || !box.current?.contains(e.target)) onClose(); };
-    // Escape closes this menu only (not the list's window under it).
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); onClose(); } };
-    document.addEventListener("pointerdown", away, true);
-    window.addEventListener("keydown", key, true);
-    window.addEventListener("scroll", away, true);
-    return () => { document.removeEventListener("pointerdown", away, true); window.removeEventListener("keydown", key, true); window.removeEventListener("scroll", away, true); };
-  }, [onClose]);
-  const act = (fn: () => void) => () => { onClose(); fn(); };
-  return createPortal(
-    <div ref={box} role="menu" className="menu pic-menu" style={{ position: "fixed", left: at.left, top: at.top, right: "auto" }}>
+  return (
+    <ContextMenu x={x} y={y} onClose={onClose} className="pic-menu">
       <div className="label cap truncate">{pic.name}</div>
-      <button onClick={act(onOpen)}><Icon name="expand" size={14} />{t("Full screen")}</button>
+      <button onClick={onOpen}><Icon name="expand" size={14} />{t("Full screen")}</button>
       <div className="sep" />
       <div className="label cap">{t("Move to")}</div>
       {lists.length ? lists.map((l) => (
-        <button key={l.id} onClick={act(() => onMove(l.id))}><Icon name="image" size={14} /><span className="truncate grow">{l.name}</span><span className="muted xs">{l.pics.length}</span></button>
+        <button key={l.id} onClick={() => onMove(l.id)}><Icon name="image" size={14} /><span className="truncate grow">{l.name}</span><span className="muted xs">{l.pics.length}</span></button>
       )) : <p className="muted xs pic-menu-none">{t("No other photo list yet.")}</p>}
       <div className="sep" />
-      <button className="danger" style={{ color: "var(--danger)" }} onClick={act(onRemove)}><Icon name="trash" size={14} />{t("Remove from the list")}</button>
-    </div>,
-    document.body,
+      <button className="danger" style={{ color: "var(--danger)" }} onClick={onRemove}><Icon name="trash" size={14} />{t("Remove from the list")}</button>
+    </ContextMenu>
   );
 }

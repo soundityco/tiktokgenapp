@@ -156,16 +156,19 @@ export function Toast({ msg }: { msg: string | null }) {
 }
 
 /** Small popover menu that closes on outside click / Escape. */
-export function Menu({ trigger, children, left, float }: {
+export function Menu({ trigger, children, left, float, portal }: {
   trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; left?: boolean;
   /** Placed on the screen, not in its column: it can spill over the next column (side panels hide what overflows). */
   float?: boolean;
+  /** (Floating) put in the page itself: its button sits in something moved or turned (the phone's deck of slides),
+   *  where a fixed menu would be placed from that thing instead of the screen. */
+  portal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const down = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node) && !menu.current?.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key);
@@ -209,14 +212,17 @@ export function Menu({ trigger, children, left, float }: {
   return (
     <div className="menu-wrap" ref={ref}>
       {trigger(open, () => setOpen((o) => !o))}
-      {open && (
-        <div ref={menu} role="menu"
-          className={"menu" + ((place ? place.left : left) ? " left" : "") + (place?.up ? " up" : "")}
-          // Measured first, hidden: a floating one at its own width (".menu" sets right: 0, which would stretch it).
-          style={place ? (fixed ?? undefined) : { visibility: "hidden", ...(float ? { position: "fixed", top: 0, left: 0, right: "auto", bottom: "auto" } : null) }}>
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open && (() => {
+        const box = (
+          <div ref={menu} role="menu"
+            className={"menu" + ((place ? place.left : left) ? " left" : "") + (place?.up ? " up" : "")}
+            // Measured first, hidden: a floating one at its own width (".menu" sets right: 0, which would stretch it).
+            style={place ? (fixed ?? undefined) : { visibility: "hidden", ...(float ? { position: "fixed", top: 0, left: 0, right: "auto", bottom: "auto" } : null) }}>
+            {children(() => setOpen(false))}
+          </div>
+        );
+        return float && portal ? createPortal(box, document.body) : box;
+      })()}
     </div>
   );
 }
@@ -305,6 +311,41 @@ export function Range(p: { label: string; value: number; display?: string; min: 
       <input type="range" min={p.min} max={p.max} step={p.step ?? 1} value={p.value} onChange={(e) => p.onChange(+e.target.value)} onDoubleClick={back} title={back ? t("Double-click to reset") : undefined}
         style={{ "--fill": `${((p.value - p.min) / Math.max(1e-9, p.max - p.min)) * 100}%` } as CSSProperties} />
     </label>
+  );
+}
+
+/**
+ * The app's own right-click menu (the browser's is off, see PointerHabits): where it was clicked, kept on the screen,
+ * closed by a click elsewhere, Escape (that closes this menu only, not a window under it) or a scroll.
+ */
+export function ContextMenu({ x, y, onClose, className, children }: { x: number; y: number; onClose: () => void; className?: string; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState({ left: x, top: y });
+  useLayoutEffect(() => {
+    const r = box.current?.getBoundingClientRect();
+    if (r) setAt({ left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) });
+  }, [x, y]);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const away = (e: Event) => { if (!(e.target instanceof Node) || !box.current?.contains(e.target)) close.current(); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); close.current(); } };
+    document.addEventListener("pointerdown", away, true);
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("resize", away);
+    return () => {
+      document.removeEventListener("pointerdown", away, true); window.removeEventListener("keydown", key, true);
+      window.removeEventListener("scroll", away, true); window.removeEventListener("resize", away);
+    };
+  }, []);
+  return createPortal(
+    // A click on one of its buttons closes it (after the button's own action).
+    <div ref={box} role="menu" className={"menu ctx-menu" + (className ? " " + className : "")} style={{ position: "fixed", left: at.left, top: at.top, right: "auto", bottom: "auto" }}
+      onClick={(e) => { if ((e.target as HTMLElement).closest("button:not(:disabled)")) close.current(); }} onContextMenu={(e) => e.preventDefault()}>
+      {children}
+    </div>,
+    document.body,
   );
 }
 
