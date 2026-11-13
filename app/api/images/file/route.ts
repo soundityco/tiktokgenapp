@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { IMAGE_HOSTS } from "@/lib/imageSearch";
+import { fileHeaders, isPicture } from "@/lib/safeFile";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,8 @@ export async function GET(req: Request) {
   // After redirects, still one of the photo hosts.
   if (!IMAGE_HOSTS.test(new URL(res.url).hostname)) return Response.json({ error: "host not allowed" }, { status: 400 });
   const type = res.headers.get("content-type") ?? "";
-  if (!type.startsWith("image/")) return Response.json({ error: "not an image" }, { status: 502 });
+  if (!isPicture(type)) return Response.json({ error: "not an image" }, { status: 502 });
   const buf = await res.arrayBuffer();
   if (buf.byteLength > MAX) return Response.json({ error: "too_large" }, { status: 413 });
-  return new Response(buf, { headers: { "Content-Type": type, "Cache-Control": "private, max-age=86400" } });
+  return new Response(buf, { headers: fileHeaders(type, { "Cache-Control": "private, max-age=86400" }) });
 }

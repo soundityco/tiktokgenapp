@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { RELAY_CHUNK } from "@/lib/shareLimits";
+import { fileHeaders } from "@/lib/safeFile";
 import { dropChunks, getChunk, putChunk, shareInfo } from "@/lib/shareStore";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
     if (!sliceOk(t.s, t.f, t.n)) return new Response(null, { status: 400 });
     const data = await getChunk(t.code, t.f, t.n);
     if (!data) return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
-    return new Response(new Uint8Array(data), { headers: { "Content-Type": "application/octet-stream", "Cache-Control": "no-store" } });
+    return new Response(new Uint8Array(data), { headers: fileHeaders("", { "Cache-Control": "no-store" }) });
   } catch (err) { console.error("share chunk get failed", err); return new Response(null, { status: 500 }); }
 }
 

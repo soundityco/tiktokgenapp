@@ -49,10 +49,14 @@ export async function createShare(email: string, offer: string, meta: ShareMeta)
     await ensureChunks();
     await sql`DELETE FROM share_sessions WHERE created_at < now() - make_interval(mins => ${SHARE_MINUTES})`;
     await sql`DELETE FROM share_chunks WHERE created_at < now() - make_interval(mins => ${SHARE_MINUTES})`;
+    // One share at a time per account (a new one ends the last): the bridge never holds more than one share's files.
+    await sql`DELETE FROM share_chunks WHERE code IN (SELECT code FROM share_sessions WHERE email = ${email})`;
+    await sql`DELETE FROM share_sessions WHERE email = ${email}`;
     await sql`INSERT INTO share_sessions (code, email, offer, meta) VALUES (${code}, ${email}, ${offer}, ${JSON.stringify(meta)}::jsonb)`;
   } else {
     for (const [k, v] of mem) if (!fresh(v.at)) mem.delete(k);
     for (const [k, v] of memChunks) if (!fresh(v.at)) memChunks.delete(k);
+    for (const [k, v] of mem) if (v.email === email) { mem.delete(k); for (const c of memChunks.keys()) if (c.startsWith(`${k}/`)) memChunks.delete(c); }
     mem.set(code, { email, offer, answer: null, meta, at: Date.now() });
   }
   return code;
@@ -85,11 +89,11 @@ export async function answerShare(code: string, answer: string): Promise<boolean
 export async function setShareDrive(code: string, email: string, drive: { name: string; id: string }[]): Promise<boolean> {
   if (sql) {
     await ensure();
-    const rows = await sql`UPDATE share_sessions SET meta = jsonb_set(meta, '{drive}', ${JSON.stringify(drive)}::jsonb) WHERE code = ${code} AND email = ${email} RETURNING code`;
+    const rows = await sql`UPDATE share_sessions SET meta = jsonb_set(meta, '{drive}', ${JSON.stringify(drive)}::jsonb) WHERE code = ${code} AND email = ${email} AND created_at > now() - make_interval(mins => ${SHARE_MINUTES}) RETURNING code`;
     return rows.length > 0;
   }
   const r = mem.get(code);
-  if (!r || r.email !== email) return false;
+  if (!r || r.email !== email || !fresh(r.at)) return false;
   r.meta = { ...r.meta, drive };
   return true;
 }

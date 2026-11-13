@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { coverAllowed } from "@/lib/tiktok";
+import { fileHeaders, isPicture } from "@/lib/safeFile";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,6 @@ export async function GET(req: Request) {
   const res = await fetch(target, { redirect: "error" }).catch(() => null);
   if (!res?.ok) return Response.json({ error: "cover unavailable" }, { status: 502 });
   const type = res.headers.get("content-type") ?? "";
-  if (!type.startsWith("image/")) return Response.json({ error: "not an image" }, { status: 502 });
-  return new Response(res.body, { headers: { "Content-Type": type, "Cache-Control": "private, max-age=300" } });
+  if (!isPicture(type)) return Response.json({ error: "not an image" }, { status: 502 });
+  return new Response(res.body, { headers: fileHeaders(type, { "Cache-Control": "private, max-age=300" }) });
 }

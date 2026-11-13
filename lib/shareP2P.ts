@@ -5,6 +5,7 @@
  */
 import type { ShareMeta } from "./shareStore";
 import { RELAY_CHUNK, RELAY_MAX } from "./shareLimits";
+import { safeType } from "./safeFile";
 
 const ICE: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
 const CHUNK = 64 * 1024;
@@ -167,7 +168,7 @@ async function fromDrive(code: string, meta: ShareMeta, onState: (s: ReceiveStat
       const r = await fetch(`/api/share/file?code=${code}&i=${i}`, { cache: "no-store" });
       if (!r.ok) throw new Error(String(r.status));
       const b = await r.blob();
-      out.push(new File([b], drive[i].name, { type: b.type }));
+      out.push(new File([b], drive[i].name, { type: safeType(meta.files.find((x) => x.name === drive[i].name)?.type ?? b.type) }));
     }
     onState({ step: "done", meta, files: out });
   } catch { onState({ step: "drive", meta }); }
@@ -197,7 +198,7 @@ async function fromRelay(code: string, meta: ShareMeta, onState: (s: ReceiveStat
         got += parts[n].size;
         onState({ step: "receiving", meta, pct: got / total });
       });
-      out.push(new File(parts, name, { type }));
+      out.push(new File(parts, name, { type: safeType(type) }));
     }
     onState({ step: "done", meta, files: out });
     // The computer shows "done"; the files leave the bridge.
@@ -232,7 +233,7 @@ export async function receiveFiles(code: string, onState: (s: ReceiveState) => v
       if (typeof e.data === "string") {
         const m = JSON.parse(e.data);
         if (m.type === "head") head = m.files;
-        else if (m.type === "end") { const f = head[m.i]; out.push(new File(parts, f.name, { type: f.type })); parts = []; }
+        else if (m.type === "end") { const f = head[m.i]; out.push(new File(parts, f.name, { type: safeType(f.type) })); parts = []; }
         else if (m.type === "done") { got = true; dc.send("got"); onState({ step: "done", meta, files: out }); setTimeout(() => pc.close(), 1500); }
         return;
       }

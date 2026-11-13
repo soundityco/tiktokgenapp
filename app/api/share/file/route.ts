@@ -1,3 +1,4 @@
+import { fileHeaders } from "@/lib/safeFile";
 import { getShare } from "@/lib/shareStore";
 
 export const dynamic = "force-dynamic";
@@ -24,5 +25,6 @@ export async function GET(req: Request) {
   if (!r.ok || type.startsWith("text/html")) return new Response("drive", { status: 502 });
   const body = await r.arrayBuffer();
   if (body.byteLength > PROXY_MAX) return new Response("too large", { status: 413 });
-  return new Response(body, { headers: { "Content-Type": f.type || type || "application/octet-stream", "Cache-Control": "no-store" } });
+  // The type the sender gave is only kept for a picture or a video (an HTML "photo" would run on the app's address).
+  return new Response(body, { headers: fileHeaders(f.type || type, { "Cache-Control": "no-store", "Content-Disposition": "attachment" }) });
 }
