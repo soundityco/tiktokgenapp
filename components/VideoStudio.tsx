@@ -603,6 +603,8 @@ export default function VideoStudio({
   /** Frame of the camera file at the playhead, read with ffmpeg while the player gives none (see pictureOf). */
   const stillRef = useRef<{ src: string; at: number; bmp: ImageBitmap } | null>(null);
   const stillWant = useRef<number | null>(null);
+  /** The camera file (its URL) of which the player has given a picture: no frame read from the file is needed any more. */
+  const playerSeen = useRef<string | null>(null);
 
   // ---- poster: the last graded picture of the clip, shown at once while a big camera file opens ----
   const posterRef = useRef<ImageBitmap | HTMLCanvasElement | null>(null);
@@ -634,10 +636,14 @@ export default function VideoStudio({
     if (!videoUrlRef.current || fileClip.current !== clipIdRef.current) return null;
     const off = settingsRef.current.offset;
     const inVideo = time >= off - 0.001 && (!Number.isFinite(el?.duration) || time <= off + (el?.duration ?? 0) + 0.001);
-    // No picture from the player yet (Safari, before the first play): the frame read from the file.
+    // No picture from the player yet (Safari, before the first play): the frame read from the file. Only until the
+    // player gave one: ffmpeg's decoding differs slightly in colour, so coming back on that frame later (a seek, the
+    // pause going back to the start) flashed another grade for a moment.
     const still = stillRef.current;
+    if (el && el.readyState >= 2) playerSeen.current = el.currentSrc;
     // While playing starts, keep it on screen until the player has its first picture (no black flash).
-    if (el && inVideo && el.readyState < 2 && still && still.src === el.currentSrc && (!el.paused || Math.abs(still.at - (time - off)) < 0.08)) {
+    if (el && inVideo && el.readyState < 2 && still && still.src === el.currentSrc && playerSeen.current !== el.currentSrc
+      && (!el.paused || Math.abs(still.at - (time - off)) < 0.08)) {
       const w = el.videoWidth || still.bmp.width, h = el.videoHeight || still.bmp.height;
       return { src: still.bmp, w, h, part: { x: 0, y: 0, w, h } };
     }
@@ -1613,7 +1619,7 @@ export default function VideoStudio({
     const target = head - settings.offset;
     if (target < 0 || target > videoDur) return;
     const id = window.setTimeout(() => {
-      if (el.readyState >= 2 || !el.paused) return; // the player has pictures: nothing to do
+      if (el.readyState >= 2 || !el.paused || playerSeen.current === el.currentSrc) return; // the player has pictures: nothing to do
       const s = stillRef.current;
       if (s && s.src === el.currentSrc && Math.abs(s.at - target) < 0.08) return;
       const src = el.currentSrc;
