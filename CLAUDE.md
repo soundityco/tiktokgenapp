@@ -28,6 +28,9 @@ Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app
 - Listes de textes par rôle (`TextPool.kind`) : `hooks` (accroche : slide 1, vidéos), `texts` (les autres slides, transitions…), `captions` (légendes), `block` (ancien, rangé avec les textes). `isLineList` = hooks ou texts (un texte par ligne, thèmes, tirages). Migration unique `textRoles` (flag `textRolesV1`). Le studio vidéo ne montre que hooks et légendes.
 - Légendes de post : listes de type `captions` (une case par légende, séparées par `---`), `components/PostCaption.tsx`. Exports : seulement images / MP4 + `caption.txt`.
 - i18n : `lib/fr.ts` (dictionnaire clé = texte anglais). Un test vérifie que chaque `t("…")` a une traduction française : en ajouter une à chaque nouveau texte.
+- Outils partagés (ne pas recopier) : `lib/files.ts` (`stamp`, `safeName`, `saveBlob`), `clamp` dans `lib/render.ts`, `sessionEmail()` dans `auth.ts` pour les routes API, `isShareCode` / `SHARE_MINUTES` dans `lib/shareLimits.ts` (client + serveur), `RoleSelect` / `ScopeSelect` dans `ui.tsx`.
+- Bibliothèques lourdes chargées au premier usage (`await import(...)`) : JSZip, QRCode, Tesseract, mp4box (`mp4box()` dans `lib/videoSource.ts`), mp4-muxer. Ne pas les réimporter en haut d'un fichier (premier chargement de /studio : 288 ko).
+- Sécurité : tout fichier relayé par le serveur (photos trouvées, couvertures TikTok, fichiers du partage) passe par `lib/safeFile.ts` (`fileHeaders` : types limités, pas de SVG, CSP sandbox, nosniff). Un seul partage en cours par compte. Les fichiers du plan B Drive ne sont lisibles par lien que le temps du partage (+5 min), fermés par `closeOpenLinks` (`lib/shareP2P.ts`).
 
 ## Design
 - Look « éditorial » sombre, sobre, pas de look « SaaS généré par IA ». Accent blanc (le rouge ne sert qu'au danger) ; couleurs en variables CSS dans `app/globals.css` (`--accent`, `--on-accent`, `--danger`, `--video`, `--music`…), jamais en dur.
