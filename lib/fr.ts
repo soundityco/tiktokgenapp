@@ -705,6 +705,7 @@ export const FR: Record<string, string> = {
   "Open {name} full screen": "Ouvrir {name} en plein écran",
   "Previous photo": "Photo précédente",
   "Move to": "Déplacer vers",
+  "Help": "Aide",
   "Start of the segment here": "Début du segment ici",
   "End of the segment here": "Fin du segment ici",
   "No other photo list yet.": "Pas encore d'autre liste de photos.",

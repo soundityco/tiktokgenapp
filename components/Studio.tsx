@@ -1673,17 +1673,24 @@ export default function Studio({ userName }: { userName: string }) {
       setAppCtx({ x: e.clientX, y: e.clientY });
     }}>
       {appCtx && project && (
-        <ContextMenu x={appCtx.x} y={appCtx.y} onClose={() => setAppCtx(null)}>
+        <ContextMenu x={appCtx.x} y={appCtx.y} onClose={() => setAppCtx(null)} className="app-ctx">
           <div className="label cap truncate">{project.name}</div>
-          <button onClick={() => switchStudio("carousel")}>{studio === "carousel" ? <Icon name="check" size={14} /> : <Icon name="deck" size={14} />}{t("Carousel")}</button>
-          <button onClick={() => switchStudio("video")}>{studio === "video" ? <Icon name="check" size={14} /> : <Icon name="reel" size={14} />}{t("Video")}</button>
-          <div className="sep" />
-          {studio === "carousel" && <>
-            <button onClick={() => generate()}><Icon name="sparkle" size={14} />{t("Generate")}<kbd>R</kbd></button>
-            <button disabled={busy || !project.generated} onClick={() => void downloadAll()}><Icon name="download" size={14} />{t("Download all")}</button>
-            <div className="sep" />
-          </>}
+          {/* The studio first: the two studios side by side, each with its own colour, the open one lit. */}
+          <div className="ctx-studios" role="group" aria-label={t("Studio")}>
+            <button className={studio === "carousel" ? "on" : ""} aria-pressed={studio === "carousel"} onClick={() => switchStudio("carousel")}>
+              <span className="ctx-studio-ico carousel"><Icon name="deck" size={13} /></span>{t("Carousel")}</button>
+            <button className={studio === "video" ? "on" : ""} aria-pressed={studio === "video"} onClick={() => switchStudio("video")}>
+              <span className="ctx-studio-ico video"><Icon name="reel" size={13} /></span>{t("Video")}</button>
+          </div>
+          <div className="label cap">{t("Create")}</div>
+          {studio === "carousel" && <button onClick={() => generate()}><Icon name="sparkle" size={14} />{t("Generate")}<kbd>R</kbd></button>}
           <button onClick={() => setOverlay({ k: "newProject" })}><Icon name="plus" size={14} />{t("New release")}</button>
+          {studio === "carousel" && <>
+            <div className="label cap">{t("Export")}</div>
+            <button disabled={busy || !project.generated} onClick={() => void downloadAll()}><Icon name="download" size={14} />{t("Download all")}</button>
+            <button disabled={busy || !project.generated} onClick={() => setShareOpen(true)}><Icon name="share" size={14} />{handheld ? t("Share") : t("Send to my phone")}</button>
+          </>}
+          <div className="label cap">{t("Help")}</div>
           <button onClick={() => setKeysOpen(true)}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
         </ContextMenu>
       )}
