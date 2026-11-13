@@ -6,7 +6,7 @@ import { Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
 import { clamp, clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
-import { type AIProgress, type AIStep, coversFrame, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
+import { type AIProgress, type AIStep, fillFraming, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
 import { poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
 import { themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
@@ -149,13 +149,15 @@ export default function SlideCard(p: Props) {
     if (!img || !cv.current) return;
     setAiNote(null);
     const base = (gen?.picName ?? "photo").replace(/\.[a-z0-9]+$/i, "");
-    if (kind === "sharp" && sharpEnough(img.width, img.height)) { setAiNote(t("Already sharp enough for a slide")); return; }
+    if (kind === "sharp" && sharpEnough(img.width, img.height)) { setAiNote(t("Already in high definition")); return; }
     setAiBusy({ kind, step: "start" });
     const t0 = performance.now();
     try {
       const onStep: AIProgress = (step, pct) => setAiBusy({ kind, step, pct });
-      const blob = kind === "sharp" ? await sharper(img, onStep) : await fillFrame(img, clampPic(cfg.pic, img.width, img.height, cv.current.width, cv.current.height), cv.current.width, cv.current.height, onStep);
-      if (!blob) { setAiNote(t("The photo covers the whole slide: zoom out first")); return; }
+      const W = cv.current.width, H = cv.current.height;
+      const framing = fillFraming(img, clampPic(cfg.pic, img.width, img.height, W, H), W, H);
+      const blob = kind === "sharp" ? await sharper(img, onStep) : framing ? await fillFrame(img, framing, W, H, onStep) : null;
+      if (!blob) { setAiNote(t("The photo already has the slide's shape")); return; }
       console.info(`[photoai] ${kind} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
       p.onImage(blob, `${base} ${kind === "sharp" ? "HD" : t("filled")}.jpg`);
     } catch (e) {
@@ -595,12 +597,13 @@ export default function SlideCard(p: Props) {
             <button className={"ai-open" + (open ? " on" : "") + (aiBusy ? " busy" : "")} aria-label={t("Photo AI")} title={t("Photo AI")} aria-haspopup="menu"
               style={aiBusy ? { "--p": aiBusy.step === "start" ? 0 : aiBusy.pct ?? 0 } as CSSProperties : undefined}
               onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); p.onSelect(); toggle(); }}>
-              <Icon name="sparkle" size={16} />
+              <span className="ai-glyph" aria-hidden />
             </button>
           )}>
             {(close) => {
               const sharpOk = !sharpEnough(img.width, img.height);
-              const fillOk = !!cv.current && !coversFrame(img, clampPic(cfg.pic, img.width, img.height, cv.current.width, cv.current.height), cv.current.width, cv.current.height);
+              const W = cv.current?.width ?? 1080, H = cv.current?.height ?? 1920;
+              const shown = clampPic(cfg.pic, img.width, img.height, W, H), framing = fillFraming(img, shown, W, H);
               const item = (kind: "sharp" | "fill", title: string, what: string, why: string | null) => (
                 <button className="ai-item" disabled={!!why || (!!aiBusy && aiBusy.kind !== kind)} onClick={() => { close(); if (!aiBusy) void runAI(kind); }}>
                   <Icon name="sparkle" size={14} />
@@ -608,8 +611,9 @@ export default function SlideCard(p: Props) {
                 </button>
               );
               return (<div onClick={(e) => e.stopPropagation()}>
-                {item("sharp", t("Sharper"), t("Four times more pixels, details rebuilt"), sharpOk ? null : t("Already sharp enough for a slide"))}
-                {item("fill", t("Fill the frame"), t("Invents the empty edges around the photo"), fillOk ? null : t("The photo covers the whole slide: zoom out first"))}
+                {item("sharp", t("Sharper"), t("Four times more pixels, details rebuilt"), sharpOk ? null : t("Already in high definition"))}
+                {item("fill", t("Fill the frame"), framing === shown ? t("Invents the empty edges around the photo") : t("Shows the whole photo and invents the edges around it"),
+                  framing ? null : t("The photo already has the slide's shape"))}
                 <p className="ai-foot">{t("On this device, nothing is sent.")}</p>
               </div>);
             }}
@@ -631,13 +635,11 @@ export default function SlideCard(p: Props) {
           });
           return (
             <div ref={adjustPanel} className={"adjust-panel" + (adjustLeaving ? " leaving" : "")} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-              <div className="adjust-tools" role="tablist" aria-label={t("Photo edits")}>
-                {ADJUST.map((x) => (
-                  <button key={x.k} role="tab" aria-selected={tool === x.k} className={(tool === x.k ? "on" : "") + (adj[x.k] ? " set" : "")}
-                    onClick={() => setTool(x.k)}>{t(x.label)}</button>
-                ))}
-              </div>
-              <div className="adjust-value">{v > 0 && cur.min < 0 ? "+" : ""}{v}</div>
+              {/* As on a phone's photo editor: the edit's name, a row of dials to swipe (the middle one is the edit the
+                  wheel moves; each one's ring shows how much it is set), then the wheel. */}
+              <div className="adjust-name">{t(cur.label)}</div>
+              <DialStrip label={t("Photo edits")} current={tool} onPick={(k) => setTool(k as keyof PhotoAdjust)}
+                items={ADJUST.map((x) => ({ k: x.k, label: t(x.label), icon: `adj-${x.k}`, value: adj[x.k] ?? 0, min: x.min }))} />
               <Wheel value={v} min={cur.min} max={100} label={t(cur.label)} onChange={setAdj} />
               {/* Under the wheel, centred: the edits on / off to compare; then, at the very bottom, Reset and Done. */}
               <div className="adjust-compare">
@@ -653,6 +655,57 @@ export default function SlideCard(p: Props) {
       </div>
       {p.selected && p.below}
       {fields}
+    </div>
+  );
+}
+
+/**
+ * A row of dials, as on a phone's photo editor: swipe it, the one in the middle is picked (a click centres one too).
+ * Each dial: its icon, or its value when picked, inside a ring showing how much it is set (backwards when below 0).
+ */
+function DialStrip({ items, current, onPick, label }: {
+  items: { k: string; label: string; icon: string; value: number; min: number }[]; current: string; onPick: (k: string) => void; label: string;
+}) {
+  const row = useRef<HTMLDivElement>(null);
+  const settle = useRef(0);
+  const centre = (k: string, smooth: boolean) => {
+    const r = row.current, el = r?.querySelector<HTMLElement>(`[data-k="${k}"]`);
+    if (r && el) r.scrollTo({ left: el.offsetLeft + el.offsetWidth / 2 - r.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
+  };
+  // At first, the picked one in the middle at once; then, picked another way (a click), it slides there.
+  const first = useRef(true);
+  useEffect(() => { centre(current, !first.current); first.current = false; }, [current]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onScroll = () => {
+    clearTimeout(settle.current);
+    settle.current = window.setTimeout(() => {
+      const r = row.current;
+      if (!r) return;
+      const mid = r.scrollLeft + r.clientWidth / 2;
+      let best = current, d = Infinity;
+      r.querySelectorAll<HTMLElement>("[data-k]").forEach((el) => {
+        const dd = Math.abs(el.offsetLeft + el.offsetWidth / 2 - mid);
+        if (dd < d) { d = dd; best = el.dataset.k!; }
+      });
+      if (best !== current) onPick(best);
+    }, 90);
+  };
+  useEffect(() => () => clearTimeout(settle.current), []);
+  const R = 16, C = 2 * Math.PI * R;
+  return (
+    <div className="dial-strip" ref={row} role="tablist" aria-label={label} onScroll={onScroll}>
+      {items.map((x) => {
+        const on = x.k === current, part = Math.min(1, Math.abs(x.value) / 100);
+        return (
+          <button key={x.k} data-k={x.k} role="tab" aria-selected={on} aria-label={x.label} title={x.label}
+            className={"dial" + (on ? " on" : "") + (x.value ? " set" : "")} onClick={() => (on ? undefined : onPick(x.k))}>
+            <svg className="dial-ring" viewBox="0 0 36 36" aria-hidden style={x.value < 0 ? { transform: "rotate(-90deg) scaleY(-1)" } : undefined}>
+              <circle cx="18" cy="18" r={R} className="dial-track" />
+              {part > 0 && <circle cx="18" cy="18" r={R} className="dial-arc" strokeDasharray={`${part * C} ${C}`} />}
+            </svg>
+            {on ? <span className="dial-val">{x.value > 0 && x.min < 0 ? "+" : ""}{x.value}</span> : <Icon name={x.icon} size={16} />}
+          </button>
+        );
+      })}
     </div>
   );
 }

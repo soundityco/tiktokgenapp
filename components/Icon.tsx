@@ -16,6 +16,14 @@ const P: Record<string, string> = {
   "zones-off": "M8 3h8a2.5 2.5 0 012.5 2.5v13A2.5 2.5 0 0116 21H8a2.5 2.5 0 01-2.5-2.5v-13A2.5 2.5 0 018 3zM15.6 8.4v.01M15.6 11.4v.01M15.6 14.4v.01M8.6 17.4h4.6M3.5 3.5l17 17",
   /** The photo's settings: two sliders and their round knobs. */
   tune: "M4 8h8M18 8h2M4 16h2M12 16h8M15 5.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM9 13.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z",
+  // The photo edits (the dials of the edits panel): exposure ±, contrast (half a circle), saturation (a drop),
+  // warmth (a thermometer), vignette (a frame and its centre), grain (dots).
+  "adj-exposure": "M12 3.5a8.5 8.5 0 110 17 8.5 8.5 0 010-17zM7.5 10h4M9.5 8v4M12.5 15h4M17.5 6.5l-11 11",
+  "adj-contrast": "M12 3.5a8.5 8.5 0 110 17 8.5 8.5 0 010-17zM12 3.5v17M12 7.5h4.2M12 11.5h5.3M12 15.5h4.6",
+  "adj-saturation": "M12 3.8s6 6.3 6 10.4a6 6 0 01-12 0c0-4.1 6-10.4 6-10.4zM8.8 14.6a3.3 3.3 0 003 3",
+  "adj-temperature": "M10 13.6V5.5a2 2 0 014 0v8.1a3.6 3.6 0 11-4 0zM12 9.5v6.2",
+  "adj-vignette": "M4.5 5.5h15a1 1 0 011 1v11a1 1 0 01-1 1h-15a1 1 0 01-1-1v-11a1 1 0 011-1zM12 8.6a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8z",
+  "adj-grain": "M7 7.5h.01M12 6.5h.01M17 7.5h.01M9 12h.01M15 12h.01M7 16.5h.01M12 17.5h.01M17 16.5h.01M12 12h.01",
   check: "M5 12.5l4.5 4.5L19 7.5",
   chevron: "M6 9l6 6 6-6",
   back: "M19 12H5M11 6l-6 6 6 6",
@@ -80,8 +88,9 @@ export default function Icon({ name, size = 16 }: { name: keyof typeof P | "more
   }
   // The icons drawn over a picture (photo settings, TikTok's zones, full screen): a heavier line, read on any image.
   const heavy = name === "tune" || name === "zones" || name === "zones-off" || name === "expand";
+  const dots = name === "adj-grain"; // dots: round ends of a thick line
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={heavy ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={dots ? 2.6 : heavy ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={P[name]} />
     </svg>
   );

@@ -38,16 +38,28 @@ const toBlob = (img: ImageData | OffscreenCanvas) => {
   return c.convertToBlob({ type: "image/jpeg", quality: 0.92 });
 };
 
-/** Pictures this big or more are sharp enough for a slide (1080 wide): nothing to gain. */
-export const sharpEnough = (w: number, h: number) => Math.min(w, h) >= 1080;
+/** Pictures this big or more are high definition already (a slide is 1080 wide): nothing to gain. A smaller one can
+ *  be big enough and still blurry (an image found on the web): it can go. */
+export const sharpEnough = (w: number, h: number) => Math.min(w, h) >= 1600;
 
 /** The picture four times bigger, its details rebuilt (Swin2SR, trained on real-world blurry pictures). */
 export async function sharper(img: CanvasImageSource & { width: number; height: number }, onStep: AIProgress): Promise<Blob> {
-  // At most 540 px on the short side in (2160 out, twice a slide's width): beyond, only slower, nothing gained.
-  const k = Math.min(1, 540 / Math.min(img.width, img.height));
+  // At most 720 px on the short side in (2880 out): beyond, only slower, nothing gained for a slide.
+  const k = Math.min(1, 720 / Math.min(img.width, img.height));
   const w = Math.round(img.width * k), h = Math.round(img.height * k);
   const px = pixels(img, w, h);
   return toBlob(await call({ type: "upscale", width: w, height: h, data: px.data.buffer }, [px.data.buffer], onStep));
+}
+
+/**
+ * The framing to fill from: the slide's own when it leaves empty edges, else the whole photo in the middle (the slide
+ * set to fill hides nothing to invent: one click shows the photo whole and fills around it). Null: the photo has the
+ * slide's own shape, nothing to fill either way.
+ */
+export function fillFraming(img: { width: number; height: number }, pic: PicSettings, W: number, H: number): PicSettings | null {
+  if (!coversFrame(img, pic, W, H)) return pic;
+  const whole: PicSettings = { ...pic, framing: "fit", zoom: 1, ox: 0, oy: 0 };
+  return coversFrame(img, whole, W, H) ? null : whole;
 }
 
 /** The photo, framed so, already covers the whole slide (nothing to fill). */
