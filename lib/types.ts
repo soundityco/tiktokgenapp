@@ -433,6 +433,9 @@ export interface Workspace {
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag
   exportFormat: "jpg" | "png";
   zones: boolean;
+  /** Video studio: a pause puts the playhead back where play started (as editing apps do). Default on; false: it
+   *  stays where it stopped. */
+  playReturn?: boolean;
   /** Draw hooks in proportion to their TikTok views (hooks that have views stored). */
   favorTop?: boolean;
   /** Named text styles, reusable across projects. */

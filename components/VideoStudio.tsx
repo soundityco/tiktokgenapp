@@ -306,6 +306,7 @@ export default function VideoStudio({
   lyricsRow,
   onCopyJob,
   onToast,
+  playReturn = true,
   active = true,
   stylePage = false,
   libraryPage = false,
@@ -339,6 +340,8 @@ export default function VideoStudio({
   onCopyJob?: (job: CopyJob | null) => void;
   /** A short message, wherever the user is (the copy is done, or failed). */
   onToast?: (msg: string) => void;
+  /** A pause puts the playhead back where play started (the app's setting, on unless turned off). */
+  playReturn?: boolean;
   /** The library's shared part (the text lists, the same as the carousel's), under the release's files. */
   library?: ReactNode;
   /** The same on a phone, where the library holds everything of the release (the carousel's lists too). */
@@ -1499,6 +1502,15 @@ export default function VideoStudio({
 
   // ---- playback ----
   const playRef = useRef<() => Promise<void>>(async () => {});
+  /** Where the last play started, to go back there at the pause (`playReturn`). */
+  const playStartRef = useRef<number | null>(null);
+  const playReturnRef = useRef(playReturn);
+  playReturnRef.current = playReturn;
+  /** The user's pause: the playhead back where play started (as editing apps do), or left where it stopped. */
+  const pause = () => {
+    stop();
+    if (playReturnRef.current && playStartRef.current !== null) setHead(playStartRef.current);
+  };
   const play = async () => {
     // Not before the video can play: a click would otherwise start everything later, by surprise.
     if (!audioBuf || (videoUrl && !playerReady)) return;
@@ -1511,7 +1523,9 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     const until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
     let from = head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
+    playStartRef.current = from;
     const cfgStart = cfg.crop.start;
+    const from0 = from;
     // The sound is heard this much after it is played (the phone's output, Bluetooth headphones…): the picture shows
     // what is heard, not what was just sent.
     const ac = ctx as AudioContext & { outputLatency?: number };
@@ -1549,7 +1563,7 @@ export default function VideoStudio({
     setPlaying(true);
     const tick = () => {
       const now = from + (ctx.currentTime - originRef.current);
-      if (now >= until) { setHead(until); stop(); return; }
+      if (now >= until) { setHead(playReturnRef.current ? from0 : until); stop(); return; }
       // The playhead and the lyrics follow what is heard (the sound sent, minus the output's delay).
       const heard = Math.max(cfgStart, now - lat);
       setHead(heard);
@@ -1902,7 +1916,7 @@ export default function VideoStudio({
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.documentElement.classList.toggle("pv-idle", full && idle); return () => document.documentElement.classList.remove("pv-idle"); }, [full, idle]);
   /** A tap on the full-screen picture plays or pauses (the player stays, under the picture, on a phone too). */
-  const fullTap = () => { if (playing) stop(); else void play(); };
+  const fullTap = () => { if (playing) pause(); else void play(); };
   /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and under the phone's
    *  picture. */
   const shownToggles = (cls: string, reachable = true) => {
@@ -3167,7 +3181,7 @@ export default function VideoStudio({
     if (!e.altKey && k.toLowerCase() === "f") { if (videoBlob && !full) { e.preventDefault(); toggleFull(true); } return; }
     if (!e.altKey && k.toLowerCase() === "g") { if (videoBlob && settings.format !== "16:9") setAids({ zones: !aids.zones }); return; }
     if (!audioBuf) return;
-    if (k === " ") { e.preventDefault(); if (playing) stop(); else void play(); }
+    if (k === " ") { e.preventDefault(); if (playing) pause(); else void play(); }
     else if ((k === "ArrowLeft" || k === "ArrowRight") && e.altKey) {
       e.preventDefault();
       if (!linked) setV({ offset: round2(settingsRef.current.offset + (k === "ArrowLeft" ? -0.1 : 0.1)) });
@@ -3195,7 +3209,7 @@ export default function VideoStudio({
   const playerEl = (
         <div className="dp">
           <button className="dp-play" aria-label={playing ? t("Pause") : t("Play")} disabled={!playing && !!videoUrl && !playerReady}
-            onClick={() => (playing ? stop() : void play())}>
+            onClick={() => (playing ? pause() : void play())}>
             {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden />
               : playing
                 // Solid: two thick bars, a full triangle (the dock's big button, read at a glance).
@@ -3521,7 +3535,7 @@ export default function VideoStudio({
                 <div className="row transport">
                   <button className="btn icon tr-play" aria-label={playing ? t("Pause") : t("Play")} title={(playing ? t("Pause") : t("Play")) + " (Espace)"}
                     disabled={!playing && !!videoUrl && !playerReady}
-                    onClick={() => (playing ? stop() : void play())}>
+                    onClick={() => (playing ? pause() : void play())}>
                     {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden /> : <Icon name={playing ? "pause" : "play"} />}
                   </button>
                   <span className="mono xs tr-time">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>

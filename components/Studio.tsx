@@ -1597,6 +1597,11 @@ export default function Studio({ userName }: { userName: string }) {
                 {(["jpg", "png"] as const).map((f) => (
                   <button key={f} onClick={() => upd((w) => ({ ...w, exportFormat: f }))}>{ws.exportFormat === f ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}{f.toUpperCase()}</button>
                 ))}
+                <div className="sep" />
+                <div className="label cap">{t("Playback")}</div>
+                <label className="check menu-check" title={t("Play, pause, play again: it starts again from the same point. Off: it goes on from where it stopped.")}>
+                  <input type="checkbox" checked={ws.playReturn !== false} onChange={(e) => upd((w) => ({ ...w, playReturn: e.target.checked ? undefined : false }))} />{t("Pause goes back to where play started")}
+                </label>
               </div>
             )}
             <div className="sep" />
@@ -1696,6 +1701,7 @@ export default function Studio({ userName }: { userName: string }) {
             releaseTitle={releaseTitle}
             onCopyJob={setCopyJob}
             onToast={say}
+            playReturn={ws.playReturn !== false}
             library={textGroups(["hooks", "captions"])}
             libraryPhone={<>{textGroups(["hooks", "texts", "captions"])}{photosFamily()}</>}
             lyricsRow={lyricsRow}
