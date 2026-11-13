@@ -11,6 +11,7 @@ const SHORTCUTS: { part: string; keys: string[][]; what: string; pair?: boolean 
   { part: "Both studios", keys: [["mod", "Z"]], what: "Undo" },
   { part: "Both studios", keys: [["⇧", "mod", "Z"], ["mod", "Y"]], what: "Redo" },
   { part: "Both studios", keys: [["Esc"]], what: "Close a window or the full screen" },
+  { part: "Both studios", keys: [["mod"]], what: "Held while dragging a text, a photo or the video: no snapping to the middle" },
   { part: "Carousel", keys: [["R"]], what: "Generate" },
   { part: "Carousel", keys: [["E"]], what: "Edit the selected slide's photo (exposure, contrast…)" },
   { part: "Carousel", keys: [["Space"]], what: "Full screen (Space again closes it)" },

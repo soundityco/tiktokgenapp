@@ -2858,10 +2858,12 @@ export default function VideoStudio({
     const d = pdrag.current, c = canvasRef.current;
     if (!d || !c) return;
     const dx = (e.clientX - d.sx) * d.k, dy = (e.clientY - d.sy) * d.k;
+    // ⌘ (Ctrl) held: no snapping, as in design apps.
+    const free = e.metaKey || e.ctrlKey;
     if (d.kind !== "pic") {
       let x = clamp(d.ox + (dx / c.width) * 100, 0, 100), y = clamp(d.oy + (dy / c.height) * 100, 0, 100);
       // Snaps to the centre lines, shown in blue while dragging.
-      const sv = Math.abs(x - 50) < 1.5, sh = Math.abs(y - 50) < 1.5;
+      const sv = !free && Math.abs(x - 50) < 1.5, sh = !free && Math.abs(y - 50) < 1.5;
       if (sv) x = 50;
       if (sh) y = 50;
       if (sv !== snap.v || sh !== snap.h) setSnap({ v: sv, h: sh });
@@ -2869,7 +2871,7 @@ export default function VideoStudio({
       else setV({ captionStyle: { ...styleRef.current, x, y } });
     } else {
       // Its centre snaps to the middle lines, as a text does (the blue guides show).
-      const sn = snapPic(d.ox + dx / c.width, d.oy + dy / c.height);
+      const sn = snapPic(d.ox + dx / c.width, d.oy + dy / c.height, free ? 0 : undefined);
       const room = fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: 1, oy: 1 });
       const gv = sn.v && room.ox > 0.001, gh = sn.h && room.oy > 0.001; // a guide only where it can move
       if (gv !== snap.v || gh !== snap.h) setSnap({ v: gv, h: gh });

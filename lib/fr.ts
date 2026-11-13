@@ -707,6 +707,7 @@ export const FR: Record<string, string> = {
   "Move to": "Déplacer vers",
   "Help": "Aide",
   "Black bars": "Bandes noires",
+  "Held while dragging a text, a photo or the video: no snapping to the middle": "Maintenu en faisant glisser un texte, une photo ou la vidéo : pas d'aimant au centre",
   "cinema": "cinéma",
   "Start of the segment here": "Début du segment ici",
   "End of the segment here": "Fin du segment ici",
