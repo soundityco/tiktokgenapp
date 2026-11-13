@@ -2968,6 +2968,8 @@ export default function VideoStudio({
   /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
   const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
+  /** The strip's passage and file (not its grade): a change of colour only waits longer before it is made again. */
+  const stripBase = useRef("");
   useEffect(() => {
     if (!active || !videoUrl) { if (!videoUrl) setStrip([]); return; }
     let off = false;
@@ -2975,12 +2977,17 @@ export default function VideoStudio({
     // Already made for this video's file and this passage: at once, from memory or from this device (kept there,
     // one strip per video: switching videos or reloading never makes it again).
     const squeeze = settings.desqueeze ?? 1;
-    const key = `${clip.id}|${videoBlob?.size ?? videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}${squeeze === 1 ? "" : `|${squeeze}`}`;
+    // Its pictures wear the video's colour grade (once ready: the LUT may still be loading), as the preview does.
+    const gradeNow = gradesColour(settings.grade) && !gradePendingRef.current && graderRef.current?.ready && videoLut.current ? settings.grade : undefined;
+    const base = `${clip.id}|${videoBlob?.size ?? videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}${squeeze === 1 ? "" : `|${squeeze}`}`;
+    const key = base + (gradeNow ? `|${colourKey}` : "");
     const disk = `strip:${clip.id}`;
     const known = STRIPS.get(key);
-    if (known) { setStrip(known); return; }
-    // The first time, right away; while the segment is being moved, once it rests (the old pictures stay meanwhile).
-    const wait = strip.length ? 450 : 0;
+    if (known) { stripBase.current = base; setStrip(known); return; }
+    // The first time, right away; while the segment is being moved, once it rests (the old pictures stay meanwhile);
+    // only the colour changed (sliders being moved): once it rests a little longer.
+    const wait = !strip.length ? 0 : stripBase.current === base ? 1500 : 450;
+    stripBase.current = base;
     const timer = window.setTimeout(async () => {
       try {
         const saved = await getMedia(disk);
@@ -3002,7 +3009,17 @@ export default function VideoStudio({
           await new Promise<void>((ok) => { v.onseeked = () => ok(); window.setTimeout(ok, 2000); });
           if (!v.videoWidth) break;
           cv.width = Math.round((H * v.videoWidth * squeeze) / v.videoHeight); cv.height = H;
-          cv.getContext("2d")!.drawImage(v, 0, 0, cv.width, cv.height);
+          const g = cv.getContext("2d")!;
+          g.drawImage(v, 0, 0, cv.width, cv.height);
+          const grader = graderRef.current;
+          if (gradeNow && grader?.ready && videoLut.current) {
+            // The same grade as the preview (its LUT put back: the slides share the grader), the vignette too
+            // (no grain: noise at this size).
+            grader.setLut(videoLut.current, 33);
+            const done = grader.grade({ src: cv, w: cv.width, h: cv.height }, { x: 0, y: 0, w: cv.width, h: cv.height }, cv.width, cv.height);
+            g.drawImage(done.src, 0, 0);
+            drawLook(g, cv.width, cv.height, { ...gradeNow, grain: 0 }, 0);
+          }
           out.push(cv.toDataURL("image/jpeg", 0.82));
           // Each picture takes its place as soon as it is made (the strip is at its full height from the start).
           if (!off && !wait) setStrip([...out]);
@@ -3016,7 +3033,7 @@ export default function VideoStudio({
       finally { v.removeAttribute("src"); v.load(); }
     }, wait);
     return () => { off = true; clearTimeout(timer); };
-  }, [active, videoUrl, settings.crop.start, segLen, settings.offset, settings.desqueeze]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, videoUrl, settings.crop.start, segLen, settings.offset, settings.desqueeze, colourKey, lutRev]); // eslint-disable-line react-hooks/exhaustive-deps
   const placed = (project.lyricWords?.length ?? 0) > 0;
   /** Nothing synced yet: one button does both. Afterwards each has its own, so changing the video never touches the lyrics. */
   const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
