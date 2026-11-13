@@ -1,6 +1,7 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { hookKey, joinCaptions, poolTags, splitCaptions, tagGroups, textItems } from "@/lib/generate";
 import { THEMES, themeLabel } from "@/lib/themes";
 import { classifyThemes } from "@/lib/themeAI";
@@ -276,6 +277,9 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   savedIn?: string | null;
   /** That folder in the Drive, as a link. */
   savedHref?: string | null;
+  /** The other photo lists a photo can be moved to (right click, or a long press, on it). */
+  lists?: PicPool[];
+  onMovePic?: (picId: string, toPoolId: string) => void;
 }) {
   const { t } = useT();
   const { pool } = p;
@@ -290,6 +294,9 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   // A photo opened full screen (the carousel's own full screen: swipe, ← →, dragged down to close).
   const [viewing, setViewing] = useState<number | null>(null);
   const grid = useRef<HTMLDivElement>(null);
+  // A photo's own menu: right click on a computer, a long press on a phone.
+  const [ctx, setCtx] = useState<{ i: number; x: number; y: number } | null>(null);
+  const press = useRef<{ timer: number; fired: boolean } | null>(null);
   const images = (list: FileList | null) => [...(list ?? [])].filter((f) => looksLikeImage(f.name, f.type));
   const remove = (pic: PicRef) => p.onChange((x) => ({ ...x, pics: x.pics.filter((y) => y.id !== pic.id) }));
   return (
@@ -323,8 +330,16 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
       {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them.")}</p>}
       <div className="thumbs" ref={grid} style={{ maxHeight: "46dvh", overflow: "auto" }}>
         {pool.pics.map((pic, i) => (
-          <div key={pic.id} className="thumb-wrap">
-            <button className="thumb-open" aria-label={t("Open {name} full screen", { name: pic.name })} onClick={() => setViewing(i)}>
+          <div key={pic.id} className="thumb-wrap" onContextMenu={(e) => { e.preventDefault(); setCtx({ i, x: e.clientX, y: e.clientY }); }}
+            onPointerDown={(e) => {
+              if (e.pointerType !== "touch") return;
+              const { clientX: x, clientY: y } = e;
+              press.current = { fired: false, timer: window.setTimeout(() => { if (press.current) press.current.fired = true; setCtx({ i, x, y }); }, 500) };
+            }}
+            onPointerMove={() => { if (press.current && !press.current.fired) { clearTimeout(press.current.timer); press.current = null; } }}
+            onPointerUp={() => { if (press.current && !press.current.fired) { clearTimeout(press.current.timer); press.current = null; } }}>
+            <button className="thumb-open" aria-label={t("Open {name} full screen", { name: pic.name })}
+              onClick={() => { if (press.current?.fired) { press.current = null; return; } setViewing(i); }}>
               <Thumb id={pic.id} name={pic.name} />
             </button>
             <button className="x" aria-label={t("Remove {name}", { name: pic.name })}
@@ -333,6 +348,11 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
         ))}
       </div>
       {over && <div className="pic-drop-hint">{t("Drop the photos: they go to your Drive")}</div>}
+      {ctx && pool.pics[ctx.i] && (
+        <PicMenu x={ctx.x} y={ctx.y} pic={pool.pics[ctx.i]} lists={p.lists ?? []} onClose={() => setCtx(null)}
+          onOpen={() => setViewing(ctx.i)} onRemove={() => remove(pool.pics[ctx.i])}
+          onMove={(to) => p.onMovePic?.(pool.pics[ctx.i].id, to)} />
+      )}
       {viewing !== null && pool.pics[viewing] && (
         <PhotoView pics={pool.pics} index={viewing} onNav={(i) => { setViewing(i); grid.current?.querySelectorAll(".thumb-wrap")[i]?.scrollIntoView({ block: "nearest" }); }}
           onClose={() => setViewing(null)} thumb={(i) => grid.current?.querySelectorAll<HTMLElement>(".thumb-wrap")[i] ?? null} />
@@ -343,5 +363,44 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
         <button className="btn primary" onClick={close}>{t("Done")}</button>
       </div>
     </Modal>
+  );
+}
+
+/** A photo's menu in its list, where it was clicked: open it, move it to another list (and its Drive folder), remove it. */
+function PicMenu({ x, y, pic, lists, onClose, onOpen, onRemove, onMove }: {
+  x: number; y: number; pic: PicRef; lists: PicPool[]; onClose: () => void; onOpen: () => void; onRemove: () => void; onMove: (to: string) => void;
+}) {
+  const { t } = useT();
+  const box = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState({ left: x, top: y });
+  // Kept on the screen (opened near an edge, it goes the other way).
+  useLayoutEffect(() => {
+    const r = box.current?.getBoundingClientRect();
+    if (!r) return;
+    setAt({ left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) });
+  }, [x, y]);
+  useEffect(() => {
+    const away = (e: Event) => { if (!(e.target instanceof Node) || !box.current?.contains(e.target)) onClose(); };
+    // Escape closes this menu only (not the list's window under it).
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); onClose(); } };
+    document.addEventListener("pointerdown", away, true);
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("scroll", away, true);
+    return () => { document.removeEventListener("pointerdown", away, true); window.removeEventListener("keydown", key, true); window.removeEventListener("scroll", away, true); };
+  }, [onClose]);
+  const act = (fn: () => void) => () => { onClose(); fn(); };
+  return createPortal(
+    <div ref={box} role="menu" className="menu pic-menu" style={{ position: "fixed", left: at.left, top: at.top, right: "auto" }}>
+      <div className="label cap truncate">{pic.name}</div>
+      <button onClick={act(onOpen)}><Icon name="expand" size={14} />{t("Full screen")}</button>
+      <div className="sep" />
+      <div className="label cap">{t("Move to")}</div>
+      {lists.length ? lists.map((l) => (
+        <button key={l.id} onClick={act(() => onMove(l.id))}><Icon name="image" size={14} /><span className="truncate grow">{l.name}</span><span className="muted xs">{l.pics.length}</span></button>
+      )) : <p className="muted xs pic-menu-none">{t("No other photo list yet.")}</p>}
+      <div className="sep" />
+      <button className="danger" style={{ color: "var(--danger)" }} onClick={act(onRemove)}><Icon name="trash" size={14} />{t("Remove from the list")}</button>
+    </div>,
+    document.body,
   );
 }

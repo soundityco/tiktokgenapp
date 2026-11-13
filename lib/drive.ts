@@ -324,6 +324,18 @@ export async function moveDriveFolder(from: string[], to: string[]): Promise<voi
 }
 
 
+/** A photo moved into another folder of the tree (another list's), out of the folder(s) it was in. */
+export async function movePictureTo(id: string, path: string[]): Promise<void> {
+  const to = await driveFolder(path);
+  const meta = await (await api(`https://www.googleapis.com/drive/v3/files/${id}?fields=parents&supportsAllDrives=true`)).json() as { parents?: string[] };
+  const from = (meta.parents ?? []).filter((x) => x !== to);
+  if (!from.length && meta.parents?.includes(to)) return;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?${new URLSearchParams({ addParents: to, ...(from.length ? { removeParents: from.join(",") } : {}), fields: "id", supportsAllDrives: "true" })}`, {
+    method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: "{}",
+  });
+  if (!res.ok) throw new Error(`Google Drive error ${res.status}`);
+}
+
 /** Move a file the app made into a folder of the tree (from wherever it is). */
 export async function moveToDriveFolder(id: string, path: string[], from: string): Promise<void> {
   const to = await driveFolder(path);

@@ -3,7 +3,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, webPicId } from "@/lib/drive";
+import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, movePictureTo, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
@@ -1168,6 +1168,20 @@ export default function Studio({ userName }: { userName: string }) {
     void flushSave();
     say(failed ? t("{n} photos could not be sent to your Drive", { n: failed }) : t("{n} photos added", { n: files.length }));
   };
+  /** A photo of a list moved to another list: out of the first, into the other, and into its folder on the Drive. */
+  const movePic = async (fromId: string, picId: string, toId: string) => {
+    const cur = wsRef.current, from = cur?.picPools.find((p) => p.id === fromId), to = cur?.picPools.find((p) => p.id === toId);
+    const pic = from?.pics.find((x) => x.id === picId);
+    if (!from || !to || !pic) return;
+    setPicPool(fromId, (x) => ({ ...x, pics: x.pics.filter((y) => y.id !== picId) }));
+    setPicPool(toId, (x) => (x.pics.some((y) => y.id === picId) ? x : { ...x, pics: [...x.pics, pic] }));
+    void flushSave();
+    say(t("Moved to “{list}”", { list: to.name }));
+    if (driveWrite && !picId.includes(":")) {
+      try { await movePictureTo(picId, listPath(to)); }
+      catch (e) { console.warn("[photos] move on the Drive", e); say(t("Moved in the app, but not in your Drive's folders: {why}", { why: e instanceof Error ? e.message : String(e) })); }
+    }
+  };
   const askDeletePool = (kind: "text" | "photos", id: string) => {
     const pool = kind === "text" ? ws!.textPools.find((p) => p.id === id) : ws!.picPools.find((p) => p.id === id);
     if (!pool) return;
@@ -1911,6 +1925,7 @@ export default function Studio({ userName }: { userName: string }) {
           onChange={(fn) => setPicPool(edPics.id, (x) => scopeFix(fn(x)))}
           onUpload={(files) => void uploadToList(edPics.id, files)} uploading={picUpload?.pool === edPics.id ? picUpload : null}
           onMoved={(from, to) => void moveDriveFolder(listPath(from), listPath(to))}
+          lists={vPics.filter((p) => p.id !== edPics.id)} onMovePic={(picId, toId) => void movePic(edPics.id, picId, toId)}
           savedIn={driveWrite ? listPath(edPics).join(" / ") : null}
           savedHref={picFolderUrl} />
       )}
