@@ -72,8 +72,9 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
 };
 
 
-/** Fade of the sound when playback starts or stops (seconds). */
-const FADE = 0.15;
+/** Fade of the sound when playback starts or stops (seconds): just enough to avoid a click, short enough not to eat
+ *  the first or last syllable of a line (a video that starts right on the voice). The export has none. */
+const FADE = 0.02;
 
 /** The way the lyrics are placed on the audio: raised when it changes, so lyrics placed before are placed again once. */
 const LYRICS_ALIGN_V = 3;
