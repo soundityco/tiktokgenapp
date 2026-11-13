@@ -6,6 +6,7 @@ import { Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
 import { clamp, clampPic, renderSlide, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
+import { type AIProgress, type AIStep, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
 import { poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
 import { themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
@@ -138,6 +139,30 @@ export default function SlideCard(p: Props) {
     document.addEventListener("pointerdown", away, true);
     return () => document.removeEventListener("pointerdown", away, true);
   }, [adjusting]);
+  // ---- photo AI (a test, lib/photoAI): the result comes in as a new photo (the same way as a dropped one) ----
+  const [aiBusy, setAiBusy] = useState<null | { kind: "sharp" | "fill"; step: AIStep; pct?: number }>(null);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const aiLabel = (b: { step: AIStep; pct?: number }) => b.step === "model"
+    ? t("Downloading the model… {n}%", { n: Math.round((b.pct ?? 0) * 100) })
+    : b.step === "start" ? t("Starting…") : b.pct !== undefined ? t("Working… {n}%", { n: Math.round(b.pct * 100) }) : t("Working…");
+  const runAI = async (kind: "sharp" | "fill") => {
+    if (!img || !cv.current) return;
+    setAiNote(null);
+    const base = (gen?.picName ?? "photo").replace(/\.[a-z0-9]+$/i, "");
+    if (kind === "sharp" && sharpEnough(img.width, img.height)) { setAiNote(t("This photo is already sharp enough for a slide.")); return; }
+    setAiBusy({ kind, step: "start" });
+    const t0 = performance.now();
+    try {
+      const onStep: AIProgress = (step, pct) => setAiBusy({ kind, step, pct });
+      const blob = kind === "sharp" ? await sharper(img, onStep) : await fillFrame(img, clampPic(cfg.pic, img.width, img.height, cv.current.width, cv.current.height), cv.current.width, cv.current.height, onStep);
+      if (!blob) { setAiNote(t("The photo already covers the whole slide: zoom out or move it to leave empty edges, then fill them.")); return; }
+      console.info(`[photoai] ${kind} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+      p.onImage(blob, `${base} ${kind === "sharp" ? "HD" : t("filled")}.jpg`);
+    } catch (e) {
+      console.warn("[photoai]", e);
+      setAiNote(t("The AI could not finish on this device: {why}", { why: e instanceof Error ? e.message : String(e) }));
+    } finally { setAiBusy(null); }
+  };
   const adj = cfg.pic.adjust ?? {};
   const hasAdjust = Object.values(adj).some((x) => x);
   // E: the selected slide's photo edits open or close (the same as its button); Escape closes them. Not while typing,
@@ -588,6 +613,14 @@ export default function SlideCard(p: Props) {
               <div className="adjust-compare">
                 <Switch off={t("Before")} on={t("After")} checked={!compare} disabled={!hasAdjust} onChange={(v) => setCompare(!v)} title={t("Before: the photo without its edits, to compare")} />
               </div>
+              {/* AI on the device (a test): the photo sharper, or the empty part of the slide filled around it. */}
+              <div className="adjust-ai">
+                <button className="btn sm" disabled={!!aiBusy} title={t("Four times more pixels, details rebuilt (on this device)")} onClick={() => void runAI("sharp")}>
+                  <Icon name="sparkle" size={13} />{aiBusy?.kind === "sharp" ? aiLabel(aiBusy) : t("Sharper")}</button>
+                <button className="btn sm" disabled={!!aiBusy} title={t("Invents the empty part of the slide around the photo (zoom out or move it first; on this device)")} onClick={() => void runAI("fill")}>
+                  <Icon name="sparkle" size={13} />{aiBusy?.kind === "fill" ? aiLabel(aiBusy) : t("Fill the frame")}</button>
+              </div>
+              {aiNote && <p className="adjust-note xs">{aiNote}</p>}
               <div className="adjust-actions">
                 <button className="btn sm danger" disabled={!hasAdjust} onClick={() => p.onCfg((c) => ({ ...c, pic: { ...c.pic, adjust: undefined } }))}>{t("Reset")}</button>
                 <button className="btn sm primary" onClick={() => { setCompare(false); setAdjusting(false); }}>{t("Done")}</button>
