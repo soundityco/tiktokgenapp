@@ -372,6 +372,9 @@ export interface VideoSetup extends VideoSettings {
 export interface Project {
   id: string;
   name: string;
+  /** Tags of the text lists this release puts aside (e.g. the pre-release hooks once it is out): their texts are never
+   *  drawn here (carousels, video hooks), they stay in the lists. */
+  hiddenTags?: string[];
   slides: SlideCfg[];
   lyrics: LyricSection[];
   lyricsSectionId: string | null;

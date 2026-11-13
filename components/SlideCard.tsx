@@ -45,6 +45,8 @@ interface Props {
   gen: GenSlide | undefined;
   selected: boolean;
   textPools: TextPool[];
+  /** Tags the release put aside: their texts are not offered (nor drawn). */
+  hiddenTags?: string[];
   picPools: PicPool[];
   /** The release's lyrics, cut into sections: a lyrics slide ticks the ones it shows. */
   lyrics: LyricSection[];
@@ -342,7 +344,8 @@ export default function SlideCard(p: Props) {
   const itemTags = listPool && isLineList(listPool) ? poolTags(listPool) : [];
   const groups = tagGroups(itemTags);
   const ticked = (cfg.textSource.kind === "pool" ? sourceTags(cfg.textSource.tags, cfg.textSource.theme) : undefined)?.filter((x) => groups.some((g) => g.id === x));
-  const listItems = ticked?.length ? allItems.filter((_, i) => itemTags[i].some((x) => ticked.includes(x))) : allItems;
+  const aside = (i: number) => !!p.hiddenTags?.length && !!itemTags[i]?.some((x) => p.hiddenTags!.includes(x));
+  const listItems = allItems.filter((_, i) => !aside(i) && (!ticked?.length || itemTags[i].some((x) => ticked.includes(x))));
   const setTicked = (list: string[]) => p.onCfg((c) => (c.textSource.kind === "pool" ? { ...c, textSource: { ...c.textSource, theme: undefined, tags: list.length ? list : undefined } } : c));
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";
 
@@ -430,9 +433,11 @@ export default function SlideCard(p: Props) {
                   <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
                     {groups.length > 1 && (
                       <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                        <button className={"pick-chip" + (!ticked?.length ? " on" : "")} onClick={() => setTicked([])}>{t("All ({n})", { n: allItems.length })}</button>
+                        <button className={"pick-chip" + (!ticked?.length ? " on" : "")} onClick={() => setTicked([])}>{t("All ({n})", { n: allItems.filter((_, i) => !aside(i)).length })}</button>
                         {groups.map((g) => {
                           const on = !!ticked?.includes(g.id);
+                          // Put aside for the release: shown struck through, not to be ticked here.
+                          if (p.hiddenTags?.includes(g.id)) return <button key={g.id || "other"} className="pick-chip aside" disabled title={t("Put aside in this release")}>{themeLabel(g.id, t)}</button>;
                           return (
                             <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
                               onClick={() => setTicked(on ? (ticked ?? []).filter((x) => x !== g.id) : [...(ticked ?? []), g.id])}>

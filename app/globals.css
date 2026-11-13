@@ -2171,6 +2171,11 @@ details.sec:first-of-type { background-image: none; }
 .menu .pick-chips .pick-chip { width: auto; min-height: 0; height: 30px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: var(--fs-sm); color: var(--text); }
 .menu .pick-chips .pick-chip:hover { border-color: var(--muted); background: none; }
 .menu .pick-chips .pick-chip.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+/* A tag put aside for the release (its texts are not drawn here): struck through, dashed; in its window, one per chip. */
+.menu .pick-chips .pick-chip.aside, .hidden-tags .pick-chip.aside { color: var(--muted); text-decoration: line-through; border-style: dashed; }
+.hidden-tags .pick-chips { padding: 0; }
+.hidden-tags .pick-chip { height: 30px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: var(--r); background: none; font-size: var(--fs-sm); color: var(--text); cursor: pointer; }
+.hidden-tags .pick-chip:hover { border-color: var(--muted); }
 .pick-list { display: flex; flex-direction: column; gap: 1px; max-height: 280px; overflow-y: auto; } /* a column, not a grid: the grid squeezed the long lines onto each other */
 .pick-chips + .pick-list { border-top: 1px solid var(--line); padding-top: 4px; }
 .menu .pick-list .pick-line { flex: none; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: start; gap: 6px; height: auto; min-height: 32px;

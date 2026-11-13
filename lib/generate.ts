@@ -1,3 +1,4 @@
+import { isLineList } from "./defaults";
 import { slideLyrics } from "./lyricsSections";
 import { themesOf } from "./themes";
 import { GenSlide, PicPool, Project, TextPool, Workspace } from "./types";
@@ -103,13 +104,15 @@ export function weightedPickBag(
  * One hook from a list, for the video studio: the same shuffle bag as the carousel, so a hook used
  * on one side does not come back on the other before the list has been used up. Mutates `bags`.
  */
-export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = [], tags?: string[] | string): string | null {
+export function drawHook(ws: Workspace, poolId: string, bags: Record<string, string[]>, exclude: string[] = [], tags?: string[] | string,
+  /** Tags the release put aside: their texts are never drawn. */
+  hidden?: string[]): string | null {
   const pool = ws.textPools.find((p) => p.id === poolId);
   if (!pool) return null;
   // Some tags of the list only (their own shuffle bag), as for a slide; none (or none matching): the whole list.
   const want = typeof tags === "string" ? [tags] : tags;
-  const inTags = want?.length ? taggedItems(pool, want) : [];
-  const items = inTags.length ? inTags : textItems(pool);
+  const inTags = want?.length ? taggedItems(pool, want, hidden) : [];
+  const items = inTags.length ? inTags : drawableItems(pool, hidden);
   const bag = inTags.length ? bagOf(pool.id, want) : pool.id;
   if (!items.length) return null;
   const skip = new Set(exclude);
@@ -167,9 +170,9 @@ export function pickText(project: Project, ws: Workspace, slideIdx: number, bags
     const pool = ws.textPools.find((p) => p.id === src.poolId);
     if (!pool) return "";
     // Some tags of the list only (their own shuffle bag); none ticked, or none matching: the whole list.
-    const all = textItems(pool);
+    const all = drawableItems(pool, project.hiddenTags);
     const want = sourceTags(src.tags, src.theme);
-    const inTags = want ? taggedItems(pool, want) : all;
+    const inTags = want ? taggedItems(pool, want, project.hiddenTags) : all;
     const items = inTags.length ? inTags : all;
     const bag = want && inTags.length ? bagOf(pool.id, want) : pool.id;
     if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length && items.length) {
@@ -239,10 +242,17 @@ export function tagGroups(tags: string[][]): { id: string; items: number[] }[] {
   tags.forEach((list, i) => list.forEach((id) => m.set(id, [...(m.get(id) ?? []), i])));
   return [...m.entries()].map(([id, items]) => ({ id, items })).sort((a, b) => (a.id === "") === (b.id === "") ? b.items.length - a.items.length : a.id === "" ? 1 : -1);
 }
-/** The texts of a list with at least one of `tags`. */
-export function taggedItems(pool: TextPool, tags: string[]): string[] {
+/** The texts of a list with at least one of `tags`, none of the `hidden` ones. */
+export function taggedItems(pool: TextPool, tags: string[], hidden?: string[]): string[] {
   const items = textItems(pool), tg = poolTags(pool);
-  return items.filter((_, i) => tg[i].some((x) => tags.includes(x)));
+  return items.filter((_, i) => tg[i].some((x) => tags.includes(x)) && !tg[i].some((x) => hidden?.includes(x)));
+}
+/** The texts of a list a release can draw: none with a tag it put aside (`Project.hiddenTags`). */
+export function drawableItems(pool: TextPool, hidden?: string[]): string[] {
+  const items = textItems(pool);
+  if (!hidden?.length || !isLineList(pool)) return items;
+  const tg = poolTags(pool);
+  return items.filter((_, i) => !tg[i].some((x) => hidden.includes(x)));
 }
 /** The tags a source draws from: its own, else its older single theme, else none (the whole list). */
 export const sourceTags = (tags?: string[], theme?: string): string[] | undefined => (tags?.length ? tags : theme !== undefined ? [theme] : undefined);

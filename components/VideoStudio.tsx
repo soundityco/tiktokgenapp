@@ -3034,8 +3034,10 @@ export default function VideoStudio({
     const own = h?.pool && h.pool === poolId ? h.tags : undefined;
     const ticked = (own ?? (poolId === hookPoolId ? sourceTags(settings.hookTags, settings.hookTheme) : undefined) ?? []).filter((x) => groups.some((g) => g.id === x));
     const all = pool ? textItems(pool) : [];
-    const items = ticked.length ? all.filter((_, i) => tagsOf[i]?.some((x) => ticked.includes(x))) : all;
-    return { poolId, pool, groups, ticked, items, count: tagsOf.length };
+    // The texts with a tag the release put aside are not offered (nor drawn: see Studio's onDrawHook).
+    const hidden = project.hiddenTags ?? [];
+    const items = all.filter((_, i) => !tagsOf[i]?.some((x) => hidden.includes(x)) && (!ticked.length || tagsOf[i]?.some((x) => ticked.includes(x))));
+    return { poolId, pool, groups, ticked, items, count: tagsOf.filter((tg) => !tg.some((x) => hidden.includes(x))).length, hidden };
   };
   /** A hook drawn from its list (and tags), different from the ones already on the video. */
   const drawFor = (h: VideoHook | undefined, taken: string[]) => {
@@ -3965,6 +3967,7 @@ export default function VideoStudio({
                                   <button className={"pick-chip" + (!src.ticked.length ? " on" : "")} onClick={() => setSrc({ tags: [] })}>{t("All ({n})", { n: src.count })}</button>
                                   {src.groups.map((g) => {
                                     const on = src.ticked.includes(g.id);
+                                    if (src.hidden.includes(g.id)) return <button key={g.id || "other"} className="pick-chip aside" disabled title={t("Put aside in this release")}>{themeLabel(g.id, t)}</button>;
                                     return (
                                       <button key={g.id || "other"} className={"pick-chip" + (on ? " on" : "")} aria-pressed={on}
                                         onClick={() => setSrc({ tags: on ? src.ticked.filter((x) => x !== g.id) : [...src.ticked, g.id] })}>{themeLabel(g.id, t)} · {g.items.length}</button>
