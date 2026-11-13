@@ -3533,13 +3533,15 @@ export default function VideoStudio({
                     <Menu trigger={(_, toggle) => (
                       <button className={"btn sm" + ((videoBlob && settings.score === undefined) || (hasLyrics && !placed) ? " primary" : "")} onClick={toggle}
                         aria-haspopup="menu">
-                        <Icon name="refresh" size={14} /><span className="tr-sync-lbl">{t("Sync")}</span> <Icon name="chevron" size={12} />
+                        <Icon name="refresh" size={14} /><span className="tr-sync-lbl">{
+                          // Everything there is synced already: doing it again.
+                          !((videoBlob && settings.score === undefined) || (hasLyrics && !placed)) && (settings.score !== undefined || placed) ? t("Resync") : t("Sync")}</span> <Icon name="chevron" size={12} />
                       </button>
                     )}>
                       {(closeMenu) => (<>
                         {videoBlob && (
                           <button onClick={() => { closeMenu(); void autoSync(); }} title={t("Find where the camera video sits in the official audio. The lyrics do not move.")}>
-                            <Icon name="film" size={14} />{t("Sync the video")}{settings.score === undefined && <span className="tab-dot" />}
+                            <Icon name="film" size={14} />{settings.score === undefined ? t("Sync the video") : t("Resync the video")}{settings.score === undefined && <span className="tab-dot" />}
                           </button>
                         )}
                         <button disabled={!hasLyrics} onClick={() => { closeMenu(); void syncLyrics(); }}

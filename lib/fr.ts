@@ -699,6 +699,8 @@ export const FR: Record<string, string> = {
   "Sync lyrics and video": "Caler les paroles et synchroniser",
   "Sync the lyrics": "Caler les paroles",
   "Sync the video": "Synchroniser la vidéo",
+  "Resync the video": "Resynchroniser la vidéo",
+  "Resync": "Resynchroniser",
   "Syncing the video… {n}%": "Synchronisation de la vidéo… {n} %",
   "Placing the lyrics… {n}%": "Calage des paroles… {n} %",
   "No lyrics: paste them to show them on the video.": "Pas de paroles : colle-les pour les afficher sur la vidéo.",
