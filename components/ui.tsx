@@ -318,8 +318,6 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
   const set = (v: number) => onChange(Math.round(Math.max(min, Math.min(max, v))));
   return (
     <div className="wheel" role="slider" tabIndex={0} aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}
-      // One tile per tick spacing, placed from the centre: at 0 a long tick sits right under the centre mark.
-      style={{ backgroundPositionX: `calc(50% + 20px - ${value * PX + 0.5}px), calc(50% + 4px - ${value * PX + 0.5}px)` }}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, v: value, last: value }; }}
       onPointerMove={(e) => {
         const d = drag.current;
@@ -339,6 +337,12 @@ export function Wheel({ value, min, max, label, onChange }: { value: number; min
         else if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); set(value - step); }
         else if (e.key === "Home") { e.preventDefault(); set(0); }
       }}>
+      {/* The ticks from `min` to `max` only, slid under the centre mark: at an end, the wheel visibly stops on that side.
+          A long tick every 10, one of them on 0. */}
+      <span className="wheel-ticks" aria-hidden style={{
+        left: `calc(50% + ${(min - value) * PX - 0.5}px)`, width: (max - min) * PX + 1,
+        backgroundPositionX: `${(((-min % 10) + 10) % 10) * PX}px, 0px`,
+      }} />
       <span className="wheel-mark" aria-hidden />
     </div>
   );
