@@ -17,3 +17,11 @@ export function saveBlob(blob: Blob, name: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
+
+/** Several files downloaded one after the other (no zip): a moment between two, or browsers keep only the first. */
+export async function saveBlobs(files: { name: string; blob: Blob }[], gap = 350) {
+  for (let i = 0; i < files.length; i++) {
+    if (i) await new Promise((r) => setTimeout(r, gap));
+    saveBlob(files[i].blob, files[i].name);
+  }
+}

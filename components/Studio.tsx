@@ -10,7 +10,7 @@ import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
 import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
-import { safeName, saveBlob, stamp } from "@/lib/files";
+import { safeName, saveBlob, saveBlobs, stamp } from "@/lib/files";
 import { addCarousel, carouselsOf, currentCarouselId, deleteCarousel, duplicateCarousel, mapAllSlides, openCarousel, renameCarousel } from "@/lib/carousels";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
@@ -1285,8 +1285,8 @@ export default function Studio({ userName }: { userName: string }) {
     return out;
   }
   /**
-   * Downloads the open carousel, or every carousel of the release (`all`): one zip, one folder per carousel
-   * holding its pictures and its caption.txt (the post's text), nothing else.
+   * Downloads the open carousel: its pictures and its caption.txt (the post's text), straight into the downloads (no
+   * zip), named after the release. Every carousel of the release (`all`): one zip, one folder per carousel.
    */
   async function downloadAll(all = false) {
     if (!project) return;
@@ -1301,10 +1301,10 @@ export default function Studio({ userName }: { userName: string }) {
     const failures: string[] = [];
     try {
       const release = safeName(project.name);
-      const { default: JSZip } = await import("jszip");
-      const zip = new JSZip();
-      const root = all ? zip.folder(`${release} ${stamp()}`)! : null;
-      let made = 0, single = "";
+      const zip = all ? new (await import("jszip")).default() : null;
+      const root = zip ? zip.folder(`${release} ${stamp()}`)! : null;
+      let made = 0;
+      const direct: { name: string; blob: Blob }[] = [];
       const usedNames = new Set<string>();
       for (const p of ready) {
         const files = await buildFiles(p, (done) => setExportProgress({ done: before + done, total }), failures);
@@ -1314,19 +1314,27 @@ export default function Studio({ userName }: { userName: string }) {
         made += files.length;
         const c = carouselsOf(p).find((x) => x.id === currentCarouselId(p))!;
         const many = carouselsOf(project).length > 1;
-        const name = all ? safeName(carouselName(c)) : `${safeName(project.name + (many ? ` - ${carouselName(c)}` : ""))} ${stamp()}`;
-        if (!all) single = name;
+        const caption = p.caption?.trim() ? new Blob([p.caption.trim() + "\n"], { type: "text/plain" }) : null;
+        if (!root) {
+          // One carousel: the files themselves, named after the release (and the carousel when there are several).
+          const prefix = safeName(project.name + (many ? ` - ${carouselName(c)}` : ""));
+          direct.push(...files.map((f) => ({ name: `${prefix} - ${f.name}`, blob: f.blob })));
+          if (caption) direct.push({ name: `${prefix} - caption ${stamp()}.txt`, blob: caption });
+          continue;
+        }
+        const name = safeName(carouselName(c));
         // Two carousels of the same name get two folders (never one over the other).
         let folderName = name;
         for (let k = 2; usedNames.has(folderName.toLowerCase()); k++) folderName = `${name} (${k})`;
         usedNames.add(folderName.toLowerCase());
-        const dir = (root ?? zip).folder(folderName)!;
+        const dir = root.folder(folderName)!;
         files.forEach((f) => dir.file(f.name, f.blob));
         // The pictures and the text of the post (ready to paste in TikTok), nothing else.
-        if (p.caption?.trim()) dir.file("caption.txt", p.caption.trim() + "\n");
+        if (caption) dir.file("caption.txt", caption);
       }
       if (!made) throw new Error(t("Export failed"));
-      saveBlob(await zip.generateAsync({ type: "blob" }), `${all ? `${release} ${stamp()}` : single}.zip`);
+      if (zip) saveBlob(await zip.generateAsync({ type: "blob" }), `${release} ${stamp()}.zip`);
+      else await saveBlobs(direct);
       if (failures.length) say(t("Exported {n} of {m} slides ({f} failed)", { n: made, m: total, f: failures.length }));
       else if (all && ready.length < list.length) say(t("{n} carousels not generated yet were left out", { n: list.length - ready.length }));
     } catch (e: any) { say(e?.message ?? t("Export failed")); }
@@ -1774,7 +1782,6 @@ export default function Studio({ userName }: { userName: string }) {
               <button className="btn icon quiet hist" aria-label={t("Undo")} title={`${t("Undo")} (⌘Z)`} onClick={undo} disabled={!history.past}><Icon name="undo" /></button>
               <button className="btn icon quiet hist" aria-label={t("Redo")} title={`${t("Redo")} (⇧⌘Z)`} onClick={redo} disabled={!history.future}><Icon name="redo" /></button>
               <div className="row nowrap head-actions">
-              {exportProgress && <span className="badge h-progress" aria-live="polite">{exportProgress.done}/{exportProgress.total}</span>}
               {busy && <button className="btn h-cancel" onClick={() => { cancelExport.current = true; }}>{t("Cancel")}</button>}
 
               <button className="btn icon h-share" aria-label={handheld ? t("Share") : t("Send to my phone")} title={handheld ? t("Share") : t("Send to my phone (QR code)")} onClick={() => setShareOpen(true)} disabled={busy || !project.generated}><Icon name="share" /></button>
@@ -1788,7 +1795,11 @@ export default function Studio({ userName }: { userName: string }) {
                   </>)}
                 </Menu></div>
               ) : (
-                <button className={"btn primary h-dl" + (busy ? " shine-box" : "")} aria-label={t("Download all")} onClick={() => void downloadAll()} disabled={busy || !project.generated}><Icon name="download" /><span className="lbl">{busy ? t("Exporting…") : t("Download all")}</span></button>
+                // While exporting, the button itself fills up (the slides done out of all), its label counts them.
+                <button className={"btn primary h-dl" + (busy ? " shine-box" : "") + (exportProgress ? " filling" : "")} aria-label={t("Download all")} onClick={() => void downloadAll()} disabled={busy || !project.generated}
+                  style={exportProgress ? { "--p": exportProgress.done / Math.max(1, exportProgress.total) } as CSSProperties : undefined}>
+                  <Icon name="download" /><span className="lbl" aria-live="polite">{exportProgress ? `${exportProgress.done} / ${exportProgress.total}` : busy ? t("Exporting…") : t("Download all")}</span>
+                </button>
               )}
               </div>
             </div>
