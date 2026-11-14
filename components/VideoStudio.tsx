@@ -4165,7 +4165,6 @@ export default function VideoStudio({
                         )}
                       </Menu>
                     )}
-                    <button className="btn sm icon quiet hook-del" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))} aria-label={t("Remove")} title={t("Remove")}><Icon name="trash" size={14} /></button>
                     {src.items.length > 0 && (
                       <button className="btn sm primary hook-gen" onClick={() => drawInto(h.id)} title={t("Another hook from its list and tags")}><Icon name="sparkle" size={13} />{t("Generate")}</button>
                     )}
@@ -4190,6 +4189,8 @@ export default function VideoStudio({
                         onChange={(e) => editHook(h.id, { to: e.target.checked ? undefined : round2(Math.min(segLen, h.from + 3)) })} />
                       {t("Until the end")}
                     </label>
+                    {/* Remove: at the card's bottom right, away from its other buttons. */}
+                    <button className="btn sm danger hook-del" onClick={() => setHooks(hooks.filter((x) => x.id !== h.id))}><Icon name="trash" size={13} />{t("Remove")}</button>
                   </div>
                 </div>
                 );
