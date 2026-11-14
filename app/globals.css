@@ -26,6 +26,8 @@
   --glow-carousel: color-mix(in srgb, #ff8a3d 40%, transparent);
   --glow-video: color-mix(in srgb, #a184ff 50%, transparent);
   --ok: #7ad9a1; --warn: #f0c35c; --danger: #ff6b80;
+  /* The carousel's own solid tone (its gradient's middle): the home page's carousel parts. */
+  --carousel: #ffa24d;
 
   --sans: "TikTok Sans Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
   --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
@@ -2593,3 +2595,123 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
     white-space: nowrap; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
   .clip-card:not(.shown) .clip-open { pointer-events: none; }
 }
+
+
+/* =====================================================================
+   Home page (signed out): the app's own look, wider. Serif headlines with an italic word, mono kickers, each studio
+   in its colour, hairlines between the parts; two live demos (the carousel engine, the burnt lyrics).
+   ===================================================================== */
+.lp { --lp-w: 1180px; min-height: 100dvh; color: var(--text); overflow-x: hidden; }
+.lp > section, .lp-nav, .lp-foot { width: min(var(--lp-w), calc(100% - 48px)); margin-inline: auto; }
+.lp .display em, .lp-title em { font-style: italic; }
+.lp-nav { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; height: 64px; }
+.lp-nav::before { content: ""; position: absolute; inset: 0 calc(50% - 50vw); z-index: -1; background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+
+.lp-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 64px; align-items: center; min-height: calc(100dvh - 64px); padding: 48px 0 72px; }
+.lp-hero-txt { display: grid; gap: 22px; align-content: center; }
+.lp-title { font-size: clamp(52px, 7.2vw, 104px); line-height: .98; letter-spacing: -.02em; margin: 0; }
+.lp-lead { margin: 0; max-width: 46ch; font-size: 17px; line-height: 1.55; color: var(--muted); }
+.lp-ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+.lp-ctas.center { justify-content: center; }
+.lp-cta { text-decoration: none; height: 46px; padding: 0 20px; gap: 10px; font-size: 14px; border-radius: 10px; }
+.lp-fine { margin: 0; font-size: var(--fs-xs); color: var(--faint); letter-spacing: .02em; }
+
+/* The carousel demo: three slides, the middle one raised; under them Generate and the looks. */
+.lp-demo { display: grid; gap: 18px; }
+.lp-deck { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: center; }
+.lp-slide { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line-2); background: var(--panel);
+  box-shadow: 0 24px 60px rgba(0,0,0,.45); aspect-ratio: 9 / 16; }
+.lp-slide:nth-child(2) { translate: 0 -18px; }
+.lp-slide canvas { display: block; width: 100%; height: 100%; }
+.lp-slide-n { position: absolute; top: 10px; left: 10px; font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(0,0,0,.55); color: var(--text); }
+.lp-deck.ready .lp-slide { animation: lp-in .6s cubic-bezier(.2,.8,.2,1) both; }
+.lp-deck.ready .lp-slide:nth-child(2) { animation-delay: .06s; }
+.lp-deck.ready .lp-slide:nth-child(3) { animation-delay: .12s; }
+@keyframes lp-in { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+.lp-demo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; }
+.lp-demo-bar .gen-btn { height: 40px; padding: 0 18px; border-radius: 10px; gap: 8px; }
+.lp-chips { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel); }
+.lp-chips button { height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: none; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.lp-chips button:hover { color: var(--text); }
+.lp-chips button.on { color: var(--text); background: var(--raised); }
+.lp-demo-note { margin: 0; text-align: center; font-size: var(--fs-xs); color: var(--faint); }
+
+/* Three steps, numbered, between hairlines. */
+.lp-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.lp-step { display: grid; gap: 10px; align-content: start; padding: 36px 32px 40px 0; }
+.lp-step + .lp-step { padding-left: 32px; border-left: 1px solid var(--line); }
+.lp-step-n { font-size: var(--fs-xs); color: var(--faint); letter-spacing: .1em; }
+.lp-step h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 34px; line-height: 1; }
+.lp-step p { margin: 0; color: var(--muted); line-height: 1.55; }
+
+/* A studio: its text and its picture side by side, its colour in its kicker's dot. */
+.lp-feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 64px; align-items: center; padding: 112px 0; border-bottom: 1px solid var(--line); }
+.lp-feature-txt { display: grid; gap: 22px; }
+.lp-feature h2 { margin: 0; font-size: clamp(38px, 4.6vw, 64px); line-height: 1; letter-spacing: -.015em; }
+.lp-kicker { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.lp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--grad-carousel); }
+.lp-videof .lp-dot { background: var(--grad-video); }
+.lp-files .lp-dot { background: var(--grad-music); }
+.lp-list { margin: 0; padding: 0; list-style: none; display: grid; }
+.lp-list li { padding: 14px 0; border-top: 1px solid var(--line); color: var(--muted); line-height: 1.5; }
+.lp-list li:last-child { border-bottom: 1px solid var(--line); }
+.lp-carousel .lp-list li::before { content: "—"; margin-right: 10px; color: var(--carousel); }
+.lp-videof .lp-list li::before { content: "—"; margin-right: 10px; color: var(--video); }
+
+/* The carousel's picture: its tags, as the slide's tag chips (one excluded). */
+.lp-feature-art { position: relative; min-height: 320px; border-radius: 18px; border: 1px solid var(--line); background:
+  radial-gradient(80% 70% at 70% 30%, color-mix(in srgb, var(--carousel) 14%, transparent), transparent 70%), var(--panel); }
+.lp-art-carousel { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 10px; padding: 40px; }
+.lp-tag { height: 38px; padding: 0 16px; display: inline-flex; align-items: center; border: 1px solid var(--line-2); border-radius: 10px; background: var(--raised);
+  font-family: var(--mono); font-size: var(--fs-sm); color: var(--text); }
+.lp-tag:nth-child(2) { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.lp-tag.off { color: var(--muted); text-decoration: line-through; border-style: dashed; background: none; }
+
+/* The video demo: a vertical frame, its player under it (the dock's). */
+.lp-video { display: grid; gap: 14px; justify-items: center; }
+.lp-video-frame { width: min(320px, 100%); aspect-ratio: 9 / 16; border-radius: 18px; overflow: hidden; border: 1px solid var(--line-2);
+  box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 0 1px color-mix(in srgb, var(--video) 18%, transparent); }
+.lp-video-frame canvas { display: block; width: 100%; height: 100%; }
+.lp-player { width: min(320px, 100%); display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; border: 1px solid var(--line-2); border-radius: 14px; background: var(--panel); font-size: var(--fs-xs); color: var(--muted); }
+.lp-play { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--accent); color: var(--on-accent); }
+.lp-track { flex: 1; height: 4px; border-radius: 2px; background: var(--line-2); overflow: hidden; }
+.lp-track i { display: block; height: 100%; background: var(--grad-video); }
+
+/* Your files: the Drive's tree, the audio green and the take violet. */
+.lp-art-files { display: grid; place-items: center; background: radial-gradient(80% 70% at 30% 70%, color-mix(in srgb, var(--music) 10%, transparent), transparent 70%), var(--panel); }
+.lp-tree { display: grid; gap: 12px; font-size: var(--fs-sm); color: var(--text); }
+.lp-tree span { display: inline-flex; align-items: center; gap: 8px; }
+.lp-tree svg { color: var(--muted); }
+.lp-tree .in { padding-left: 22px; }
+.lp-tree .in2 { padding-left: 52px; color: var(--muted); }
+.lp-tree .in2::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+.lp-tree .a::before { background: var(--grad-music); }
+.lp-tree .v::before { background: var(--grad-video); }
+
+.lp-end { display: grid; gap: 26px; justify-items: center; text-align: center; padding: 140px 0 120px; }
+.lp-end h2 { margin: 0; font-size: clamp(44px, 6vw, 84px); line-height: 1; letter-spacing: -.02em; }
+.lp-foot { display: flex; align-items: center; gap: 22px; padding: 28px 0 36px; border-top: 1px solid var(--line); font-size: var(--fs-xs); color: var(--faint); }
+.lp-foot a { color: var(--muted); text-decoration: none; font-family: var(--mono); }
+.lp-foot a:hover { color: var(--text); }
+
+@media (max-width: 900px) {
+  .lp-hero { grid-template-columns: minmax(0, 1fr); gap: 40px; min-height: 0; padding: 36px 0 56px; }
+  .lp-steps { grid-template-columns: minmax(0, 1fr); }
+  .lp-step, .lp-step + .lp-step { padding: 26px 0; border-left: 0; }
+  .lp-step + .lp-step { border-top: 1px solid var(--line); }
+  .lp-feature { grid-template-columns: minmax(0, 1fr); gap: 36px; padding: 72px 0; }
+  .lp-feature-art { min-height: 220px; }
+  .lp-end { padding: 96px 0 80px; }
+}
+@media (max-width: 640px) {
+  .lp > section, .lp-nav, .lp-foot { width: calc(100% - 32px); }
+  .lp-lead { font-size: 15.5px; }
+  .lp-deck { gap: 8px; }
+  .lp-slide { border-radius: 10px; }
+  .lp-slide:nth-child(2) { translate: 0 -10px; }
+  .lp-foot { flex-wrap: wrap; }
+  .lp-ctas > * { flex: 1 1 100%; }
+  .lp-ctas .lp-cta { width: 100%; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { .lp-deck.ready .lp-slide { animation: none; } }
