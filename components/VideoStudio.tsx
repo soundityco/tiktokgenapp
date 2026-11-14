@@ -1521,9 +1521,6 @@ export default function VideoStudio({
     ro.observe(r);
     return () => { ro.disconnect(); r.removeEventListener("pointerdown", touched); r.removeEventListener("wheel", touched); };
   }, [clip.id, clips.length]);
-  /** A video tile's title: "Camera video" on a computer; on a phone (its strip), the video's own name, as the audio
-   *  tile shows "Official audio" (the still title above then only says "Video"). */
-  const tileLabel = (c: VideoSetup) => <><span className="lbl-desk">{t("Camera video")}</span><span className="lbl-phone">{clipName(c)}</span></>;
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
   const renameClip = (name: string) => {
     const n = name.trim();
@@ -3355,7 +3352,7 @@ export default function VideoStudio({
               <span className="label">{t("Release")}</span>
             </div>
             {lyricsRow}
-            <MediaTile icon="music" label={t("Official audio")} loading={!!audioBlob && !audioBuf}
+            <MediaTile icon="music" label={t("Audio")} loading={!!audioBlob && !audioBuf}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
               meta={audioBlob && (<>
                 {audioBuf ? <span className="mono">{fmtLength(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
@@ -3383,15 +3380,15 @@ export default function VideoStudio({
                 above the board): the studio's one whole, the others greyed on each side, each with what it holds and
                 its own button to open it in the studio (swiping never changes the studio's video). */}
             <div className="tree-branch">
-            {/* One title, still: the name of the video in the middle of the strip (the studio's one at first). */}
+            {/* One title, still ("Video"): each card has its video's name, as the audio tile has "Audio". */}
             <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
-              <span className="label">{t("Video")}</span><span className="tree-name clip-head-name">{clipName(clips.find((c) => c.id === stripShown) ?? clip)}</span>
+              <span className="label">{t("Video")}</span>
             </div>
             <div className={"clip-strip" + (clips.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}
               onScrollEnd={onStripScroll}>
             {clips.map((c) => c.id !== clip.id ? (
               <div key={c.id} className={"clip-card ghost" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
-                <MediaTile icon="film" label={tileLabel(c)} name={c.videoName ?? null}
+                <MediaTile icon="film" label={clipName(c)} name={c.videoName ?? null}
                   meta={c.videoName ? <>
                     {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
                     {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
@@ -3418,7 +3415,7 @@ export default function VideoStudio({
               ].filter(Boolean).join("\n");
               const missing = !videoBlob && !!settings.videoName;
               return (
-                <MediaTile icon="film" label={tileLabel(clip)} name={settings.videoName ?? null} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                <MediaTile icon="film" label={clipName(clip)} name={settings.videoName ?? null} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
