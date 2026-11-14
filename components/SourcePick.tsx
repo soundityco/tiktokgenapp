@@ -10,12 +10,12 @@ import { TagChip } from "./ui";
  * list and what is drawn from it; its menu: the list, its tags, then the texts (or photos) to pick one, opened on it.
  */
 
-/** A source's tags in words: the ticked one ("Out now") or how many ("2 tags"), then the excluded ones ("without
- *  Humour", "without 2 tags"). Empty: the whole list. */
+/** A source's tags, short, on one line: the ticked one ("Out now") or how many ("2 tags"), else "All" when some
+ *  are excluded, then how many are excluded ("1 excl."). Empty: the whole list. */
 export function tagSummary(ticked: string[], not: string[], t: (k: string, v?: Record<string, string | number>) => string): string {
-  const on = ticked.length === 1 ? themeLabel(ticked[0], t) : ticked.length ? t("{n} tags", { n: ticked.length }) : "";
-  const off = not.length === 1 ? t("without {tag}", { tag: themeLabel(not[0], t) }) : not.length ? t("without {n} tags", { n: not.length }) : "";
-  return [on, off].filter(Boolean).join(", ");
+  if (!ticked.length && !not.length) return "";
+  const on = ticked.length === 1 ? themeLabel(ticked[0], t) : ticked.length ? t("{n} tags", { n: ticked.length }) : t("All");
+  return not.length ? `${on} · ${not.length === 1 ? t("1 excl.") : t("{n} excl.", { n: not.length })}` : on;
 }
 
 /** A list's tags as chips: All, then each one by name (a click ticks it, its − excludes it). */

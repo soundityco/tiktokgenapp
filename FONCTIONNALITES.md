@@ -46,7 +46,7 @@ dans ton Google Drive.
 - **Tags automatiques**, plusieurs par hook, dans 15 catégories : annonce, sortie, émotion, histoire du son, coulisses, une phrase du son, ça sonne comme, POV, humour, hype, écoute jusqu'au bout, pépite / artiste indé, objectif / soutien, question, pour qui / quand l'écouter. — En ligne
 - **Modèle d'IA local pour les tags** (comprend le sens, pas seulement les mots) ; il apprend des tags posés à la main, tags perso compris, et trie seul les hooks ajoutés ensuite. — En ligne
 - **Tirer dans des tags** (« seulement les teasers ») ou **en exclure** (« jamais les hooks de sortie »), par slide et par hook vidéo. — En ligne
-- **Un bouton par source**, le même en carrousel et en vidéo : la liste, et dessous ce qu'on en tire en mots (« Annonce, sans Humour ») ; son menu : la liste, ses tags, puis les textes (ou les photos) pour en choisir un, ouvert sur celui de la slide ou du hook. — En ligne
+- **Un bouton par source**, le même en carrousel et en vidéo : la liste, et dessous ce qu'on en tire en court (« Annonce », « Tous · 1 exclu ») ; son menu : la liste, ses tags, puis les textes (ou les photos) pour en choisir un, ouvert sur celui de la slide ou du hook. — En ligne
 - **Ordre alphabétique** des hooks et des tags partout ; le choix d'un hook s'ouvre sur celui déjà choisi. — En ligne
 - **Textes retouchés gardés** : après un export, l'app propose d'ajouter à sa liste un hook modifié à la main. — En ligne
 - **Légende et hashtags du post**, tirés d'une liste de légendes ; exportés avec le post (`caption.txt`). — En ligne
