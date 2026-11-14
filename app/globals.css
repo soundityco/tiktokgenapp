@@ -639,6 +639,9 @@ details.sec > summary .sec-sub { margin-right: auto; padding-left: .4em; color: 
 /* Its lines (when they wrap: the Drive copy under the length) as far apart as the name is from them. */
 .media-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 11.5px; color: var(--muted); padding-left: 40px; }
 .media.warn .media-meta { color: var(--warn); }
+/* Ending on its info line: as far from the bottom edge as the icon is from the top one (it sits in the middle of the
+   two lines of text beside it, 14.5 px down). */
+.media:has(> .media-meta:last-child) { padding-bottom: 13.5px; }
 .media > .row, .media > .stack { padding-left: 40px; }
 .media > .row .btn { flex: 1 1 auto; min-width: 0; }
 /* The hierarchy: the release (its audio), then this video under it, on a branch. */
