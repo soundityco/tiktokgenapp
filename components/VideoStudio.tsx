@@ -3383,7 +3383,8 @@ export default function VideoStudio({
             <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
               <span className="label">{t("Video")}</span><span className="tree-name">{clipName(clips.find((c) => c.id === stripShown) ?? clip)}</span>
             </div>
-            <div className={"clip-strip" + (clips.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}>
+            <div className={"clip-strip" + (clips.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}
+              onScrollEnd={onStripScroll}>
             {clips.map((c) => c.id !== clip.id ? (
               <div key={c.id} className={"clip-card ghost" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
                 <MediaTile icon="film" label={t("Camera video")} name={c.videoName ?? null}
@@ -3391,10 +3392,9 @@ export default function VideoStudio({
                     {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
                     {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
                     {c.drive?.copy && <span className="pill-copy">{t("Drive copy")}</span>}
-                  </> : undefined}>
-                  {/* In the middle of the card's free room, under what it holds: a pill to make it the studio's video. */}
-                  <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
-                </MediaTile>
+                  </> : undefined} />
+                {/* Over the card, darkened behind it: a pill to make it the studio's video. */}
+                <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
               </div>
             ) : (
             <div key={c.id} className={"clip-card" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
