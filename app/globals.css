@@ -2570,13 +2570,21 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   .clip-strip.many > .clip-card.ghost { display: flex; }
   /* A card: its file's name first (the title above already says "Video"), what it is in grey under it, packed at
      the top (the card is as tall as the open one, not its lines). */
-  .clip-strip.many .media { align-content: start; gap: 8px; padding: 14px 14px 14px 12px; }
+  /* Top: the icon, beside it the file's name and under it its length and format (as tall as the icon); "⋯" in the top
+     right corner (as far from the top as from the right); the Drive copy at the bottom left. */
+  .clip-strip.many .media { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+  .clip-strip.many .media-head { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic name" "ic aside"; column-gap: 10px; row-gap: 2px; align-items: center; padding-right: 30px; }
+  .clip-strip.many .media-ic { grid-area: ic; }
+  .clip-strip.many .media-txt { grid-area: name; align-self: end; }
+  .clip-strip.many .media-head > .media-aside { grid-area: aside; align-self: start; }
+  .clip-strip.many .media-head > .menu-wrap { position: absolute; top: 8px; right: 8px; }
+  .clip-strip.many .media-meta { margin-top: auto; padding-left: 0; }
   .clip-strip.many .media-txt > .label { display: none; }
   .clip-strip.many .media-name { font-size: var(--fs-lg); font-weight: 600; }
   .clip-strip.many .media-meta { font-size: var(--fs-xs); }
   /* The length and the format on the name's line (the name cut with "…"), the Drive copy alone under it (its range
      only when it holds a part of the take). */
-  .clip-strip.many .media-aside { display: flex; flex: none; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-xs); }
+  .clip-strip.many .media-aside { display: flex; flex: none; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.2; }
   .clip-strip.many .media-meta > .beside-name { display: none; }
   .clip-strip.many .copy-status.whole > .mono { display: none; }
   /* A video that is not the studio's: darkened, a pill in its middle to open it (only on the one in the middle). */
