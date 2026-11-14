@@ -3391,9 +3391,10 @@ export default function VideoStudio({
                     {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
                     {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
                     {c.drive?.copy && <span className="pill-copy">{t("Drive copy")}</span>}
-                  </> : undefined} />
-                {/* Over the whole card, in its middle: a pill to make it the studio's video. */}
-                <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
+                  </> : undefined}>
+                  {/* In the middle of the card's free room, under what it holds: a pill to make it the studio's video. */}
+                  <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
+                </MediaTile>
               </div>
             ) : (
             <div key={c.id} className={"clip-card" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
