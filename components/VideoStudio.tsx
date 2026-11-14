@@ -12,7 +12,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
-import { followLists, hookLink, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
+import { byTagName, compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
@@ -4135,7 +4135,7 @@ export default function VideoStudio({
                               {src.groups.length > 1 ? (
                                 <div className="pick-chips" role="group" aria-label={t("Tags")}>
                                   <button className={"pick-chip" + (!src.ticked.length && !src.notTicked.length ? " on" : "")} onClick={() => setTags({ tags: [], not: [] })}>{t("All ({n})", { n: src.count })}</button>
-                                  {src.groups.map((g) => (
+                                  {byTagName(src.groups, (g) => g.id, (id) => themeLabel(id, t)).map((g) => (
                                     <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length}
                                       state={src.ticked.includes(g.id) ? "on" : src.notTicked.includes(g.id) ? "not" : undefined}
                                       onTick={() => setTags(tagStep(src.ticked, src.notTicked, g.id, "tick"))} onNot={() => setTags(tagStep(src.ticked, src.notTicked, g.id, "not"))} />
@@ -4155,7 +4155,7 @@ export default function VideoStudio({
                         {(close) => (
                           <div className="pick-pane">
                             <div className="pick-list">
-                              {src.items.map((x, k) => (
+                              {[...src.items].sort(compareTexts).map((x, k) => (
                                 <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
                                   <span className="dd-check" aria-hidden>{x === h.text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
                                 </button>

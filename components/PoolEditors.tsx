@@ -1,7 +1,7 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
 import { useEffect, useRef, useState } from "react";
-import { hookKey, joinCaptions, poolTags, splitCaptions, tagGroups, textItems } from "@/lib/generate";
+import { byTagName, compareTexts, hookKey, joinCaptions, poolTags, sortLines, splitCaptions, tagGroups, textItems } from "@/lib/generate";
 import { THEMES, themeLabel } from "@/lib/themes";
 import { modelWork, sortWithModel } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
@@ -91,8 +91,9 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
   const items = textItems(pool);
   // Tags: several per text. Without its own, a text has its theme as its only tag.
   const tagsNow = poolTags(pool);
-  const tagGroupsNow = tagGroups(tagsNow);
-  const knownTags = [...new Set([...tagsNow.flat().filter(Boolean), ...THEMES.map((x) => x.id)])];
+  // By name (Other last), each one's texts in alphabetical order.
+  const tagGroupsNow = byTagName(tagGroups(tagsNow), (g) => g.id, (id) => themeLabel(id, t)).map((g) => ({ ...g, items: [...g.items].sort((a, b) => compareTexts(items[a], items[b])) }));
+  const knownTags = byTagName([...new Set([...tagsNow.flat().filter(Boolean), ...THEMES.map((x) => x.id)])], (x) => x, (id) => themeLabel(id, t));
   const setTags = (text: string, list: string[]) => onChange((x) => ({ ...x, tags: { ...(x.tags ?? {}), [hookKey(text)]: [...new Set(list)] } }));
   const [renamingTag, setRenamingTag] = useState<string | null>(null);
   /** A tag renamed on every text that has it (the texts that only had it as their theme get it as their own tag). */
@@ -195,6 +196,10 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   const file = useRef<HTMLInputElement>(null);
   const [imports, setImports] = useState(0); // a .txt added: the captions boxes are read again
   const [view, setView] = useState<"text" | "themes">(p.byTag ? "themes" : "text");
+  // A hooks list is kept in alphabetical order: when it opens, after an import, when its text field is left (never
+  // while typing: the line would jump away). The order changes nothing to the draws (random).
+  const tidy = () => { if (pool.kind === "hooks" && sortLines(pool.text) !== pool.text) p.onChange((x) => ({ ...x, text: sortLines(x.text) })); };
+  useEffect(() => { tidy(); }, [pool.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const n = textItems(pool).length;
   const perf = pool.kind === "hooks" && pool.views
     ? textItems(pool)
@@ -225,6 +230,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <CaptionsEditor key={`${pool.id}:${imports}`} text={pool.text} onText={(text) => p.onChange((x) => ({ ...x, text }))} />
       ) : (
         <textarea className="input" rows={12} aria-label={t("Texts")} value={pool.text} onChange={(e) => p.onChange((x) => ({ ...x, text: e.target.value }))}
+          onBlur={() => { if (pool.kind === "hooks") tidy(); }}
           placeholder={isLineList(pool) ? t("One text per line. Use | to force a line break on the slide.")
             : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
       )}
@@ -246,7 +252,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <input ref={file} type="file" accept=".txt,text/plain" hidden onChange={async (e) => {
           const f = e.target.files?.[0];
           if (f) { const txt = await f.text(); p.onChange((x) => ({ ...x, text: x.kind === "captions" ? joinCaptions([...splitCaptions(x.text), ...splitCaptions(txt)])
-            : x.text.trim() ? x.text.replace(/\s+$/, "") + "\n" + txt : txt })); setImports((k) => k + 1); }
+            : x.kind === "hooks" ? sortLines(x.text + "\n" + txt) : x.text.trim() ? x.text.replace(/\s+$/, "") + "\n" + txt : txt })); setImports((k) => k + 1); }
           e.target.value = "";
         }} />
         <button className="btn sm" onClick={() => file.current?.click()}>{t("Import .txt")}</button>

@@ -210,6 +210,17 @@ export function Menu({ trigger, children, left, float, portal }: {
     else if (l && r.right > hi) l = false;
     setPlace({ left: l, up: r.bottom > window.innerHeight - 8 && r.top - r.height > 60 });
   }, [open, left, float]);
+  // Placed: the line already picked (a hook in its list…) comes to the middle of what scrolls around it, so the
+  // menu opens on it. Only the menu's own parts scroll (never the page: that would close it).
+  useLayoutEffect(() => {
+    const m = menu.current, on = place && m?.querySelector<HTMLElement>(".pick-line.on");
+    if (!m || !on) return;
+    for (let box = on.parentElement; box && m.contains(box); box = box.parentElement) {
+      if (box.scrollHeight <= box.clientHeight + 1) continue;
+      const r = on.getBoundingClientRect(), b = box.getBoundingClientRect();
+      box.scrollTop += r.top - b.top - (box.clientHeight - r.height) / 2;
+    }
+  }, [place]);
   // A floating menu stays where it was put: it closes when the page moves under it.
   useEffect(() => {
     if (!open || !float) return;

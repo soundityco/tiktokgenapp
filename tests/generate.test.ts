@@ -248,3 +248,15 @@ describe("tags of a hooks list", () => {
     expect(drawHook(ws, "h", {}, [], undefined, ["pre-release", "out-now"])).toBeNull();
   });
 });
+
+describe("alphabetical order", async () => {
+  const { sortLines, byTagName, compareTexts } = await import("@/lib/generate");
+  it("a list's lines the French way: no case, no accents, no quotes, numbers by value, blank lines out", () => {
+    expect(sortLines("zèbre\n\n« Écoute »\nÉté 10\nété 2\nabc|def\n")).toBe("abc|def\n« Écoute »\nété 2\nÉté 10\nzèbre");
+    expect(["b", "A"].sort(compareTexts)).toEqual(["A", "b"]);
+  });
+  it("tags by their name as shown, Other last", () => {
+    const names: Record<string, string> = { soon: "Annonce", pov: "POV", "": "Autres", humour: "Humour" };
+    expect(byTagName(["pov", "", "soon", "humour"], (x) => x, (id) => names[id])).toEqual(["soon", "humour", "pov", ""]);
+  });
+});

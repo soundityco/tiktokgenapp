@@ -239,6 +239,14 @@ export function poolTags(pool: TextPool): string[][] {
     return list.length ? list : [""];
   });
 }
+/** Alphabetical order, the French way: no case, no accents, no punctuation (quotes, "POV :"), 2 before 10. */
+const collator = new Intl.Collator("fr", { sensitivity: "base", numeric: true, ignorePunctuation: true });
+export const compareTexts = (a: string, b: string) => collator.compare(a.replace(/\|/g, " ").trim(), b.replace(/\|/g, " ").trim());
+/** A list's texts (one per line) in alphabetical order, the blank lines dropped. */
+export const sortLines = (text: string) => text.split("\n").filter((l) => l.trim()).sort(compareTexts).join("\n");
+/** Tags (or tag groups) in alphabetical order of their names as shown, "Other" ("") last. */
+export const byTagName = <T,>(list: T[], id: (x: T) => string, label: (id: string) => string): T[] =>
+  [...list].sort((a, b) => (id(a) === "") !== (id(b) === "") ? (id(a) === "" ? 1 : -1) : compareTexts(label(id(a)), label(id(b))));
 /** The tags of a list, the biggest first ("" last), with their texts' indexes (a text is under each of its tags). */
 export function tagGroups(tags: string[][]): { id: string; items: number[] }[] {
   const m = new Map<string, number[]>();

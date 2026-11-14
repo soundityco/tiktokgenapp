@@ -8,7 +8,7 @@ import { clamp, clampPic, renderSlide, snapPic, TextBox, zoomPic } from "@/lib/r
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
 import { type AIProgress, type AIStep, coversFrame, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
-import { poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
+import { byTagName, compareTexts, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
 import { themeLabel } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { isLineList } from "@/lib/defaults";
@@ -488,7 +488,7 @@ export default function SlideCard(p: Props) {
                     {groups.length > 1 && (
                       <div className="pick-chips" role="group" aria-label={t("Tags")}>
                         <button className={"pick-chip" + (!ticked?.length && !notTicked.length ? " on" : "")} onClick={() => setTags({ tags: [], not: [] })}>{t("All ({n})", { n: allItems.length })}</button>
-                        {groups.map((g) => (
+                        {byTagName(groups, (g) => g.id, (id) => themeLabel(id, t)).map((g) => (
                           <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length}
                             state={ticked?.includes(g.id) ? "on" : notTicked.includes(g.id) ? "not" : undefined}
                             onTick={() => setTags(tagStep(ticked ?? [], notTicked, g.id, "tick"))} onNot={() => setTags(tagStep(ticked ?? [], notTicked, g.id, "not"))} />
@@ -496,7 +496,7 @@ export default function SlideCard(p: Props) {
                       </div>
                     )}
                     <div className="pick-list">
-                      {listItems.map((x, k) => (
+                      {[...listItems].sort(compareTexts).map((x, k) => (
                         <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
                           <span className="dd-check" aria-hidden>{x === text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
                         </button>
