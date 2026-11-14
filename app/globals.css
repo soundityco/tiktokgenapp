@@ -2541,7 +2541,9 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .video-side .hook-item { gap: 10px; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); background-image: none; }
 .hook-head { gap: 2px; align-items: center; }
 .hook-num { flex: none; margin-right: 8px; font-family: var(--mono); font-size: var(--fs-sm); color: var(--muted); }
-.hook-src-btn { flex: 0 1 200px; min-width: 0; width: auto; }
+/* The list · tags button: its wrapper is what the row sizes (it shrinks, the name ends with "…"). */
+.hook-head > .menu-wrap:has(> .hook-src-btn) { flex: 0 1 200px; min-width: 0; }
+.hook-src-btn { width: 100%; }
 .hook-head .hook-gen { margin-left: 6px; flex: none; }
 .hook-head .hook-del:hover { color: var(--danger); }
 

@@ -186,11 +186,19 @@ export function Menu({ trigger, children, left, float, portal }: {
     if (!m) return;
     const r = m.getBoundingClientRect();
     if (float) {
-      // From the button: below it (above near the bottom), its right edge on the button's, kept on screen.
+      // From the button: below it, or above when it only fits there, its right edge on the button's, kept on screen;
+      // between the app's header and the phone's dock. Taller than the room on both sides: on the roomier one, and
+      // it scrolls inside (the page under it stays still).
       const b = ref.current!.getBoundingClientRect();
-      const up = b.bottom + 6 + r.height > window.innerHeight - 8 && b.top - r.height > 60;
+      const shown = (el: Element | null) => (el instanceof HTMLElement && el.offsetParent ? el.getBoundingClientRect() : null);
+      const top = Math.max(8, (shown(document.querySelector(".app > .top"))?.bottom ?? 0) + 6);
+      const bottom = Math.min(window.innerHeight, shown(document.querySelector(".mobile-tabs"))?.top ?? Infinity) - 8;
+      const below = bottom - (b.bottom + 6), above = b.top - 6 - top;
+      const up = r.height > below && (r.height <= above || above > below);
+      const room = up ? above : below;
       const x = Math.min(window.innerWidth - 8 - r.width, Math.max(8, left ? b.left : b.right - r.width));
-      setFixed({ position: "fixed", left: x, right: "auto", top: up ? b.top - 6 - r.height : b.bottom + 6, bottom: "auto" });
+      setFixed({ position: "fixed", left: x, right: "auto", top: up ? b.top - 6 - Math.min(r.height, room) : b.bottom + 6, bottom: "auto",
+        ...(r.height > room ? { maxHeight: room, overflowY: "auto", overscrollBehavior: "contain" } : null) });
       setPlace({ left: false, up: false });
       return;
     }

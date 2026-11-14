@@ -9,6 +9,7 @@ import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
 import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
+import { modelWork, sortWithModel } from "@/lib/themeAI";
 import { addVariants, carouselVariants, type Variant } from "@/lib/variants";
 import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, saveBlobs, stamp } from "@/lib/files";
@@ -1219,6 +1220,22 @@ export default function Studio({ userName }: { userName: string }) {
   };
   const setTextPool = (id: string, fn: (x: TextPool) => TextPool) => upd((w) => ({ ...w, textPools: w.textPools.map((x) => (x.id === id ? fn(x) : x)) }));
   const setPicPool = (id: string, fn: (x: PicPool) => PicPool) => upd((w) => ({ ...w, picPools: w.picPools.map((x) => (x.id === id ? fn(x) : x)) }));
+  // The lists sorted by the local model once: the texts added since (an import, a hook kept, typed) get their tags
+  // by themselves, a moment after the last change, without an undo step. One list at a time.
+  const autoTagging = useRef(false);
+  useEffect(() => {
+    if (!ws || autoTagging.current) return;
+    const pool = ws.textPools.find((p) => isLineList(p) && modelWork(p).length);
+    if (!pool) return;
+    const timer = setTimeout(() => {
+      autoTagging.current = true;
+      void sortWithModel(pool, modelWork(pool))
+        .then((fn) => { const cur = wsRef.current; if (cur) apply({ ...cur, textPools: cur.textPools.map((x) => (x.id === pool.id ? fn(x) : x)) }, false); })
+        .catch(() => { /* the model could not run here: the lexicon's tags stay */ })
+        .finally(() => { autoTagging.current = false; });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [ws?.textPools]); // eslint-disable-line react-hooks/exhaustive-deps
   const refreshViews = async (pool: TextPool) => {
     setViewsBusy(true);
     try {

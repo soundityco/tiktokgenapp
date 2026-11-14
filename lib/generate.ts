@@ -1,6 +1,6 @@
 import { isLineList } from "./defaults";
 import { slideLyrics } from "./lyricsSections";
-import { themesOf } from "./themes";
+import { tagsOf, THEMES_VERSION } from "./themes";
 import { GenSlide, PicPool, Project, TextPool, Workspace } from "./types";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g, " ").trim();
@@ -223,17 +223,20 @@ export function generateAll(
 export const poolsVisible = <T extends { scope: string; projectId?: string }>(pools: T[], projectId: string) =>
   pools.filter((p) => p.scope === "shared" || p.projectId === projectId);
 
-/** The theme of every text of a list (set by hand first, else found locally). */
-export const poolThemes = (pool: TextPool): string[] => themesOf(textItems(pool), hookKey, pool.themes, pool.aiThemes);
+/** The model's tags of a list, when they were found with this version of the tags (else none: found again). */
+export const aiTagsNow = (pool: TextPool): Record<string, string[]> | undefined => (pool.aiVersion === THEMES_VERSION ? pool.aiTags : undefined);
+/** The tags found automatically for every text of a list (by hand as a theme, the local model, the lexicon). */
+export const poolAutoTags = (pool: TextPool): string[][] => tagsOf(textItems(pool), hookKey, pool.themes, aiTagsNow(pool), pool.aiThemes);
 /**
- * The tags of every text of a list: the ones set by hand, else one, its theme (found by hand, the local model or
- * the lexicon). "" is the tag of the texts that have none ("Other").
+ * The tags of every text of a list: the ones set by hand, else the ones found automatically (several: what it
+ * does, how it grabs…). "" is the tag of the texts that have none ("Other").
  */
 export function poolTags(pool: TextPool): string[][] {
-  const items = textItems(pool), th = poolThemes(pool);
+  const items = textItems(pool), auto = poolAutoTags(pool);
   return items.map((x, i) => {
     const own = pool.tags?.[hookKey(x)];
-    return own ? (own.length ? own : [""]) : [th[i]];
+    const list = own ?? auto[i];
+    return list.length ? list : [""];
   });
 }
 /** The tags of a list, the biggest first ("" last), with their texts' indexes (a text is under each of its tags). */

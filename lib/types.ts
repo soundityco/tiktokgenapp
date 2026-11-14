@@ -115,6 +115,10 @@ export interface TextPool {
   themes?: Record<string, string>;
   /** Themes found by the local model (public/themes/worker.js), by hookKey; "" = no theme. Hand-set ones win. */
   aiThemes?: Record<string, string>;
+  /** Tags found by the local model (several per text, by hookKey; [] = none), with the lexicon's version they were
+   *  found with (an older one: found again). Replace `aiThemes`. Hand-set tags win. */
+  aiTags?: Record<string, string[]>;
+  aiVersion?: number;
   /** Tags of a text set by hand (hookKey -> tags). A text without its own tags has one: its theme (lib/generate poolTags). */
   tags?: Record<string, string[]>;
   /** hook (normalised) -> views. Reserved for the TikTok import (phase 2). */

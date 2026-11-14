@@ -16,7 +16,7 @@ const vec = async (texts) => {
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
 
 self.onmessage = async (e) => {
-  const { type, id, texts, examples, lex, weight, minScore } = e.data || {};
+  const { type, id, texts, examples, lex, weight } = e.data || {};
   if (type !== "classify") return;
   try {
     if (!embed) {
@@ -53,14 +53,13 @@ self.onmessage = async (e) => {
         const raw = keys.map((t) => { const s = proto[t].map((p) => dot(p, v)).sort((a, b) => b - a); return (s[0] + (s[1] ?? s[0])) / 2; });
         const m = raw.reduce((a, x) => a + x, 0) / raw.length;
         const sd = Math.sqrt(raw.reduce((a, x) => a + (x - m) ** 2, 0) / raw.length) || 1;
+        // Every tag's score (the text's own scores made relative, plus the lexicon's points): the app picks its tags.
         const l = lex[i + k] || {};
-        let best = null, bestScore = -Infinity;
-        keys.forEach((t, j) => { const s = (raw[j] - m) / sd + weight * (l[t] || 0); if (s > bestScore) { bestScore = s; best = t; } });
-        out.push(bestScore >= minScore ? best : null);
+        out.push(Object.fromEntries(keys.map((t, j) => [t, (raw[j] - m) / sd + weight * (l[t] || 0)])));
       });
       post({ id, type: "progress", pct: Math.min(1, (i + 16) / texts.length), step: "think" });
     }
-    post({ id, type: "done", themes: out });
+    post({ id, type: "done", scores: out });
   } catch (err) {
     post({ id, type: "error", message: String(err && err.message || err) });
   }

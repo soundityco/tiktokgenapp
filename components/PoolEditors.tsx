@@ -3,7 +3,7 @@ import { isLineList } from "@/lib/defaults";
 import { useEffect, useRef, useState } from "react";
 import { hookKey, joinCaptions, poolTags, splitCaptions, tagGroups, textItems } from "@/lib/generate";
 import { THEMES, themeLabel } from "@/lib/themes";
-import { classifyThemes } from "@/lib/themeAI";
+import { modelWork, sortWithModel } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
 import { looksLikeImage } from "@/lib/imageFormat";
 import { useT } from "@/lib/i18n";
@@ -111,20 +111,20 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
   // The local model: the whole list the first time, then only the texts added since.
   const [ai, setAi] = useState<null | { step: "model" | "think"; pct: number }>(null);
   const [aiErr, setAiErr] = useState<string | null>(null);
-  const missing = items.filter((x) => !(hookKey(x) in (pool.aiThemes ?? {})));
+  // The texts still to sort (the list used the model already: the ones added since, or all after a change of tags).
+  const missing = modelWork(pool);
   const runAi = async (texts: string[]) => {
     if (!texts.length || ai) return;
     setAiErr(null); setAi({ step: "model", pct: 0 });
     try {
-      const found = await classifyThemes(texts, setAi);
-      onChange((x) => ({ ...x, aiThemes: { ...(x.aiThemes ?? {}), ...Object.fromEntries(texts.map((tx, i) => [hookKey(tx), found[i]])) } }));
+      onChange(await sortWithModel(pool, texts, setAi));
     } catch (e) {
       setAiErr(e instanceof Error ? e.message : String(e));
     } finally { setAi(null); }
   };
-  // Already sorted by the model once: new texts are sorted as soon as the view opens.
-  useEffect(() => { if (pool.aiThemes && missing.length) void runAi(missing); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const sorted = !!pool.aiThemes && !missing.length;
+  // Already sorted by the model once: what is left is sorted as soon as the view opens.
+  useEffect(() => { if (missing.length) void runAi(missing); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const sorted = !!(pool.aiTags || pool.aiThemes) && !missing.length;
 
   return (
     <div className="theme-groups">
