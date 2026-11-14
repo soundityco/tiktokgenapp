@@ -358,13 +358,19 @@ export function ContextMenu({ x, y, onClose, className, children }: { x: number;
   useEffect(() => {
     const away = (e: Event) => { if (!(e.target instanceof Node) || !box.current?.contains(e.target)) close.current(); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); close.current(); } };
+    // Scrolled by the user (wheel, finger, the page itself): it goes. A list the app scrolls by itself (the lyrics
+    // following the playback) leaves it open.
+    const pageScroll = (e: Event) => { if (e.target === document) close.current(); };
     document.addEventListener("pointerdown", away, true);
     window.addEventListener("keydown", key, true);
-    window.addEventListener("scroll", away, true);
+    window.addEventListener("wheel", away, { capture: true, passive: true });
+    window.addEventListener("touchmove", away, { capture: true, passive: true });
+    window.addEventListener("scroll", pageScroll, true);
     window.addEventListener("resize", away);
     return () => {
       document.removeEventListener("pointerdown", away, true); window.removeEventListener("keydown", key, true);
-      window.removeEventListener("scroll", away, true); window.removeEventListener("resize", away);
+      window.removeEventListener("wheel", away, true); window.removeEventListener("touchmove", away, true);
+      window.removeEventListener("scroll", pageScroll, true); window.removeEventListener("resize", away);
     };
   }, []);
   return createPortal(
