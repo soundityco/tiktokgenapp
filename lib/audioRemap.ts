@@ -2,13 +2,13 @@
  * A new version of a release's audio (the master after a demo): everything placed on the earlier one is moved to
  * where the same music is in the new one. The anchors come from lib/syncAudio alignTracks; here they become a map of
  * the time (stretches where the music is the same, each with its shift), then the release follows it: every video's
- * sync and takes, every version's segment, the lyrics placed word by word, the lines of the sections. What the map
+ * sync and takes, every version's segment, the lyrics placed word by word. What the map
  * cannot vouch for (a segment whose passage was edited, a passage gone) is moved as well as can be and reported.
  *
  * Pure functions: they run the same in the app and in the tests.
  */
 import type { TrackAnchor } from "./syncAudio";
-import type { LyricWord, Project, VideoSettings, VideoSetup } from "./types";
+import type { LyricWord, VideoSettings, VideoSetup } from "./types";
 
 /** An anchor stands for the 4 s excerpt around it. */
 const HALF = 2;
@@ -143,35 +143,25 @@ function moveWords(m: TrackMap, words: LyricWord[] | undefined, count: { moved: 
   return out;
 }
 
-/**
- * The release on the new version of its audio: every video (its sync, its takes) and every version (its segment and
- * its own sync) moved with the music of its segment, the lyrics' words and the sections' lines moved; with the report.
- */
-export function remapProject(p: Project, m: TrackMap): { project: Project; report: RemapReport } {
-  const words = { moved: 0, dropped: 0 };
-  const videos: RemapReport["videos"] = [];
-  const list: VideoSetup[] = (p.videos ?? []).map((clip) => {
-    const top = moveSettings(m, clip);
-    const vers: { name: string; status: SpanStatus }[] = [];
-    const versions = clip.versions?.map((ver, k) => {
-      if (ver.id === clip.activeVersion) return ver; // the one shown lives in the video's own fields (moved above)
-      const r = moveSettings(m, ver.v);
-      if (r.status) vers.push({ name: ver.name || String.fromCharCode(65 + k), status: r.status });
-      return { ...ver, v: r.v };
-    });
-    // The takes (the passage filmed several times): each one moved like the video's segment.
-    const takes = top.status && top.status !== "gone" ? clip.takes?.map((tk) => ({ ...tk, offset: r3(tk.offset + top.shift) })) : clip.takes;
-    const status = worst([...(top.status ? [top.status] : []), ...vers.map((x) => x.status)]);
-    videos.push({ id: clip.id, name: clip.name, status, versions: vers.filter((x) => x.status === "check" || x.status === "gone") });
-    return { ...(top.v as VideoSetup), versions, takes };
+/** One video on the new version of its audio: its segment and sync, its takes, each of its versions; with its line of
+ *  the report. */
+export function remapClip(clip: VideoSetup, m: TrackMap): { clip: VideoSetup; report: RemapReport["videos"][number] } {
+  const top = moveSettings(m, clip);
+  const vers: { name: string; status: SpanStatus }[] = [];
+  const versions = clip.versions?.map((ver, k) => {
+    if (ver.id === clip.activeVersion) return ver; // the one shown lives in the video's own fields (moved above)
+    const r = moveSettings(m, ver.v);
+    if (r.status) vers.push({ name: ver.name || String.fromCharCode(65 + k), status: r.status });
+    return { ...ver, v: r.v };
   });
-  const lyrics = p.lyrics.map((l) => (l.times ? { ...l, times: l.times.map((x) => (x === null ? null : mapTime(m, x)?.t ?? null)).map((x) => (x === null ? null : r3(x))) } : l));
-  const project: Project = {
-    ...p,
-    videos: list,
-    lyrics,
-    lyricWords: moveWords(m, p.lyricWords, words),
-    heardWords: moveWords(m, p.heardWords, { moved: 0, dropped: 0 }),
+  // The takes (the passage filmed several times): each one moved like the video's segment.
+  const takes = top.status && top.status !== "gone" ? clip.takes?.map((tk) => ({ ...tk, offset: r3(tk.offset + top.shift) })) : clip.takes;
+  const status = worst([...(top.status ? [top.status] : []), ...vers.map((x) => x.status)]);
+  return {
+    clip: { ...(top.v as VideoSetup), versions, takes },
+    report: { id: clip.id, name: clip.name, status, versions: vers.filter((x) => x.status === "check" || x.status === "gone") },
   };
-  return { project, report: { shift: uniformShift(m), coverage: coverage(m), videos, words } };
 }
+
+/** Lyrics placed on an earlier version, on the new one (the words of a part gone are dropped, counted in `count`). */
+export const remapWords = (m: TrackMap, words: LyricWord[] | undefined, count = { moved: 0, dropped: 0 }) => moveWords(m, words, count);

@@ -8,7 +8,9 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
-import { coverage, remapProject, trackMap, type RemapReport } from "@/lib/audioRemap";
+import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
+import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
+import type { AudioVersion } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -299,10 +301,10 @@ export default function VideoStudio({
   canRedo,
   onUndo,
   onRedo,
-  project,
+  project: release,
   hookPools,
   onDrawHook,
-  onProject,
+  onProject: onRelease,
   audioUsedElsewhere,
   onSaveNow,
   releaseTitle,
@@ -376,6 +378,17 @@ export default function VideoStudio({
   onDeletePreset: (id: string) => void;
 }) {
   const { t, lang } = useT();
+  // The release as the open video's audio version (lib/audioVersions): its file and its lyrics timing in the project's
+  // own fields, so everything below works on that version; a change goes back where it belongs.
+  const releaseRef = useRef(release);
+  releaseRef.current = release;
+  const versionClip = useMemo(() => { const l = clipsOf(release); return l.find((c) => c.id === release.videoId) ?? l[0]; }, [release]);
+  const audioId = audioIdOf(release, versionClip);
+  const project = useMemo(() => projectFor(release, audioId), [release, audioId]);
+  const onProject = useCallback((fn: (p: Project) => Project) => onRelease((p) => {
+    const l = clipsOf(p), c = l.find((x) => x.id === p.videoId) ?? l[0];
+    return writeFor(p, audioIdOf(p, c), fn);
+  }), [onRelease]);
   const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
   const clip = clips.find((c) => c.id === project.videoId) ?? clips[0];
   const settings = useMemo<VideoSettings>(() => ({ ...DEFAULT_VIDEO, ...clip }), [clip]);
@@ -477,8 +490,10 @@ export default function VideoStudio({
   /** The pasted text, unfolded (it folds into one line once the lyrics are placed). */
   const [pasteOpen, setPasteOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  /** The audio version being renamed (its id). */
+  const [renamingAudio, setRenamingAudio] = useState<string | null>(null);
   /** One official audio per release, shared by all its videos. */
-  const projectAudioKey = `audio:project:${project.id}`;
+  const projectAudioKey = audioKey(audioId);
   // Another release (the studio stays mounted behind the carousel): its own lyrics, its own source of lyrics,
   // and an export of all the videos of the previous one stops.
   useEffect(() => {
@@ -939,21 +954,27 @@ export default function VideoStudio({
   }, [settings.grade?.lut, look, driveWrite]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The official audio imported from the computer goes to Drive by itself (once): any browser or device gets it back.
-  const audioUp = useRef<string | null>(null);
-  useEffect(() => {
-    if (!audioBlob || project.audioDriveId || !driveWrite) return;
-    const key = `${project.id}|${audioBlob.size}`;
-    if (audioUp.current === key) return;
-    audioUp.current = key;
-    const name = safeName(`${project.name || "Rollout"} - ${t("official audio")} - ${project.audioName ?? "audio"}`);
-    void uploadToDrive(audioBlob, name, () => {}, new AbortController().signal, audioBlob.type || "application/octet-stream", { tktgen: "audio", project: project.id }, DRIVE_PATHS.audios(project.name || "Release"))
+  // Each version of it too (its Drive id goes to that version, whichever video is open when the upload ends).
+  const audioUp = useRef(new Set<string>());
+  const uploadAudio = (blob: Blob, versionId: string, fileName?: string) => {
+    const key = `${versionId}|${blob.size}`;
+    if (!driveWrite || audioUp.current.has(key)) return;
+    audioUp.current.add(key);
+    const rel = releaseRef.current;
+    const name = safeName(`${rel.name || "Rollout"} - ${t("official audio")} - ${fileName ?? "audio"}`);
+    void uploadToDrive(blob, name, () => {}, new AbortController().signal, blob.type || "application/octet-stream", { tktgen: "audio", project: rel.id }, DRIVE_PATHS.audios(rel.name || "Release"))
       .then((id) => {
-        // Still the same file of the same release: remember where it is.
-        onProject((p) => (p.id === project.id && p.audioSize === audioBlob.size && !p.audioDriveId ? { ...p, audioDriveId: id } : p));
+        // Still the same file of the same version: remember where it is.
+        onRelease((p) => (p.id !== rel.id ? p : versionId === mainAudioId(p)
+          ? (p.audioSize === blob.size && !p.audioDriveId ? { ...p, audioDriveId: id } : p)
+          : { ...p, audios: p.audios?.map((a) => (a.id === versionId && a.audioSize === blob.size && !a.audioDriveId ? { ...a, audioDriveId: id } : a)) }));
         onSaveNow();
       })
-      .catch((e) => { console.warn("[drive] audio upload failed", e); audioUp.current = null; });
-  }, [audioBlob, project.audioDriveId, driveWrite, project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+      .catch((e) => { console.warn("[drive] audio upload failed", e); audioUp.current.delete(key); });
+  };
+  useEffect(() => {
+    if (audioBlob && !project.audioDriveId) uploadAudio(audioBlob, audioId, project.audioName);
+  }, [audioBlob, project.audioDriveId, driveWrite, project.id, audioId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The camera file from Drive, on a device that does not have it. */
   const fetchOriginal = async () => {
@@ -1245,21 +1266,119 @@ export default function VideoStudio({
     return () => clearTimeout(id);
   }, [note]);
 
-  /** Another audio over the one there: a new version of the same song (all follows), or another song (starts over). */
+  // ---- the versions of the audio (lib/audioVersions): a demo, the master, a sped up… each video on one of them ----
+  /** A new audio while this video has one: kept next to it as another version; asked first which videos go on it. */
   const [audioAsk, setAudioAsk] = useState<{ f: File; driveId?: string; busy?: boolean } | null>(null);
-  const [remapReport, setRemapReport] = useState<(RemapReport & { notSame?: boolean }) | null>(null);
+  const [remapReport, setRemapReport] = useState<(RemapReport & { notSame?: boolean; to?: string }) | null>(null);
+  /** Videos going onto another version (what is being done). */
+  const [audioBusy, setAudioBusy] = useState<string | null>(null);
+  /** Below this share of the earlier version found in the other one, it is not the same song. */
+  const SAME_SONG = 0.4;
+
+  /** A version's audio, decoded: the open one as it is, another one read from the device or fetched from the Drive. */
+  const bufferOf = async (id: string): Promise<{ blob: Blob; buf: AudioBuffer } | null> => {
+    if (id === audioId && audioBlob && audioBuf) return { blob: audioBlob, buf: audioBuf };
+    const v = audioVersionsOf(releaseRef.current).find((x) => x.id === id);
+    let blob = await getMedia(audioKey(id)).catch(() => undefined);
+    if (!blob && v?.audioDriveId) {
+      try { blob = await downloadDriveFile(v.audioDriveId); void putMedia(audioKey(id), blob).catch(() => {}); } catch { /* not reachable now */ }
+    }
+    if (!blob) return null;
+    try { return { blob, buf: await decodeAudio(getCtx(), blob) }; } catch { return null; }
+  };
+  /** Where the music of one version is in another (lib/audioRemap). */
+  const mapBetween = (a: AudioBuffer, b: AudioBuffer) => trackMap(alignTracks(monoOf(a), a.sampleRate, monoOf(b), b.sampleRate), a.duration, b.duration);
+
   /**
-   * Import the official audio. `driveId`: picked from Google Drive, so it can be fetched again anywhere. Over another
-   * audio: asked first whether it is a new version of the same song (`mode`): "version", every video, version and
-   * lyric of the release moves to where the same music is in it (lib/audioRemap); "other", their timings start over.
+   * Videos put on another version of the audio (`to`): each one moved to where its music is in it, from whichever
+   * version it was on (its sync, its takes, every version's segment); one on another song starts its sync over. The
+   * open one plays the new version at once. `known`: the target already decoded, maps already made.
    */
-  const pickAudio = async (f: File, driveId?: string, mode?: "version" | "other") => {
+  const switchAudio = async (ids: string[], to: string, known?: { blob: Blob; buf: AudioBuffer; maps?: Map<string, TrackMap | null>; name?: string; label?: string; words?: { moved: number; dropped: number } }) => {
+    const rel = releaseRef.current;
+    const from = [...new Set(clipsOf(rel).filter((c) => ids.includes(c.id) && audioIdOf(rel, c) !== to).map((c) => audioIdOf(rel, c)))];
+    if (!from.length) return;
+    const ver = audioVersionsOf(rel).find((x) => x.id === to);
+    stop();
+    syncRef.current?.abort();
+    setAudioBusy(t("Finding the music of each video in this version…"));
+    await new Promise((r) => setTimeout(r, 40));
+    try {
+      const target = known ?? await bufferOf(to);
+      if (!target) { setErr(t("This version of the audio could not be read on this device (nor fetched from the Drive).")); return; }
+      const maps = new Map<string, TrackMap | null>(known?.maps ?? []);
+      for (const id of from) if (!maps.has(id)) { const src = await bufferOf(id); maps.set(id, src ? mapBetween(src.buf, target.buf) : null); }
+      const name = known?.name ?? ver?.audioName;
+      const videos: RemapReport["videos"] = [];
+      let restarted = 0;
+      onRelease((p) => ({
+        ...p,
+        videos: clipsOf(p).map((c) => {
+          const fromId = audioIdOf(p, c);
+          if (!ids.includes(c.id) || fromId === to) return c;
+          const m = maps.get(fromId);
+          const audio = { audioId: to === mainAudioId(p) ? undefined : to, audioName: name };
+          if (!m || coverage(m) < SAME_SONG) {
+            restarted++;
+            return { ...c, ...audio, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false };
+          }
+          const r = remapClip(c, m);
+          videos.push(r.report);
+          return { ...r.clip, ...audio };
+        }),
+      }));
+      if (ids.includes(clip.id)) {
+        setAudioBlob(target.blob);
+        setAudioBuf(target.buf);
+        setPeaks(peaksOf(target.buf.getChannelData(0)));
+        setHead(settingsRef.current.crop.start);
+      }
+      const only = maps.size === 1 ? [...maps.values()][0] : null;
+      setRemapReport({ shift: only ? uniformShift(only) : null, coverage: only ? coverage(only) : 1, videos, words: known?.words ?? { moved: 0, dropped: 0 },
+        notSame: restarted > 0 && !videos.length, to: known?.label ?? (ver ? audioLabel(ver) : undefined) });
+      onSaveNow();
+    } finally { setAudioBusy(null); }
+  };
+
+  /** A new version of the audio, kept next to the others; this video, all of them, or none go on it. Its lyrics
+   *  timing comes from the open version's (moved to where the same words are sung in it). */
+  const addAudioVersion = async (f: File, driveId: string | undefined, use: "this" | "all" | "keep") => {
+    setAudioAsk({ f, driveId, busy: true });
+    const id = uid();
+    try {
+      void askPersistentStorage();
+      try { await putMedia(audioKey(id), f); } catch { /* private mode: in memory only */ }
+      let buf: AudioBuffer;
+      try { buf = await decodeAudio(getCtx(), f); } catch { setErr(t("Could not read this audio file.")); return; }
+      await new Promise((r) => setTimeout(r, 40));
+      const m = audioBuf ? mapBetween(audioBuf, buf) : null;
+      const sameSong = !!m && coverage(m) >= SAME_SONG;
+      const words = { moved: 0, dropped: 0 };
+      const cur = project;
+      const version: AudioVersion = {
+        id, audioName: f.name, audioSize: f.size, audioDriveId: driveId,
+        ...(sameSong && m ? { lyricWords: remapWords(m, cur.lyricWords, words), heardWords: remapWords(m, cur.heardWords), lyricsPlacedFrom: cur.lyricsPlacedFrom, lyricsAlignV: cur.lyricsAlignV } : null),
+      };
+      onRelease((p) => ({ ...p, audios: [...(p.audios ?? []), version] }));
+      if (!driveId) uploadAudio(f, id, f.name);
+      if (use === "keep") { onSaveNow(); onToast?.(t("“{name}” is in the library: pick it for a video when you need it.", { name: audioLabel(version) })); return; }
+      const ids = use === "all" ? clipsOf(releaseRef.current).map((c) => c.id) : [clip.id];
+      await switchAudio(ids, id, { blob: f, buf, maps: new Map([[audioId, m]]), name: f.name, label: audioLabel(version), words });
+    } finally { setAudioAsk(null); }
+  };
+
+  /**
+   * Import the official audio. `driveId`: picked from Google Drive, so it can be fetched again anywhere. Another file
+   * while this video has its audio: a new version of it, kept next to it (asked first which videos go on it, `use`).
+   */
+  const pickAudio = async (f: File, driveId?: string, use?: "this" | "all" | "keep") => {
     // Same file again (lost from this device, or another computer): the lyrics timing and the sync stay.
     const same = project.audioSize === f.size && project.audioName === f.name;
-    const oldBuf = audioBuf;
-    if (!same && oldBuf && !mode) { setAudioAsk({ f, driveId }); return; }
-    const following = !same && mode === "version" && !!oldBuf;
-    if (following) setAudioAsk({ f, driveId, busy: true });
+    if (!same && audioBlob && project.audioName) {
+      if (use) await addAudioVersion(f, driveId, use);
+      else setAudioAsk({ f, driveId });
+      return;
+    }
     const token = ++ioRef.current;
     syncRef.current?.abort();
     stop();
@@ -1267,20 +1386,14 @@ export default function VideoStudio({
     setAudioBlob(f);
     setAudioBuf(null);
     setPeaks([]);
-    // Another audio replaces this one: the previous file of the release goes to the Drive's bin (if no other
-    // release uses it), so its Audios folder never piles up versions.
+    // Another file where this version's was lost from the device: it takes its place, the previous file of it goes to
+    // the Drive's bin (if no other release uses it).
     const old = !same && !driveId ? project.audioDriveId : undefined;
     if (old && !audioUsedElsewhere?.(old)) void trashDriveFile(old);
-    const restart = () => {
-      onProject((p) => ({ ...p, heardWords: undefined, lyricWords: undefined }));
-      setV({ offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
-    };
     onProject((p) => (same
       ? { ...p, audioName: f.name, audioDriveId: driveId ?? p.audioDriveId }
-      : { ...p, audioName: f.name, audioSize: f.size, audioDriveId: driveId }));
-    if (!same) setV({ audioName: f.name });
-    // Another song: its timings are void (the pasted lyrics stay). A new version: they follow, once it is read.
-    if (!same && !following) restart();
+      : { ...p, audioName: f.name, audioSize: f.size, audioDriveId: driveId, heardWords: undefined, lyricWords: undefined }));
+    if (!same) setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
     void askPersistentStorage();
     try { await putMedia(projectAudioKey, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
@@ -1289,28 +1402,6 @@ export default function VideoStudio({
       if (token !== ioRef.current) return;
       setAudioBuf(buf);
       setPeaks(peaksOf(buf.getChannelData(0)));
-      if (following) {
-        // Where the music of the earlier version is in this one (a few seconds: the dialog says so meanwhile).
-        await new Promise((r) => setTimeout(r, 40));
-        const map = trackMap(alignTracks(monoOf(oldBuf), oldBuf.sampleRate, monoOf(buf), buf.sampleRate), oldBuf.duration, buf.duration);
-        if (token !== ioRef.current) return;
-        if (coverage(map) < 0.4) {
-          // Not the same song after all: nothing to follow, its timings start over.
-          restart();
-          setRemapReport({ shift: null, coverage: coverage(map), videos: [], words: { moved: 0, dropped: 0 }, notSame: true });
-        } else {
-          let report: RemapReport | null = null;
-          onProject((p) => {
-            const r = remapProject(p, map);
-            report = r.report;
-            return { ...r.project, videos: r.project.videos.map((v) => ({ ...v, audioName: f.name })) };
-          });
-          setRemapReport(report);
-        }
-        setAudioAsk(null);
-        onSaveNow();
-        return;
-      }
       const cur = settingsRef.current;
       const d = Math.min(cur.crop.duration, buf.duration);
       const start = Math.max(0, Math.min(cur.crop.start, buf.duration - d));
@@ -1319,9 +1410,21 @@ export default function VideoStudio({
       onSaveNow();
     } catch {
       if (token === ioRef.current) setErr(t("Could not read this audio file."));
-    } finally {
-      if (following && token === ioRef.current) setAudioAsk(null);
     }
+  };
+
+  /** A version of the audio taken out of the library: its videos go back on the main audio first (moved with the
+   *  music), its file leaves the device and the Drive (to the bin, unless another release uses it). */
+  const removeAudioVersion = async (id: string) => {
+    const rel = releaseRef.current;
+    const v = rel.audios?.find((x) => x.id === id);
+    if (!v) return;
+    const on = clipsOf(rel).filter((c) => audioIdOf(rel, c) === id).map((c) => c.id);
+    if (on.length) await switchAudio(on, mainAudioId(rel));
+    onRelease((p) => ({ ...p, audios: p.audios?.filter((x) => x.id !== id) }));
+    void delMedia(audioKey(id)).catch(() => {});
+    if (v.audioDriveId && !audioUsedElsewhere?.(v.audioDriveId)) void trashDriveFile(v.audioDriveId);
+    onSaveNow();
   };
 
   /**
@@ -3426,30 +3529,57 @@ export default function VideoStudio({
               <span className="label">{t("Release")}</span>
             </div>
             {lyricsRow}
-            <MediaTile icon="music" label={t("Audio")} loading={!!audioBlob && !audioBuf}
+            {(() => {
+              // The versions of the audio (a demo, the master, a sped up…): this video's one shown, the others to pick.
+              const versions = audioVersionsOf(release);
+              const cur = versions.find((v) => v.id === audioId);
+              const isMain = audioId === mainAudioId(release);
+              const used = videosOn(release, audioId);
+              return (
+            <MediaTile icon="music" label={versions.length > 1 && cur ? audioLabel(cur) : t("Audio")} loading={!!audioBlob && !audioBuf}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
               meta={audioBlob && (<>
-                {audioBuf ? <span className="mono">{fmtLength(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
-                {clips.length > 1 && <span>{t("For its {n} videos", { n: clips.length })}</span>}
+                {audioBusy ? <span className="shine">{audioBusy}</span>
+                  : audioBuf ? <span className="mono">{fmtLength(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
+                {clips.length > 1 && <span>{versions.length > 1 ? t(used === 1 ? "For 1 video" : "For {n} videos", { n: used }) : t("For its {n} videos", { n: clips.length })}</span>}
                 {project.audioDriveId ? <span className="pill-drive">Drive</span>
                   : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer for now: it goes to your Drive by itself as soon as Google Drive can be written to.")} /></span>}
               </>)}
               menu={audioBlob && ((close) => (<>
-                <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}>{t("Replace the audio")}</button>
+                <div className="label cap">{t("Versions")}</div>
+                <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}><Icon name="plus" size={14} />{t("Add a version of the audio")}</button>
+                <button onClick={() => { close(); setRenamingAudio(audioId); }}><Icon name="pencil" size={14} />{t("Rename this version")}</button>
+                {versions.length > 1 && clips.length > 1 && used < clips.length && (
+                  <button disabled={!!audioBusy} onClick={() => { close(); void switchAudio(clips.map((c) => c.id), audioId); }}><Icon name="film" size={14} />{t("Put every video on it")}</button>
+                )}
                 <div className="sep" />
-                <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setConfirmRemove(true); }}>{t("Remove audio")}</button>
+                {isMain && versions.length > 1 ? (
+                  <button disabled title={t("The other versions are kept next to this one: remove them first.")}>{t("Remove audio")}</button>
+                ) : (
+                  <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setConfirmRemove(true); }}>{isMain ? t("Remove audio") : t("Remove this version")}</button>
+                )}
               </>))}>
               {!audioBlob && audioPick}
+              {/* Several versions: the one this video plays on, picked here (the video moves with the music). */}
+              {audioBlob && versions.length > 1 && !confirmRemove && (
+                <Select className="input sm" aria-label={t("Version of the audio for this video")} value={audioId} disabled={!!audioBusy}
+                  onChange={(e) => { if (e.target.value !== audioId) void switchAudio([clip.id], e.target.value); }}>
+                  {versions.map((v) => <option key={v.id} value={v.id}>{`${audioLabel(v)} · ${t(videosOn(release, v.id) === 1 ? "1 video" : "{n} videos", { n: videosOn(release, v.id) })}`}</option>)}
+                </Select>
+              )}
               {audioBlob && confirmRemove && (
                 <div className="stack" style={{ gap: 6 }}>
-                  <span className="xs">{t("Remove it from every video of this release, with the lyrics timing?")}</span>
+                  <span className="xs">{isMain ? t("Remove it from every video of this release, with the lyrics timing?")
+                    : used > 1 || (used === 1 && clips.length > 1) ? t("Remove this version? Its videos go back on the main audio (moved with the music).") : t("Remove this version? This video goes back on the main audio (moved with the music).")}</span>
                   <div className="row">
-                    <button className="btn sm danger" onClick={() => void removeAudio()}>{t("Remove")}</button>
+                    <button className="btn sm danger" onClick={() => { setConfirmRemove(false); void (isMain ? removeAudio() : removeAudioVersion(audioId)); }}>{t("Remove")}</button>
                     <button className="btn sm quiet" onClick={() => setConfirmRemove(false)}>{t("Cancel")}</button>
                   </div>
                 </div>
               )}
             </MediaTile>
+              );
+            })()}
             {/* The release's videos side by side (a phone swipes them; a computer shows only the open one, its picker is
                 above the board): the studio's one whole, the others greyed on each side, each with what it holds and
                 its own button to open it in the studio (swiping never changes the studio's video). */}
@@ -4430,30 +4560,36 @@ export default function VideoStudio({
         <PromptDialog title={t("Rename the video")} label={t("Name")} initial={clipName(clip)} confirmLabel={t("Rename")}
           onSubmit={renameClip} onClose={() => setClipDialog(null)} />
       )}
+      {renamingAudio && (
+        <PromptDialog title={t("Rename this version")} label={t("Name")} confirmLabel={t("Rename")}
+          initial={(() => { const v = audioVersionsOf(release).find((x) => x.id === renamingAudio); return v ? audioLabel(v) : ""; })()}
+          onSubmit={(v) => { const id = renamingAudio; setRenamingAudio(null); onRelease((p) => renameAudio(p, id, v)); onSaveNow(); }} onClose={() => setRenamingAudio(null)} />
+      )}
       {clipDialog === "delete" && (
         <ConfirmDialog danger title={t("Delete this video")} confirmLabel={t("Delete")}
           message={t("“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.", { name: clipName(clip) })}
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
       )}
-      {/* Another audio over the release's: a new version of the same song (everything follows) or another song. */}
+      {/* A new audio while there is one: another version of it, kept next to it; which videos go on it. */}
       {audioAsk && (
-        <Modal title={t("Replace the audio")} onClose={() => { if (!audioAsk.busy) setAudioAsk(null); }}>
+        <Modal title={t("Another version of the audio")} onClose={() => { if (!audioAsk.busy) setAudioAsk(null); }}>
           {audioAsk.busy ? (
-            <p className="shine">{t("Finding the music of the earlier version in the new one…")}</p>
+            <p className="shine">{t("Adding “{name}” and finding where its music is…", { name: audioAsk.f.name })}</p>
           ) : (<>
-            <p>{t("Is “{name}” a new version of the same song (the master after a demo, a new mix, a longer intro)?", { name: audioAsk.f.name })}</p>
-            <p className="muted sm">{t("A new version: every video of the release, its segments, its takes and the lyrics move to where the same music is in it, even if parts changed length. Another song: their timing starts over.")}</p>
+            <p>{t("“{name}” is kept next to the audio already there, as another version (a demo, the master, a sped up…). Which videos play on it?", { name: audioAsk.f.name })}</p>
+            <p className="muted sm">{t("A video that goes on it moves to where the same music is in it (its segment, its sync, its takes), even if parts changed length; the lyrics timing follows. Each video can change version later, in the library.")}</p>
             <div className="modal-foot">
-              <button className="btn left" onClick={() => { const a = audioAsk; setAudioAsk(null); void pickAudio(a.f, a.driveId, "other"); }}>{t("Another song")}</button>
-              <button className="btn primary" onClick={() => void pickAudio(audioAsk.f, audioAsk.driveId, "version")}>{t("New version of this song")}</button>
+              <button className="btn left quiet" onClick={() => void pickAudio(audioAsk.f, audioAsk.driveId, "keep")}>{t("None, keep it in the library")}</button>
+              {clips.length > 1 && <button className="btn" onClick={() => void pickAudio(audioAsk.f, audioAsk.driveId, "all")}>{t("All the videos ({n})", { n: clips.length })}</button>}
+              <button className="btn primary" onClick={() => void pickAudio(audioAsk.f, audioAsk.driveId, "this")}>{t("This video")}</button>
             </div>
           </>)}
         </Modal>
       )}
       {remapReport && (
-        <Modal title={t("New version of the audio")} onClose={() => setRemapReport(null)}>
+        <Modal title={remapReport.to ? t("On “{name}”", { name: remapReport.to }) : t("Another version of the audio")} onClose={() => setRemapReport(null)}>
           {remapReport.notSame ? (
-            <p className="notice warn">{t("This audio does not look like a version of the same song: nothing could follow it. The sync of this video and the lyrics' timing start over.")}</p>
+            <p className="notice warn">{t("This audio does not look like a version of the same song: nothing could follow it. The sync of these videos starts over (and the lyrics timing, on this version).")}</p>
           ) : (<>
             <p>{remapReport.shift === 0 ? t("Same timing as before: nothing had to move.")
               : remapReport.shift !== null ? t(remapReport.shift > 0 ? "Same timing, {s} s later: everything moved with it." : "Same timing, {s} s earlier: everything moved with it.", { s: Math.abs(remapReport.shift).toFixed(2) })

@@ -218,6 +218,21 @@ export interface VideoVersion {
   all?: boolean;
 }
 
+/** Another version of a release's audio (a demo, a sped up…), next to its main one (see lib/audioVersions): its file and
+ *  the lyrics placed on it, the same fields as the project's for the main audio. */
+export interface AudioVersion {
+  id: string;
+  /** Its name in the library ("Demo", "Master", "Sped up"…); none: its file's. */
+  label?: string;
+  audioName?: string;
+  audioSize?: number;
+  audioDriveId?: string;
+  lyricWords?: LyricWord[];
+  heardWords?: LyricWord[];
+  lyricsPlacedFrom?: string;
+  lyricsAlignV?: number;
+}
+
 export interface VideoTake {
   offset: number;
   musicStart: number;
@@ -296,6 +311,8 @@ export interface VideoSettings {
   caption?: string;
   captionPoolId?: string;
   audioName?: string;
+  /** The version of the release's audio this video plays on (lib/audioVersions); none: the main one. */
+  audioId?: string;
   videoName?: string;
   /** Size in bytes of the camera file: picking the same file again (another browser) keeps the sync. */
   videoSize?: number;
@@ -407,6 +424,10 @@ export interface Project {
   audioSize?: number;
   /** Google Drive file of that audio, when picked from Drive: fetched again when this device lost its copy. */
   audioDriveId?: string;
+  /** The main audio's name in the library ("Demo", "Master"…); none: its file's. */
+  audioLabel?: string;
+  /** The other versions of the audio (demo, sped up…), kept next to the main one above (lib/audioVersions). */
+  audios?: AudioVersion[];
   generated: GenSlide[] | null;
   selectedSlide: number;
   /** Caption and hashtags of the open carousel's post, and the captions list it is drawn from. */

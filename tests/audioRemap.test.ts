@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { coverage, mapSpan, mapTime, remapProject, trackMap, uniformShift } from "../lib/audioRemap";
+import { coverage, mapSpan, mapTime, remapClip, remapWords, trackMap, uniformShift } from "../lib/audioRemap";
 import { alignTracks } from "../lib/syncAudio";
-import type { Project } from "../lib/types";
+import type { VideoSetup } from "../lib/types";
 import { song, SR } from "./songSim";
 
 vi.setConfig({ testTimeout: 120000 });
@@ -79,30 +79,29 @@ describe("a new version of the audio", () => {
   });
 });
 
-describe("the release follows", () => {
+describe("a video and the lyrics follow", () => {
   const m = trackMap([...Array(60)].map((_, i) => ({ old: i + 2, new: i + 3.5, score: 0.9 })), 64, 65.5);
-  const project = {
-    id: "p", name: "R", slides: [], lyrics: [{ id: "s", name: "Verse", text: "a\nb", times: [10, null] }],
-    lyricWords: [{ w: "a", s: 10, e: 10.4 }, { w: "b", s: 11, e: 11.5, until: 12, manual: true }],
-    videos: [{
-      id: "v1", name: "Take 1", crop: { start: 20, duration: 10 }, offset: 18.2, takes: [{ offset: 18.2, musicStart: 1, musicEnd: 30 }, { offset: 40, musicStart: 31, musicEnd: 60 }],
-      captions: true, activeVersion: "A", versions: [{ id: "A", v: {} }, { id: "B", name: "B", v: { crop: { start: 30, duration: 8 }, offset: 25 } }],
-    }],
-  } as unknown as Project;
+  const clip = {
+    id: "v1", name: "Take 1", crop: { start: 20, duration: 10 }, offset: 18.2, takes: [{ offset: 18.2, musicStart: 1, musicEnd: 30 }, { offset: 40, musicStart: 31, musicEnd: 60 }],
+    captions: true, activeVersion: "A", versions: [{ id: "A", v: {} }, { id: "B", name: "B", v: { crop: { start: 30, duration: 8 }, offset: 25 } }],
+  } as unknown as VideoSetup;
 
-  it("every video's sync and takes, every version's segment, the words and the lines move with the music", () => {
-    const { project: out, report } = remapProject(project, m);
-    const v = out.videos[0];
+  it("its sync and takes, every version's segment move with the music; its own clock does not", () => {
+    const { clip: v, report } = remapClip(clip, m);
     expect(v.crop.start).toBeCloseTo(21.5);
     expect(v.offset).toBeCloseTo(19.7);
     expect(v.takes?.map((x) => x.offset)).toEqual([19.7, 41.5]);
-    expect(v.takes?.[0].musicStart).toBe(1); // the video's own clock does not change
+    expect(v.takes?.[0].musicStart).toBe(1);
     expect(v.versions?.[1].v.crop?.start).toBeCloseTo(31.5);
     expect(v.versions?.[1].v.offset).toBeCloseTo(26.5);
-    expect(out.lyricWords?.map((w) => [w.s, w.until, w.manual])).toEqual([[11.5, undefined, undefined], [12.5, 13.5, true]]);
-    expect(out.lyrics[0].times).toEqual([11.5, null]);
-    expect(report.shift).toBe(1.5);
-    expect(report.videos).toEqual([{ id: "v1", name: "Take 1", status: "moved", versions: [] }]);
-    expect(report.words).toEqual({ moved: 2, dropped: 0 });
+    expect(report).toEqual({ id: "v1", name: "Take 1", status: "moved", versions: [] });
+    expect(uniformShift(m)).toBe(1.5);
+  });
+  it("the words move, a hand-set end too; the ones of a part gone are dropped", () => {
+    const count = { moved: 0, dropped: 0 };
+    const cut = trackMap([...Array(20)].map((_, i) => ({ old: i + 2, new: i + 2, score: 0.9 })), 64, 40);
+    const words = remapWords(cut, [{ w: "a", s: 10, e: 10.4 }, { w: "b", s: 11, e: 11.5, until: 12, manual: true }, { w: "c", s: 50, e: 50.5 }], count);
+    expect(words?.map((w) => [w.w, w.s, w.until, w.manual])).toEqual([["a", 10, undefined, undefined], ["b", 11, 12, true]]);
+    expect(count).toEqual({ moved: 2, dropped: 1 });
   });
 });

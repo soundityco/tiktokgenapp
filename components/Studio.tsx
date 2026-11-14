@@ -343,6 +343,7 @@ export default function Studio({ userName }: { userName: string }) {
       const releaseOf = new Map<string, string>();
       for (const p of cur.projects) {
         if (p.audioDriveId) releaseOf.set(p.audioDriveId, p.name);
+        for (const a of p.audios ?? []) if (a.audioDriveId) releaseOf.set(a.audioDriveId, p.name);
         for (const v of p.videos ?? []) {
           if (v.drive?.originalId) releaseOf.set(v.drive.originalId, p.name);
           if (v.drive?.copy?.id) releaseOf.set(v.drive.copy.id, p.name);
@@ -1297,6 +1298,7 @@ export default function Studio({ userName }: { userName: string }) {
     if (gone) {
       const keys = new Set<string>([`audio:project:${gone.id}`, `audio:${gone.id}`, `video:${gone.id}`]);
       gone.videos?.forEach((v) => { keys.add(`audio:${v.id}`); keys.add(`video:${v.id}`); });
+      gone.audios?.forEach((a) => keys.add(`audio:${a.id}`));
       keys.forEach((k) => void delMedia(k));
     }
     upd((w) => {
@@ -1781,7 +1783,7 @@ export default function Studio({ userName }: { userName: string }) {
               return hook;
             }}
             onProject={(fn) => upd((w) => ({ ...w, projects: w.projects.map((p) => (p.id === project.id ? fn(p) : p)) }))}
-            audioUsedElsewhere={(id) => !!wsRef.current?.projects.some((p) => p.id !== project.id && p.audioDriveId === id)}
+            audioUsedElsewhere={(id) => !!wsRef.current?.projects.some((p) => p.id !== project.id && (p.audioDriveId === id || !!p.audios?.some((a) => a.audioDriveId === id)))}
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
             onCopyJob={setCopyJob}
