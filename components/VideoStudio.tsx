@@ -2004,7 +2004,8 @@ export default function VideoStudio({
   /** The studio's options (draws, preview, export format): in the head on a computer, under the picture on a phone. */
   /** Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */
   const zoomEl = (where = "") => (
-    <div className={"wave-zoom " + where} role="group" aria-label={t("Zoom of the waveform")}>
+    <div className={"wave-zoom " + where} role="group" aria-label={t("Zoom of the waveform")}
+      title={t("Zoomed in, to move along the track (even inside the segment): two fingers, Alt + drag, or Shift + the mouse wheel.")}>
       <button className="btn icon sm" aria-label={t("Zoom out")} disabled={!view} onClick={() => { const v = viewOf(); zoomTo(v.d * 2, v.s + v.d / 2); }}><Icon name="minus" size={12} /></button>
       <button className="btn icon sm" aria-label={t("Zoom in")} onClick={() => { const v = viewOf(), c = settingsRef.current.crop; const mid = view ? v.s + v.d / 2 : c.start + c.duration / 2; zoomTo(v.d / 2, mid); }}><Icon name="plus" size={12} /></button>
       <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("Track") : t("Segment")}</span></button>
@@ -2143,6 +2144,12 @@ export default function VideoStudio({
     const f = wavePos(e);
     const cfg = settingsRef.current;
     const px = e.clientX;
+    // Zoomed, Alt + drag or a drag with the wheel button: the view slides, wherever it starts (the segment too).
+    if (viewRef.current && (e.altKey || e.button === 1)) {
+      e.preventDefault();
+      dragWave.current = { mode: "pan", x: f, px, vs: v.s, vd: v.d, start: cfg.crop.start, duration: cfg.crop.duration };
+      return;
+    }
     const xOf = (t: number) => rect.left + ((t - v.s) / v.d) * rect.width;
     const near = (t: number, r = 6) => Math.abs(e.clientX - xOf(t)) <= r;
     const t = v.s + f * v.d;
@@ -2210,7 +2217,9 @@ export default function VideoStudio({
       const [a, b] = [...pointers.current.values()];
       const span = clamp(d.vd * (d.dist! / Math.max(10, Math.abs(a - b))), Math.min(2, dur), dur);
       if (span >= dur - 1e-3) { setView(null); return; }
-      const k = (d.mid! - d.vs) / d.vd;
+      // The moment under the fingers' middle stays under it: spread to zoom, slide both to move along the track.
+      const r = e.currentTarget.getBoundingClientRect();
+      const k = clamp(((a + b) / 2 - r.left) / r.width, 0, 1);
       setView({ s: clamp(d.mid! - k * span, 0, dur - span), d: span });
       return;
     }
@@ -2251,8 +2260,8 @@ export default function VideoStudio({
     dragWave.current = null;
     if (d?.mode === "press") setHead(headAt(wavePos(e))); // a click inside the segment: the playhead goes there
   };
-  // Trackpad: pinch (ctrl + wheel) zooms around the pointer, a sideways swipe slides the view. A plain vertical
-  // wheel scrolls the page, as anywhere else.
+  // Trackpad: pinch (ctrl + wheel) zooms around the pointer, a sideways swipe (or Shift + the wheel) slides the view.
+  // A plain vertical wheel scrolls the page, as anywhere else.
   useEffect(() => {
     const c = waveRef.current;
     if (!c || !audioBuf) return;
@@ -2262,9 +2271,11 @@ export default function VideoStudio({
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         zoomTo(v.d * Math.exp(e.deltaY * 0.012), v.s + clamp((e.clientX - r.left) / r.width, 0, 1) * v.d);
-      } else if (viewRef.current && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      } else if (viewRef.current && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))) {
+        // A sideways swipe, or Shift + the mouse wheel: the view slides along the track.
         e.preventDefault();
-        setView({ s: clamp(v.s + (e.deltaX / r.width) * v.d, 0, audioBuf.duration - v.d), d: v.d });
+        const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        setView({ s: clamp(v.s + (dx / r.width) * v.d, 0, audioBuf.duration - v.d), d: v.d });
       }
     };
     c.addEventListener("wheel", h, { passive: false });

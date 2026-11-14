@@ -711,6 +711,7 @@ export const FR: Record<string, string> = {
   "Move to": "Déplacer vers",
   "Help": "Aide",
   "Sign in": "Se connecter",
+  "Zoomed in, to move along the track (even inside the segment): two fingers, Alt + drag, or Shift + the mouse wheel.": "Zoomé, pour te déplacer sur la piste (même dans le segment) : deux doigts, Alt + glisser, ou Maj + molette.",
   "For artists who release music": "Pour les artistes qui sortent de la musique",
   "Rollout turns your photos, hooks and lyrics into TikTok carousels, and syncs your filmed takes to your track with the lyrics on screen. In your browser, free.": "Rollout transforme tes photos, tes hooks et tes paroles en carrousels TikTok, et cale tes prises filmées sur ton son avec les paroles à l'écran. Dans ton navigateur, gratuitement.",
   "See what it does": "Voir ce que ça fait",
