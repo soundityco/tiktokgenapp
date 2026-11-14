@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useT } from "@/lib/i18n";
 import Icon from "./Icon";
 import { ContextMenu, Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
+import { TextQuickMenu } from "./TextControls";
 import { clamp, clampPic, renderSlide, snapPic, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
@@ -52,6 +53,10 @@ interface Props {
   onEditLyrics: () => void;
   zones: boolean;
   fontsReady: boolean;
+  /** The fonts loaded on this device, and the font under the pointer previewed on the slide (its text's quick menu). */
+  fonts: string[];
+  onFonts: (names: string[]) => void;
+  onFontPreview: (patch: Partial<SlideCfg["style"]> | null) => void;
   onSelect: () => void;
   onCfg: (fn: (c: SlideCfg) => SlideCfg) => void;
   onText: (t: string) => void;
@@ -151,7 +156,7 @@ export default function SlideCard(p: Props) {
     return { sharpOk: !sharpEnough(im.width, im.height), fillOk: !coversFrame(im, clampPic(cfg.pic, im.width, im.height, W, H), W, H) };
   };
   // The slide's own right-click menu (a computer: on a phone, a long press edits the text).
-  const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
+  const [ctx, setCtx] = useState<{ x: number; y: number; text?: boolean } | null>(null);
   const runAI = async (kind: "sharp" | "fill") => {
     if (!img || !cv.current) return;
     setAiNote(null);
@@ -596,25 +601,39 @@ export default function SlideCard(p: Props) {
           e.preventDefault();
           if (adjusting || matchMedia("(hover: none)").matches) return;
           p.onSelect();
-          setCtx({ x: e.clientX, y: e.clientY });
+          // On its text: the text's quick settings; elsewhere, the slide's menu.
+          const c = toCanvas(e);
+          setCtx({ x: e.clientX, y: e.clientY, text: !p.locked && inText(c.x, c.y) });
         }}>
-        {ctx && (() => {
+        {ctx?.text && (
+          <ContextMenu x={ctx.x} y={ctx.y} onClose={() => { setCtx(null); p.onFontPreview(null); }}>
+            <TextQuickMenu style={cfg.style} fonts={p.fonts} onFonts={p.onFonts} onPreview={p.onFontPreview}
+              onChange={(patch) => p.onCfg((c) => ({ ...c, style: { ...c.style, ...patch } }))}>
+              <button disabled={cfg.textSource.kind !== "pool"} onClick={p.onRerollText}><Icon name="refresh" size={14} />{t("Pick another text")}</button>
+              <button onClick={() => { const ta = cv.current?.closest(".card")?.querySelector<HTMLTextAreaElement>(".slide-text textarea"); ta?.focus(); ta?.select(); }}>
+                <Icon name="pencil" size={14} />{t("Edit the text")}</button>
+            </TextQuickMenu>
+          </ContextMenu>
+        )}
+        {ctx && !ctx.text && (() => {
           const can = img ? aiCan(img) : { sharpOk: false, fillOk: false };
           return (
             <ContextMenu x={ctx.x} y={ctx.y} onClose={() => setCtx(null)}>
               <div className="label cap">{t("Slide {n}", { n: p.index + 1 })}{p.locked ? ` · ${t("Locked")}` : ""}</div>
+              <div className="label cap">{t("Draw")}</div>
               <button disabled={cfg.textSource.kind !== "pool" || p.locked} onClick={p.onRerollText}><Icon name="refresh" size={14} />{t("Pick another text")}</button>
               <button disabled={!cfg.picPoolId || p.locked} onClick={p.onRerollPic}><Icon name="refresh" size={14} />{t("Pick another photo")}</button>
-              <div className="sep" />
+              <div className="label cap">{t("Photo")}</div>
               <button disabled={!img || p.locked} onClick={() => { setAdjusting(true); window.dispatchEvent(new CustomEvent(ADJUST_OPEN, { detail: myId.current })); }}>
                 <Icon name="tune" size={14} />{t("Adjust the photo")}<kbd>E</kbd></button>
-              <button disabled={!img || p.locked || !can.sharpOk || !!aiBusy} onClick={() => void runAI("sharp")}><Icon name="sparkle" size={14} />{t("Sharper")}</button>
-              <button disabled={!img || p.locked || !can.fillOk || !!aiBusy} onClick={() => void runAI("fill")}><Icon name="sparkle" size={14} />{t("Fill the frame")}</button>
-              <div className="sep" />
+              {/* The AI ones in Generate's gradient, their stars solid. */}
+              <button className="ai-opt" disabled={!img || p.locked || !can.sharpOk || !!aiBusy} onClick={() => void runAI("sharp")}><span className="ai-glyph" aria-hidden /><span className="ai-txt">{t("Sharper")}</span></button>
+              <button className="ai-opt" disabled={!img || p.locked || !can.fillOk || !!aiBusy} onClick={() => void runAI("fill")}><span className="ai-glyph" aria-hidden /><span className="ai-txt">{t("Fill the frame")}</span></button>
+              <div className="label cap">{t("View")}</div>
               {p.onFull && <button onClick={p.onFull}><Icon name="expand" size={14} />{t("Full screen")}<kbd>F</kbd></button>}
               {p.onZones && <button onClick={p.onZones}><Icon name={p.zones ? "zones-off" : "zones"} size={14} />{t("TikTok zones")}<kbd>G</kbd></button>}
+              <div className="label cap">{t("Slide")}</div>
               <button onClick={p.onSave}><Icon name="download" size={14} />{t("Save this slide")}</button>
-              <div className="sep" />
               <button onClick={p.onDuplicate}><Icon name="copy" size={14} />{t("Duplicate slide")}</button>
               <button onClick={p.onToggleLock}><Icon name={p.locked ? "unlock" : "lock"} size={14} />{p.locked ? t("Unlock slide") : t("Lock slide")}</button>
               <button className="danger" style={{ color: "var(--danger)" }} onClick={p.onDelete}><Icon name="trash" size={14} />{t("Delete slide")}</button>

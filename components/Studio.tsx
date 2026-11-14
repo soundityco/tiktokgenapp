@@ -1607,7 +1607,7 @@ export default function Studio({ userName }: { userName: string }) {
   // One slide card (the deck's, or on a phone the selected slide's fields under the deck).
   const cardFor = (cfg: SlideCfg, i: number, part?: "fields") => (
               <SlideCard key={(part ?? "") + cfg.id} part={part} index={i} cfg={i === sel && fontPreview ? { ...cfg, style: { ...cfg.style, ...fontPreview } } : cfg} gen={project.generated?.[i]} selected={i === sel}
-                textPools={slideTexts} picPools={vPics} zones={isPhone ? phoneZones : ws.zones} onZones={isPhone ? togglePhoneZones : () => upd((w) => ({ ...w, zones: !w.zones }))} onFull={() => setPreview(true)} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
+                textPools={slideTexts} picPools={vPics} fonts={fonts} onFonts={setFonts} onFontPreview={setFontPreview} zones={isPhone ? phoneZones : ws.zones} onZones={isPhone ? togglePhoneZones : () => upd((w) => ({ ...w, zones: !w.zones }))} onFull={() => setPreview(true)} fontsReady={fontsReady} below={<div className="deck-spacer" aria-hidden />}
                 lyrics={project.lyrics} onEditLyrics={() => setOverlay({ k: "lyrics" })}
                 locked={!!cfg.locked} canMoveLeft={i > 0} canMoveRight={i < nSlides - 1}
                 onSelect={() => i !== project.selectedSlide && updProject((p) => ({ ...p, selectedSlide: i }))}

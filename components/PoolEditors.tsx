@@ -373,13 +373,13 @@ function PicMenu({ x, y, pic, lists, onClose, onOpen, onRemove, onMove }: {
   return (
     <ContextMenu x={x} y={y} onClose={onClose} className="pic-menu">
       <div className="label cap truncate">{pic.name}</div>
+      <div className="label cap">{t("View")}</div>
       <button onClick={onOpen}><Icon name="expand" size={14} />{t("Full screen")}</button>
-      <div className="sep" />
       <div className="label cap">{t("Move to")}</div>
       {lists.length ? lists.map((l) => (
         <button key={l.id} onClick={() => onMove(l.id)}><Icon name="image" size={14} /><span className="truncate grow">{l.name}</span><span className="muted xs">{l.pics.length}</span></button>
       )) : <p className="muted xs pic-menu-none">{t("No other photo list yet.")}</p>}
-      <div className="sep" />
+      <div className="label cap">{t("List")}</div>
       <button className="danger" style={{ color: "var(--danger)" }} onClick={onRemove}><Icon name="trash" size={14} />{t("Remove from the list")}</button>
     </ContextMenu>
   );

@@ -16,6 +16,14 @@ const P: Record<string, string> = {
   "zones-off": "M8 3h8a2.5 2.5 0 012.5 2.5v13A2.5 2.5 0 0116 21H8a2.5 2.5 0 01-2.5-2.5v-13A2.5 2.5 0 018 3zM15.6 8.4v.01M15.6 11.4v.01M15.6 14.4v.01M8.6 17.4h4.6M3.5 3.5l17 17",
   /** The photo's settings: two sliders and their round knobs. */
   tune: "M4 8h8M18 8h2M4 16h2M12 16h8M15 5.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM9 13.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z",
+  // A text's quick settings (its right-click menu): size (a big and a small T), case (A a), alignments.
+  "text-size": "M3 7.5V5.5h10v2M8 5.5v13M14.5 12.5v-1.5h6.5v1.5M17.75 11v7.5",
+  "text-case": "M3 18.5l4-12 4 12M4.4 14.5h5.2M14 12.2c.5-.9 1.4-1.4 2.6-1.4 1.7 0 2.6 1 2.6 2.6v5.1M19.2 15.2h-2.6c-1.6 0-2.6.7-2.6 1.8 0 1 .8 1.6 1.9 1.6 1.4 0 2.6-.9 3.3-2.2",
+  "align-left": "M4 6h16M4 10h10M4 14h16M4 18h10",
+  "align-center": "M4 6h16M7 10h10M4 14h16M7 18h10",
+  "align-right": "M4 6h16M10 10h10M4 14h16M10 18h10",
+  /** Centred on the post: a target. */
+  target: "M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4M12 9.3a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4z",
   // The photo edits (the dials of the edits panel): exposure ±, contrast (half a circle), saturation (a drop),
   // warmth (a thermometer), vignette (a frame and its centre), grain (dots).
   "adj-exposure": "M12 3.5a8.5 8.5 0 110 17 8.5 8.5 0 010-17zM7.5 10h4M9.5 8v4M12.5 15h4M17.5 6.5l-11 11",

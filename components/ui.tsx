@@ -333,9 +333,19 @@ export function MatteSelect({ value, onChange, className = "input" }: { value?: 
 export function ContextMenu({ x, y, onClose, className, children }: { x: number; y: number; onClose: () => void; className?: string; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState({ left: x, top: y });
+  // Kept on the screen, also when it grows (a list opening inside it): taller than the screen, it scrolls.
   useLayoutEffect(() => {
-    const r = box.current?.getBoundingClientRect();
-    if (r) setAt({ left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) });
+    const el = box.current;
+    if (!el) return;
+    const place = () => {
+      const r = el.getBoundingClientRect();
+      setAt({ left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) });
+    };
+    place();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [x, y]);
   const close = useRef(onClose);
   close.current = onClose;
@@ -352,9 +362,9 @@ export function ContextMenu({ x, y, onClose, className, children }: { x: number;
     };
   }, []);
   return createPortal(
-    // A click on one of its buttons closes it (after the button's own action).
+    // A click on one of its buttons closes it (after the button's own action), except the ones marked `data-keep`.
     <div ref={box} role="menu" className={"menu ctx-menu" + (className ? " " + className : "")} style={{ position: "fixed", left: at.left, top: at.top, right: "auto", bottom: "auto" }}
-      onClick={(e) => { if ((e.target as HTMLElement).closest("button:not(:disabled)")) close.current(); }} onContextMenu={(e) => e.preventDefault()}>
+      onClick={(e) => { if ((e.target as HTMLElement).closest("button:not(:disabled):not([data-keep])")) close.current(); }} onContextMenu={(e) => e.preventDefault()}>
       {children}
     </div>,
     document.body,

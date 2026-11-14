@@ -24,7 +24,7 @@ import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkC
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
-import { presetOf, StylePresets, withPreset } from "./TextControls";
+import { presetOf, StylePresets, TextQuickMenu, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
@@ -3219,7 +3219,7 @@ export default function VideoStudio({
     setV({ crop: fitCrop(cfg.crop.start, Math.max(1, head - cfg.crop.start), boundsOf(cfg)) });
   };
   /** The preview's right-click menu, where it was opened. */
-  const [vctx, setVctx] = useState<{ x: number; y: number } | null>(null);
+  const [vctx, setVctx] = useState<{ x: number; y: number; text?: "hook" | "text" } | null>(null);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e) => {
     if (!active) return; // hidden behind the carousel: its shortcuts are the carousel's
@@ -3502,19 +3502,36 @@ export default function VideoStudio({
             <canvas ref={canvasRef} className="cv" width={outW} height={outH}
               title={t("On the preview: drag the video to reframe it, scroll to zoom, double-click to reset. Drag the lyrics to move them, scroll on them to resize.")}
               onPointerDown={cvDown} onPointerMove={cvMove} onPointerUp={cvUp} onPointerCancel={cvUp} onDoubleClick={cvDouble}
-              onContextMenu={(e) => { e.preventDefault(); if (!matchMedia("(hover: none)").matches) setVctx({ x: e.clientX, y: e.clientY }); }} />
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (matchMedia("(hover: none)").matches) return;
+                // On the lyrics or the hook: that text's quick settings; elsewhere, the preview's menu.
+                const c = toCv(e);
+                setVctx({ x: e.clientX, y: e.clientY, text: textAt(c.x, c.y) ?? undefined });
+              }} />
+            {vctx?.text && (() => {
+              const which = vctx.text === "hook" ? "hook" : "caption";
+              const st = which === "hook" ? hookStyle : captionStyle;
+              return (
+                <ContextMenu x={vctx.x} y={vctx.y} onClose={() => { setVctx(null); setFontPreview(null); }}>
+                  <TextQuickMenu style={st} fonts={fonts} onFonts={onFonts} onPreview={(patch) => setFontPreview(patch ? { which, patch } : null)}
+                    onChange={(patch) => setV(which === "hook" ? { hookStyle: { ...hookStyle, ...patch } } : { captionStyle: { ...captionStyle, ...patch } })} />
+                </ContextMenu>
+              );
+            })()}
             {/* The preview's own right-click menu: play, the segment at the playhead, full screen, zones, export. */}
-            {vctx && (
+            {vctx && !vctx.text && (
               <ContextMenu x={vctx.x} y={vctx.y} onClose={() => setVctx(null)}>
                 <div className="label cap truncate">{clipName(clip)}</div>
+                <div className="label cap">{t("Playback")}</div>
                 <button disabled={!audioBuf || (!!videoUrl && !playerReady && !playing)} onClick={() => (playing ? pause() : void play())}>
                   <Icon name={playing ? "pause" : "play"} size={14} />{playing ? t("Pause") : t("Play")}<kbd>{t("Space")}</kbd></button>
                 <button disabled={!audioBuf} onClick={markIn}><Icon name="arrowLeft" size={14} />{t("Start of the segment here")}<kbd>I</kbd></button>
                 <button disabled={!audioBuf} onClick={markOut}><Icon name="arrowRight" size={14} />{t("End of the segment here")}<kbd>O</kbd></button>
-                <div className="sep" />
+                <div className="label cap">{t("View")}</div>
                 <button disabled={!videoBlob} onClick={() => toggleFull(true)}><Icon name="expand" size={14} />{t("Full screen")}<kbd>F</kbd></button>
                 {settings.format !== "16:9" && <button disabled={!videoBlob} onClick={() => setAids({ zones: !aids.zones })}><Icon name={aids.zones ? "zones-off" : "zones"} size={14} />{t("TikTok zones")}<kbd>G</kbd></button>}
-                <div className="sep" />
+                <div className="label cap">{t("Video")}</div>
                 {videoBlob && <button disabled={syncBusy} onClick={() => void autoSync()}><Icon name="film" size={14} />{settings.score === undefined ? t("Sync the video") : t("Resync the video")}</button>}
                 <button disabled={!audioBuf || !videoBlob || exporting} onClick={() => void exportVideo()}><Icon name="download" size={14} />{t("Export video (MP4)")}</button>
               </ContextMenu>

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FONT_LABELS } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { addFont, canvasFamily, DuplicateFont, facesOf, removeFont } from "@/lib/fonts";
@@ -31,6 +31,104 @@ function GoogleRow({ g, on, onPick, onHover }: { g: GoogleFont; on: boolean; onP
   );
 }
 
+/** A text style's font face (a loaded family's file). */
+const faceStyle = (f: FaceInfo): Partial<TextStyle> => ({ customFont: f.family, googleFont: undefined, weight: f.weight, italic: f.italic || undefined, stretch: f.stretch === "normal" ? undefined : f.stretch });
+/** The regular face of a loaded family (upright, normal width, the weight nearest 400). */
+const regularOf = (family: string) => {
+  const all = facesOf(family);
+  return [...all].sort((a, b) => Number(a.italic) - Number(b.italic) || Number(a.stretch !== "normal") - Number(b.stretch !== "normal") || Math.abs(a.weight - 400) - Math.abs(b.weight - 400))[0];
+};
+
+/**
+ * The fonts to choose from, each name written in its own font: a search, then the bundled ones, the user's, Google's.
+ * The one under the pointer shows on the post at once (`onPreview`). Shared by the font picker of the side column
+ * and the quick text menu (right click on a text).
+ */
+export function FontList({ style, fonts, onChoose, onFonts, onPreview }: {
+  style: TextStyle;
+  fonts: string[];
+  onChoose: (patch: Partial<TextStyle>) => void;
+  onFonts: (names: string[]) => void;
+  onPreview?: (patch: Partial<TextStyle> | null) => void;
+}) {
+  const { t } = useT();
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  // ---- hover preview on the post ----
+  const hoverTimer = useRef(0);
+  const hovered = useRef<string | null>(null);
+  const preview = (key: string, patch: Partial<TextStyle> | (() => Promise<Partial<TextStyle> | null>)) => {
+    if (!onPreview) return;
+    hovered.current = key;
+    clearTimeout(hoverTimer.current);
+    // A short wait: scrolling through the list does not load every font it passes.
+    hoverTimer.current = window.setTimeout(async () => {
+      const p = typeof patch === "function" ? await patch() : patch;
+      if (p && hovered.current === key) onPreview(p);
+    }, 120);
+  };
+  const endPreview = () => { clearTimeout(hoverTimer.current); hovered.current = null; onPreview?.(null); };
+  const hoverGoogle = (g: GoogleFont) => preview(`g:${g.family}`, async () => {
+    const w = g.weights.includes(700) ? 700 : g.weights[g.weights.length - 1];
+    return (await loadGoogleFont(g.family, w)) ? { googleFont: g.family, weight: w, customFont: undefined } : null;
+  });
+  // Closed (a font chosen, the menu gone) while a font is under the pointer: the post gets its own font back.
+  const previewRef = useRef(onPreview);
+  previewRef.current = onPreview;
+  useEffect(() => () => { clearTimeout(hoverTimer.current); if (hovered.current) previewRef.current?.(null); }, []);
+
+  const choose = (patch: Partial<TextStyle>) => { endPreview(); onChoose(patch); setQ(""); };
+  const pickGoogle = async (g: GoogleFont) => {
+    const w = g.weights.includes(700) ? 700 : g.weights[g.weights.length - 1];
+    setBusy(g.family); setErr(null);
+    const ok = await loadGoogleFont(g.family, w, false);
+    setBusy(null);
+    if (!ok) { setErr(t("This Google font could not be loaded. Check the connection.")); return; }
+    choose({ googleFont: g.family, weight: w, italic: undefined, customFont: undefined });
+    onFonts([...fonts]); // drawn again with the font now loaded
+  };
+
+  const k = q.trim().toLowerCase();
+  const has = (s: string) => !k || s.toLowerCase().includes(k);
+  const bundled = (Object.keys(FONT_LABELS) as FontId[]).filter((id) => has(FONT_LABELS[id]));
+  // Loaded families as fonts: "Helvetica Compressed" and "Helvetica Rounded" go under Helvetica.
+  const mine = groupFamilies(fonts).filter((g) => g.variants.some((v) => has(v.family)));
+  const google = GOOGLE_FONTS.filter((g) => has(g.family));
+  return (
+    <div className="font-list-box" role="listbox" aria-label={t("Font")}>
+      <input className="input sm" autoFocus placeholder={t("Search a font…")} value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="font-list" onMouseLeave={endPreview}>
+        {bundled.length > 0 && <span className="font-group">{t("Bundled")}</span>}
+        {bundled.map((id) => (
+          <button key={id} role="option" aria-selected={!style.customFont && !style.googleFont && style.font === id}
+            className={"font-opt" + (!style.customFont && !style.googleFont && style.font === id ? " on" : "")}
+            style={{ fontFamily: bundledFont(id).family, fontWeight: bundledFont(id).weight, fontStyle: bundledFont(id).italic ? "italic" : undefined }}
+            onMouseEnter={() => preview(`b:${id}`, { font: id, customFont: undefined, googleFont: undefined, weight: undefined })}
+            onClick={() => choose({ font: id, customFont: undefined, googleFont: undefined, weight: undefined })}>{FONT_LABELS[id]}</button>
+        ))}
+        {mine.length > 0 && <span className="font-group">{t("Your fonts")}</span>}
+        {mine.map(({ family: n, variants }) => {
+          const on = !!style.customFont && variants.some((v) => v.family === style.customFont);
+          const count = variants.reduce((c, v) => c + facesOf(v.family).length, 0);
+          const pick = regularOf(n) ? faceStyle(regularOf(n)) : { customFont: n, googleFont: undefined };
+          return (
+            <button key={n} role="option" aria-selected={on} className={"font-opt" + (on ? " on" : "")}
+              style={{ fontFamily: `"${n}"` }} onMouseEnter={() => preview(`c:${n}`, pick)} onClick={() => choose(pick)}>
+              {n}{count > 1 && <span className="muted xs" style={{ fontFamily: "var(--sans)" }}> · {t("{n} styles", { n: count })}</span>}
+            </button>
+          );
+        })}
+        {google.length > 0 && <span className="font-group">Google Fonts</span>}
+        {google.map((g) => <GoogleRow key={g.family} g={g} on={!style.customFont && style.googleFont === g.family} onPick={() => void pickGoogle(g)} onHover={() => hoverGoogle(g)} />)}
+        {!bundled.length && !mine.length && !google.length && <p className="muted xs">{t("No font with this name.")}</p>}
+      </div>
+      {busy && <p className="muted xs shine">{t("Loading…")}</p>}
+      {err && <p className="notice bad xs">{err}</p>}
+    </div>
+  );
+}
+
 /**
  * Font picker shared by both studios: the bundled fonts, the ones loaded by the user, and Google Fonts,
  * each name written in its own font. Search at the top; the weight of a Google font below.
@@ -48,7 +146,6 @@ export function FontPicker({
   const { t } = useT();
   const [fontErr, setFontErr] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -74,37 +171,7 @@ export function FontPicker({
   const canWeight = weights.length > 1;
   const styleOff = !canWeight && !canItalic && ownWidths.length < 2;
   const faceLabel = (f: FaceInfo) => [weightName(f.weight), f.italic ? t("Italic") : "", f.stretch !== "normal" ? t(STRETCH_LABEL[f.stretch] ?? f.stretch) : ""].filter(Boolean).join(" ");
-  /** A face as a text style; the regular face of a family when none is given. */
-  const faceStyle = (f: FaceInfo): Partial<TextStyle> => ({ customFont: f.family, googleFont: undefined, weight: f.weight, italic: f.italic || undefined, stretch: f.stretch === "normal" ? undefined : f.stretch });
-  const regularOf = (family: string) => {
-    const all = facesOf(family);
-    return [...all].sort((a, b) => Number(a.italic) - Number(b.italic) || Number(a.stretch !== "normal") - Number(b.stretch !== "normal") || Math.abs(a.weight - 400) - Math.abs(b.weight - 400))[0];
-  };
   const weightName = (w: number) => ({ 100: t("Thin"), 200: t("Extra light"), 300: t("Light"), 400: t("Regular"), 500: t("Medium"), 600: t("Semibold"), 700: t("Bold"), 800: t("Extra bold"), 900: t("Black") } as Record<number, string>)[w] ?? String(w);
-
-  // ---- hover preview on the post ----
-  const hoverTimer = useRef(0);
-  const hovered = useRef<string | null>(null);
-  const preview = (key: string, patch: Partial<TextStyle> | (() => Promise<Partial<TextStyle> | null>)) => {
-    if (!onPreview) return;
-    hovered.current = key;
-    clearTimeout(hoverTimer.current);
-    // A short wait: scrolling through the list does not load every font it passes.
-    hoverTimer.current = window.setTimeout(async () => {
-      const p = typeof patch === "function" ? await patch() : patch;
-      if (p && hovered.current === key) onPreview(p);
-    }, 120);
-  };
-  const endPreview = () => { clearTimeout(hoverTimer.current); hovered.current = null; onPreview?.(null); };
-  const hoverGoogle = (g: GoogleFont) => preview(`g:${g.family}`, async () => {
-    const w = g.weights.includes(700) ? 700 : g.weights[g.weights.length - 1];
-    return (await loadGoogleFont(g.family, w)) ? { googleFont: g.family, weight: w, customFont: undefined } : null;
-  });
-  useEffect(() => { if (!open) endPreview(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Leaving the panel (another tab) while a font is under the pointer: the post gets its own font back.
-  const previewRef = useRef(onPreview);
-  previewRef.current = onPreview;
-  useEffect(() => () => { clearTimeout(hoverTimer.current); if (hovered.current) previewRef.current?.(null); }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -115,16 +182,13 @@ export function FontPicker({
     return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", esc); };
   }, [open]);
 
-  const choose = (patch: Partial<TextStyle>) => { endPreview(); onChange(patch); setOpen(false); setQ(""); };
-  const pickGoogle = async (g: GoogleFont, weight?: number, italic?: boolean) => {
-    const w = weight ?? (g.weights.includes(700) ? 700 : g.weights[g.weights.length - 1]);
-    const it = weight === undefined ? false : italic ?? !!style.italic;
+  /** Another weight (or italic) of the chosen Google font: its file loaded first. */
+  const pickWeight = async (g: GoogleFont, w: number, it: boolean) => {
     setBusy(g.family); setFontErr(null);
     const ok = await loadGoogleFont(g.family, w, it);
     setBusy(null);
     if (!ok) { setFontErr(t("This Google font could not be loaded. Check the connection.")); return; }
-    if (weight === undefined) choose({ googleFont: g.family, weight: w, italic: undefined, customFont: undefined });
-    else onChange({ weight: w, italic: it || undefined });
+    onChange({ weight: w, italic: it || undefined });
     onFonts([...fonts]); // drawn again with the font now loaded
   };
 
@@ -159,14 +223,7 @@ export function FontPicker({
     onChange({ customFont: undefined, weight: undefined, italic: undefined, stretch: undefined });
   };
 
-  const k = q.trim().toLowerCase();
-  const has = (s: string) => !k || s.toLowerCase().includes(k);
-  const bundled = (Object.keys(FONT_LABELS) as FontId[]).filter((id) => has(FONT_LABELS[id]));
-  // Loaded families as fonts: "Helvetica Compressed" and "Helvetica Rounded" go under Helvetica.
-  const groups = groupFamilies(fonts);
-  const mine = groups.filter((g) => g.variants.some((v) => has(v.family)));
-  const group = style.customFont ? groups.find((g) => g.variants.some((v) => v.family === style.customFont)) : undefined;
-  const google = GOOGLE_FONTS.filter((g) => has(g.family));
+  const group = style.customFont ? groupFamilies(fonts).find((g) => g.variants.some((v) => v.family === style.customFont)) : undefined;
 
   return (
     <>
@@ -177,33 +234,8 @@ export function FontPicker({
           <span className={"muted xs" + (busy ? " shine" : "")}>{busy ? t("Loading…") : "▾"}</span>
         </button>
         {open && (
-          <div className="font-menu" role="listbox" aria-label={t("Font")}>
-            <input className="input sm" autoFocus placeholder={t("Search a font…")} value={q} onChange={(e) => setQ(e.target.value)} />
-            <div className="font-list" onMouseLeave={endPreview}>
-              {bundled.length > 0 && <span className="font-group">{t("Bundled")}</span>}
-              {bundled.map((id) => (
-                <button key={id} role="option" aria-selected={!style.customFont && !style.googleFont && style.font === id}
-                  className={"font-opt" + (!style.customFont && !style.googleFont && style.font === id ? " on" : "")}
-                  style={{ fontFamily: bundledFont(id).family, fontWeight: bundledFont(id).weight, fontStyle: bundledFont(id).italic ? "italic" : undefined }}
-                  onMouseEnter={() => preview(`b:${id}`, { font: id, customFont: undefined, googleFont: undefined, weight: undefined })}
-                  onClick={() => choose({ font: id, customFont: undefined, googleFont: undefined, weight: undefined })}>{FONT_LABELS[id]}</button>
-              ))}
-              {mine.length > 0 && <span className="font-group">{t("Your fonts")}</span>}
-              {mine.map(({ family: n, variants }) => {
-                const on = !!style.customFont && variants.some((v) => v.family === style.customFont);
-                const count = variants.reduce((k, v) => k + facesOf(v.family).length, 0);
-                return (
-                  <button key={n} role="option" aria-selected={on} className={"font-opt" + (on ? " on" : "")}
-                    style={{ fontFamily: `"${n}"` }} onMouseEnter={() => preview(`c:${n}`, regularOf(n) ? faceStyle(regularOf(n)) : { customFont: n, googleFont: undefined })}
-                    onClick={() => choose(regularOf(n) ? faceStyle(regularOf(n)) : { customFont: n, googleFont: undefined })}>
-                    {n}{count > 1 && <span className="muted xs" style={{ fontFamily: "var(--sans)" }}> · {t("{n} styles", { n: count })}</span>}
-                  </button>
-                );
-              })}
-              {google.length > 0 && <span className="font-group">Google Fonts</span>}
-              {google.map((g) => <GoogleRow key={g.family} g={g} on={!style.customFont && style.googleFont === g.family} onPick={() => void pickGoogle(g)} onHover={() => hoverGoogle(g)} />)}
-              {!bundled.length && !mine.length && !google.length && <p className="muted xs">{t("No font with this name.")}</p>}
-            </div>
+          <div className="font-menu">
+            <FontList style={style} fonts={fonts} onFonts={onFonts} onPreview={onPreview} onChoose={(patch) => { onChange(patch); setOpen(false); }} />
           </div>
         )}
       </div>
@@ -222,11 +254,11 @@ export function FontPicker({
         {weights.map((w) => (
           <button key={w} className={"btn sm" + (canWeight && (style.weight ?? 400) === w ? " on" : "")} disabled={!canWeight}
             style={{ fontFamily: labelCss, fontWeight: w, fontStyle: style.italic ? "italic" : undefined }} title={weightName(w)}
-            onClick={() => (gf ? void pickGoogle(gf, w) : onChange({ weight: w }))}>{weightName(w)}</button>
+            onClick={() => (gf ? void pickWeight(gf, w, !!style.italic) : onChange({ weight: w }))}>{weightName(w)}</button>
         ))}
         <button className={"btn sm" + (style.italic ? " on" : "")} aria-pressed={!!style.italic} disabled={!canItalic}
           style={{ fontFamily: labelCss, fontStyle: "italic" }} title={(gf || own.length) && !canItalic ? t("No italic for this font.") : undefined}
-          onClick={() => (gf ? void pickGoogle(gf, style.weight ?? 400, !style.italic) : onChange({ italic: !style.italic || undefined }))}>{t("Italic")}</button>
+          onClick={() => (gf ? void pickWeight(gf, style.weight ?? 400, !style.italic) : onChange({ italic: !style.italic || undefined }))}>{t("Italic")}</button>
         {ownWidths.length > 1 && ownWidths.map((w) => (
           <button key={w} className={"btn sm" + ((style.stretch ?? "normal") === w ? " on" : "")}
             style={{ fontFamily: `"${canvasFamily(style.customFont ?? "", w)}"` }} onClick={() => onChange({ stretch: w === "normal" ? undefined : w })}>{t(STRETCH_LABEL[w] ?? w)}</button>
@@ -361,6 +393,66 @@ export function LookExtras({ style, onChange }: { style: TextStyle; onChange: (p
 
 /** The case options, shared by the carousel and the video. */
 /** The case choices, as plain options (the app's Select reads its options directly: not through a component). */
+/**
+ * A text's quick settings, in its right-click menu (a slide's text, the video's lyrics or hook): the font (the same list
+ * as the side column, the one under the pointer shown on the post), then its look, size, case and alignment, and
+ * centred on the post. Its buttons keep the menu open (`data-keep`), a font chosen or "Centre" close it.
+ */
+export function TextQuickMenu({ style, fonts, onChange, onFonts, onPreview, children }: {
+  style: TextStyle;
+  fonts: string[];
+  onChange: (patch: Partial<TextStyle>) => void;
+  onFonts: (names: string[]) => void;
+  onPreview?: (patch: Partial<TextStyle> | null) => void;
+  /** More actions for this text (another text…), at the end. */
+  children?: ReactNode;
+}) {
+  const { t } = useT();
+  const [fontOpen, setFontOpen] = useState(false);
+  const label = style.customFont ?? style.googleFont ?? FONT_LABELS[style.font];
+  const css = style.customFont ? `"${style.customFont}"` : style.googleFont ? `"${style.googleFont}"` : bundledFont(style.font).family;
+  /** A choice of a few small buttons, on the right of its row (each one's name in its tooltip). */
+  const seg = <V extends string>(value: V, list: [V, ReactNode, string][], set: (v: V) => void) => (
+    <div className="tq-seg" role="group">
+      {list.map(([v, inner, name]) => (
+        <button key={v} data-keep className={value === v ? "on" : ""} aria-pressed={value === v} aria-label={name} title={name} onClick={() => set(v)}>{inner}</button>
+      ))}
+    </div>
+  );
+  /** A row of the menu: its icon and name as a menu item's, its control on the right. */
+  const row = (icon: string, name: string, control: ReactNode) => (
+    <div className="tq-row"><Icon name={icon} size={14} /><span className="grow">{name}</span>{control}</div>
+  );
+  return (
+    <div className="tq">
+      <div className="label cap">{t("Text")}</div>
+      <button data-keep className={"tq-font" + (fontOpen ? " on" : "")} aria-expanded={fontOpen} onClick={() => setFontOpen((o) => !o)}>
+        <Icon name="type" size={14} /><span className="grow">{t("Font")}</span>
+        <span className="tq-font-name truncate" style={{ fontFamily: css }}>{label}</span><Icon name="chevron" size={12} />
+      </button>
+      {fontOpen && <div className="tq-fonts"><FontList style={style} fonts={fonts} onFonts={onFonts} onPreview={onPreview} onChoose={onChange} /></div>}
+      {row("sliders", t("Style"), seg(style.look, [
+        ["outline", <span key="o" className="tq-look outline">A</span>, t("Outline")], ["box", <span key="b" className="tq-look box">A</span>, t("Box")],
+        ["shadow", <span key="s" className="tq-look shadow">A</span>, t("Shadow")], ["plain", <span key="p" className="tq-look">A</span>, t("Plain")],
+      ], (look) => onChange({ look })))}
+      {row("text-size", t("Size"), (
+        <div className="tq-seg">
+          <button data-keep aria-label={t("Smaller")} title={t("Smaller")} onClick={() => onChange({ size: Math.max(18, style.size - 4) })}><Icon name="minus" size={12} /></button>
+          <span className="tq-val">{style.size}</span>
+          <button data-keep aria-label={t("Bigger")} title={t("Bigger")} onClick={() => onChange({ size: Math.min(200, style.size + 4) })}><Icon name="plus" size={12} /></button>
+        </div>
+      ))}
+      {row("text-case", t("Case"), seg(style.case, [["asis", "Aa", t("As typed")], ["upper", "AA", t("UPPERCASE")], ["lower", "aa", t("lowercase")], ["sentence", "Ab.", t("First letter capital")]], (c) => onChange({ case: c })))}
+      {row(`align-${style.align}`, t("Align"), seg(style.align, [
+        ["left", <Icon key="l" name="align-left" size={13} />, t("Left")], ["center", <Icon key="c" name="align-center" size={13} />, t("Center")], ["right", <Icon key="r" name="align-right" size={13} />, t("Right")],
+      ], (align) => onChange({ align })))}
+      <div className="label cap">{t("Actions")}</div>
+      <button onClick={() => onChange({ x: 50, y: 50 })}><Icon name="target" size={14} />{t("Centre it on the post")}</button>
+      {children}
+    </div>
+  );
+}
+
 export function caseOptions(t: (k: string) => string) {
   return (
     <>
