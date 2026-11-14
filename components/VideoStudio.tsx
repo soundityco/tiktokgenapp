@@ -1129,6 +1129,13 @@ export default function VideoStudio({
       <span className="mono">{fmtLength(settings.drive.copy.from)} → {fmtLength(settings.drive.copy.to)}</span>
       {copyState?.hint && <Hint text={copyState.hint} />}
     </span>
+  ) : compact && copyState?.ok ? (
+    // The library's tile, the copy on the Drive and up to date (this device works on the original): a pill too, outlined
+    // with a ✓ (the filled one says the copy is the one in use); what it holds and how it was made in its (i).
+    <span className="copy-status compact xs" title={copyState.text}>
+      <span className="pill-copy ready"><Icon name="check" size={10} />{t("Drive copy")}</span>
+      {copyState.hint && <Hint text={copyState.hint} />}
+    </span>
   ) : copyState && (
     <span className={"copy-status xs" + (copyState.busy ? " busy" : "") + (copyState.ok ? " ok" : "") + (copyState.bad ? " bad" : "") + (compact ? " compact" : "")}>
       {copyState.ok ? <Icon name="check" size={12} /> : <span className="bg-ring" style={{ "--p": copyState.p } as CSSProperties} aria-hidden />}
