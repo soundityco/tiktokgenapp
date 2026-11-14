@@ -2076,7 +2076,22 @@ export default function VideoStudio({
   const viewRef = useRef(view);
   viewRef.current = view;
   const viewOf = () => viewRef.current ?? { s: 0, d: audioBuf?.duration ?? 1 };
-  useEffect(() => { setView(null); }, [audioBuf]);
+  // Kept on this device, per release: the zoom (and where it looks) comes back after a refresh, for the same audio
+  // (same length); another audio starts on the whole track.
+  const viewKey = `tktgen-tl-view:${project.id}`;
+  useEffect(() => {
+    if (!audioBuf) { setView(null); return; }
+    try {
+      const v = JSON.parse(localStorage.getItem(viewKey) ?? "null") as { s: number; d: number; dur: number } | null;
+      const dur = audioBuf.duration;
+      if (v && Math.abs(v.dur - dur) < 0.05 && v.d > 0 && v.d < dur) { setView({ s: clamp(v.s, 0, dur - v.d), d: v.d }); return; }
+    } catch { /* storage blocked: the whole track */ }
+    setView(null);
+  }, [audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!audioBuf) return;
+    try { if (view) localStorage.setItem(viewKey, JSON.stringify({ ...view, dur: audioBuf.duration })); else localStorage.removeItem(viewKey); } catch { /* private mode */ }
+  }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Zoom to `d` seconds shown, `around` (seconds) staying where it is on screen. */
   const zoomTo = (d: number, around: number) => {
     const dur = audioBuf?.duration ?? 0;

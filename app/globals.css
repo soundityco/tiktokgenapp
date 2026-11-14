@@ -2546,6 +2546,8 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .hook-src-btn { width: 100%; }
 .hook-head .hook-gen { margin-left: 6px; flex: none; }
 .hook-head .hook-del:hover { color: var(--danger); }
+/* Phone: the bin away from the list button next to it (no remove by a finger a little off). */
+@media (max-width: 640px) { .hook-head .hook-del { margin-left: 14px; } }
 
 /* The full screen of both studios (a slide, the video): the blurred dark, the picture with its cross at its top
    right, its bar under it. The video's keeps room for its player under it. */

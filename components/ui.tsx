@@ -190,7 +190,8 @@ export function Menu({ trigger, children, left, float, portal }: {
       // between the app's header and the phone's dock. Taller than the room on both sides: on the roomier one, and
       // it scrolls inside (the page under it stays still).
       const b = ref.current!.getBoundingClientRect();
-      const shown = (el: Element | null) => (el instanceof HTMLElement && el.offsetParent ? el.getBoundingClientRect() : null);
+      // (Shown: it has a box; the header and the dock are fixed on a phone, where offsetParent is always null.)
+      const shown = (el: Element | null) => (el && el.getClientRects().length ? el.getBoundingClientRect() : null);
       const top = Math.max(8, (shown(document.querySelector(".app > .top"))?.bottom ?? 0) + 6);
       const bottom = Math.min(window.innerHeight, shown(document.querySelector(".mobile-tabs"))?.top ?? Infinity) - 8;
       const below = bottom - (b.bottom + 6), above = b.top - 6 - top;
