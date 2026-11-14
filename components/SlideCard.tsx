@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useT } from "@/lib/i18n";
-import { SourceButton, tagSummary, TagChips } from "./SourcePick";
+import { SourceButton, sourceSub, tagSummary, TagChips } from "./SourcePick";
 import Icon from "./Icon";
 import { ContextMenu, Hint, Menu, Switch, Wheel } from "./ui";
 import { TextQuickMenu } from "./TextControls";
@@ -444,7 +444,8 @@ export default function SlideCard(p: Props) {
           <Menu float left trigger={(open, toggle) => (
             <SourceButton open={open} onClick={toggle} label={t("Text from")}
               name={cfg.textSource.kind === "lyrics" ? t("Lyrics") : listPool?.name ?? t("No text")}
-              sub={lyricSrc ? (p.lyrics.length ? (lyricNames.length ? lyricNames.join(" · ") : t("None ticked")) : undefined) : tagSummary(ticked ?? [], notTicked, t) || undefined} />
+              sub={lyricSrc ? (p.lyrics.length ? (lyricNames.length ? lyricNames.join(" · ") : t("None ticked")) : undefined)
+                : cfg.textSource.kind === "pool" ? sourceSub(tagSummary(ticked ?? [], notTicked, t), text) : undefined} />
           )}>
             {(close) => (
               <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
@@ -515,7 +516,8 @@ export default function SlideCard(p: Props) {
           </div>
           {/* Where from (a photo list), then which one (its photos, the slide's framed): one button, as for the text. */}
           <Menu float trigger={(open, toggle) => (
-            <SourceButton open={open} onClick={toggle} label={t("Photo from")} name={pool?.name ?? t("No photo")} />
+            <SourceButton open={open} onClick={toggle} label={t("Photo from")} name={pool?.name ?? t("No photo")}
+              sub={pool ? sourceSub("", p.gen?.picName?.replace(/\.[a-z0-9]{2,4}$/i, "")) : undefined} />
           )}>
             {(close) => (
               <div className="pick-pane" onClick={(e) => e.stopPropagation()}>

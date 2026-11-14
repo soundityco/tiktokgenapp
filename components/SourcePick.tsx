@@ -18,6 +18,13 @@ export function tagSummary(ticked: string[], not: string[], t: (k: string, v?: R
   return [on, off].filter(Boolean).join(" · ");
 }
 
+/** What a source's button says after the list's name: its tags in short, then a glimpse of the one picked (the
+ *  start of a text, a photo's name), cut by "…" with the rest. */
+export function sourceSub(tags: string, picked?: string): string | undefined {
+  const glimpse = picked?.replace(/\|/g, " ").replace(/\s+/g, " ").trim();
+  return [tags, glimpse].filter(Boolean).join(" · ") || undefined;
+}
+
 /** A list's tags as chips: All, then each one by name (a click ticks it, its − excludes it). */
 export function TagChips({ groups, ticked, not, count, onChange }: {
   groups: { id: string; items: number[] }[]; ticked: string[]; not: string[]; count: number;

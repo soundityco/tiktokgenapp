@@ -32,7 +32,7 @@ import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { SourceButton, tagSummary, TagChips } from "./SourcePick";
+import { SourceButton, sourceSub, tagSummary, TagChips } from "./SourcePick";
 import { ConfirmDialog, ContextMenu, Hint, MatteSelect, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
 import { FullView } from "./FullView";
@@ -4285,7 +4285,7 @@ export default function VideoStudio({
                     {/* Where from (its list and tags), then which one (the list, opened on this hook): as on a slide. */}
                     {hookPools.length > 0 && (
                       <Menu float trigger={(open, toggle) => (
-                        <SourceButton open={open} onClick={toggle} label={t("List and tags of this hook")} name={src.pool?.name ?? ""} sub={tagSummary(src.ticked, src.notTicked, t) || undefined} />
+                        <SourceButton open={open} onClick={toggle} label={t("List and tags of this hook")} name={src.pool?.name ?? ""} sub={sourceSub(tagSummary(src.ticked, src.notTicked, t), h.text)} />
                       )}>
                         {(close) => (
                           <div className="pick-pane">
