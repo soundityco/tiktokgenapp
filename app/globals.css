@@ -1368,6 +1368,9 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .pill-copy, .pill-drive { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
   text-transform: uppercase; color: #120d1c; background: var(--grad-video); font-weight: 600; }
 .pill-drive { color: #07190f; background: var(--grad-music); }
+/* A pill never squeezed nor cut on two lines: short of room, it goes to the next line whole. */
+.pill-copy, .pill-drive { flex: none; white-space: nowrap; }
+.media-meta > .copy-status { flex: none; max-width: 100%; }
 /* The copy ready on the Drive (not the one in use): the same pill, outlined, with its ✓. */
 .pill-copy.ready { gap: 4px; color: var(--video); background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--video) 70%, transparent); }
 /* Storage: one bar like a phone's (Rollout's kinds in their colours, the rest of the Drive in grey, the free space). */
