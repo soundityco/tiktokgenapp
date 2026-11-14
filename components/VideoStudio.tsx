@@ -1123,7 +1123,8 @@ export default function VideoStudio({
   })();
   const copyStatusEl = (compact = false) => compact && onCopy && settings.drive?.copy ? (
     // The library's tile, on the copy: its badge and the part of the take it holds, on one line.
-    <span className="copy-status compact on-copy xs">
+    // "whole": it holds the whole take (the phone's library then leaves out its range: the length is beside the name).
+    <span className={"copy-status compact on-copy xs" + (settings.drive.copy.from < 0.5 && settings.drive.copy.to >= (settings.source?.duration ?? videoDur) - 0.5 ? " whole" : "")}>
       <span className="pill-copy">{t("Drive copy")}</span>
       <span className="mono">{fmtLength(settings.drive.copy.from)} → {fmtLength(settings.drive.copy.to)}</span>
       {copyState?.hint && <Hint text={copyState.hint} />}
@@ -3388,11 +3389,11 @@ export default function VideoStudio({
             {clips.map((c) => c.id !== clip.id ? (
               <div key={c.id} className={"clip-card ghost" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
                 <MediaTile icon="film" label={t("Camera video")} name={c.videoName ?? null}
-                  meta={c.videoName ? <>
-                    {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
-                    {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
-                    {c.drive?.copy && <span className="pill-copy">{t("Drive copy")}</span>}
-                  </> : undefined} />
+                  aside={c.source?.duration ? <>
+                    <span className="mono">{fmtLength(c.source.duration)}</span>
+                    {c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
+                  </> : undefined}
+                  meta={c.drive?.copy ? <span className="pill-copy">{t("Drive copy")}</span> : undefined} />
                 {/* Over the card, darkened behind it: a pill to make it the studio's video. */}
                 <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
               </div>
@@ -3415,11 +3416,16 @@ export default function VideoStudio({
               const missing = !videoBlob && !!settings.videoName;
               return (
                 <MediaTile icon="film" label={t("Camera video")} name={settings.videoName ?? null} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                  aside={!missing && settings.videoName && videoDur > 0 ? <>
+                    <span className="mono">{fmtLength(onCopy && src?.duration ? src.duration : videoDur)}</span>
+                    {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
+                  </> : undefined}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
-                      {videoDur > 0 ? <span className="mono">{fmtLength(onCopy && src?.duration ? src.duration : videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
-                      {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
+                      {/* (On the phone's strip, the length and the format are beside the name: not again here.) */}
+                      {videoDur > 0 ? <span className="mono beside-name">{fmtLength(onCopy && src?.duration ? src.duration : videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
+                      {src && <span className="row beside-name" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
                       {d.originalId && !onCopy && <span>Drive</span>}
                       {/* The copy of the take: the same words as under the preview. */}
                       {copyStatusEl(true)}
@@ -4439,8 +4445,10 @@ export default function VideoStudio({
 }
 
 /** One file of the clip (the audio, the camera video): the same tile for both, empty or filled. */
-function MediaTile({ icon, label, name, meta, menu, warn, loading, children }: {
+function MediaTile({ icon, label, name, meta, menu, warn, loading, aside, children }: {
   icon: string; label: string; name: string | null; warn?: boolean;
+  /** Beside the name, on its right (the phone's library strip: the length and the format there). */
+  aside?: ReactNode;
   /** Still opening (or on its way to / from the Drive): the tile shines. */
   loading?: boolean;
   meta?: ReactNode; menu?: false | null | "" | ((close: () => void) => ReactNode); children?: ReactNode;
@@ -4454,6 +4462,7 @@ function MediaTile({ icon, label, name, meta, menu, warn, loading, children }: {
           <span className="label">{label}</span>
           {name ? <span className="media-name" title={name}>{name}</span> : <span className="muted xs">{t("Drop it here, or:")}</span>}
         </div>
+        {aside && <span className="media-aside">{aside}</span>}
         {menu && <Menu float trigger={(_, toggle) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={toggle}><Icon name="more" /></button>}>{menu}</Menu>}
       </div>
       {meta && <div className="media-meta">{meta}</div>}
