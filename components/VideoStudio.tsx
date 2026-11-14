@@ -1104,9 +1104,9 @@ export default function VideoStudio({
   const copyState = ((): null | { text: string; p: number; busy?: boolean; ok?: boolean; bad?: boolean; action?: { label: string; run: () => void }; hint?: string } => {
     const cp = settings.drive?.copy;
     const q = cp?.tenBit ? t("10-bit, as filmed") : t("1080p+, as filmed");
-    if (onCopy && cp) return { text: t("You work on the Drive copy ({from} → {to})", { from: fmtLength(cp.from), to: fmtLength(cp.to) }), p: 1,
-      action: { label: t("Link the original"), run: () => document.getElementById("video-original")?.click() },
-      hint: t("The camera file is not in this browser (imported on another device, in another browser, or at another address of the app: a website never sees your files by itself). You work here on its copy from your Drive ({quality}, the passage used). If the original is on this computer, “Link the original” plugs it back: the sync and the settings are kept.", { quality: q }) };
+    // (Linking the original is in the video's "⋯" menu, in the library: not again here.)
+    if (onCopy && cp) return { text: t("You work on the Drive copy"), p: 1,
+      hint: t("The camera file is not in this browser (imported on another device, in another browser, or at another address of the app: a website never sees your files by itself). You work here on its copy from your Drive ({quality}, the passage used). If the original is on this computer, “Link the original file” (the video's ⋯ menu, in the library) plugs it back: the sync and the settings are kept.", { quality: q }) };
     if (copyJob?.clip === clip.id) return { text: copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) }),
       p: copyJob.p, busy: true, hint: t("Keep this page open until it is done: leaving it stops the copy (it starts again next time).") };
     if (copyJob) return { text: t("Another video's copy first: {video}", { video: copyJob.label }), p: 0, busy: true };
