@@ -531,3 +531,83 @@ export function mixToMono(channels: Float32Array[]): Float32Array {
   for (const ch of channels) for (let i = 0; i < out.length; i++) out[i] += ch[i] / channels.length;
   return out;
 }
+
+// ------------------------------------------------- two versions of a track ----
+
+/** A moment of an earlier version of the track and where it is in the new one (seconds), with how well it matched. */
+export interface TrackAnchor { old: number; new: number; score: number }
+
+const ALIGN_CHUNK = 4 * FPS; // 4 s excerpts of the earlier version…
+const ALIGN_HOP = FPS; // …one every second
+const ALIGN_MIN = 0.3; // a weaker match is not the same music
+const ALIGN_JUMP = 0.8; // what a cut / an addition costs on the chosen path (a whole match is worth up to 1)
+
+/**
+ * Where every second of an earlier version of a song (a demo, a pre-master) is in its new version (the master): each
+ * 4 s excerpt is looked for in the whole new track, then one path is chosen through the matches, keeping the same
+ * shift from one excerpt to the next unless the music says otherwise (a cut, an added bar, a longer intro): a chorus
+ * repeated in the song never sends one excerpt to the wrong one. Silent excerpts are skipped; the ones that match
+ * nowhere (a part removed, rewritten) are left out. The anchors are at the excerpts' middles, in order.
+ */
+export function alignTracks(oldSamples: Float32Array, oldRate: number, newSamples: Float32Array, newRate: number): TrackAnchor[] {
+  const a = featuresOf(oldSamples, oldRate), b = featuresOf(newSamples, newRate);
+  const n = Math.min(ALIGN_CHUNK, a.frames);
+  if (n < 2 * FPS || b.frames < n + 1) return [];
+  const cum = new Float64Array(b.frames + 1);
+  for (let i = 0; i < b.frames; i++) cum[i + 1] = cum[i] + b.energy[i];
+
+  // Every excerpt (not silent): its candidate places in the new track, or none (it matches nowhere).
+  interface Cand { lag: number; score: number }
+  const steps: { at: number; cands: Cand[] }[] = [];
+  const starts: number[] = [];
+  for (let s = 0; s + n <= a.frames; s += ALIGN_HOP) starts.push(s);
+  if (starts[starts.length - 1] !== a.frames - n) starts.push(a.frames - n);
+  for (const s of starts) {
+    const m = matchChunk(a, s, n, b, cum);
+    if (!m) continue; // silence: says nothing
+    steps.push({ at: s, cands: m.peaks.filter((p) => p.score >= ALIGN_MIN).map((p) => ({ lag: p.lag, score: p.score })) });
+  }
+  if (!steps.length) return [];
+  // What a true match scores between these two versions (a remaster with new vocals scores lower all along): a
+  // match counts by how much it beats three quarters of that, so a place that only looks like it (the same chords,
+  // the same drum loop elsewhere in the song) never wins over "matches nowhere".
+  const tops = steps.filter((st) => st.cands.length).map((st) => st.cands[0].score).sort((x, y) => x - y);
+  const bar = tops.length ? 0.75 * tops[Math.floor(tops.length / 2)] : ALIGN_MIN;
+
+  // The path (Viterbi): each step on one of its candidates or on "none". Same shift as the step before: free; a
+  // little drift (a tempo nudged): almost free; another shift (a cut, an addition): ALIGN_JUMP; "none" costs half a
+  // jump to enter and half to leave, so going through it is never a way around a jump.
+  const NONE = -1;
+  const best: number[][] = [], from: number[][] = [];
+  steps.forEach((st, i) => {
+    const k = st.cands.length;
+    const cur = new Array(k + 1).fill(-Infinity), back = new Array(k + 1).fill(NONE);
+    for (let c = 0; c <= k; c++) {
+      const gain = c < k ? st.cands[c].score - bar : 0;
+      if (i === 0) { cur[c] = gain; continue; }
+      const prev = steps[i - 1], pb = best[i - 1];
+      for (let p = 0; p <= prev.cands.length; p++) {
+        if (pb[p] === -Infinity) continue;
+        let cost = 0;
+        const pNone = p === prev.cands.length, cNone = c === k;
+        if (pNone !== cNone) cost = ALIGN_JUMP / 2;
+        else if (!pNone) {
+          const d = Math.abs((st.cands[c].lag - st.at) - (prev.cands[p].lag - prev.at)); // change of shift, frames
+          cost = d <= 2 ? 0 : d <= 4 ? 0.1 : ALIGN_JUMP;
+        }
+        const v = pb[p] + gain - cost;
+        if (v > cur[c]) { cur[c] = v; back[c] = p; }
+      }
+    }
+    best.push(cur); from.push(back);
+  });
+  const last = best.length - 1;
+  let c = best[last].indexOf(Math.max(...best[last]));
+  const out: TrackAnchor[] = [];
+  for (let i = last; i >= 0 && c >= 0; i--) {
+    const st = steps[i];
+    if (c < st.cands.length) out.push({ old: (st.at + n / 2) / FPS, new: (st.cands[c].lag + n / 2) / FPS, score: st.cands[c].score });
+    c = from[i][c];
+  }
+  return out.reverse();
+}

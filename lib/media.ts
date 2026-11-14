@@ -1,7 +1,7 @@
 /** Audio helpers for the video studio. Everything runs in the browser: no file ever leaves the device. */
 
 import { mixToMono } from "./syncAudio";
-export { syncAudio, mixToMono, NO_SYNC } from "./syncAudio";
+export { alignTracks, syncAudio, mixToMono, NO_SYNC } from "./syncAudio";
 export type { SyncResult, Focus, Take } from "./syncAudio";
 
 const monoCache = new WeakMap<AudioBuffer, Float32Array>();

@@ -7,7 +7,8 @@ import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
-import { autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
+import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
+import { coverage, remapProject, trackMap, type RemapReport } from "@/lib/audioRemap";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -1244,8 +1245,21 @@ export default function VideoStudio({
     return () => clearTimeout(id);
   }, [note]);
 
-  /** Import the official audio. `driveId`: picked from Google Drive, so it can be fetched again anywhere. */
-  const pickAudio = async (f: File, driveId?: string) => {
+  /** Another audio over the one there: a new version of the same song (all follows), or another song (starts over). */
+  const [audioAsk, setAudioAsk] = useState<{ f: File; driveId?: string; busy?: boolean } | null>(null);
+  const [remapReport, setRemapReport] = useState<(RemapReport & { notSame?: boolean }) | null>(null);
+  /**
+   * Import the official audio. `driveId`: picked from Google Drive, so it can be fetched again anywhere. Over another
+   * audio: asked first whether it is a new version of the same song (`mode`): "version", every video, version and
+   * lyric of the release moves to where the same music is in it (lib/audioRemap); "other", their timings start over.
+   */
+  const pickAudio = async (f: File, driveId?: string, mode?: "version" | "other") => {
+    // Same file again (lost from this device, or another computer): the lyrics timing and the sync stay.
+    const same = project.audioSize === f.size && project.audioName === f.name;
+    const oldBuf = audioBuf;
+    if (!same && oldBuf && !mode) { setAudioAsk({ f, driveId }); return; }
+    const following = !same && mode === "version" && !!oldBuf;
+    if (following) setAudioAsk({ f, driveId, busy: true });
     const token = ++ioRef.current;
     syncRef.current?.abort();
     stop();
@@ -1253,17 +1267,20 @@ export default function VideoStudio({
     setAudioBlob(f);
     setAudioBuf(null);
     setPeaks([]);
-    // Same file again (lost from this device, or another computer): the lyrics timing and the sync stay.
-    // Another file: its timings are void; the pasted lyrics stay.
-    const same = project.audioSize === f.size && project.audioName === f.name;
     // Another audio replaces this one: the previous file of the release goes to the Drive's bin (if no other
     // release uses it), so its Audios folder never piles up versions.
     const old = !same && !driveId ? project.audioDriveId : undefined;
     if (old && !audioUsedElsewhere?.(old)) void trashDriveFile(old);
+    const restart = () => {
+      onProject((p) => ({ ...p, heardWords: undefined, lyricWords: undefined }));
+      setV({ offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+    };
     onProject((p) => (same
       ? { ...p, audioName: f.name, audioDriveId: driveId ?? p.audioDriveId }
-      : { ...p, audioName: f.name, audioSize: f.size, audioDriveId: driveId, heardWords: undefined, lyricWords: undefined }));
-    if (!same) setV({ audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
+      : { ...p, audioName: f.name, audioSize: f.size, audioDriveId: driveId }));
+    if (!same) setV({ audioName: f.name });
+    // Another song: its timings are void (the pasted lyrics stay). A new version: they follow, once it is read.
+    if (!same && !following) restart();
     void askPersistentStorage();
     try { await putMedia(projectAudioKey, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
@@ -1272,6 +1289,28 @@ export default function VideoStudio({
       if (token !== ioRef.current) return;
       setAudioBuf(buf);
       setPeaks(peaksOf(buf.getChannelData(0)));
+      if (following) {
+        // Where the music of the earlier version is in this one (a few seconds: the dialog says so meanwhile).
+        await new Promise((r) => setTimeout(r, 40));
+        const map = trackMap(alignTracks(monoOf(oldBuf), oldBuf.sampleRate, monoOf(buf), buf.sampleRate), oldBuf.duration, buf.duration);
+        if (token !== ioRef.current) return;
+        if (coverage(map) < 0.4) {
+          // Not the same song after all: nothing to follow, its timings start over.
+          restart();
+          setRemapReport({ shift: null, coverage: coverage(map), videos: [], words: { moved: 0, dropped: 0 }, notSame: true });
+        } else {
+          let report: RemapReport | null = null;
+          onProject((p) => {
+            const r = remapProject(p, map);
+            report = r.report;
+            return { ...r.project, videos: r.project.videos.map((v) => ({ ...v, audioName: f.name })) };
+          });
+          setRemapReport(report);
+        }
+        setAudioAsk(null);
+        onSaveNow();
+        return;
+      }
       const cur = settingsRef.current;
       const d = Math.min(cur.crop.duration, buf.duration);
       const start = Math.max(0, Math.min(cur.crop.start, buf.duration - d));
@@ -1280,6 +1319,8 @@ export default function VideoStudio({
       onSaveNow();
     } catch {
       if (token === ioRef.current) setErr(t("Could not read this audio file."));
+    } finally {
+      if (following && token === ioRef.current) setAudioAsk(null);
     }
   };
 
@@ -4393,6 +4434,47 @@ export default function VideoStudio({
         <ConfirmDialog danger title={t("Delete this video")} confirmLabel={t("Delete")}
           message={t("“{name}” and its camera file will be removed from this release. The official audio, the lyrics and the other videos stay as they are.", { name: clipName(clip) })}
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
+      )}
+      {/* Another audio over the release's: a new version of the same song (everything follows) or another song. */}
+      {audioAsk && (
+        <Modal title={t("Replace the audio")} onClose={() => { if (!audioAsk.busy) setAudioAsk(null); }}>
+          {audioAsk.busy ? (
+            <p className="shine">{t("Finding the music of the earlier version in the new one…")}</p>
+          ) : (<>
+            <p>{t("Is “{name}” a new version of the same song (the master after a demo, a new mix, a longer intro)?", { name: audioAsk.f.name })}</p>
+            <p className="muted sm">{t("A new version: every video of the release, its segments, its takes and the lyrics move to where the same music is in it, even if parts changed length. Another song: their timing starts over.")}</p>
+            <div className="modal-foot">
+              <button className="btn left" onClick={() => { const a = audioAsk; setAudioAsk(null); void pickAudio(a.f, a.driveId, "other"); }}>{t("Another song")}</button>
+              <button className="btn primary" onClick={() => void pickAudio(audioAsk.f, audioAsk.driveId, "version")}>{t("New version of this song")}</button>
+            </div>
+          </>)}
+        </Modal>
+      )}
+      {remapReport && (
+        <Modal title={t("New version of the audio")} onClose={() => setRemapReport(null)}>
+          {remapReport.notSame ? (
+            <p className="notice warn">{t("This audio does not look like a version of the same song: nothing could follow it. The sync of this video and the lyrics' timing start over.")}</p>
+          ) : (<>
+            <p>{remapReport.shift === 0 ? t("Same timing as before: nothing had to move.")
+              : remapReport.shift !== null ? t(remapReport.shift > 0 ? "Same timing, {s} s later: everything moved with it." : "Same timing, {s} s earlier: everything moved with it.", { s: Math.abs(remapReport.shift).toFixed(2) })
+                : t("Some parts changed: everything moved to where the same music is.")}</p>
+            {remapReport.videos.length > 0 && (
+              <div className="remap-list">
+                {remapReport.videos.map((v) => (
+                  <div key={v.id} className="row nowrap remap-row">
+                    <span className="grow truncate">{v.name}</span>
+                    <span className={"remap-st " + v.status}>{v.status === "same" ? t("Unchanged") : v.status === "moved" ? t("Moved") : v.status === "check" ? t("To check") : t("Passage gone")}</span>
+                    {v.versions.length > 0 && <span className="muted xs">{t(v.versions.length > 1 ? "versions {names}" : "version {names}", { names: v.versions.map((x) => x.name).join(", ") })}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {remapReport.videos.some((v) => v.status === "check") && <p className="muted sm">{t("To check: its segment covers a part that changed length; it moved with its middle. Play it to see if the take is still on the music (else Resync).")}</p>}
+            {remapReport.videos.some((v) => v.status === "gone") && <p className="muted sm">{t("Passage gone: its segment is in a part that is no longer in the audio; it stayed where it was. Pick another segment.")}</p>}
+            {remapReport.words.dropped > 0 && <p className="muted sm">{remapReport.words.dropped === 1 ? t("1 word of the lyrics was in a part that is no longer there: removed.") : t("{n} words of the lyrics were in a part that is no longer there: removed.", { n: remapReport.words.dropped })}</p>}
+          </>)}
+          <div className="modal-foot"><button className="btn primary" onClick={() => setRemapReport(null)}>{t("OK")}</button></div>
+        </Modal>
       )}
       {clearAsk && (
         <ConfirmDialog danger title={t("Clear the timing")} confirmLabel={t("Clear")}

@@ -2546,6 +2546,13 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .hook-src-btn { width: 100%; }
 .hook-head .hook-gen { margin-left: 6px; flex: none; }
 .hook-item .hook-del { margin-left: auto; }
+/* A new version of the audio: what became of each video. */
+.remap-list { display: grid; gap: 1px; margin: var(--s3) 0; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.remap-row { gap: var(--s2); padding: 9px 12px; background: var(--panel); font-size: var(--fs-sm); }
+.remap-st { flex: none; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.remap-st.moved { color: var(--text); }
+.remap-st.check { color: var(--warn); }
+.remap-st.gone { color: var(--danger); }
 
 /* The full screen of both studios (a slide, the video): the blurred dark, the picture with its cross at its top
    right, its bar under it. The video's keeps room for its player under it. */
