@@ -710,6 +710,8 @@ export const FR: Record<string, string> = {
   "Move to": "Déplacer vers",
   "Help": "Aide",
   "Sign in": "Se connecter",
+  "without {tag}": "sans {tag}",
+  "without {n} tags": "sans {n} tags",
   "Finding the music of each video in this version…": "Je retrouve la musique de chaque vidéo dans cette version…",
   "This version of the audio could not be read on this device (nor fetched from the Drive).": "Cette version de l'audio n'a pas pu être lue sur cet appareil (ni récupérée sur le Drive).",
   "“{name}” is in the library: pick it for a video when you need it.": "« {name} » est dans la bibliothèque : choisis-la pour une vidéo quand tu en as besoin.",

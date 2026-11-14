@@ -213,7 +213,8 @@ export function Menu({ trigger, children, left, float, portal }: {
   // Placed: the line already picked (a hook in its list…) comes to the middle of what scrolls around it, so the
   // menu opens on it. Only the menu's own parts scroll (never the page: that would close it).
   useLayoutEffect(() => {
-    const m = menu.current, on = place && m?.querySelector<HTMLElement>(".pick-line.on");
+    // (The last one: in a source's menu, the text or photo picked, after its list and tags.)
+    const m = menu.current, on = place ? [...(m?.querySelectorAll<HTMLElement>(".pick-line.on") ?? [])].pop() : undefined;
     if (!m || !on) return;
     for (let box = on.parentElement; box && m.contains(box); box = box.parentElement) {
       if (box.scrollHeight <= box.clientHeight + 1) continue;

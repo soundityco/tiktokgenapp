@@ -15,7 +15,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { probeVideo } from "@/lib/probe";
-import { byTagName, compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
+import { compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
 import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
@@ -31,9 +31,9 @@ import { presetOf, StylePresets, TextQuickMenu, withPreset } from "./TextControl
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
-import { themeLabel } from "@/lib/themes";
 import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { ConfirmDialog, ContextMenu, Hint, MatteSelect, Menu, Modal, PromptDialog, Range, Section, Select, Switch, TagChip } from "./ui";
+import { SourceButton, tagSummary, TagChips } from "./SourcePick";
+import { ConfirmDialog, ContextMenu, Hint, MatteSelect, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
 import { FullView } from "./FullView";
 import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from "./StyleSheet";
@@ -4280,17 +4280,13 @@ export default function VideoStudio({
                   {/* Its name, where it is drawn from (list · tags), then its actions as icons: another one, one picked in the list, remove. */}
                   <div className="row nowrap hook-head">
                     <span className="hook-num" title={t("Hook {n}", { n: i + 1 })}>#{i + 1}</span>
+                    {/* Where from (its list and tags), then which one (the list, opened on this hook): as on a slide. */}
                     {hookPools.length > 0 && (
                       <Menu float trigger={(open, toggle) => (
-                        <button type="button" className={"input sm pick-btn hook-src-btn" + (open ? " on" : "")} onClick={toggle}
-                          aria-label={t("List and tags of this hook")} title={t("List and tags of this hook")}>
-                          <span className="truncate">{src.pool?.name ?? ""}{src.ticked.length ? " · " + (src.ticked.length === 1 ? themeLabel(src.ticked[0], t) : t("{n} tags", { n: src.ticked.length })) : ""}</span>
-                          <Icon name="chevron" size={13} />
-                        </button>
+                        <SourceButton open={open} onClick={toggle} label={t("List and tags of this hook")} name={src.pool?.name ?? ""} sub={tagSummary(src.ticked, src.notTicked, t) || undefined} />
                       )}>
-                        {() => (
+                        {(close) => (
                           <div className="pick-pane">
-                            {/* Two parts: the list, then its tags. */}
                             <div className="pick-sec">
                               <span className="pick-k">{t("List")}</span>
                               <div className="pick-list">
@@ -4303,39 +4299,27 @@ export default function VideoStudio({
                             </div>
                             <div className="pick-sec">
                               <span className="pick-k">{t("Tags")}</span>
-                              {src.groups.length > 1 ? (
-                                <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                                  <button className={"pick-chip" + (!src.ticked.length && !src.notTicked.length ? " on" : "")} onClick={() => setTags({ tags: [], not: [] })}>{t("All ({n})", { n: src.count })}</button>
-                                  {byTagName(src.groups, (g) => g.id, (id) => themeLabel(id, t)).map((g) => (
-                                    <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length}
-                                      state={src.ticked.includes(g.id) ? "on" : src.notTicked.includes(g.id) ? "not" : undefined}
-                                      onTick={() => setTags(tagStep(src.ticked, src.notTicked, g.id, "tick"))} onNot={() => setTags(tagStep(src.ticked, src.notTicked, g.id, "not"))} />
+                              {src.groups.length > 1 ? <TagChips groups={src.groups} ticked={src.ticked} not={src.notTicked} count={src.count} onChange={setTags} />
+                                : <p className="muted xs">{t("No tags in this list yet.")}</p>}
+                            </div>
+                            {/* Which one: the list's hooks (the tags' ones), this one ticked (the menu opens on it). */}
+                            {src.items.length > 0 && (
+                              <div className="pick-sec">
+                                <span className="pick-k">{t("Hooks")} <span className="pick-n">{src.items.length}</span></span>
+                                <div className="pick-list">
+                                  {[...src.items].sort(compareTexts).map((x, k) => (
+                                    <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
+                                      <span className="dd-check" aria-hidden>{x === h.text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
+                                    </button>
                                   ))}
                                 </div>
-                              ) : <p className="muted xs">{t("No tags in this list yet.")}</p>}
-                            </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </Menu>
                     )}
                     <span className="grow" />
-                    {src.items.length > 0 && (
-                      <Menu float trigger={(open, toggle) => (
-                        <button className={"btn sm icon quiet" + (open ? " on" : "")} onClick={toggle} aria-label={t("Pick from the list")} title={t("Pick from the list")}><Icon name="list" size={14} /></button>
-                      )}>
-                        {(close) => (
-                          <div className="pick-pane">
-                            <div className="pick-list">
-                              {[...src.items].sort(compareTexts).map((x, k) => (
-                                <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
-                                  <span className="dd-check" aria-hidden>{x === h.text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </Menu>
-                    )}
                     {src.items.length > 0 && (
                       <button className="btn sm primary hook-gen" onClick={() => drawInto(h.id)} title={t("Another hook from its list and tags")}><Icon name="sparkle" size={13} />{t("Generate")}</button>
                     )}

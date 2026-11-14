@@ -1,15 +1,15 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useT } from "@/lib/i18n";
+import { SourceButton, tagSummary, TagChips } from "./SourcePick";
 import Icon from "./Icon";
-import { ContextMenu, Hint, Menu, Select, Switch, TagChip, Wheel } from "./ui";
+import { ContextMenu, Hint, Menu, Switch, Wheel } from "./ui";
 import { TextQuickMenu } from "./TextControls";
 import { clamp, clampPic, renderSlide, snapPic, TextBox, zoomPic } from "@/lib/render";
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
 import { type AIProgress, type AIStep, coversFrame, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
-import { byTagName, compareTexts, poolTags, sourceTags, tagGroups, tagStep, textItems } from "@/lib/generate";
-import { themeLabel } from "@/lib/themes";
+import { compareTexts, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { isLineList } from "@/lib/defaults";
 import ImageFinder from "./ImageFinder";
@@ -407,30 +407,6 @@ export default function SlideCard(p: Props) {
   const tickSection = (id: string, on: boolean) => lyricSrc && p.onCfg((c) => ({ ...c, textSource: { ...lyricSrc, sectionId: undefined,
     sectionIds: p.lyrics.map((l) => l.id).filter((x) => (x === id ? on : lyricTicked.includes(x))) } }));
   const lyricNames = p.lyrics.filter((l) => lyricTicked.includes(l.id)).map((l) => l.name);
-  const lyricsPick = !lyricSrc ? null : !p.lyrics.length ? (
-    <button className="btn sm pick-add" onClick={p.onEditLyrics}><Icon name="plus" size={13} />{t("Add the lyrics")}</button>
-  ) : (
-    <Menu float left trigger={(open, toggle) => (
-      <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} title={lyricNames.join(", ")} aria-label={t("Sections")}>
-        <span className="truncate">{lyricNames.length ? lyricNames.join(" · ") : t("None ticked")}</span><Icon name="chevron" size={13} />
-      </button>
-    )}>
-      {() => (<div className="pick-pane" onClick={(e) => e.stopPropagation()}>
-        <div className="pick-list">
-          {p.lyrics.map((l) => {
-            const on = lyricTicked.includes(l.id);
-            return (
-              <button key={l.id} className={"pick-line" + (on ? " on" : "")} title={l.text.slice(0, 200)} aria-pressed={on} onClick={() => tickSection(l.id, !on)}>
-                <span className="dd-check" aria-hidden>{on ? "✓" : ""}</span><span>{l.name}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="sep" />
-        <button className="pick-line" onClick={p.onEditLyrics}><Icon name="pencil" size={12} /><span>{t("Edit the lyrics…")}</span></button>
-      </div>)}
-    </Menu>
-  );
 
   // Under the picture: the slide's text and sources. On a phone they show once, under the deck (part "fields"),
   // so they fade in place instead of sliding with the cards.
@@ -464,37 +440,58 @@ export default function SlideCard(p: Props) {
               onClick={(e) => { e.preventDefault(); p.onLyricsBack(); }}><Icon name="undo" size={11} /></button>
           </>)}
           </div>
-          <Select className="input" value={textVal} onChange={(e) => {
-            const v = e.target.value;
-            // Lyrics: "Lyrics:" on top of the text, in the app's language (to retouch on the slide like the rest).
-            p.onCfg((c) => ({ ...c, textSource: v === "" ? { kind: "none" } : v === "__lyrics" ? { kind: "lyrics", header: t("Lyrics:") } : { kind: "pool", poolId: v } }));
-          }}>
-            <option value="">{t("No text")}</option>
-            <option value="__lyrics">{t("Lyrics")}</option>
-            {p.textPools.filter((x) => x.kind !== "block" || x.id === textVal).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </Select>
-          {!p.locked && (
-          cfg.textSource.kind === "pool" && allItems.length > 0 ? (
-              <Menu float left trigger={(open, toggle) => (
-                <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Pick from the list")}>
-                  <span className="truncate">{listItems.includes(text) ? text.replace(/\|/g, " ") : text.trim() ? t("Text retouched") : t("Pick a text")}</span>
-                  {ticked?.length ? <span className="pick-tag">{ticked.length === 1 ? themeLabel(ticked[0], t) : t("{n} tags", { n: ticked.length })}</span>
-                    : notTicked.length > 0 && <span className="pick-tag">{notTicked.length === 1 ? t("1 excluded") : t("{n} excluded", { n: notTicked.length })}</span>}
-                  <Icon name="chevron" size={13} />
-                </button>
-              )}>
-                {(close) => (
-                  <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
-                    {groups.length > 1 && (
-                      <div className="pick-chips" role="group" aria-label={t("Tags")}>
-                        <button className={"pick-chip" + (!ticked?.length && !notTicked.length ? " on" : "")} onClick={() => setTags({ tags: [], not: [] })}>{t("All ({n})", { n: allItems.length })}</button>
-                        {byTagName(groups, (g) => g.id, (id) => themeLabel(id, t)).map((g) => (
-                          <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length}
-                            state={ticked?.includes(g.id) ? "on" : notTicked.includes(g.id) ? "not" : undefined}
-                            onTick={() => setTags(tagStep(ticked ?? [], notTicked, g.id, "tick"))} onNot={() => setTags(tagStep(ticked ?? [], notTicked, g.id, "not"))} />
-                        ))}
-                      </div>
-                    )}
+          {/* Where from: the text's list (none, the release's lyrics, a list) with its tags, or the lyrics' sections. */}
+          <Menu float left trigger={(open, toggle) => (
+            <SourceButton open={open} onClick={toggle} label={t("Text from")}
+              name={cfg.textSource.kind === "lyrics" ? t("Lyrics") : listPool?.name ?? t("No text")}
+              sub={lyricSrc ? (p.lyrics.length ? (lyricNames.length ? lyricNames.join(" · ") : t("None ticked")) : undefined) : tagSummary(ticked ?? [], notTicked, t) || undefined} />
+          )}>
+            {(close) => (
+              <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+                <div className="pick-sec">
+                  <span className="pick-k">{t("List")}</span>
+                  <div className="pick-list">
+                    {[
+                      { v: "", name: t("No text") },
+                      { v: "__lyrics", name: t("Lyrics") },
+                      ...p.textPools.filter((x) => x.kind !== "block" || x.id === textVal).map((x) => ({ v: x.id, name: x.name, n: textItems(x).length })),
+                    ].map((o) => (
+                      <button key={o.v || "none"} className={"pick-line" + (o.v === textVal ? " on" : "")} onClick={() => {
+                        if (o.v === textVal) return;
+                        // Lyrics: "Lyrics:" on top of the text, in the app's language (to retouch on the slide like the rest).
+                        p.onCfg((c) => ({ ...c, textSource: o.v === "" ? { kind: "none" } : o.v === "__lyrics" ? { kind: "lyrics", header: t("Lyrics:") } : { kind: "pool", poolId: o.v } }));
+                      }}>
+                        <span className="dd-check" aria-hidden>{o.v === textVal ? "✓" : ""}</span><span>{o.name}</span>{"n" in o && <span className="pick-n">{o.n}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {cfg.textSource.kind === "pool" && groups.length > 1 && (
+                  <div className="pick-sec">
+                    <span className="pick-k">{t("Tags")}</span>
+                    <TagChips groups={groups} ticked={ticked ?? []} not={notTicked} count={allItems.length} onChange={setTags} />
+                  </div>
+                )}
+                {lyricSrc && p.lyrics.length > 0 && (
+                  <div className="pick-sec">
+                    <span className="pick-k">{t("Sections")}</span>
+                    <div className="pick-list">
+                      {p.lyrics.map((l) => {
+                        const on = lyricTicked.includes(l.id);
+                        return (
+                          <button key={l.id} className={"pick-line" + (on ? " on" : "")} title={l.text.slice(0, 200)} aria-pressed={on} onClick={() => tickSection(l.id, !on)}>
+                            <span className="dd-check" aria-hidden>{on ? "✓" : ""}</span><span>{l.name}</span>
+                          </button>
+                        );
+                      })}
+                      <button className="pick-line" onClick={p.onEditLyrics}><Icon name="pencil" size={12} /><span>{t("Edit the lyrics…")}</span></button>
+                    </div>
+                  </div>
+                )}
+                {/* Which one: the list's texts (the tags' ones), the slide's ticked (the menu opens on it). */}
+                {!p.locked && cfg.textSource.kind === "pool" && listItems.length > 0 && (
+                  <div className="pick-sec">
+                    <span className="pick-k">{t("Texts")} <span className="pick-n">{listItems.length}</span></span>
                     <div className="pick-list">
                       {[...listItems].sort(compareTexts).map((x, k) => (
                         <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
@@ -504,8 +501,11 @@ export default function SlideCard(p: Props) {
                     </div>
                   </div>
                 )}
-              </Menu>
-            ) : lyricsPick
+              </div>
+            )}
+          </Menu>
+          {!p.locked && lyricSrc && !p.lyrics.length && (
+            <button className="btn sm pick-add" onClick={p.onEditLyrics}><Icon name="plus" size={13} />{t("Add the lyrics")}</button>
           )}
         </div>
         <div className="src-tile src-photo">
@@ -513,37 +513,45 @@ export default function SlideCard(p: Props) {
             <span className={"src-ico" + (p.gen?.picId ? " has-pic" : "")} aria-hidden>{p.gen?.picId ? <Thumb id={p.gen.picId} name={p.gen.picName ?? ""} /> : <Icon name="image" size={14} />}</span>
             <span className="src-k" title={t("Photo from")}>{t("Photo")}</span>
           </div>
-          <Select className="input" value={cfg.picPoolId ?? ""} onChange={(e) => {
-            const v = e.target.value || null;
-            p.onCfg((c) => ({ ...c, picPoolId: v }));
-            // Another list: the slide takes a photo drawn from it at once (none for "No photo").
-            if (!p.locked) p.onRerollPic();
-          }}>
-            <option value="">{t("No photo")}</option>
-            {p.picPools.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </Select>
-          {!p.locked && (
-          pool && pool.pics.length > 0 && p.onChoosePic ? (
-              <Menu float trigger={(open, toggle) => (
-                <button type="button" className={"input pick-btn" + (open ? " on" : "")} onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={t("Choose the photo")}>
-                  <span className="truncate">{p.gen?.picName ?? t("Choose the photo")}</span>
-                  <Icon name="chevron" size={13} />
-                </button>
-              )}>
-                {(close) => (
-                  <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+          {/* Where from (a photo list), then which one (its photos, the slide's framed): one button, as for the text. */}
+          <Menu float trigger={(open, toggle) => (
+            <SourceButton open={open} onClick={toggle} label={t("Photo from")} name={pool?.name ?? t("No photo")} />
+          )}>
+            {(close) => (
+              <div className="pick-pane" onClick={(e) => e.stopPropagation()}>
+                <div className="pick-sec">
+                  <span className="pick-k">{t("List")}</span>
+                  <div className="pick-list">
+                    {[{ v: "", name: t("No photo"), n: undefined as number | undefined }, ...p.picPools.map((x) => ({ v: x.id, name: x.name, n: x.pics.length }))].map((o) => {
+                      const on = o.v === (cfg.picPoolId ?? "");
+                      return (
+                        <button key={o.v || "none"} className={"pick-line" + (on ? " on" : "")} onClick={() => {
+                          if (on) return;
+                          p.onCfg((c) => ({ ...c, picPoolId: o.v || null }));
+                          // Another list: the slide takes a photo drawn from it at once (none for "No photo").
+                          if (!p.locked) p.onRerollPic();
+                        }}>
+                          <span className="dd-check" aria-hidden>{on ? "✓" : ""}</span><span>{o.name}</span>{o.n !== undefined && <span className="pick-n">{o.n}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {!p.locked && pool && pool.pics.length > 0 && p.onChoosePic && (
+                  <div className="pick-sec">
+                    <span className="pick-k">{t("Photos")} <span className="pick-n">{pool.pics.length}</span></span>
                     <div className="pic-grid">
                       {pool.pics.map((x) => (
-                        <button key={x.id} className={"pic-cell" + (x.id === p.gen?.picId ? " on" : "")} title={x.name} onClick={() => { close(); p.onChoosePic!(x.id, x.name); }}>
+                        <button key={x.id} className={"pick-line pic-cell" + (x.id === p.gen?.picId ? " on" : "")} title={x.name} onClick={() => { close(); p.onChoosePic!(x.id, x.name); }}>
                           <Thumb id={x.id} name={x.name} />
                         </button>
                       ))}
                     </div>
                   </div>
                 )}
-              </Menu>
-            ) : null
-          )}
+              </div>
+            )}
+          </Menu>
         </div>
       </div>
   </>);
