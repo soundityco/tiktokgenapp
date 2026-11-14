@@ -7,7 +7,7 @@ import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
-import { autoLineTimes, decodeAudio, envelopeOf, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
+import { autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -1104,7 +1104,7 @@ export default function VideoStudio({
   const copyState = ((): null | { text: string; p: number; busy?: boolean; ok?: boolean; bad?: boolean; action?: { label: string; run: () => void }; hint?: string } => {
     const cp = settings.drive?.copy;
     const q = cp?.tenBit ? t("10-bit, as filmed") : t("1080p+, as filmed");
-    if (onCopy && cp) return { text: t("You work on the Drive copy ({from} → {to})", { from: fmtTime(cp.from), to: fmtTime(cp.to) }), p: 1,
+    if (onCopy && cp) return { text: t("You work on the Drive copy ({from} → {to})", { from: fmtLength(cp.from), to: fmtLength(cp.to) }), p: 1,
       action: { label: t("Link the original"), run: () => document.getElementById("video-original")?.click() },
       hint: t("The camera file is not in this browser (imported on another device, in another browser, or at another address of the app: a website never sees your files by itself). You work here on its copy from your Drive ({quality}, the passage used). If the original is on this computer, “Link the original” plugs it back: the sync and the settings are kept.", { quality: q }) };
     if (copyJob?.clip === clip.id) return { text: copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) }),
@@ -1125,7 +1125,7 @@ export default function VideoStudio({
     // The library's tile, on the copy: its badge and the part of the take it holds, on one line.
     <span className="copy-status compact on-copy xs">
       <span className="pill-copy">{t("Drive copy")}</span>
-      <span className="mono">{fmtTime(settings.drive.copy.from)} → {fmtTime(settings.drive.copy.to)}</span>
+      <span className="mono">{fmtLength(settings.drive.copy.from)} → {fmtLength(settings.drive.copy.to)}</span>
       {copyState?.hint && <Hint text={copyState.hint} />}
     </span>
   ) : copyState && (
@@ -3354,7 +3354,7 @@ export default function VideoStudio({
             <MediaTile icon="music" label={t("Official audio")} loading={!!audioBlob && !audioBuf}
               name={audioBlob ? (project.audioName ?? settings.audioName ?? t("Official audio")) : null}
               meta={audioBlob && (<>
-                {audioBuf ? <span className="mono">{fmtTime(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
+                {audioBuf ? <span className="mono">{fmtLength(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
                 {clips.length > 1 && <span>{t("For its {n} videos", { n: clips.length })}</span>}
                 {project.audioDriveId ? <span>Drive</span>
                   : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer for now: it goes to your Drive by itself as soon as Google Drive can be written to.")} /></span>}
@@ -3385,18 +3385,18 @@ export default function VideoStudio({
             </div>
             <div className={"clip-strip" + (clips.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}>
             {clips.map((c) => c.id !== clip.id ? (
-              <div key={c.id} className="clip-card ghost" data-clip={c.id}>
+              <div key={c.id} className={"clip-card ghost" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
                 <MediaTile icon="film" label={t("Camera video")} name={c.videoName ?? null}
                   meta={c.videoName ? <>
-                    {c.source?.duration ? <span className="mono">{fmtTime(c.source.duration)}</span> : null}
+                    {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
                     {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
                     {c.drive?.copy && <span className="pill-copy">{t("Drive copy")}</span>}
-                  </> : undefined}>
-                  <div className="row"><button className="btn sm" onClick={() => openClipCard(c.id)}>{t("Open in the studio")}</button></div>
-                </MediaTile>
+                  </> : undefined} />
+                {/* Over the whole card, in its middle: a pill to make it the studio's video. */}
+                <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
               </div>
             ) : (
-            <div key={c.id} className="clip-card" data-clip={c.id}>
+            <div key={c.id} className={"clip-card" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
             {(() => {
               const d = settings.drive ?? {};
               const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
@@ -3417,7 +3417,7 @@ export default function VideoStudio({
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
-                      {videoDur > 0 ? <span className="mono">{fmtTime(onCopy && src?.duration ? src.duration : videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
+                      {videoDur > 0 ? <span className="mono">{fmtLength(onCopy && src?.duration ? src.duration : videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
                       {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
                       {d.originalId && !onCopy && <span>Drive</span>}
                       {/* The copy of the take: the same words as under the preview. */}

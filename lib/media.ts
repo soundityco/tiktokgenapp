@@ -140,6 +140,11 @@ export async function decodeAudio(ctx: BaseAudioContext, blob: Blob): Promise<Au
   return await ctx.decodeAudioData(await blob.arrayBuffer());
 }
 
+/** A file's length, to the second ("1:13"): the library's tiles, where room is short. */
+export const fmtLength = (s: number) => {
+  const v = Math.max(0, Math.round(s));
+  return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}`;
+};
 export const fmtTime = (s: number) => {
   const v = Math.max(0, s);
   const m = Math.floor(v / 60);

@@ -2558,5 +2558,12 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   .clip-strip.many { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 calc(-1 * var(--s4)); padding: 0 var(--s4); scroll-padding: 0 var(--s4); }
   .clip-strip.many::-webkit-scrollbar { display: none; }
   .clip-strip.many > .clip-card { flex: 0 0 84%; min-width: 0; scroll-snap-align: center; }
-  .clip-strip.many > .clip-card.ghost { display: block; opacity: .45; transition: opacity .2s; }
+  /* The card in the middle lit, the others greyed (the studio's one too, once swiped away). */
+  .clip-strip.many > .clip-card { position: relative; opacity: .4; transition: opacity .2s; }
+  .clip-strip.many > .clip-card.shown { opacity: 1; }
+  .clip-strip.many > .clip-card.ghost { display: block; }
+  .clip-open { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 7px;
+    height: 34px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: var(--fs-sm);
+    white-space: nowrap; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+  .clip-card:not(.shown) .clip-open { pointer-events: none; }
 }
