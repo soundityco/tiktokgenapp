@@ -1130,10 +1130,10 @@ export default function VideoStudio({
       {copyState?.hint && <Hint text={copyState.hint} />}
     </span>
   ) : compact && copyState?.ok ? (
-    // The library's tile, the copy on the Drive and up to date (this device works on the original): a pill too, outlined
-    // with a ✓ (the filled one says the copy is the one in use); what it holds and how it was made in its (i).
+    // The library's tile, the copy on the Drive and up to date (this device works on the original): "Backed up", outlined
+    // with a ✓ (the filled "Drive copy" says the copy is the one in use); its (i): on the Drive, for the other devices.
     <span className="copy-status compact xs" title={copyState.text}>
-      <span className="pill-copy ready"><Icon name="check" size={10} />{t("Drive copy")}</span>
+      <span className="pill-copy ready"><Icon name="check" size={10} />{t("Backed up")}</span>
       {copyState.hint && <Hint text={copyState.hint} />}
     </span>
   ) : copyState && (

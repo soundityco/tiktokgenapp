@@ -751,6 +751,7 @@ export const FR: Record<string, string> = {
   "Text added to your list": "Texte ajouté à ta liste",
   "Link the original file": "Relier le fichier original",
   "You work on the Drive copy": "Tu travailles sur la copie Drive",
+  "Backed up": "Sauvegardée",
   "This is not the same camera file ({name}). Pick the original, or use “Replace” for another take.": "Ce n'est pas le même fichier caméra ({name}). Choisis l'original, ou « Remplacer » pour une autre prise.",
   "The camera file is not in this browser (imported on another device, in another browser, or at another address of the app: a website never sees your files by itself). You work here on its copy from your Drive ({quality}, the passage used). If the original is on this computer, “Link the original file” (the video's ⋯ menu, in the library) plugs it back: the sync and the settings are kept.": "Le fichier caméra n'est pas dans ce navigateur (importé sur un autre appareil, dans un autre navigateur ou à une autre adresse de l'app : un site ne voit jamais tes fichiers tout seul). Tu travailles ici sur sa copie Drive ({quality}, le passage utilisé). Si l'original est sur cet ordinateur, « Relier le fichier original » (menu ⋯ de la vidéo, dans la Bibliothèque) le rebranche : la synchro et les réglages sont gardés.",
   "Custom…": "Personnalisé…",
