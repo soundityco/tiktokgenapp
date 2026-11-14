@@ -1479,8 +1479,8 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .main[data-studio="video"][data-mobile-tab="style"] .video-grid { display: block; }
   /* A smaller picture there: the style gets the rest of the screen. */
   /* Its height: --pv-h, set by dragging the Style control (40% of the screen to start with). */
-  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap:not(.landscape) { width: min(100%, calc(var(--pv-h, 40dvh) * 9 / 16)); margin: 0 auto; }
-  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap.landscape { width: min(100%, calc(var(--pv-h, 40dvh) * 16 / 9)); margin: 0 auto; }
+  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap:not(.landscape) { width: min(100%, calc(var(--pv-h, var(--pv-video)) * 9 / 16)); margin: 0 auto; }
+  .main[data-studio="video"][data-mobile-tab="style"] .cv-wrap.landscape { width: min(100%, calc(var(--pv-h, var(--pv-video)) * 16 / 9)); margin: 0 auto; }
   .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides > .card { flex-basis: min(74vw, calc(var(--pv-h, 40dvh) * .5625)); margin: 0 -2vw; }
   .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides { padding-left: calc(50vw - min(37vw, var(--pv-h, 40dvh) * .28125)); padding-right: calc(50vw - min(37vw, var(--pv-h, 40dvh) * .28125)); }
   html.pv-dragging, html.pv-dragging * { user-select: none; cursor: grabbing !important; }
@@ -1601,6 +1601,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
      studio leaves the control and the settings exactly where they were. The picture is --pv-h tall in both. */
   .main[data-studio="carousel"][data-mobile-tab="style"] .col.center,
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center { height: calc(var(--pv-h, 40dvh) + 76px); overflow: clip; box-sizing: border-box; }
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center { height: calc(var(--pv-h, var(--pv-video)) + 76px); }
   .main[data-studio="video"][data-mobile-tab="style"] .video-grid { margin-top: 8px; }
   .main[data-studio="carousel"][data-mobile-tab="style"] .col.center .slides > .card { flex-basis: min(74vw, calc(var(--pv-h, 40dvh) * .5625 + 4px)); }
 }
@@ -1938,6 +1939,8 @@ details.sec:first-of-type { background-image: none; }
   .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center {
     top: calc(var(--top-h, 60px) - var(--style-head, 0px));
     height: calc(var(--pv-h, 40dvh) + 76px + var(--style-head, 0px)) !important; }
+  .main[data-studio="video"][data-mobile-tab="style"] .video-shell > .col.center {
+    height: calc(var(--pv-h, var(--pv-video)) + 76px + var(--style-head, 0px)) !important; }
   .main[data-studio="video"][data-mobile-tab="style"] .video-center { display: grid !important; }
 }
 @media (max-width: 1000px) {
@@ -1955,8 +1958,8 @@ details.sec:first-of-type { background-image: none; }
   .main > .col.center, .main .video-shell, .main .video-shell > .col { animation: none !important; }
   /* The video is one size on Create and on Style (the height chosen on Style, --pv-h): switching page, the head and
      the picture stay put, only what is under them changes. */
-  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap:not(.landscape) { width: min(100%, calc(var(--pv-h, 40dvh) * 9 / 16)); max-width: none; margin: 0 auto; }
-  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap.landscape { width: min(100%, calc(var(--pv-h, 40dvh) * 16 / 9)); max-width: none; margin: 0 auto; }
+  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap:not(.landscape) { width: min(100%, calc(var(--pv-h, var(--pv-video)) * 9 / 16)); max-width: none; margin: 0 auto; }
+  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap.landscape { width: min(100%, calc(var(--pv-h, var(--pv-video)) * 16 / 9)); max-width: none; margin: 0 auto; }
 }
 @media (max-width: 1000px) {
   /* Create page, video: the picture and its Zones button at the very places they have on the Style page. */
@@ -1980,10 +1983,13 @@ details.sec:first-of-type { background-image: none; }
 }
 .h-status.field .badge { text-transform: none; letter-spacing: normal; }
 @media (max-width: 1000px) {
-  /* Create page, video: never smaller than its base size (40% of the screen's height); bigger if the Style page's
+  /* The video's base height on a phone (before any drag on the Style page): 54% of the screen, less on a short one
+     (the Style page's control stays above the dock). */
+  :root { --pv-video: min(54dvh, 100dvh - 380px); }
+  /* Create page, video: never smaller than its base size (--pv-video); bigger if the Style page's
      drag made it bigger. Between the two pages the picture glides to its size instead of jumping. */
-  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap:not(.landscape) { width: min(100%, calc(max(40dvh, var(--pv-h, 40dvh)) * 9 / 16)); }
-  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap.landscape { width: min(100%, calc(max(40dvh, var(--pv-h, 40dvh)) * 16 / 9)); }
+  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap:not(.landscape) { width: min(100%, calc(max(var(--pv-video), var(--pv-h, var(--pv-video))) * 9 / 16)); }
+  .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap.landscape { width: min(100%, calc(max(var(--pv-video), var(--pv-h, var(--pv-video))) * 16 / 9)); }
   .main[data-studio="video"] .video-grid .cv-wrap { transition: width .34s cubic-bezier(.3,1,.4,1); }
   html.pv-dragging .main[data-studio="video"] .video-grid .cv-wrap { transition: none; }
 }
