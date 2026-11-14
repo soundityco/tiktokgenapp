@@ -2278,11 +2278,9 @@ details.sec:first-of-type { background-image: none; }
 .pick-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; text-align: left; cursor: pointer; }
 .pick-btn > .truncate { flex: 1; min-width: 0; }
 .pick-btn.on { border-color: var(--muted); }
-/* Source cards (a slide's text and photo, a video's hook): one button, the list's name and, under it, what is drawn
-   from it (its tags in words, the lyrics' sections), faded. */
-.src-btn .src-txt { flex: 1; min-width: 0; display: grid; text-align: left; }
-.src-btn.two { height: auto; min-height: var(--h); padding-top: 6px; padding-bottom: 6px; }
-.src-btn .src-sub { font-size: var(--fs-xs); line-height: 1.35; color: var(--muted); }
+/* Source cards (a slide's text and photo, a video's hook): one button, on one line: the list's name, then what is
+   drawn from it (its tags, the lyrics' sections), faded. */
+.src-btn .src-sub { color: var(--muted); }
 /* (In a slide's tile, as bright as the drop-down it replaces, not faded like a secondary button.) */
 .src-tile .src-btn { color: var(--text); font-size: inherit; }
 .pick-tag { flex: none; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -2546,13 +2544,12 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 
 /* A hook = a card: its number, where it is drawn from, its actions; its text; its timing. */
 .video-side .hook-item { gap: 10px; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); background-image: none; }
-.hook-head { gap: 2px; align-items: center; }
-.hook-num { flex: none; margin-right: 8px; font-family: var(--mono); font-size: var(--fs-sm); color: var(--muted); }
-/* The hook's source button: its wrapper is what the row sizes (it shrinks, the name ends with "…"). */
-.hook-head > .menu-wrap:has(> .src-btn) { flex: 0 1 220px; min-width: 0; }
+.hook-head { gap: 8px; align-items: center; }
+/* The hook's source button: its wrapper takes the row (Generate keeps its size), the name ends with "…". */
+.hook-head > .menu-wrap:has(> .src-btn) { flex: 1 1 auto; min-width: 0; }
 .hook-head > .menu-wrap:has(> .src-btn) > .src-btn { width: 100%; }
 
-.hook-head .hook-gen { margin-left: 6px; flex: none; }
+.hook-head .hook-gen { flex: none; }
 .hook-item .hook-del { margin-left: auto; }
 /* A new version of the audio: what became of each video. */
 .remap-list { display: grid; gap: 1px; margin: var(--s3) 0; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }

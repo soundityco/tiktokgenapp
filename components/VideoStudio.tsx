@@ -4277,9 +4277,11 @@ export default function VideoStudio({
                 const setTags = (next: { tags: string[]; not: string[] }) => setSrc({ tags: next.tags, notTags: next.not.length ? next.not : undefined });
                 return (
                 <div key={h.id} className="hook-item">
-                  {/* Its name, where it is drawn from (list · tags), then its actions as icons: another one, one picked in the list, remove. */}
+                  {/* As a slide's: its title and its text, then where it is drawn from (with another one drawn), then its timing. */}
+                  <span className="label hook-k">{t("Hook {n}", { n: i + 1 })}</span>
+                  <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
+                    onChange={(e) => editHook(h.id, { text: e.target.value, link: undefined })} />
                   <div className="row nowrap hook-head">
-                    <span className="hook-num" title={t("Hook {n}", { n: i + 1 })}>#{i + 1}</span>
                     {/* Where from (its list and tags), then which one (the list, opened on this hook): as on a slide. */}
                     {hookPools.length > 0 && (
                       <Menu float trigger={(open, toggle) => (
@@ -4319,13 +4321,11 @@ export default function VideoStudio({
                         )}
                       </Menu>
                     )}
-                    <span className="grow" />
+                    
                     {src.items.length > 0 && (
                       <button className="btn sm primary hook-gen" onClick={() => drawInto(h.id)} title={t("Another hook from its list and tags")}><Icon name="sparkle" size={13} />{t("Generate")}</button>
                     )}
                   </div>
-                  <textarea className="input" rows={2} value={h.text} placeholder={t("Write the hook…")}
-                    onChange={(e) => editHook(h.id, { text: e.target.value, link: undefined })} />
                   <div className="row">
                     <span className="nudge">
                       <span className="muted xs">{t("From")}</span>
