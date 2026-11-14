@@ -22,6 +22,7 @@
   /* The two studios' colours: orange for the carousel, violet for the video (the dock's tile, the switch, the release picked). */
   --grad-carousel: linear-gradient(140deg, #ffd27a 0%, #ffa24d 48%, #ff7b3a 100%);
   --grad-video: linear-gradient(140deg, #dcc4ff 0%, #a184ff 50%, #6a55ff 100%);
+  --grad-music: linear-gradient(140deg, #c9ffe5 0%, #4fffb0 50%, #1ccb86 100%);
   --glow-carousel: color-mix(in srgb, #ff8a3d 40%, transparent);
   --glow-video: color-mix(in srgb, #a184ff 50%, transparent);
   --ok: #7ad9a1; --warn: #f0c35c; --danger: #ff6b80;
@@ -1361,8 +1362,10 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .preflight-pop ul { color: var(--text); }
 @media (max-width: 640px) { .studio-head.more .h-pick { justify-self: stretch; } }
 /* The working copy of a take, standing in for the camera file on this device. */
-.pill-copy { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
+/* The audio kept on the Drive: the same pill, in the audio's green. */
+.pill-copy, .pill-drive { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
   text-transform: uppercase; color: #120d1c; background: var(--grad-video); font-weight: 600; }
+.pill-drive { color: #07190f; background: var(--grad-music); }
 /* Storage: one bar like a phone's (Rollout's kinds in their colours, the rest of the Drive in grey, the free space). */
 .storage-head { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; }
 .storage-big { font-family: var(--serif); font-size: 34px; line-height: 1; }

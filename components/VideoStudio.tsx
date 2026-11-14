@@ -3357,7 +3357,7 @@ export default function VideoStudio({
               meta={audioBlob && (<>
                 {audioBuf ? <span className="mono">{fmtLength(audioBuf.duration)}</span> : <span className="shine">{t("Reading the audio…")}</span>}
                 {clips.length > 1 && <span>{t("For its {n} videos", { n: clips.length })}</span>}
-                {project.audioDriveId ? <span>Drive</span>
+                {project.audioDriveId ? <span className="pill-drive">Drive</span>
                   : <span className="row" style={{ gap: 4 }}>{t("This computer only")}<Hint text={t("This audio is only on this computer for now: it goes to your Drive by itself as soon as Google Drive can be written to.")} /></span>}
               </>)}
               menu={audioBlob && ((close) => (<>
