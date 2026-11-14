@@ -2,6 +2,9 @@
 
 Réponds en français. Andy (Angers) construit Rollout avec un ami : une web app pour artistes musicaux qui crée des carrousels TikTok (hooks, paroles, photos Drive) et un studio vidéo (prise caméra synchronisée sur l'audio officiel, paroles incrustées). En ligne : https://getrollout.netlify.app
 
+## Liste des fonctionnalités
+- `FONCTIONNALITES.md` : tout ce que fait l'app, du point de vue de l'artiste, par rubrique, avec son état (En ligne, En test, À venir, En attente). À mettre à jour à chaque fonctionnalité ajoutée, changée ou retirée (dans le même commit). Sert aussi pour la home.
+
 ## Stack
 - Next.js 15 (App Router), TypeScript 5 (ne pas passer à 7 ; pas de `baseUrl` dans tsconfig), Auth.js (next-auth beta) avec login Google + `drive.file` seul (plus de `drive.readonly`, permission restreinte : l'app ne voit que ce qu'elle a créé ; tout s'importe depuis l'appareil). Session JWT d'un an, renouvelée à chaque visite.
 - Données : Neon Postgres (table `workspaces`, un JSON par email, compare-and-swap sur `rev`). Sans `DATABASE_URL`, repli sur `.data/workspaces.json` (badge « Local file »). Plusieurs appareils : l'app relit les données au retour sur la page et toutes les 30 s (si rien n'attend d'être enregistré), et un conflit d'enregistrement est fusionné (`lib/merge.ts`, fusion à trois sur la dernière version chargée / enregistrée).
