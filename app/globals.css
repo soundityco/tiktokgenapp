@@ -2550,3 +2550,13 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .menu .pick-foot .btn { width: auto; flex: none; justify-content: center; padding: 0 12px; }
 /* The board's end: as much room above the player as under it (the last part never touches it). */
 @media (min-width: 1001px) { .board-player { margin-top: 42px; } }
+
+/* The library's videos side by side. A computer: only the open one (its picker is above the board). A phone: a strip
+   to swipe, the open one in the middle, the others greyed on each side (a tap or a swipe opens one). */
+.clip-strip > .clip-card.ghost { display: none; }
+@media (max-width: 1000px) {
+  .clip-strip.many { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 calc(-1 * var(--s4)); padding: 0 var(--s4); scroll-padding: 0 var(--s4); }
+  .clip-strip.many::-webkit-scrollbar { display: none; }
+  .clip-strip.many > .clip-card { flex: 0 0 84%; min-width: 0; scroll-snap-align: center; }
+  .clip-strip.many > .clip-card.ghost { display: block; opacity: .45; transition: opacity .2s; }
+}

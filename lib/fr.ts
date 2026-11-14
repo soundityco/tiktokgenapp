@@ -708,6 +708,7 @@ export const FR: Record<string, string> = {
   "Help": "Aide",
   "Black bars": "Bandes noires",
   "Smaller": "Plus petit",
+  "Open in the studio": "Ouvrir dans le studio",
   "View": "Affichage",
   "Actions": "Actions",
   "Slide": "Slide",

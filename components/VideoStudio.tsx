@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
@@ -1478,6 +1478,48 @@ export default function VideoStudio({
 
   const [clipDialog, setClipDialog] = useState<null | "rename" | "delete">(null);
   /** Shown name of a video: the automatic "Video 2" in the interface language. */
+  // ---- the library's videos side by side (phone): the open one centred; swiping only shows the others (it never
+  //      changes the studio's video), each with its own "Open in the studio" ----
+  const clipStrip = useRef<HTMLDivElement>(null);
+  const openClipCard = (id: string) => { if (id !== clip.id) { onProject((p) => ({ ...p, videoId: id })); onSaveNow(); } };
+  // The studio's video in the middle: at first, when another one is opened, and when the strip shows (the library page
+  // was hidden: nothing to measure before). Once swiped by hand, it stays where it was left (until another opens).
+  const stripTouched = useRef(false);
+  /** The video in the middle of the strip (its name in the still title above). */
+  const [stripShown, setStripShown] = useState(clip.id);
+  const stripFrame = useRef(0);
+  const onStripScroll = () => {
+    cancelAnimationFrame(stripFrame.current);
+    stripFrame.current = requestAnimationFrame(() => {
+      const r = clipStrip.current;
+      if (!r) return;
+      const mid = r.scrollLeft + r.clientWidth / 2;
+      let best = clip.id, d = Infinity;
+      r.querySelectorAll<HTMLElement>("[data-clip]").forEach((el) => {
+        const dd = Math.abs(el.offsetLeft + el.offsetWidth / 2 - mid);
+        if (dd < d) { d = dd; best = el.dataset.clip!; }
+      });
+      setStripShown(best);
+    });
+  };
+  useLayoutEffect(() => {
+    const r = clipStrip.current;
+    setStripShown(clip.id);
+    if (!r) return;
+    stripTouched.current = false;
+    const centre = () => {
+      const el = r.querySelector<HTMLElement>(`[data-clip="${clip.id}"]`);
+      if (el && !stripTouched.current && r.scrollWidth > r.clientWidth) r.scrollLeft = el.offsetLeft + el.offsetWidth / 2 - r.clientWidth / 2;
+    };
+    centre();
+    const touched = () => { stripTouched.current = true; };
+    r.addEventListener("pointerdown", touched);
+    r.addEventListener("wheel", touched, { passive: true });
+    if (typeof ResizeObserver === "undefined") return () => { r.removeEventListener("pointerdown", touched); r.removeEventListener("wheel", touched); };
+    const ro = new ResizeObserver(centre);
+    ro.observe(r);
+    return () => { ro.disconnect(); r.removeEventListener("pointerdown", touched); r.removeEventListener("wheel", touched); };
+  }, [clip.id, clips.length]);
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
   const renameClip = (name: string) => {
     const n = name.trim();
@@ -3333,10 +3375,28 @@ export default function VideoStudio({
                 </div>
               )}
             </MediaTile>
+            {/* The release's videos side by side (a phone swipes them; a computer shows only the open one, its picker is
+                above the board): the studio's one whole, the others greyed on each side, each with what it holds and
+                its own button to open it in the studio (swiping never changes the studio's video). */}
             <div className="tree-branch">
+            {/* One title, still: the name of the video in the middle of the strip (the studio's one at first). */}
             <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
-              <span className="label">{t("Video")}</span><span className="tree-name">{clipName(clip)}</span>
+              <span className="label">{t("Video")}</span><span className="tree-name">{clipName(clips.find((c) => c.id === stripShown) ?? clip)}</span>
             </div>
+            <div className={"clip-strip" + (clips.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}>
+            {clips.map((c) => c.id !== clip.id ? (
+              <div key={c.id} className="clip-card ghost" data-clip={c.id}>
+                <MediaTile icon="film" label={t("Camera video")} name={c.videoName ?? null}
+                  meta={c.videoName ? <>
+                    {c.source?.duration ? <span className="mono">{fmtTime(c.source.duration)}</span> : null}
+                    {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
+                    {c.drive?.copy && <span className="pill-copy">{t("Drive copy")}</span>}
+                  </> : undefined}>
+                  <div className="row"><button className="btn sm" onClick={() => openClipCard(c.id)}>{t("Open in the studio")}</button></div>
+                </MediaTile>
+              </div>
+            ) : (
+            <div key={c.id} className="clip-card" data-clip={c.id}>
             {(() => {
               const d = settings.drive ?? {};
               const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
@@ -3398,6 +3458,9 @@ export default function VideoStudio({
             {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + (onCopy && settings.source?.duration ? settings.source.duration : videoDur) + 0.02 && (
               <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
             )}
+            </div>
+            ))}
+            </div>
             </div>
           </div>
           <div className="lib-desk">{library}</div>
