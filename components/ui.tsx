@@ -333,13 +333,19 @@ export function MatteSelect({ value, onChange, className = "input" }: { value?: 
 export function ContextMenu({ x, y, onClose, className, children }: { x: number; y: number; onClose: () => void; className?: string; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState({ left: x, top: y });
+  /** Where it was dragged to (its top left), once moved by hand: it stays there. */
+  const moved = useRef<{ left: number; top: number } | null>(null);
+  const drag = useRef<{ px: number; py: number; left: number; top: number } | null>(null);
+  const keepIn = (left: number, top: number, w: number, h: number) =>
+    ({ left: Math.max(8, Math.min(left, window.innerWidth - w - 8)), top: Math.max(8, Math.min(top, window.innerHeight - h - 8)) });
   // Kept on the screen, also when it grows (a list opening inside it): taller than the screen, it scrolls.
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
     const place = () => {
       const r = el.getBoundingClientRect();
-      setAt({ left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) });
+      const from = moved.current ?? { left: x, top: y };
+      setAt(keepIn(from.left, from.top, r.width, r.height));
     };
     place();
     if (typeof ResizeObserver === "undefined") return;
@@ -363,7 +369,22 @@ export function ContextMenu({ x, y, onClose, className, children }: { x: number;
   }, []);
   return createPortal(
     // A click on one of its buttons closes it (after the button's own action), except the ones marked `data-keep`.
+    // Dragged by its title or any empty part of it (never from a button, a field or a list), anywhere on the screen.
     <div ref={box} role="menu" className={"menu ctx-menu" + (className ? " " + className : "")} style={{ position: "fixed", left: at.left, top: at.top, right: "auto", bottom: "auto" }}
+      onPointerDown={(e) => {
+        if (e.button !== 0 || (e.target as HTMLElement).closest("button, input, textarea, a, .font-list")) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { px: e.clientX, py: e.clientY, left: at.left, top: at.top };
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current, el = box.current;
+        if (!d || !el) return;
+        const next = keepIn(d.left + e.clientX - d.px, d.top + e.clientY - d.py, el.offsetWidth, el.offsetHeight);
+        moved.current = next;
+        setAt(next);
+      }}
+      onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}
       onClick={(e) => { if ((e.target as HTMLElement).closest("button:not(:disabled):not([data-keep])")) close.current(); }} onContextMenu={(e) => e.preventDefault()}>
       {children}
     </div>,

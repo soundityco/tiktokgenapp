@@ -252,6 +252,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 /* The right-click menus: their actions by kind, a little room above each kind's title (the first: the menu's own). */
 .ctx-menu .label.cap:not(:first-child) { margin-top: 6px; }
 .ctx-menu .label.cap:first-child { color: var(--text); }
+/* It can be dragged (by its title or an empty part): the title shows it. */
+.ctx-menu .label.cap:first-child { cursor: grab; }
+.ctx-menu:active .label.cap:first-child { cursor: grabbing; }
 /* Its AI options: the solid stars and their name in Generate's gradient. */
 .menu .ai-opt .ai-glyph { width: 15px; height: 15px; flex: none; }
 .ai-opt .ai-txt { background: var(--grad-holo); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 600;
