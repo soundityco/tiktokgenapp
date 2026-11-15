@@ -79,6 +79,7 @@ dans ton Google Drive.
 - **Bandes noires** au format voulu. — En ligne
 - **Presets de style** des textes, à garder et réappliquer. — En ligne
 - **Plein écran**, zones TikTok, lecture qui revient au départ à la pause (réglable). — En ligne
+- **Montage multicam** : jusqu'à 4 caméras (d'autres vidéos de la release, synchronisées sur le même audio, chacune avec son cadrage et son étalonnage) ; en lecture, les touches 1 à 4 coupent vers une caméra ; à l'arrêt, elles changent le plan sous la tête de lecture, C le coupe, Suppr retire le cut ; les cuts se glissent sur la piste des plans ; l'export suit les cuts. — En test
 
 ## Audio de la release
 
@@ -130,6 +131,9 @@ dans ton Google Drive.
 
 ## À venir (idées retenues)
 
+- **Brume avec profondeur** (IA) : le brouillard placé selon la distance, comme le Cinematic Haze de DaVinci. — À venir
+- **Typo animée** : un mot mis en avant (autre police, taille, apparition). — À venir
+- **Cuts calés sur les paroles** en multicam. — À venir
 - **Version live sans audio officiel** : le son de la prise comme référence. — À venir
 - **Correction mot par mot sur la timeline**. — À venir
 - **Aperçu vidéo plus compact** sur téléphone (option). — À venir

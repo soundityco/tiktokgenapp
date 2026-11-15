@@ -348,6 +348,10 @@ export interface VideoSourceInfo {
 }
 
 export interface VideoSettings {
+  /** Multicam: the other videos of the release used as cameras 2 to 4 (their own sync, framing and grade). */
+  angles?: string[];
+  /** Multicam cuts (lib/multicam): from this official time on, this camera (0 = this video). */
+  cuts?: { at: number; cam: number }[];
   /** Only the hooks of this theme of the hook list (see lib/themes). */
   hookTheme?: string;
   /** Only the hooks with one of these tags (replaces `hookTheme`). */

@@ -23,6 +23,7 @@ import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSour
 import { type Variant, videoVariants } from "@/lib/variants";
 import { fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
+import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -51,6 +52,10 @@ const LYRICS_LAP = 2;
 const DEFAULT_VIDEO: VideoSettings = defaultVideo();
 /** Look LUTs already read on this page (id → LUT). */
 const LOOKS = new Map<string, CubeLut>();
+/** A multicam camera's look: its framing and grade (its LUT for the preview, 33 points). */
+type AngleLook = { frame?: VideoSettings["frame"]; desqueeze?: VideoSettings["desqueeze"]; grade?: VideoGrade; lut: Float32Array | null };
+/** A multicam camera: another video of the release, its file played by a hidden player. */
+type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoElement; url: string; offset: number; look: CubeLut | null };
 
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 /** A working copy on its way (shown in the top bar wherever the user is: see Studio). */
@@ -88,7 +93,7 @@ const LYRICS_ALIGN_V = 3;
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade", "matte"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
@@ -650,6 +655,83 @@ export default function VideoStudio({
     setLutRev((n) => n + 1);
   }, [colourKey, look, lookErr]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- multicam: the other cameras (videos of the release on the same audio), each with its sync, framing, grade ----
+  const anglesRef = useRef(new Map<string, Angle>());
+  const [angleRev, setAngleRev] = useState(0);
+  const angleClips = (settings.angles ?? []).map((id) => clips.find((c) => c.id === id && c.id !== clip.id) ?? null);
+  // What a camera needs (its file, its offset, framing and grade): read again when one of them changes.
+  const anglesKey = JSON.stringify(angleClips.map((c) => c && [c.id, c.media, c.videoSize, c.offset, c.frame, c.desqueeze, c.grade, lutLibrary?.find((l) => l.id === c.grade?.lut?.id)]));
+  useEffect(() => {
+    let off = false;
+    const map = anglesRef.current;
+    const want = new Set(angleClips.filter(Boolean).map((c) => c!.id));
+    for (const [id, a] of map) if (!want.has(id)) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); URL.revokeObjectURL(a.url); map.delete(id); }
+    void (async () => {
+      for (const c of angleClips) {
+        if (!c || off) continue;
+        const media = c.media ?? c.id;
+        let a = map.get(c.id);
+        if (!a || a.media !== media) {
+          // The camera file on this device, else its Drive working copy kept here.
+          const blob = (await getMedia(`video:${media}`).catch(() => undefined)) ?? (await getMedia(`copy:${c.id}`).catch(() => undefined));
+          if (off) return;
+          if (!blob) { map.delete(c.id); continue; }
+          const el = document.createElement("video");
+          el.muted = true; el.playsInline = true; el.preload = "auto";
+          const url = URL.createObjectURL(blob);
+          el.src = url;
+          const redraw = () => { if (!sourceRef.current) drawAt(headRef.current); };
+          el.addEventListener("seeked", redraw);
+          el.addEventListener("loadeddata", redraw);
+          if (a) { a.el.removeAttribute("src"); a.el.load(); URL.revokeObjectURL(a.url); }
+          a = { id: c.id, media, blob, el, url, offset: 0, frame: undefined, desqueeze: undefined, grade: undefined, look: null, lut: null };
+          map.set(c.id, a);
+        }
+        a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze;
+        a.grade = withLutSettings(c.grade);
+        a.look = null; a.lut = null;
+        const lutRef = a.grade?.lut;
+        if (lutRef) {
+          let look = LOOKS.get(lutRef.id) ?? null;
+          if (!look) {
+            const b = await getMedia(`lut:${lutRef.id}`).catch(() => undefined);
+            try { if (b) { look = parseCube(await b.text()); LOOKS.set(lutRef.id, look); } } catch { /* not a LUT */ }
+          }
+          if (off) return;
+          a.look = look;
+        }
+        if (gradesColour(a.grade) && (!lutRef || a.look)) a.lut = buildGradeLut(a.grade, lutRef ? a.look : null, 33);
+      }
+      if (!off) { setAngleRev((n) => n + 1); drawAt(headRef.current); }
+    })();
+    return () => { off = true; };
+  }, [anglesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { for (const a of anglesRef.current.values()) { a.el.removeAttribute("src"); a.el.load(); URL.revokeObjectURL(a.url); } }, []);
+  /** The camera (2 to 4) of the shot at official time `time`; null: this video's own. */
+  const angleAt = (time: number): Angle | null => {
+    const cfg = settingsRef.current;
+    const cam = camAt(cfg.cuts, time);
+    return cam > 0 ? anglesRef.current.get(cfg.angles?.[cam - 1] ?? "") ?? null : null;
+  };
+  /** A camera's picture at official time `time` (paused: its player placed there first). */
+  const anglePicture = (a: Angle, time: number, still: boolean): Picture | null => {
+    const el = a.el, target = time - a.offset;
+    if (target < -0.001 || (Number.isFinite(el.duration) && target > el.duration + 0.001)) return null;
+    if (still && !el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = Math.max(0, target);
+    return el.readyState >= 2 && el.videoWidth ? { src: el, w: el.videoWidth, h: el.videoHeight } : null;
+  };
+  /** While playing: the camera on screen plays with the sound (the others wait, paused). */
+  const syncAngles = (heard: number) => {
+    const on = angleAt(heard);
+    for (const a of anglesRef.current.values()) {
+      if (a !== on) { if (!a.el.paused) a.el.pause(); continue; }
+      const target = Math.max(0, heard - a.offset), diff = target - a.el.currentTime;
+      if (a.el.paused) { if (Math.abs(diff) > 0.05) a.el.currentTime = target; void a.el.play().catch(() => {}); }
+      else if (Math.abs(diff) > 0.4) { a.el.currentTime = target; a.el.playbackRate = 1; }
+      else a.el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
+    }
+  };
+
   /** Frame of the camera file at the playhead, read with ffmpeg while the player gives none (see pictureOf). */
   const stillRef = useRef<{ src: string; at: number; bmp: ImageBitmap } | null>(null);
   const stillWant = useRef<number | null>(null);
@@ -703,8 +785,11 @@ export default function VideoStudio({
    * The picture of the post at official time `time`: the framed camera video, the lyrics, then the hook.
    * Used by the preview and the export. Returns where the texts were drawn, to drag them on the preview.
    */
-  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number, preview?: { raw: boolean; keep: boolean }) => {
+  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number, preview?: { raw: boolean; keep: boolean },
+    /** Multicam: another camera's picture, with its own framing and grade. */
+    angle?: AngleLook) => {
     const cfg = settingsRef.current;
+    const lookFrame = angle ? angle.frame : cfg.frame, lookGrade = angle ? angle.grade : cfg.grade;
     const raw = !!preview?.raw;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
@@ -712,8 +797,8 @@ export default function VideoStudio({
     if (preview && !pic && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
-      pic = desqueeze(pic, cfg.desqueeze);
-      let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame, cfg.matte);
+      pic = desqueeze(pic, angle ? angle.desqueeze : cfg.desqueeze);
+      let f = picOf(lookFrame ?? DEFAULT_VIDEO.frame, cfg.matte);
       // Progressive zoom: ×1 at the start of the segment, `push` on its last frame. The whole framed picture around the
       // centre, or (`pushIn`) only what is inside its frame, around the frame's centre (below).
       const push = cfg.push ?? 1;
@@ -721,10 +806,11 @@ export default function VideoStudio({
       const inside = !!cfg.pushIn && k > 1;
       if (k > 1 && !inside) f = zoomPic(f, f.zoom * k);
       const grader = graderRef.current;
-      const wantGrade = !raw && !pic.graded && gradesColour(cfg.grade);
-      if (wantGrade && !grader?.ready && gradePendingRef.current) { console.debug("[grade] waiting for the grade (LUT loading)"); pic = null; }
-      else if (wantGrade && grader?.ready && videoLut.current) {
-        grader.setLut(videoLut.current, 33);
+      const wantGrade = !raw && !pic.graded && gradesColour(lookGrade);
+      const lut = angle ? angle.lut : videoLut.current;
+      if (wantGrade && (angle ? !lut : !grader?.ready && gradePendingRef.current)) { console.debug("[grade] waiting for the grade (LUT loading)"); pic = null; }
+      else if (wantGrade && grader?.ready && lut) {
+        grader.setLut(lut, 33);
         // Grade only what the post shows, at the size it is drawn.
         const region = visibleRegion(f, pic.w, pic.h, W, H);
         const s = (f.framing === "fill" ? Math.max(W / pic.w, H / pic.h) : Math.min(W / pic.w, H / pic.h)) * f.zoom * (inside ? k : 1);
@@ -750,8 +836,8 @@ export default function VideoStudio({
           drawPictureAt(g, pic.src, pic.w, pic.h, x + (w * (1 - k)) / 2, y + (h * (1 - k)) / 2, s * k, pic.part);
           g.restore();
         }
-        if (!raw && cfg.grade) drawLook(g, W, H, cfg.grade, Math.round(time * GRAIN_FPS));
-        if (preview?.keep && !raw) keepPoster(g.canvas);
+        if (!raw && lookGrade) drawLook(g, W, H, lookGrade, Math.round(time * GRAIN_FPS));
+        if (preview?.keep && !raw && !angle) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
@@ -787,9 +873,11 @@ export default function VideoStudio({
     const g = c?.getContext("2d");
     if (!c || !g) return;
     const el = videoRef.current;
-    const keep = !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
-    const pic = pictureOf(el, time);
-    const boxes = drawScene(g, c.width, c.height, pic, time, { raw: rawRef.current, keep });
+    // Multicam: the camera of the shot at this time (its own picture, framing and grade).
+    const ang = angleAt(time);
+    const keep = !ang && !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
+    const pic = ang ? anglePicture(ang, time, !sourceRef.current) : pictureOf(el, time);
+    const boxes = drawScene(g, c.width, c.height, pic, time, { raw: rawRef.current, keep }, ang ?? undefined);
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
     drawHelpers(g, c.width, c.height, fullRef.current ? { ...aidsRef.current, zones: false } : aidsRef.current);
@@ -837,6 +925,7 @@ export default function VideoStudio({
       window.setTimeout(() => { src.disconnect(); fade?.disconnect(); }, fade ? FADE * 1000 + 60 : 0);
     }
     if (videoRef.current) { videoRef.current.pause(); videoRef.current.playbackRate = 1; }
+    for (const a of anglesRef.current.values()) { a.el.pause(); a.el.playbackRate = 1; }
     setPlaying(false);
   }, []);
 
@@ -1846,6 +1935,7 @@ export default function VideoStudio({
         if (Math.abs(diff) > 0.4) { el.currentTime = target; el.playbackRate = 1; }
         else el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
       }
+      syncAngles(heard);
       drawAt(heard);
       // Measure of the sync while playing (console, debug level): video behind (+) or ahead (−) of the sound.
       if (el && performance.now() - lastLog > 1000) {
@@ -2879,6 +2969,9 @@ export default function VideoStudio({
     const from = cfg.crop.start;
     const until = Math.min(audioBuf.duration, from + cfg.crop.duration);
     if (until - from < 0.5) { setErr(t("Video export failed")); return "failed"; }
+    // Multicam: every camera used in the segment must have its file on this device.
+    const lost = [...new Set(shotsOf(cfg.cuts, from, until).map((x) => x.cam))].filter((c) => c > 0 && !anglesRef.current.get(cfg.angles?.[c - 1] ?? ""));
+    if (lost.length) { setErr(t("Camera {n} has no file on this device: open its video and pick its camera file.", { n: lost[0] + 1 })); return "failed"; }
     void askNotifyPermission();
     const ac = new AbortController();
     exportRef.current = ac;
@@ -2888,6 +2981,8 @@ export default function VideoStudio({
     const name = safeName(`${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""} ${stamp()}`);
     let source: { frameAt: (t: number) => Promise<Picture | null>; close: () => void; codec: string } | null = null;
     let stopPlayer = () => {};
+    /** The multicam cameras' readers, closed at the end. */
+    const angleClose: (() => void)[] = [];
     const el = document.createElement("video");
     el.src = videoUrl;
     el.muted = true;
@@ -2978,10 +3073,38 @@ export default function VideoStudio({
           document.addEventListener("visibilitychange", back);
           ac.signal.addEventListener("abort", () => { document.removeEventListener("visibilitychange", back); resolve(); }, { once: true });
         });
+        // Multicam: each other camera read from its own file when its first shot comes (graded on the GPU from its
+        // 10-bit frames when it needs it), its player as the last resort; closed at the end.
+        const angleSrc = new Map<number, Promise<(time: number) => Promise<Picture | null>>>();
+        const openAngle = async (a: Angle): Promise<(time: number) => Promise<Picture | null>> => {
+          await whenReady(a.el);
+          const aw = a.el.videoWidth, ah = a.el.videoHeight;
+          const s0 = Math.max(0, from - a.offset), s1 = until - a.offset;
+          const g = a.grade;
+          if (g && aw && ah && gradesColour(g) && (convertsFootage(g) || !!g.lut) && (!g.lut || a.look)) {
+            const crop = cropFor(picOf(a.frame ?? DEFAULT_VIDEO.frame, cfg.matte), aw, ah, W, H, cfg.push ?? 1, a.desqueeze);
+            const gpu = await gpuGradedSource(a.blob, s0, s1, crop, aw, ah, buildGradeLut(g, g.lut ? a.look : null, 65), 65, () => {}, ac.signal).catch(() => null);
+            if (gpu) { angleClose.push(() => gpu.close()); return async (time) => { const p = await gpu.frameAt(time - a.offset); return p && { src: p.src, w: aw, h: ah, part: crop, graded: true }; }; }
+          }
+          const direct = await VideoSource.open(a.blob, s0, s1, undefined, ac.signal).catch(() => null);
+          if (direct) { angleClose.push(() => direct.close()); return (time) => direct.frameAt(time - a.offset); }
+          const pf = playerFrames(a.el, s0);
+          angleClose.push(() => pf.stop());
+          return async (time) => { await visible(); await pf.frameAt(time - a.offset); return a.el.readyState >= 2 ? { src: a.el, w: aw, h: ah } : null; };
+        };
         blob = await exportMp4({
           width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, audioBitrate: rate.audioBitrate, from, until, audio: audioBuf, signal: ac.signal,
           onProgress: (p, step) => setExp({ p: 0.05 + p * 0.95, step }),
           frame: async (g, time) => {
+            const cam = camAt(cfg.cuts, time);
+            const ang = cam > 0 ? anglesRef.current.get(cfg.angles?.[cam - 1] ?? "") : undefined;
+            if (ang) {
+              if (!angleSrc.has(cam)) angleSrc.set(cam, openAngle(ang));
+              const at = await angleSrc.get(cam)!;
+              const tt = time - ang.offset;
+              drawScene(g, W, H, tt >= -0.001 ? await at(time) : null, time, undefined, ang);
+              return;
+            }
             const target = time - cfg.offset;
             const inside = target >= -0.001 && (!Number.isFinite(vdur) || target <= vdur + 0.001);
             let pic: Picture | null = null;
@@ -3035,6 +3158,7 @@ export default function VideoStudio({
       return cancelled ? "cancelled" : "failed";
     } finally {
       source?.close();
+      for (const close of angleClose.splice(0)) close();
       stopPlayer();
       setExpPaused(false);
       el.pause();
@@ -3258,6 +3382,74 @@ export default function VideoStudio({
   /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
   const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
+  // ---- multicam: the cameras (this video, then up to 3 others synced on the same audio) and the shots ----
+  const camChoices = clips.filter((c) => c.id !== clip.id && audioIdOf(release, c) === audioId && c.videoName);
+  const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);
+  const camsEl = () => {
+    if (!camChoices.length) return null;
+    const angles = settings.angles ?? [];
+    const used = angles.filter(Boolean).length;
+    const setAngle = (i: number, id: string) => {
+      const next = [...angles];
+      next[i] = id;
+      while (next.length && !next[next.length - 1]) next.pop();
+      // A camera taken away: its shots go back to this video's.
+      const cuts = id ? settings.cuts : settings.cuts?.map((c) => (c.cam === i + 1 ? { ...c, cam: 0 } : c));
+      setV({ angles: next.length ? next : undefined, cuts: next.length ? cuts : undefined });
+    };
+    const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
+    const pct = (x: number) => `${(clamp(x - settings.crop.start, 0, segLen) / segLen) * 100}%`;
+    return (
+      <div className="cams">
+        <div className="row cams-row">
+          <span className="label">{t("Cameras")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
+          <span className="cam-chip cam-0"><b>1</b>{clipName(clip)}</span>
+          {Array.from({ length: Math.min(MAX_CAMS - 1, used + 1) }, (_, i) => (
+            <Select key={i} className={"input sm cam-pick cam-" + (i + 1)} aria-label={t("Camera {n}", { n: i + 2 })} value={angles[i] ?? ""}
+              onChange={(e) => setAngle(i, e.target.value)}>
+              <option value="">{angles[i] ? t("No camera {n}", { n: i + 2 }) : t("+ Camera {n}", { n: i + 2 })}</option>
+              {camChoices.filter((c) => c.id === angles[i] || !angles.includes(c.id)).map((c) => (
+                <option key={c.id} value={c.id}>{`${i + 2} · ${clipName(c)}${c.score === undefined ? ` (${t("not synced")})` : ""}`}</option>
+              ))}
+            </Select>
+          ))}
+        </div>
+        {used > 0 && (
+          <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
+            {shots.map((x, i) => {
+              const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
+              return (
+                <button key={i} className={"cue cam-shot cam-" + x.cam} data-at={x.from}
+                  style={{ left: pct(x.from), width: `${((x.to - x.from) / segLen) * 100}%` }}
+                  title={`${x.cam + 1} · ${a ? clipName(a) : "?"}`}
+                  onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(x.from + 0.01)); } }}>
+                  <b>{x.cam + 1}</b> {a ? clipName(a) : ""}
+                </button>
+              );
+            })}
+            {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && (
+              <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut")}
+                onPointerDown={(e) => {
+                  e.stopPropagation(); stop();
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  const r = e.currentTarget.parentElement!.getBoundingClientRect();
+                  cutDrag.current = { i: [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at).indexOf(c), left: r.left, width: r.width };
+                }}
+                onPointerMove={(e) => {
+                  const d = cutDrag.current;
+                  if (!d) return;
+                  const cfg = settingsRef.current;
+                  const at = cfg.crop.start + clamp((e.clientX - d.left) / d.width, 0, 1) * Math.max(0.1, end - cfg.crop.start);
+                  setV({ cuts: moveCut(cfg.cuts ?? [], d.i, at) });
+                }}
+                onPointerUp={() => { cutDrag.current = null; }} onPointerCancel={() => { cutDrag.current = null; }} />
+            ))}
+            <span className="lyric-head" style={{ left: pct(head) }} />
+          </div>
+        )}
+      </div>
+    );
+  };
   /** The strip's passage and file (not its grade): a change of colour only waits longer before it is made again. */
   const stripBase = useRef("");
   useEffect(() => {
@@ -3518,6 +3710,18 @@ export default function VideoStudio({
     } else if (k === "ArrowLeft" || k === "ArrowRight") { e.preventDefault(); stop(); stepTo(k === "ArrowRight" ? 1 : -1); }
     else if (k.toLowerCase() === "i") markIn();
     else if (k.toLowerCase() === "o") markOut();
+    else if (settingsRef.current.angles?.some(Boolean)) {
+      // Multicam: 1 to 4 = a camera (playing: cut to it now; paused: the shot under the playhead shows it),
+      // C = cut the shot here, Delete = remove the cut that starts it.
+      const cfg = settingsRef.current;
+      const cam = /^[1-4]$/.test(k) ? Number(k) - 1 : -1;
+      if (cam >= 0) {
+        if (cam > 0 && !cfg.angles?.[cam - 1]) return;
+        e.preventDefault();
+        setV({ cuts: playing ? cutTo(cfg.cuts, headRef.current, cam) : setShotCam(cfg.cuts, head, cam, cfg.crop.start) });
+      } else if (k.toLowerCase() === "c" && !playing) { e.preventDefault(); setV({ cuts: splitAt(cfg.cuts, head) }); }
+      else if ((k === "Backspace" || k === "Delete") && !playing && cfg.cuts?.length) { e.preventDefault(); setV({ cuts: removeCutAt(cfg.cuts, head) }); }
+    }
   };
   useEffect(() => {
     const h = (e: KeyboardEvent) => keyRef.current(e);
@@ -4130,6 +4334,7 @@ export default function VideoStudio({
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                 </div>
+                {camsEl()}
                 {genBusy && (
                   <div className="bar live" role="progressbar" aria-valuemin={0} aria-valuemax={100}
                     aria-valuenow={Math.round((genStep === "model" && genDone === 0 ? genPct : genDone) * 100)}>

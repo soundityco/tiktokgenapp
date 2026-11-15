@@ -417,6 +417,18 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
+/* Multicam: the cameras (one colour each, from the app's own) and the shots of the segment. */
+.cams { display: flex; flex-direction: column; gap: 6px; }
+.cams-row { flex-wrap: wrap; gap: 6px; }
+.cams-row .label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
+.cam-0 { --cam: var(--accent); } .cam-1 { --cam: var(--video); } .cam-2 { --cam: var(--music); } .cam-3 { --cam: var(--lyrics); }
+.cam-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: 12px; }
+.cam-chip b, .cam-shot b { color: var(--cam); font-weight: 700; }
+.cams-row .cam-pick { width: auto; flex: 0 1 230px; min-width: 0; border-color: color-mix(in srgb, var(--cam) 35%, var(--line-2)); }
+.lyric-track .cue.cam-shot { border-left-color: var(--cam); background: color-mix(in srgb, var(--cam) 12%, transparent); }
+.cam-cut { position: absolute; top: 0; bottom: 0; width: 10px; margin-left: -5px; cursor: ew-resize; z-index: 2; touch-action: none; }
+.cam-cut::after { content: ""; position: absolute; left: 4px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: var(--text); opacity: 0.55; }
+.cam-cut:hover::after { opacity: 1; }
 .lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 .hook-track { height: 26px; }
 .hook-track .cue { border-left-color: var(--blue); }
