@@ -284,6 +284,10 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
   savedHref?: string | null;
   /** The other photo lists a photo can be moved to (right click, or a long press, on it). */
   lists?: PicPool[];
+  /** The same photo more than once in the list (found by its look, lib/imageHash), and the photos still being looked at. */
+  repeats?: number;
+  lookingForRepeats?: boolean;
+  onDropRepeats?: () => void;
   onMovePic?: (picId: string, toPoolId: string) => void;
 }) {
   const { t } = useT();
@@ -332,6 +336,14 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
           </span>
         ) : t("Kept on this device only (no Google Drive access).")}
       </p>
+      {/* The same photo more than once (two files of it): said, and taken out in one click (Undo brings them back). */}
+      {!!p.repeats && (
+        <div className="notice warn row">
+          <span className="grow">{p.repeats === 1 ? t("1 photo is in this list twice.") : t("{n} photos are in this list twice.", { n: p.repeats })}</span>
+          <button className="btn sm" onClick={p.onDropRepeats}>{t("Remove the doubles")}</button>
+        </div>
+      )}
+      {!p.repeats && p.lookingForRepeats && <p className="muted xs shine">{t("Looking for photos in double…")}</p>}
       {!pool.pics.length && <p className="muted">{t("Drop your photos here, or add them.")}</p>}
       <div className="thumbs" ref={grid} style={{ maxHeight: "46dvh", overflow: "auto" }}>
         {pool.pics.map((pic, i) => (

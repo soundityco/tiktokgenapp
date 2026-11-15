@@ -130,6 +130,8 @@ export interface PicRef {
   name: string;
   /** Linked Drive folder this photo came from (kept in sync with it). */
   folder?: string;
+  /** Its look in 256 bits (lib/imageHash): the same photo twice in a list is found even when the files differ. */
+  hash?: string;
 }
 
 export interface PicPool {

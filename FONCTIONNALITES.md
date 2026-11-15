@@ -24,6 +24,7 @@ dans ton Google Drive.
 - **Une release = un projet** (un single, un EP…), avec ses carrousels, ses vidéos, ses paroles, ses audios. Dupliquer, renommer, supprimer. — En ligne
 - **La Bibliothèque** : à gauche sur ordinateur, une page à part sur téléphone ; tout ce qui sert à la release (paroles, audio, vidéos, listes de textes, photos). — En ligne
 - **Listes partagées ou propres à une release** : une liste de hooks peut servir à toutes les releases ou à une seule. — En ligne
+- **Pas deux fois la même photo dans une liste** : l'app reconnaît une photo à son image (même enregistrée deux fois en fichiers différents, par exemple reconvertie par le téléphone) ; elle n'est pas ajoutée une seconde fois, et les doublons déjà là se retirent en un clic. — En ligne
 
 ## Studio carrousel
 

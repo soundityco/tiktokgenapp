@@ -10,6 +10,7 @@ import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
 import { googleFontsIn, loadGoogleFont } from "@/lib/googleFonts";
 import { drawHook, generateAll, hookKey, pickPic, pickText, poolsVisible, textItems } from "@/lib/generate";
 import { modelWork, sortWithModel } from "@/lib/themeAI";
+import { hashDistance, pictureHash, repeatedPhotos, SAME_PHOTO } from "@/lib/imageHash";
 import { addVariants, carouselVariants, type Variant } from "@/lib/variants";
 import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, saveBlobs, stamp } from "@/lib/files";
@@ -1155,22 +1156,69 @@ export default function Studio({ userName }: { userName: string }) {
     void driveFolder(listPath(openPics)).then((id) => { if (!off) setPicFolderUrl(`https://drive.google.com/drive/folders/${id}`); }).catch(() => {});
     return () => { off = true; };
   }, [openPicsPath]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The open photo list: the look of each photo it holds (once, kept with it), so the same photo twice is found.
+  const [hashing, setHashing] = useState<string | null>(null);
+  useEffect(() => {
+    const pool = openPics;
+    if (!pool || !pool.pics.some((x) => !x.hash)) return;
+    let off = false;
+    setHashing(pool.id);
+    void (async () => {
+      const found = new Map<string, string>();
+      for (const pic of pool.pics) {
+        if (off) return;
+        if (pic.hash) continue;
+        try { found.set(pic.id, pictureHash(await loadDriveImage(pic.id))); } catch { /* not readable here: left out */ }
+      }
+      const cur = wsRef.current;
+      if (off || !cur || !found.size) return;
+      apply({ ...cur, picPools: cur.picPools.map((x) => (x.id === pool.id ? { ...x, pics: x.pics.map((y) => (found.has(y.id) && !y.hash ? { ...y, hash: found.get(y.id) } : y)) } : x)) }, false);
+    })().finally(() => { if (!off) setHashing(null); });
+    return () => { off = true; setHashing(null); };
+  }, [openPics?.id, openPics?.pics.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** The photos of a list that repeat an earlier one, out of it; their Drive file to the bin when nothing else uses it. */
+  const dropRepeats = (poolId: string) => {
+    const pool = wsRef.current?.picPools.find((x) => x.id === poolId);
+    if (!pool) return;
+    const gone = new Set(repeatedPhotos(pool.pics.map((x) => x.hash)).map((i) => pool.pics[i].id));
+    if (!gone.size) return;
+    setPicPool(poolId, (x) => ({ ...x, pics: x.pics.filter((y) => !gone.has(y.id)) }));
+    // Still used elsewhere (another list, a slide): kept in the Drive.
+    setTimeout(() => {
+      const used = JSON.stringify(wsRef.current);
+      for (const id of gone) if (!id.startsWith("local:") && !used.includes(`"${id}"`)) void trashDriveFile(id).catch(() => {});
+      void flushSave();
+    }, 0);
+    say(gone.size === 1 ? t("1 photo in double removed from the list.") : t("{n} photos in double removed from the list.", { n: gone.size }));
+  };
   const uploadToList = async (poolId: string, files: File[]) => {
     const pool = wsRef.current?.picPools.find((p) => p.id === poolId);
     if (!pool || !files.length) return;
     setPicUpload({ pool: poolId, done: 0, total: files.length });
-    let done = 0, failed = 0;
+    let done = 0, failed = 0, already = 0;
+    // The photos already in the list (and the ones just added): the same photo again is not added, even as another file.
+    const seen = pool.pics.map((x) => x.hash).filter(Boolean) as string[];
     for (const file of files) {
       try {
+        const bmp = await createImageBitmap(file).catch(() => null);
+        const hash = bmp ? pictureHash(bmp) : undefined;
+        bmp?.close();
+        if (hash && seen.some((h) => hashDistance(h, hash) <= SAME_PHOTO)) { already++; setPicUpload({ pool: poolId, done: ++done, total: files.length }); continue; }
+        if (hash) seen.push(hash);
         const id = driveWrite ? await sendPictureToDrive(file, file.name, listPath(pool)) : `local:${uid()}`;
         await keepPicture(id, file);
-        setPicPool(poolId, (x) => (x.pics.some((y) => y.id === id) ? x : { ...x, pics: [...x.pics, { id, name: file.name }] }));
+        setPicPool(poolId, (x) => (x.pics.some((y) => y.id === id) ? x : { ...x, pics: [...x.pics, { id, name: file.name, hash }] }));
       } catch (e) { failed++; console.warn("[photos] upload", e); }
       setPicUpload({ pool: poolId, done: ++done, total: files.length });
     }
     setPicUpload(null);
     void flushSave();
-    say(failed ? t("{n} photos could not be sent to your Drive", { n: failed }) : t("{n} photos added", { n: files.length }));
+    // One message: what was added, and the photos left out because the list already had them.
+    const added = files.length - failed - already;
+    const twice = already === 1 ? t("1 photo was already in the list: not added again.") : t("{n} photos were already in the list: not added again.", { n: already });
+    say(failed ? t("{n} photos could not be sent to your Drive", { n: failed })
+      : !already ? t("{n} photos added", { n: added })
+      : added ? `${t(added === 1 ? "1 photo added" : "{n} photos added", { n: added })} · ${twice}` : twice);
   };
   /** A photo of a list moved to another list: out of the first, into the other, and into its folder on the Drive. */
   const movePic = async (fromId: string, picId: string, toId: string) => {
@@ -1969,7 +2017,8 @@ export default function Studio({ userName }: { userName: string }) {
           onMoved={(from, to) => void moveDriveFolder(listPath(from), listPath(to))}
           lists={vPics.filter((p) => p.id !== edPics.id)} onMovePic={(picId, toId) => void movePic(edPics.id, picId, toId)}
           savedIn={driveWrite ? listPath(edPics).join(" / ") : null}
-          savedHref={picFolderUrl} />
+          savedHref={picFolderUrl}
+          repeats={repeatedPhotos(edPics.pics.map((x) => x.hash)).length} lookingForRepeats={hashing === edPics.id} onDropRepeats={() => dropRepeats(edPics.id)} />
       )}
 
       {overlay?.k === "import" && (
