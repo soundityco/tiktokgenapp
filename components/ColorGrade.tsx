@@ -5,7 +5,7 @@ import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { VideoGrade } from "@/lib/types";
-import { Menu, Range, Section, Select, Hint, Switch } from "./ui";
+import { Menu, Range, Section, Select, Hint } from "./ui";
 import Icon from "./Icon";
 
 const LUTS_KEY = "tktgen-luts";
@@ -28,12 +28,11 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, others, onApplyTo, onLutStored, sdr }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, others, onApplyTo, onLutStored, sdr }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   grade: VideoGrade | undefined;
   onChange: (g: VideoGrade | undefined) => void;
-  raw: boolean;
   onRaw: (v: boolean) => void;
   lookErr: string | null;
   /** The release's other videos: this grade can be put on the ones ticked (two takes of one shoot…). */
@@ -121,7 +120,6 @@ export default function ColorGrade({ grade, onChange, raw, onRaw, lookErr, other
                 {t("Import a LUT (.cube)")}
                 <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f); e.target.value = ""; }} />
               </label>
-              <Switch off={t("Before")} on={t("After")} checked={!raw} onChange={(v) => onRaw(!v)} title={t("Before: the picture as recorded, to compare")} />
             </div>
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}
           </>

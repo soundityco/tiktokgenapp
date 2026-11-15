@@ -86,6 +86,7 @@ dans ton Google Drive.
 - **Carrousel** : les images en fichiers directs ; tous les carrousels d'un coup dans un zip (un dossier par carrousel). — En ligne
 - **Vidéo** : MP4 avec sa légende ; **toutes les vidéos d'une release** à la suite. — En ligne
 - **Export calé sur la prise, réglé pour TikTok et Instagram** : 1080 × 1920, H.264, à la cadence filmée (25p reste 25p, 50/60p restent fluides, aucune image doublée), 16 Mb/s (jusqu'à 24 en 50/60p, sous le plafond d'Instagram), son AAC 256 kb/s en 48 kHz au plus, une image clé toutes les 2 s. — En ligne
+- **Rubrique Export** (colonne de droite du studio vidéo, onglet Export sur téléphone) : les réglages recommandés affichés (format, cadence, image, son) ; « Modifier » permet de choisir sa cadence, sa qualité d'image et de son, pour toutes ses vidéos, avec retour aux réglages recommandés. — En ligne
 - **Envoyer sur mon téléphone** par QR code (pont temporaire, puis lien direct ou Drive pour les gros fichiers). — En ligne
 - **Progression dans le bouton** pendant l'export. — En ligne
 

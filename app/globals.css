@@ -2552,6 +2552,11 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 
 .hook-head .hook-gen { flex: none; }
 .hook-item .hook-del { margin-left: auto; }
+/* The video's Export part: what the file will be (label, value), then the user's own settings when "Change" is on. */
+.exp-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: var(--fs-sm); color: var(--muted); }
+.exp-rows > .mono { color: var(--text); font-size: var(--fs-xs); align-self: center; }
+.exp-custom { gap: 10px; padding-top: 2px; }
+
 /* A new version of the audio: what became of each video. */
 .remap-list { display: grid; gap: 1px; margin: var(--s3) 0; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
 .remap-row { gap: var(--s2); padding: 9px 12px; background: var(--panel); font-size: var(--fs-sm); }

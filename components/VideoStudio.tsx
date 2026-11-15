@@ -10,7 +10,7 @@ import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTimi
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
-import type { AudioVersion } from "@/lib/types";
+import type { AudioVersion, VideoExportPrefs } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -18,7 +18,7 @@ import { probeVideo } from "@/lib/probe";
 import { compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
-import { exportMp4, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
+import { AUDIO_KBPS, exportMp4, exportSettings, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
 import { fastWorkCopy } from "@/lib/fastCopy";
@@ -295,7 +295,7 @@ const STRIPS = new Map<string, string[]>();
 const mmss = (x: number) => { const v = Math.max(0, Math.floor(x)); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}`; };
 
 /** The parts of the video's style, as a phone opens them. */
-type VPart = "framing" | "lyrics" | "hook" | "color";
+type VPart = "framing" | "lyrics" | "hook" | "color" | "export";
 
 export default function VideoStudio({
   canUndo,
@@ -328,6 +328,8 @@ export default function VideoStudio({
   presets,
   onSavePreset,
   onDeletePreset,
+  exportPrefs,
+  onExportPrefs,
 }: {
   /** History of the workspace, shared with the carousel. */
   canUndo: boolean;
@@ -377,12 +379,17 @@ export default function VideoStudio({
   presets: StylePreset[];
   onSavePreset: (name: string, style: TextStyle) => void;
   onDeletePreset: (id: string) => void;
+  /** The account's export settings (the recommended ones unless turned on), and changing them. */
+  exportPrefs?: VideoExportPrefs;
+  onExportPrefs?: (p: VideoExportPrefs) => void;
 }) {
   const { t, lang } = useT();
   // The release as the open video's audio version (lib/audioVersions): its file and its lyrics timing in the project's
   // own fields, so everything below works on that version; a change goes back where it belongs.
   const releaseRef = useRef(release);
   releaseRef.current = release;
+  const exportPrefsRef = useRef(exportPrefs);
+  exportPrefsRef.current = exportPrefs;
   const versionClip = useMemo(() => { const l = clipsOf(release); return l.find((c) => c.id === release.videoId) ?? l[0]; }, [release]);
   const audioId = audioIdOf(release, versionClip);
   const project = useMemo(() => projectFor(release, audioId), [release, audioId]);
@@ -730,7 +737,7 @@ export default function VideoStudio({
     drawMatte(g, W, H, cfg.matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
-    const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / recommendedRate(cfg.source?.fps).fps);
+    const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / exportSettings(cfg.source?.fps, exportPrefsRef.current).fps);
     const text = cfg.captions ? activeRef.current(at) : null;
     const caption = text ? drawStyledText(g, text, styleRef.current, W, H) : null;
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
@@ -2781,7 +2788,7 @@ export default function VideoStudio({
     src.connect(dest);
     const mime = ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
       .find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-    const rate = recommendedRate(settingsRef.current.source?.fps);
+    const rate = exportSettings(settingsRef.current.source?.fps, exportPrefsRef.current);
     const rec = new MediaRecorder(new MediaStream([...canvas.captureStream(rate.fps).getVideoTracks(), ...dest.stream.getAudioTracks()]),
       mime ? { mimeType: mime, videoBitsPerSecond: rate.bitrate } : undefined);
     const chunks: Blob[] = [];
@@ -2841,9 +2848,9 @@ export default function VideoStudio({
     try {
       await whenReady(el);
       let blob: Blob | null = null, ext = "mp4";
-      // At the camera file's own frame rate (25p stays 25p), with as many bits per frame as at 30 fps.
-      const rate = recommendedRate(settingsRef.current.source?.fps);
-      if (await mp4Support(W, H, exportSampleRate(audioBuf.sampleRate), Math.min(2, audioBuf.numberOfChannels), rate.fps, rate.bitrate)) {
+      // The recommended settings (the camera file's own rate: 25p stays 25p…), or the user's own (the Export part).
+      const rate = exportSettings(settingsRef.current.source?.fps, exportPrefsRef.current);
+      if (await mp4Support(W, H, exportSampleRate(audioBuf.sampleRate), Math.min(2, audioBuf.numberOfChannels), rate.fps, rate.bitrate, rate.audioBitrate)) {
         // Frames decoded from the file itself (works in a background tab); the hidden <video> only as a fallback.
         setExp({ p: 0, step: "read" });
         // A colour grade is applied by ffmpeg on the camera file itself (10-bit), not on the 8-bit frames of the browser.
@@ -2924,7 +2931,7 @@ export default function VideoStudio({
           ac.signal.addEventListener("abort", () => { document.removeEventListener("visibilitychange", back); resolve(); }, { once: true });
         });
         blob = await exportMp4({
-          width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, from, until, audio: audioBuf, signal: ac.signal,
+          width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, audioBitrate: rate.audioBitrate, from, until, audio: audioBuf, signal: ac.signal,
           onProgress: (p, step) => setExp({ p: 0.05 + p * 0.95, step }),
           frame: async (g, time) => {
             const target = time - cfg.offset;
@@ -3166,11 +3173,12 @@ export default function VideoStudio({
   const rightColRef = useRef<HTMLElement>(null);
   const vParts: SheetPart<VPart>[] = [
     { id: "framing", label: t("Framing") }, { id: "lyrics", label: t("Lyrics") }, { id: "hook", label: t("Hook") }, { id: "color", label: t("Colour") },
+    { id: "export", label: t("Output") },
   ];
   const vStyle = useStyleParts<VPart>({
     column: () => rightColRef.current,
-    parts: { framing: '[data-sec="video-render"]', lyrics: ".sheet-text", hook: ".sheet-text", color: "#video-color" },
-    all: ':scope > [data-sec="video-render"], :scope > .sheet-text, :scope > #video-color',
+    parts: { framing: '[data-sec="video-render"]', lyrics: ".sheet-text", hook: ".sheet-text", color: "#video-color", export: "#video-export" },
+    all: ':scope > [data-sec="video-render"], :scope > .sheet-text, :scope > #video-color, :scope > #video-export',
     first: "framing",
     active: active && stylePage,
     swap: tab,
@@ -4535,12 +4543,61 @@ export default function VideoStudio({
               {gradesColour(grade) && <Switch checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Grade on / off: the picture as recorded, to compare")} />}
               {grade && <button className="btn sm quiet" onClick={() => { setRawView(false); setV({ grade: undefined }); }} title={t("Remove the grade")}>{t("Reset")}</button>}
             </div>
-              <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} raw={rawView} onRaw={setRawView} lookErr={lookErr}
+              <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 others={clips.filter((c) => c.id !== clip.id).map((c) => ({ id: c.id, name: clipName(c) }))}
                 onApplyTo={(ids) => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (ids.includes(c.id) ? { ...c, grade } : c)) }))} />
                       </div>
+          {/* How the video file is made: the settings recommended for TikTok and Instagram (at the take's own rate), shown;
+              "Change" unfolds the user's own (for every video of the account). */}
+          {(() => {
+            const prefs = exportPrefs ?? {};
+            const rec = exportSettings(settings.source?.fps);
+            const cur = exportSettings(settings.source?.fps, prefs);
+            const fpsText = (n: number) => `${+n.toFixed(2)} ${t("fps")}`;
+            const set = (patch: VideoExportPrefs) => onExportPrefs?.({ ...prefs, ...patch });
+            return (
+              <div id="video-export" className="stack">
+                <div className="row col-head"><span className="label">{t("Output")}</span>
+                  <Hint text={t("Recommended for TikTok and Instagram: the take's own frame rate, a quality above what they keep after their own compression. Customize to choose your own (for all your videos).")} />
+                  <span className="grow" />
+                  <span className="muted xs">{t("Customize")}</span>
+                  <Switch checked={!!prefs.custom} onChange={(v) => set({ custom: v })} title={t("Customize")} />
+                </div>
+                <div className="exp-rows">
+                  <span>{t("Format")}</span><span className="mono">{outW} × {outH}</span>
+                  <span>{t("Frame rate")}</span><span className="mono">{fpsText(cur.fps)}{!prefs.custom || !prefs.fps ? <span className="muted"> · {t("the take's")}</span> : null}</span>
+                  <span>{t("Picture")}</span><span className="mono">H.264 · {cur.bitrate / 1e6} Mb/s</span>
+                  <span>{t("Sound")}</span><span className="mono">AAC · {cur.audioBitrate / 1000} kb/s</span>
+                </div>
+                {prefs.custom && (
+                  <div className="stack exp-custom">
+                    <label className="field">{t("Frame rate")}
+                      <Select className="input sm" value={prefs.fps ? String(prefs.fps) : ""} onChange={(e) => set({ fps: e.target.value ? Number(e.target.value) : undefined })}>
+                        <option value="">{t("The take's ({n})", { n: fpsText(rec.fps) })}</option>
+                        {[24, 25, 30, 50, 60].map((n) => <option key={n} value={String(n)}>{fpsText(n)}</option>)}
+                      </Select>
+                    </label>
+                    <label className="field">{t("Picture quality")}
+                      <Select className="input sm" value={prefs.mbps ? String(prefs.mbps) : ""} onChange={(e) => set({ mbps: e.target.value ? Number(e.target.value) : undefined })}>
+                        <option value="">{t("Recommended ({n} Mb/s)", { n: recommendedRate(cur.fps).bitrate / 1e6 })}</option>
+                        {[10, 16, 20, 24].map((n) => <option key={n} value={String(n)}>{`${n} Mb/s`}{n === 10 ? ` · ${t("lighter files")}` : n === 24 ? ` · ${t("Instagram's ceiling")}` : ""}</option>)}
+                      </Select>
+                    </label>
+                    <label className="field">{t("Sound quality")}
+                      <Select className="input sm" value={prefs.audioKbps ? String(prefs.audioKbps) : ""} onChange={(e) => set({ audioKbps: e.target.value ? Number(e.target.value) : undefined })}>
+                        <option value="">{t("Recommended ({n} kb/s)", { n: AUDIO_KBPS })}</option>
+                        {[128, 192, 256, 320].map((n) => <option key={n} value={String(n)}>{`${n} kb/s`}</option>)}
+                      </Select>
+                    </label>
+                    <div className="reset-m"><button className="btn sm quiet" disabled={!prefs.fps && !prefs.mbps && !prefs.audioKbps}
+                      onClick={() => onExportPrefs?.({ custom: false })}>{t("Back to the recommended settings")}</button></div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </aside>
       {/* The player: on the phone's dock; on a computer floating at the bottom of the board (the same one). */}
       {dockSlot && audioBuf && !libraryPage && createPortal(playerEl, dockSlot)}
@@ -4652,7 +4709,7 @@ export default function VideoStudio({
             <div className={"bar export-bar" + (exp.done ? "" : " shine-bar")} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(exp.p * 100)}>
               <div style={{ width: `${exp.p * 100}%` }} />
             </div>
-            <p className="muted xs">{outW}×{outH} · H.264 + AAC · {+recommendedRate(settings.source?.fps).fps.toFixed(2)} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
+            <p className="muted xs">{outW}×{outH} · H.264 + AAC · {+exportSettings(settings.source?.fps, exportPrefs).fps.toFixed(2)} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
             {exp.step === "convert" && gpuWhy && <p className="muted xs">{t("Colour grade on the graphics card not possible here: {why}", { why: gpuWhy })}</p>}
             {expMode && (expMode.direct
               ? <p className="muted xs">{t("Camera frames decoded from the file ({codec}): you can switch tabs.", { codec: expMode.detail })}</p>

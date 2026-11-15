@@ -13,6 +13,8 @@ export interface ExportJob {
   fps: number;
   /** Bits per second of the picture (see recommendedRate). */
   bitrate: number;
+  /** Bits per second of the sound wanted (less if the browser won't). */
+  audioBitrate?: number;
   /** Part of the official track exported (seconds). */
   from: number;
   until: number;
@@ -39,13 +41,35 @@ export function recommendedRate(src?: number): { fps: number; bitrate: number } 
   return { fps, bitrate: Math.min(24_000_000, Math.max(16_000_000, Math.round((16_000_000 * fps) / 30 / 1e6) * 1e6)) };
 }
 
-/** The sound's bitrates, best first: 256 kb/s in stereo (as music sold online), 160 in mono; less when the browser won't. */
-const AUDIO_BITRATES = (channels: number) => (channels > 1 ? [256_000, 192_000, 128_000] : [160_000, 128_000]);
+/** The sound's recommended bitrate (stereo): as music sold online. */
+export const AUDIO_KBPS = 256;
+
+export interface ExportSettings { fps: number; bitrate: number; audioBitrate: number; custom: boolean }
+/**
+ * What an export uses: the recommended settings for the camera file (`src` fps), or, when the user turned their own
+ * on, theirs (a rate chosen keeps the recommended bitrate for that rate unless one is chosen too).
+ */
+export function exportSettings(src: number | undefined, prefs?: { custom?: boolean; fps?: number; mbps?: number; audioKbps?: number }): ExportSettings {
+  const custom = !!prefs?.custom;
+  const rate = recommendedRate(custom && prefs?.fps ? prefs.fps : src);
+  return {
+    fps: rate.fps,
+    bitrate: custom && prefs?.mbps ? prefs.mbps * 1e6 : rate.bitrate,
+    audioBitrate: (custom && prefs?.audioKbps ? prefs.audioKbps : AUDIO_KBPS) * 1000,
+    custom,
+  };
+}
+
+/** The sound's bitrates, best first: the one wanted (160 at most in mono), then less when the browser won't. */
+const AUDIO_BITRATES = (channels: number, wanted = AUDIO_KBPS * 1000) => {
+  const top = channels > 1 ? wanted : Math.min(wanted, 160_000);
+  return [top, ...[192_000, 128_000].filter((b) => b < top)];
+};
 /** A sample rate every platform takes (Instagram: 48 kHz at most): 88.2 / 176.4 kHz to 44.1, 96 / 192 to 48. */
 export const exportSampleRate = (sr: number) => (sr <= 48000 ? sr : sr % 44100 === 0 ? 44100 : 48000);
 
 /** Codecs this browser can encode for an MP4, or null (then the realtime fallback is used). */
-export async function mp4Support(width: number, height: number, sampleRate: number, channels: number, fps = 30, bitrate = 12_000_000) {
+export async function mp4Support(width: number, height: number, sampleRate: number, channels: number, fps = 30, bitrate = 16_000_000, audioBitrate = AUDIO_KBPS * 1000) {
   if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined" || typeof VideoFrame === "undefined") return null;
   let video: string | null = null;
   for (const codec of fps > 30.5 ? AVC_FAST : AVC) {
@@ -56,10 +80,10 @@ export async function mp4Support(width: number, height: number, sampleRate: numb
   }
   if (!video) return null;
   // AAC only: Opus inside an MP4 is silent in QuickTime, on iPhones and in some editors. The best bitrate it takes.
-  for (const audioBitrate of AUDIO_BITRATES(channels)) {
+  for (const ab of AUDIO_BITRATES(channels, audioBitrate)) {
     try {
-      const r = await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: channels, bitrate: audioBitrate });
-      if (r.supported) return { video, audio: "mp4a.40.2", audioBitrate };
+      const r = await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: channels, bitrate: ab });
+      if (r.supported) return { video, audio: "mp4a.40.2", audioBitrate: ab };
     } catch { /* next */ }
   }
   return null;
@@ -96,7 +120,7 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
   const { audio, from: a0, until: a1 } = await soundPart(job.audio, job.from, job.until, channels);
   const { from, until } = job;
   const sr = audio.sampleRate;
-  const codecs = await mp4Support(width, height, sr, channels, fps, job.bitrate);
+  const codecs = await mp4Support(width, height, sr, channels, fps, job.bitrate, job.audioBitrate);
   if (!codecs) throw new Error("unsupported");
 
   const { ArrayBufferTarget, Muxer } = await import("mp4-muxer");

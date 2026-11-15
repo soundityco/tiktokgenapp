@@ -235,6 +235,17 @@ export interface AudioVersion {
   lyricsAlignV?: number;
 }
 
+/** The user's own export settings, used when `custom` is on (kept when it is off, for the next time). */
+export interface VideoExportPrefs {
+  custom?: boolean;
+  /** Frames per second; none: the camera file's own. */
+  fps?: number;
+  /** Picture, Mb/s; none: the recommended one for the rate. */
+  mbps?: number;
+  /** Sound, kb/s; none: the recommended one. */
+  audioKbps?: number;
+}
+
 export interface VideoTake {
   offset: number;
   musicStart: number;
@@ -477,6 +488,8 @@ export interface Workspace {
   noRepeat: boolean;
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag
   exportFormat: "jpg" | "png";
+  /** How videos are exported (lib/exportVideo exportSettings): the recommended settings, or the user's own. */
+  videoExport?: VideoExportPrefs;
   zones: boolean;
   /** Video studio: a pause puts the playhead back where play started (as editing apps do). Default on; false: it
    *  stays where it stopped. */

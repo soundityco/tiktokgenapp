@@ -1850,6 +1850,8 @@ export default function Studio({ userName }: { userName: string }) {
             presets={presets}
             onSavePreset={savePreset}
             onDeletePreset={deletePreset}
+            exportPrefs={ws.videoExport}
+            onExportPrefs={(v) => upd((w) => ({ ...w, videoExport: v }))}
           />
           </div>
         )}
