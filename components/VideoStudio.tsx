@@ -2166,7 +2166,7 @@ export default function VideoStudio({
    * Where the segment may sit while linked: the whole video, or, when it holds several takes, the
    * part between the neighbouring takes (what was filmed before and after the music of this take stays reachable).
    */
-  const linkRangeOf = (v: Pick<VideoSettings, "offset" | "musicStart" | "musicEnd" | "takes">): [number, number] | null => {
+  const linkRangeOf = (v: Pick<VideoSettings, "offset" | "musicStart" | "musicEnd" | "takes"> & { angles?: string[] }): [number, number] | null => {
     if (!audioBuf || !videoBlob || videoDur <= 0) return null;
     let a = 0, b = videoDur;
     if ((v.takes?.length ?? 0) > 1 && v.musicStart != null && v.musicEnd != null) {
@@ -2177,7 +2177,17 @@ export default function VideoStudio({
     }
     const lo = Math.max(0, v.offset + a);
     const hi = Math.min(audioBuf.duration, v.offset + b);
-    return hi - lo >= 1 ? [lo, hi] : null;
+    if (hi - lo < 1) return null;
+    // Multicam: the part every camera of the project filmed (a shorter take ends the segment's room), unless they
+    // share less than a second (then camera 1's alone, never a locked segment).
+    let clo = lo, chi = hi;
+    for (const id of v.angles ?? settingsRef.current.angles ?? []) {
+      const c = clips.find((x) => x.id === id);
+      const d = c?.source?.duration ?? anglesRef.current.get(id)?.el.duration;
+      if (!c || c.score === undefined || !d || !Number.isFinite(d)) continue;
+      clo = Math.max(clo, c.offset); chi = Math.min(chi, c.offset + d);
+    }
+    return chi - clo >= 1 ? [clo, chi] : [lo, hi];
   };
   /** Limits of the segment: the linked range, else the whole official track. */
   const boundsOf = (v: VideoSettings): [number, number] =>
