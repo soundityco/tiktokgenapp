@@ -55,7 +55,9 @@ const LOOKS = new Map<string, CubeLut>();
 /** A multicam camera's look: its framing and grade (its LUT for the preview, 33 points). */
 type AngleLook = { frame?: VideoSettings["frame"]; desqueeze?: VideoSettings["desqueeze"]; grade?: VideoGrade; lut: Float32Array | null };
 /** A multicam camera: another video of the release, its file played by a hidden player. */
-type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoElement; url: string; offset: number; look: CubeLut | null };
+type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoElement; url: string; offset: number; look: CubeLut | null;
+  /** Its file here is its Drive working copy (the camera file is on another device). */
+  fromCopy: boolean };
 
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 /** A working copy on its way (shown in the top bar wherever the user is: see Studio). */
@@ -476,6 +478,8 @@ export default function VideoStudio({
   const [audioBuf, setAudioBuf] = useState<AudioBuffer | null>(null);
   const [peaks, setPeaks] = useState<number[]>([]);
   const [videoDur, setVideoDur] = useState(0);
+  const videoDurRef = useRef(videoDur);
+  videoDurRef.current = videoDur;
   const [head, setHead] = useState(settings.crop.start);
   const [playing, setPlaying] = useState(false);
   const playingRef = useRef(false);
@@ -684,8 +688,13 @@ export default function VideoStudio({
         const media = c.media ?? c.id;
         let a = map.get(c.id);
         if (!a || a.media !== media) {
-          // The camera file on this device, else its Drive working copy kept here.
-          const blob = (await getMedia(`video:${media}`).catch(() => undefined)) ?? (await getMedia(`copy:${c.id}`).catch(() => undefined));
+          // The camera file on this device, else its Drive working copy kept here, else that copy fetched from the Drive.
+          const own = await getMedia(`video:${media}`).catch(() => undefined);
+          let blob = own ?? (await getMedia(`copy:${c.id}`).catch(() => undefined));
+          if (!blob && c.drive?.copy?.id) {
+            try { blob = (await downloadDriveFile(c.drive.copy.id)) ?? undefined; if (blob) void putMedia(`copy:${c.id}`, blob).catch(() => {}); }
+            catch (e) { console.warn("[takes] Drive copy not fetched", e); }
+          }
           if (off) return;
           if (!blob) { map.delete(c.id); continue; }
           const el = document.createElement("video");
@@ -700,7 +709,7 @@ export default function VideoStudio({
           el.addEventListener("seeked", redraw);
           el.addEventListener("loadeddata", redraw);
           if (a) { a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); }
-          a = { id: c.id, media, blob, el, url, offset: 0, frame: undefined, desqueeze: undefined, grade: undefined, look: null, lut: null };
+          a = { id: c.id, media, blob, el, url, offset: 0, frame: undefined, desqueeze: undefined, grade: undefined, look: null, lut: null, fromCopy: !own };
           map.set(c.id, a);
         }
         a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze;
@@ -1174,14 +1183,16 @@ export default function VideoStudio({
   // ---- The working copy for the other devices: made by itself once the take is synced ----
   // The passage used (+2 s), as rich as the take (lib/convert copyPlanFor), on the Drive; made again when the passage
   // moves out of it; 15 s after the last change (not while the sync is being set). Never from a copy.
-  const makeCopy = async () => {
-    const blob = videoBlob;
-    if (!blob || onCopy || copyAc.current) return;
+  const makeCopy = async (take?: { c: VideoSetup; blob: Blob; dur: number }) => {
+    const blob = take ? take.blob : videoBlob;
+    if (!blob || (!take && onCopy) || copyAc.current) return;
     const cur = settingsRef.current;
-    const clipId = clip.id;
-    let segS = cur.crop.start - cur.offset, segE = segS + cur.crop.duration;
+    const clipId = take ? take.c.id : clip.id;
+    const videoDur = take ? take.dur : videoDurRef.current;
+    // A take of the multicam: the project's passage in its own time.
+    let segS = cur.crop.start - (take ? take.c.offset : cur.offset), segE = segS + cur.crop.duration;
     // The passages of every version, when they sit close enough: switching versions then needs no new copy.
-    for (const v of cur.versions ?? []) {
+    for (const v of take ? [] : cur.versions ?? []) {
       if (!v.v.crop || v.v.offset === undefined) continue;
       const s0 = v.v.crop.start - v.v.offset, e0 = s0 + v.v.crop.duration;
       if (Math.max(segE, e0) - Math.min(segS, s0) <= 180) { segS = Math.min(segS, s0); segE = Math.max(segE, e0); }
@@ -1192,11 +1203,11 @@ export default function VideoStudio({
     const ac = new AbortController();
     copyAc.current = ac;
     copyClip.current = clipId;
-    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(clip)}` };
+    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}` };
     setCopyJob({ step: "make", p: 0, ...job });
     try {
-      const plan = copyPlanFor(cur.source);
-      const name = driveName(t("copy"));
+      const plan = copyPlanFor(take ? take.c.source : cur.source);
+      const name = take ? safeName(`${project.name || "Rollout"} - ${clipName(take.c)} - ${t("copy")}.mp4`) : driveName(t("copy"));
       // The device's video chip first (seconds), ffmpeg when it cannot (minutes).
       const t0 = performance.now();
       // The progress redraws the studio: once per percent, not once per picture (that made the playback stutter).
@@ -1261,6 +1272,24 @@ export default function VideoStudio({
     dueTimer.current = window.setTimeout(() => { dueTimer.current = null; setCopyDueAt(null); void makeCopy(); }, DELAY);
     return () => { if (dueTimer.current) clearTimeout(dueTimer.current); dueTimer.current = null; setCopyDueAt(null); };
   }, [videoBlob, onCopy, driveWrite, copyJob, settings.score, settings.offset, settings.crop.start, settings.crop.duration, settings.drive?.copy, videoDur]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The project's other cameras: each gets its Drive working copy too (one after the other, after this video's own),
+  // so another device opens the multicam. 15 s after the passage last moved, never while playing.
+  useEffect(() => {
+    if (!driveWrite || copyJob || copyDueAt || playing) return;
+    const segS0 = settings.crop.start, segE0 = segS0 + settings.crop.duration;
+    const next = (settings.angles ?? []).map((id) => [clips.find((c) => c.id === id), anglesRef.current.get(id)] as const).find(([c, a]) => {
+      if (!c || !a || a.fromCopy || c.score === undefined) return false;
+      const dur = a.el.duration;
+      if (!Number.isFinite(dur)) return false;
+      const s0 = segS0 - c.offset, e0 = segE0 - c.offset, cp = c.drive?.copy;
+      if (e0 <= 0 || s0 >= dur) return false;
+      return !(cp && cp.of === a.blob.size && cp.from <= Math.max(0, s0 - 0.3) + 1e-3 && cp.to >= Math.min(dur, e0 + 0.3) - 1e-3);
+    });
+    if (!next) return;
+    const [c, a] = next;
+    const id = window.setTimeout(() => void makeCopy({ c: c!, blob: a!.blob, dur: a!.el.duration }), 15_000);
+    return () => clearTimeout(id);
+  }, [driveWrite, copyJob, copyDueAt, playing, angleRev, settings.crop.start, settings.crop.duration, anglesKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
@@ -3544,8 +3573,58 @@ export default function VideoStudio({
   }, [clips]); // eslint-disable-line react-hooks/exhaustive-deps
   const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);
   const takeInput = useRef<HTMLInputElement>(null);
+  /** What a file is (device, curve, codec) and what the app does with its colours: the (i) beside LOG / SDR. */
+  const sourceNote = (src: VideoSourceInfo) => [
+    [src.device ?? (src.kind === "camera" ? t("Camera") : src.kind === "phone" ? t("Phone") : null), src.curve, src.codec].filter(Boolean).join(" · "),
+    src.colour === "log" ? (src.profile
+      ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
+      : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab."))
+      : src.colour === "hdr" ? t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab.")
+      : src.colour === "unknown" ? t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab.")
+      : t("Standard video, used as it is."),
+    src.convert ? t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality.") : "",
+  ].filter(Boolean).join("\n");
+  const colourTag = (src?: VideoSourceInfo) => (src?.colour === "log" ? "LOG" : src?.colour === "hdr" ? "HDR" : src?.colour === "sdr" ? "SDR" : "?");
+  /** A take's Drive copy, as camera 1's: being made, "Backed up" (up to date), or "Drive copy" (the one used here). */
+  const takeCopyEl = (c: VideoSetup) => {
+    const a = anglesRef.current.get(c.id), cp = c.drive?.copy;
+    if (copyJob?.clip === c.id) return <span className="copy-status compact busy xs"><span className="shine">{copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) })}</span></span>;
+    if (a?.fromCopy && cp) return <span className="copy-status compact on-copy xs"><span className="pill-copy">{t("Drive copy")}</span></span>;
+    if (a && cp && cp.of === a.blob.size) return <span className="copy-status compact xs"><span className="pill-copy ready"><Icon name="check" size={10} />{t("Backed up")}</span></span>;
+    return null;
+  };
   /** The take whose line is unfolded (its details), one at a time. */
   const [takeOpen, setTakeOpen] = useState<string | null>(null);
+  // The block of takes slides to its new height when a take unfolds or folds (FLIP: its old height, then the new one).
+  // Each copy of the column (computer, phone) has its own block; their heights kept up to date between two folds.
+  const takesH = useRef(new WeakMap<HTMLElement, number>());
+  /** A take unfolded (or none): the blocks' heights noted first, for the slide. */
+  const foldTo = (id: string | null) => {
+    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch")) if (!el.style.height) takesH.current.set(el, el.offsetHeight);
+    setTakeOpen(id);
+  };
+  useLayoutEffect(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const undo: (() => void)[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch")) {
+      const before = takesH.current.get(el), after = el.offsetHeight;
+      takesH.current.set(el, after);
+      if (!before || before === after || !el.getClientRects().length) continue;
+      el.style.height = `${before}px`;
+      el.style.overflow = "hidden";
+      void el.offsetHeight;
+      el.style.transition = "height .22s ease";
+      el.style.height = `${after}px`;
+      const done = () => { el.style.height = ""; el.style.overflow = ""; el.style.transition = ""; el.removeEventListener("transitionend", end); };
+      // Its own transition only (a child's, a hover…, bubbles up here too).
+      const end = (e: TransitionEvent) => { if (e.target === el && e.propertyName === "height") done(); };
+      el.addEventListener("transitionend", end);
+      const id = window.setTimeout(done, 300);
+      undo.push(() => { window.clearTimeout(id); done(); });
+    }
+    return () => undo.forEach((f) => f());
+  }, [takeOpen]);
+
   /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
   const takesEl = (part: "first" | "rest") => {
     const angles = (settings.angles ?? []).filter(Boolean);
@@ -3560,7 +3639,7 @@ export default function VideoStudio({
       // A camera whose file is not on this device (its shots stay black: never another camera's picture instead).
       const missing = cam !== null && cam > 0 && angleRev > 0 && !anglesRef.current.has(c.id);
       const name = c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c);
-      const toggle = () => { setTakeOpen(open ? null : c.id); if (cam !== null) { stop(); setPinCam(cam === 0 ? "main" : c.id); } };
+      const toggle = () => { foldTo(open ? null : c.id); if (cam !== null) { stop(); setPinCam(cam === 0 ? "main" : c.id); } };
       const sync = job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
         : missing ? <span className="xs warn-text">{t("File not on this device")}</span>
         : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
@@ -3568,7 +3647,7 @@ export default function VideoStudio({
       const menu = (close: () => void) => (<>
         {cam !== null && cam > 0 && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
         {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
-        <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}>{t("Sync again")}</button>
+        <button disabled={(!!job && !job.err) || (cam === 0 && (!videoBlob || syncBusy))} onClick={() => { close(); if (cam === 0) void autoSync(); else void resyncTake(c); }}>{t("Sync again")}</button>
         {c.takeOnly && <>
           <div className="sep" />
           <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
@@ -3584,9 +3663,9 @@ export default function VideoStudio({
             label={<button className="take-label" onClick={toggle} title={t("Fold")}>{cam !== null && <b>{cam + 1}</b>}{cam !== null && " · "}{clipName(c)} <Icon name="chevron" size={11} /></button>}
             meta={<>
               {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
-              {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
-              {c.source?.fps ? <span>{c.source.fps} fps</span> : null}
-              {sync ?? <span>{t("Synced at {at} in the official audio", { at: fmtTime(c.offset) })}</span>}
+              {c.source && <span className="row" style={{ gap: 4 }}>{colourTag(c.source)}<Hint text={sourceNote(c.source)} /></span>}
+              {takeCopyEl(c)}
+              {sync}
             </>} />
         </div>
       );
@@ -3600,9 +3679,12 @@ export default function VideoStudio({
             <span className="take-name" title={c.videoName ?? ""}>{name}</span>
           </button>
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
-          {sync ?? <Icon name="check" size={12} />}
+          {/* On the line, an icon (its words in the unfolded card): the name keeps the room. */}
+          {job && !job.err ? sync
+            : missing || job?.err || c.score === undefined ? <span className="warn-text take-warn" title={missing ? t("File not on this device") : job?.err ?? t("Not synced")}><Icon name="alert" size={13} /></span>
+            : <Icon name="check" size={12} />}
           {cam === null && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
-          {cam !== 0 && <Menu float trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
+          {<Menu float trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
         </div>
         </div>
       );
@@ -4088,7 +4170,7 @@ export default function VideoStudio({
             {/* The release's videos side by side (a phone swipes them; a computer shows only the open one, its picker is
                 above the board): the studio's one whole, the others greyed on each side, each with what it holds and
                 its own button to open it in the studio (swiping never changes the studio's video). */}
-            <div className="tree-branch">
+            <div className="tree-branch takes-branch">
             {/* One title, still ("Video"): each card has its video's name, as the audio tile has "Audio". */}
             <div className="tree-head" title={t("Camera 1 is the project's own take; up to 3 more for a multicam edit.")}>
               <span className="label">{t("Project takes")}</span>
@@ -4114,20 +4196,11 @@ export default function VideoStudio({
               const d = settings.drive ?? {};
               const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
               const src = videoBlob ? settings.source : undefined;
-              const note = src && [
-                [src.device ?? (src.kind === "camera" ? t("Camera") : src.kind === "phone" ? t("Phone") : null), src.curve, src.codec].filter(Boolean).join(" · "),
-                src.colour === "log" ? (src.profile
-                  ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
-                  : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab."))
-                  : src.colour === "hdr" ? t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab.")
-                  : src.colour === "unknown" ? t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab.")
-                  : t("Standard video, used as it is."),
-                src.convert ? t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality.") : "",
-              ].filter(Boolean).join("\n");
+              const note = src && sourceNote(src);
               const missing = !videoBlob && !!settings.videoName;
               return (
                 <MediaTile icon="film" name={settings.videoName ?? null}
-                  label={settings.videoName ? <button className="take-label cam-0" onClick={() => setTakeOpen(null)} title={t("Fold")}><b>1</b> · {clipName(clip)} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                  label={settings.videoName ? <button className="take-label cam-0" onClick={() => foldTo(null)} title={t("Fold")}><b>1</b> · {clipName(clip)} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
