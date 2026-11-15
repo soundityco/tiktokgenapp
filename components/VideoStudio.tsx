@@ -3730,7 +3730,7 @@ export default function VideoStudio({
               );
             })}
             {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && (
-              <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut, double-click to remove it")}
+              <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
                 onPointerDown={(e) => {
                   e.stopPropagation(); stop();
@@ -3742,7 +3742,16 @@ export default function VideoStudio({
                   const d = cutDrag.current;
                   if (!d) return;
                   const cfg = settingsRef.current;
-                  const at = cfg.crop.start + clamp((e.clientX - d.left) / d.width, 0, 1) * Math.max(0.1, end - cfg.crop.start);
+                  const span = Math.max(0.1, end - cfg.crop.start);
+                  let at = cfg.crop.start + clamp((e.clientX - d.left) / d.width, 0, 1) * span;
+                  // Drawn to the lyrics' lines and the hooks (their start or end) within 8 px, so a cut falls on the
+                  // sound; ⌘ / Ctrl held: free.
+                  if (!e.metaKey && !e.ctrlKey) {
+                    const reach = (8 / d.width) * span;
+                    const marks = [...cues.flatMap((q) => [q.start, q.end]), ...hooks.flatMap((h) => [cfg.crop.start + h.from, ...(h.to != null ? [cfg.crop.start + h.to] : [])])];
+                    const near = marks.reduce((b, m) => (Math.abs(m - at) < Math.abs(b - at) ? m : b), Infinity);
+                    if (Math.abs(near - at) <= reach) at = near;
+                  }
                   setV({ cuts: moveCut(cfg.cuts ?? [], d.i, at) });
                 }}
                 onPointerUp={() => { cutDrag.current = null; }} onPointerCancel={() => { cutDrag.current = null; }} />
