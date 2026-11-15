@@ -299,8 +299,11 @@ export function Range(p: { label: string; value: number; display?: string; min: 
   const back = p.onReset;
   const scale = p.scale ?? 1;
   // A click on the value: type it. Enter or leaving the field sets it (rounded to the step, kept in range), Escape
-  // gives up. The slider's double-click still puts the default back.
+  // gives up. A double-click on the value (or on the slider) puts the default back: the click waits a moment, so the
+  // second click of a double one is not taken by the field.
   const [edit, setEdit] = useState<string | null>(null);
+  const clickWait = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (clickWait.current) clearTimeout(clickWait.current); }, []);
   const shown = (p.display ?? String(p.value));
   const startEdit = () => {
     const n = /[-+]?\d+(?:[.,]\d+)?/.exec(shown)?.[0];
@@ -316,7 +319,7 @@ export function Range(p: { label: string; value: number; display?: string; min: 
     v = Math.min(p.max, Math.max(p.min, +v.toFixed(6)));
     if (v !== p.value) p.onChange(v);
   };
-  const hint = t("Click to type a value") + (back ? " · " + t("double-click the slider to reset") : "");
+  const hint = t("Click to type a value") + (back ? " · " + t("double-click to reset") : "");
   return (
     <label className="field">
       <span>{p.label}
@@ -326,7 +329,14 @@ export function Range(p: { label: string; value: number; display?: string; min: 
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setEdit(null); } }} />
         ) : (
           <span className={"val editable" + (back ? " resettable" : "")} title={hint} role="button" tabIndex={0}
-            onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); startEdit(); }}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.preventDefault();
+              if (!back) { startEdit(); return; }
+              if (clickWait.current) clearTimeout(clickWait.current);
+              clickWait.current = e.detail > 1 ? null : setTimeout(() => { clickWait.current = null; startEdit(); }, 250);
+            }}
+            onDoubleClick={(e) => { e.preventDefault(); if (clickWait.current) clearTimeout(clickWait.current); clickWait.current = null; back?.(); }}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); startEdit(); } }}>{shown}</span>
         )}
       </span>

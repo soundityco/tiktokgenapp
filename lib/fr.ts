@@ -143,7 +143,7 @@ export const FR: Record<string, string> = {
   "Preview tips": "Astuces de l'aperçu",
   "1 list": "1 liste",
   "Click to type a value": "Clique pour taper une valeur",
-  "double-click the slider to reset": "double-clic sur le curseur pour réinitialiser",
+  "double-click to reset": "double-clic pour réinitialiser",
   "Go to the carousel studio": "Aller au studio carrousel",
   "Go to the video studio": "Aller au studio vidéo",
   "App installed": "App installée",
