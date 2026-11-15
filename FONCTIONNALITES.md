@@ -78,7 +78,10 @@ dans ton Google Drive.
 - **Bibliothèque de LUT du compte** : une LUT importée est disponible sur tous tes appareils (sa copie va sur ton Drive) ; jamais deux fois la même ; une corbeille au survol pour en supprimer une (confirmation, les vidéos qui l'utilisent repassent en Rec.709). — En ligne
 - **Bandes noires** au format voulu. — En ligne
 - **Presets de style** des textes, à garder et réappliquer. — En ligne
+- **Vidéos rangées** dans le sélecteur : à étalonner (log / HDR), standard (SDR), autres, aussi dans le choix des caméras du multicam. — En ligne
 - **Plein écran**, zones TikTok, lecture qui revient au départ à la pause (réglable). — En ligne
+- **Prises et projets** : les fichiers caméra / téléphone s'importent dans la release (un ou plusieurs d'un coup, « Importer des prises »), chacun se synchronise seul sur l'audio officiel en arrière-plan, sans créer de projet ; un projet (un post) prend jusqu'à 4 prises ; « Autres prises de la release » repliée sous celles du projet. Un fichier déjà importé (même nom, même taille) n'est pas recréé. Toutes les prises du projet au même niveau : une ligne numérotée chacune, dépliable en carte complète (durée, type, copie Drive « Sauvegardée », synchro), dans la couleur de sa caméra, avec une transition de hauteur ; chaque prise a sa copie Drive pour les autres appareils ; un clic sur une prise montre ses détails ; un doublon déjà importé est fusionné. — En test
+- **Montage multicam** : avec plusieurs prises dans un projet, boutons 1 à 4 et « Couper » au-dessus de la piste des plans (téléphone compris) ; les boutons ou touches 1 à 4 coupent vers une caméra à la tête de lecture (en lecture comme à l'arrêt), au début d'un plan ils changent tout le plan ; une croix au survol d'un plan (sur téléphone : le plan sélectionné) retire son cut, double-clic sur un trait aussi ; les cuts se glissent sur la piste des plans ; chaque caméra garde sa synchro, son cadrage et son étalonnage, réglés dans la colonne de droite quand elle est affichée (clic sur la prise ou sur un de ses plans ; « Réglages de N » en tête ; « Autres caméras » copie la couleur sur celles du même type) ; lié à la vidéo, le segment reste dans la partie filmée par toutes les caméras ; l'export suit les cuts. — En test
 
 ## Audio de la release
 
@@ -130,6 +133,9 @@ dans ton Google Drive.
 
 ## À venir (idées retenues)
 
+- **Brume avec profondeur** (IA) : le brouillard placé selon la distance, comme le Cinematic Haze de DaVinci. — À venir
+- **Typo animée** : un mot mis en avant (autre police, taille, apparition). — À venir
+- **Cuts calés sur les paroles** en multicam. — À venir
 - **Version live sans audio officiel** : le son de la prise comme référence. — À venir
 - **Correction mot par mot sur la timeline**. — À venir
 - **Aperçu vidéo plus compact** sur téléphone (option). — À venir

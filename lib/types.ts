@@ -348,6 +348,10 @@ export interface VideoSourceInfo {
 }
 
 export interface VideoSettings {
+  /** Multicam: the other videos of the release used as cameras 2 to 4 (their own sync, framing and grade). */
+  angles?: string[];
+  /** Multicam cuts (lib/multicam): from this official time on, this camera (0 = this video). */
+  cuts?: { at: number; cam: number }[];
   /** Only the hooks of this theme of the hook list (see lib/themes). */
   hookTheme?: string;
   /** Only the hooks with one of these tags (replaces `hookTheme`). */
@@ -447,6 +451,8 @@ export interface VideoSetup extends VideoSettings {
   /** Its files on the device (camera file, its picture) are those kept under this key: a duplicate reads the ones of
    *  the video it was made from (never copied: a camera file weighs gigabytes). None: its own id. */
   media?: string;
+  /** A take imported in the release's library (lib: "Prises"): not a project of its own, used as a camera by projects. */
+  takeOnly?: boolean;
 }
 
 export interface Project {
