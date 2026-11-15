@@ -2946,13 +2946,17 @@ export default function VideoStudio({
     };
     try {
       let heard = await listen(model);
-      // Too few words recognised for the lyrics: listened to again, once, by the precise model (the singing over a busy
-      // mix needs it), before placing them roughly.
-      if (model !== "small" && writtenOf(src, proj).trim() && (!heard.length || placeWords(heard, src, proj, segFrom, segTo).approx)) {
-        console.info("[lyrics] few words recognised: listening again with the precise model");
-        setGenInfo(t("Few words recognised: listening again with the precise model…"));
-        const again = await listen("small");
-        if (again.length) heard = again;
+      // Too few words recognised for the lyrics: listened to again, once, by the other model; the better listening of the
+      // two is kept (the one the lyrics hold on, else the one that heard more words), never simply the last one.
+      if (writtenOf(src, proj).trim() && (!heard.length || placeWords(heard, src, proj, segFrom, segTo).approx)) {
+        const other: AsrModel = model === "small" ? "base" : "small";
+        console.info(`[lyrics] few words recognised: listening again with the ${other} model`);
+        setGenInfo(t("Few words recognised: listening again with another model…"));
+        const again = await listen(other);
+        const holds = (h: LyricWord[]) => h.length > 0 && !placeWords(h, src, proj, segFrom, segTo).approx;
+        if (holds(again) && !holds(heard)) heard = again;
+        else if (!holds(heard) && again.length > heard.length) heard = again;
+        console.info(`[lyrics] kept: ${heard === again ? other : model} (${heard.length} words)`);
       }
       if (!heard.length) {
         const msg = t("No words were heard in this track. Try a more accurate model or set the language.");
@@ -4604,6 +4608,13 @@ export default function VideoStudio({
                           title={!hasLyrics ? t("Import the video or paste the lyrics first.") : placed ? t("Place the lyrics again on the audio. Your retouches are kept.") : undefined}>
                           <Icon name="type" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}{hasLyrics && !placed && <span className="tab-dot" />}
                         </button>
+                        {/* A new listening of the whole song (the words heard before dropped): after a new mix, another model… */}
+                        {placed && audioBuf && (
+                          <button onClick={() => { closeMenu(); onProject((p) => ({ ...p, heardWords: undefined })); void generateLyrics(audioBuf, { ...project, heardWords: undefined }, writtenSrc); }}
+                            title={t("Listen to the whole song again and place the lyrics from scratch (your retouches are kept).")}>
+                            <Icon name="refresh" size={14} />{t("Listen to the audio again")}
+                          </button>
+                        )}
                       </>)}
                     </Menu>
                   ) : (

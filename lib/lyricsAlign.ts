@@ -250,7 +250,9 @@ export function alignSong(text: string, heard: LyricWord[]): AlignResult | null 
     else { i--; j--; } // a mismatch taken as a pair: both words skipped
   }
   const idx = [...pair.keys()].sort((a, b) => a - b);
-  if (idx.length < 2 || idx.length / n < 0.2) return null;
+  // A sung voice over a busy mix: a tenth of the words recognised (4 at least) is enough to hold the song; the others
+  // fall in order between them.
+  if (idx.length < 4 || idx.length / n < 0.1) return null;
 
   const out: LyricWord[] = [];
   const first = idx[0], last = idx[idx.length - 1];
