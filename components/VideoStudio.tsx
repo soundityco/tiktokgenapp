@@ -892,11 +892,13 @@ export default function VideoStudio({
     // Multicam: the camera of the shot at this time (its own picture, framing and grade).
     const pin = !sourceRef.current ? pinRef.current : null;
     const ang = pin ? (pin === "main" ? null : anglesRef.current.get(pin) ?? null) : angleAt(time);
+    // A camera chosen there whose file is not on this device: black (never camera 1's picture passed for it).
+    const lostCam = !ang && (pin ? pin !== "main" : camAt(settingsRef.current.cuts, time) > 0);
     const keep = !ang && !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
-    const pic = ang ? anglePicture(ang, time, !sourceRef.current) : pictureOf(el, time);
+    const pic = lostCam ? null : ang ? anglePicture(ang, time, !sourceRef.current) : pictureOf(el, time);
     // A camera not ready yet (starting, placing itself): the last picture stays on screen, never a black frame.
     if (pic === undefined) return;
-    const boxes = drawScene(g, c.width, c.height, pic, time, { raw: rawRef.current, keep }, ang ?? undefined);
+    const boxes = drawScene(g, c.width, c.height, pic, time, lostCam ? undefined : { raw: rawRef.current, keep }, ang ?? (lostCam ? { lut: null } : undefined));
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
     drawHelpers(g, c.width, c.height, fullRef.current ? { ...aidsRef.current, zones: false } : aidsRef.current);
@@ -3552,49 +3554,60 @@ export default function VideoStudio({
     const card = (c: VideoSetup, cam: number | null) => {
       const job = takeJobs[c.id];
       const i = cam === null ? -1 : cam - 1;
-      // One slim line each (all the cameras seen at once): number and colour as on the shots track, name, length, sync.
+      const open = takeOpen === c.id;
+      // Camera 1 unfolded: its own full card (file, Drive copy, sync) shows in its place, just below.
+      if (open && cam === 0) return null;
+      // A camera whose file is not on this device (its shots stay black: never another camera's picture instead).
+      const missing = cam !== null && cam > 0 && angleRev > 0 && !anglesRef.current.has(c.id);
+      const name = c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c);
+      const toggle = () => { setTakeOpen(open ? null : c.id); if (cam !== null) { stop(); setPinCam(cam === 0 ? "main" : c.id); } };
+      const sync = job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
+        : missing ? <span className="xs warn-text">{t("File not on this device")}</span>
+        : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
+        : null;
+      const menu = (close: () => void) => (<>
+        {cam !== null && cam > 0 && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
+        {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
+        <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}>{t("Sync again")}</button>
+        {c.takeOnly && <>
+          <div className="sep" />
+          <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
+            title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
+            onClick={() => { close(); deleteTake(c); }}>{t("Delete this take")}</button>
+        </>}
+      </>);
+      const cls = "take" + (cam === null ? " other" : " cam-" + cam) + (open ? " open" : "");
+      // Unfolded: the same full card as camera 1's (its name, file, what it is, its sync), in place of its line.
+      if (open) return (
+        <div key={c.id} className={cls}>
+          <MediaTile icon="film" name={c.videoName ?? null} warn={missing} loading={!!job && !job.err} menu={cam === 0 ? false : menu}
+            label={<button className="take-label" onClick={toggle} title={t("Fold")}>{cam !== null && <b>{cam + 1}</b>}{cam !== null && " · "}{clipName(c)} <Icon name="chevron" size={11} /></button>}
+            meta={<>
+              {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
+              {c.source?.colour && c.source.colour !== "unknown" && <span>{c.source.colour.toUpperCase()}</span>}
+              {c.source?.fps ? <span>{c.source.fps} fps</span> : null}
+              {sync ?? <span>{t("Synced at {at} in the official audio", { at: fmtTime(c.offset) })}</span>}
+            </>} />
+        </div>
+      );
+      // Folded: one slim line (all the cameras seen at once), number and colour as on the shots track.
       return (
-        <div key={c.id} className={"take" + (cam === null ? " other" : " cam-" + cam) + (takeOpen === c.id ? " open" : "")}>
+        <div key={c.id} className={cls}>
         <div className={"take-row" + (job && !job.err ? " shine-box" : "")}>
-          <button className="take-main" aria-expanded={takeOpen === c.id}
-            title={cam !== null ? t("Show it on the preview and set its colour and framing") : undefined}
-            onClick={() => { setTakeOpen(takeOpen === c.id ? null : c.id); if (cam !== null) { stop(); setPinCam(cam === 0 ? "main" : c.id); } }}>
+          <button className="take-main" aria-expanded={false}
+            title={cam !== null ? t("Show it on the preview and set its colour and framing") : undefined} onClick={toggle}>
             {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name="film" size={13} />}
-            <span className="take-name" title={c.videoName ?? ""}>{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
+            <span className="take-name" title={c.videoName ?? ""}>{name}</span>
           </button>
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
-          {job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
-            : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
-            : <Icon name="check" size={12} />}
-          {cam === 0 ? <button className="btn icon sm quiet take-fold" aria-label={t("Details")} onClick={() => setTakeOpen(takeOpen === c.id ? null : c.id)}><Icon name="chevron" size={12} /></button> : <>
+          {sync ?? <Icon name="check" size={12} />}
           {cam === null && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
-          <Menu float trigger={(_, toggle) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={toggle}><Icon name="more" size={14} /></button>}>
-            {(close) => (<>
-              {cam !== null && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
-              {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
-              <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}>{t("Sync again")}</button>
-              {c.takeOnly && <>
-                <div className="sep" />
-                <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
-                  title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
-                  onClick={() => { close(); deleteTake(c); }}>{t("Delete this take")}</button>
-              </>}
-            </>)}
-          </Menu>
-          </>}
+          {cam !== 0 && <Menu float trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
         </div>
-        {takeOpen === c.id && cam !== 0 && (
-          <div className="take-more xs">
-            <span className="media-name" title={c.videoName ?? ""}>{c.videoName}</span>
-            <span className="muted">{[c.source?.device ?? (c.source?.kind === "camera" ? t("Camera") : c.source?.kind === "phone" ? t("Phone") : null), c.source?.codec,
-              c.source?.colour && c.source.colour !== "unknown" ? c.source.colour.toUpperCase() : null, c.source?.fps ? `${c.source.fps} fps` : null].filter(Boolean).join(" · ")}</span>
-            <span className="muted">{c.score === undefined ? t("Not synced") : t("Synced at {at} in the official audio", { at: fmtTime(c.offset) })}</span>
-          </div>
-        )}
         </div>
       );
     };
-    if (part === "first") return <div className="takes">{card(clip, 0)}</div>;
+    if (part === "first") { const one = card(clip, 0); return one && <div className="takes">{one}</div>; }
     return (
       <div className="takes">
         {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
@@ -4113,7 +4126,8 @@ export default function VideoStudio({
               ].filter(Boolean).join("\n");
               const missing = !videoBlob && !!settings.videoName;
               return (
-                <MediaTile icon="film" label={clipName(clip)} name={settings.videoName ?? null} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                <MediaTile icon="film" name={settings.videoName ?? null}
+                  label={settings.videoName ? <button className="take-label cam-0" onClick={() => setTakeOpen(null)} title={t("Fold")}><b>1</b> · {clipName(clip)} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>

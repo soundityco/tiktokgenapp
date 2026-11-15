@@ -436,7 +436,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .look-of { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam); border-radius: var(--r); font-size: 13px; min-width: 0; }
 .look-of b { color: var(--cam); }
 .look-of .take-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.take.open .take-fold svg { transform: rotate(180deg); }
+.take-label { display: inline-flex; align-items: center; gap: 4px; padding: 0; background: none; border: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.take-label b { color: var(--cam); }
+.take-label svg { transform: rotate(180deg); }
 .takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
 .takes-more > summary::before { content: "▸ "; }
 .takes-more[open] > summary::before { content: "▾ "; }

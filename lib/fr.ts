@@ -471,6 +471,7 @@ export const FR: Record<string, string> = {
   "Sign out": "Se déconnecter",
   "Size": "Taille",
   "Threshold": "Seuil",
+  "File not on this device": "Fichier absent sur cet appareil",
   "Settings of": "Réglages de",
   "Colour, effects and framing are those of the camera on the preview: click a take in the library or a shot in the timeline to set another one. Kept in the take.": "Couleur, effets et cadrage sont ceux de la caméra affichée dans l'aperçu : cliquez sur une prise dans la bibliothèque ou sur un plan dans la timeline pour en régler une autre. Gardés dans la prise.",
   "Show it on the preview and set its colour and framing": "L'afficher dans l'aperçu et régler sa couleur et son cadrage",
