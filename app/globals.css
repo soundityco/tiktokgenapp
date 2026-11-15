@@ -2691,32 +2691,6 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* The board's end: as much room above the player as under it (the last part never touches it). */
 @media (min-width: 1001px) { .board-player { margin-top: 42px; } }
 
-/* The library's videos side by side. A computer: only the open one (its picker is above the board). A phone: a strip
-   to swipe, the open one in the middle, the others greyed on each side (a tap or a swipe opens one). */
-.clip-strip > .clip-card.ghost { display: none; }
-@media (max-width: 1000px) {
-  /* The whole width of the screen (out of the branch's indent and the page's margin); the first and the last card can
-     reach the middle too (room on each side); every card as tall as the tallest (the open one). */
-  .clip-strip.many { display: flex; align-items: stretch; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
-    margin: 0 calc(-1 * var(--s4)) 0 calc(-26px - var(--s4)); padding: 0 32px; }
-  .clip-strip.many::-webkit-scrollbar { display: none; }
-  .clip-strip.many > .clip-card { flex: 0 0 calc(100vw - 64px); min-width: 0; scroll-snap-align: center; display: flex; flex-direction: column; gap: var(--s3); }
-  .clip-strip.many > .clip-card > .media { flex: 1; }
-  .clip-strip.many::after { content: ""; flex: 0 0 1px; } /* the end padding of a scrolling row (browsers drop it otherwise) */
-  /* The card in the middle lit, the others greyed (the studio's one too, once swiped away). */
-  .clip-strip.many > .clip-card { position: relative; opacity: .4; transition: opacity .2s; }
-  .clip-strip.many > .clip-card.shown { opacity: 1; }
-  .clip-strip.many > .clip-card.ghost { display: flex; }
-  /* A card is the audio tile's shape (its title the video's name: the still title above only says "Video"), packed at
-     the top (the card is as tall as the tallest, not its lines). */
-  .clip-strip .media { align-content: start; }
-  /* A video that is not the studio's: darkened, a pill in its middle to open it (only on the one in the middle). */
-  .clip-strip.many > .clip-card.ghost::after { content: ""; position: absolute; inset: 0; border-radius: var(--r); background: rgba(8,8,10,.62); pointer-events: none; }
-  .clip-open { position: absolute; left: 50%; top: 50%; z-index: 1; translate: -50% -50%; display: inline-flex; align-items: center; gap: 7px;
-    height: 34px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: var(--fs-sm);
-    white-space: nowrap; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
-  .clip-card:not(.shown) .clip-open { pointer-events: none; }
-}
 
 
 /* =====================================================================
