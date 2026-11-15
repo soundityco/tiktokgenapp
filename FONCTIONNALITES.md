@@ -76,6 +76,7 @@ dans ton Google Drive.
 - **Couper sans perdre** : un interrupteur coupe toute la couleur (aperçu et export), d'autres coupent les Corrections, les Roues, les Effets ou la Finition, comme un node désactivé dans DaVinci ; les réglages sont gardés. — En ligne
 - **Presets de couleur** : enregistrer tout un étalonnage (profil caméra, LUT, réglages, roues) et le poser sur une autre vidéo d'un clic, puis le retoucher. — En ligne
 - **Bibliothèque de LUT du compte** : une LUT importée est disponible sur tous tes appareils (sa copie va sur ton Drive) ; jamais deux fois la même ; une corbeille au survol pour en supprimer une (confirmation, les vidéos qui l'utilisent repassent en Rec.709). — En ligne
+- **Réglages d'une LUT par vidéo** : ce que la LUT attend (log de la caméra, Cineon…), ce qu'elle sort et la compression des hautes lumières sont ceux de chaque vidéo (une prise peut demander Cineon, une autre le log de la caméra) ; les LUT d'Alister Chapman sont reconnues à l'import (log de la caméra). — En test
 - **Bandes noires** au format voulu. — En ligne
 - **Presets de style** des textes, à garder et réappliquer. — En ligne
 - **Vidéos rangées** dans le sélecteur : à étalonner (log / HDR), standard (SDR), autres, aussi dans le choix des caméras du multicam. — En ligne

@@ -1,4 +1,5 @@
-import { FontId, PicSettings, Project, SlideCfg, TextPool, PicPool, TextStyle, VideoSettings, VideoSetup, Workspace } from "./types";
+import { FontId, PicSettings, Project, SlideCfg, TextPool, PicPool, TextStyle, VideoGrade, VideoSettings, VideoSetup, Workspace } from "./types";
+import { lutInputOf } from "./grade";
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -96,7 +97,27 @@ export function textRoles(pools: TextPool[]): TextPool[] {
   });
 }
 
-export function normalizeWorkspace(w: Workspace): Workspace {
+/** Once: each video's LUT keeps the settings the library gave it (what it showed until now), now its own: another video
+ *  can then use the same LUT another way (one file needs Cineon, another the camera's log). Presets too. */
+export function lutPerVideo(w: Workspace): Workspace {
+  const fix = (g?: VideoGrade): VideoGrade | undefined => {
+    if (!g?.lut) return g;
+    const l = w.luts?.find((x) => x.id === g.lut!.id);
+    const from = l ?? g.lut;
+    return { ...g, lut: { ...g.lut, input: lutInputOf(from), output: from.output, tonemap: from.tonemap, kind: undefined } };
+  };
+  return {
+    ...w,
+    lutPerVideoV1: true,
+    gradePresets: w.gradePresets?.map((p) => ({ ...p, grade: fix(p.grade)! })),
+    projects: w.projects.map((p) => p.videos ? { ...p, videos: p.videos.map((v) => ({
+      ...v, grade: fix(v.grade), versions: v.versions?.map((x) => (x.v.grade ? { ...x, v: { ...x.v, grade: fix(x.v.grade) } } : x)),
+    })) } : p),
+  };
+}
+
+export function normalizeWorkspace(w0: Workspace): Workspace {
+  const w = w0.lutPerVideoV1 ? w0 : lutPerVideo(w0);
   return {
     ...w,
     ...(w.textRolesV1 ? {} : { textPools: textRoles(w.textPools), textRolesV1: true }),
@@ -143,5 +164,6 @@ export function defaultWorkspace(names?: StarterNames): Workspace {
     exportFormat: "jpg",
     zones: false,
     textRolesV1: true,
+    lutPerVideoV1: true,
   };
 }

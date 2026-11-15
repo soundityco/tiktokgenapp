@@ -94,8 +94,9 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
       setErr(t("This file is not a 3D LUT (.cube): {why}", { why: e instanceof Error ? e.message : String(e) }));
     }
   };
-  /** A setting of the LUT chosen (its input, output, highlights): it is the LUT's, every video using it follows. */
-  const setLut = (patch: Partial<LutRef>) => { if (!g.lut) return; const lut = { ...g.lut, ...patch }; set({ lut }); onLutSettings?.(lut); };
+  /** A setting of the LUT chosen (its input, output, highlights): this video's (its file's), another video can use the
+   *  same LUT another way; the library keeps the one a new video starts with. */
+  const setLut = (patch: Partial<LutRef>) => { if (!g.lut) return; set({ lut: { ...g.lut, ...patch, kind: undefined } }); };
   const INPUTS: { id: LutInput; label: string }[] = [
     { id: "camera", label: t("The camera's log (S-Log3, Apple Log…)") },
     { id: "dwg", label: t("DaVinci Wide Gamut / Intermediate") },
@@ -208,7 +209,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
                   </div>
                 )}
                 {guessNote && <p className="notice warn xs">{guessNote}</p>}
-                <p className="muted xs">{t("These are the LUT's own settings: every video using it follows.")}</p>
+                <p className="muted xs">{t("These settings are this video's: another video can use the same LUT another way.")}</p>
               </div>
             )}
             <div className="row">

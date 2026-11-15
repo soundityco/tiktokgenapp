@@ -200,3 +200,24 @@ describe("a LUT's input guessed from its file", async () => {
     expect(guessLutInput("MyLook.cube", "LUT_3D_SIZE 33")).toBeNull();
   });
 });
+
+describe("LUT settings per video (once)", () => {
+  it("each video keeps what the library gave it, then its own", async () => {
+    const { lutPerVideo } = await import("@/lib/defaults");
+    const lut = { id: "L", name: "Alister" };
+    const w = {
+      luts: [{ ...lut, input: "cineon709", tonemap: true }],
+      gradePresets: [{ id: "p", name: "P", grade: { profile: "slog3-cine", lut } }],
+      projects: [{ id: "r", videos: [
+        { id: "a", grade: { profile: "slog3-cine", lut: { ...lut, input: "camera" } } },
+        { id: "b", grade: { profile: "slog3-cine" } },
+      ] }],
+    } as never;
+    const out = lutPerVideo(w) as unknown as { lutPerVideoV1: boolean; gradePresets: { grade: { lut: { input: string; tonemap: boolean } } }[]; projects: { videos: { grade?: { lut?: { input: string } } }[] }[] };
+    expect(out.lutPerVideoV1).toBe(true);
+    // What it showed until now: the library's (it overrode the video's own copy).
+    expect(out.projects[0].videos[0].grade?.lut?.input).toBe("cineon709");
+    expect(out.projects[0].videos[1].grade?.lut).toBeUndefined();
+    expect(out.gradePresets[0].grade.lut).toMatchObject({ input: "cineon709", tonemap: true });
+  });
+});

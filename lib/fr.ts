@@ -471,6 +471,7 @@ export const FR: Record<string, string> = {
   "Sign out": "Se déconnecter",
   "Size": "Taille",
   "Threshold": "Seuil",
+  "These settings are this video's: another video can use the same LUT another way.": "Ces réglages sont ceux de cette vidéo : une autre vidéo peut utiliser la même LUT autrement.",
   "A camera cuts to it at the playhead; at a shot's start, the whole shot.": "Une caméra coupe vers elle à la tête de lecture ; au début d'un plan, tout le plan.",
   "Camera {n}: cut to it here (at a shot's start: the whole shot)": "Caméra {n} : couper vers elle ici (au début d'un plan : tout le plan)",
   "Remove this cut: the shot joins the one on its left": "Retirer ce cut : le plan rejoint celui de gauche",

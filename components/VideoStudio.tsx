@@ -610,8 +610,11 @@ export default function VideoStudio({
   /** A grade with its LUT's own settings as the account has them now (its input, output, highlights): a video keeps a
    *  copy of its LUT, the library says how it is used. */
   const withLutSettings = (g: VideoGrade | undefined): VideoGrade | undefined => {
-    const l = g?.lut && lutLibraryRef.current?.find((x) => x.id === g.lut!.id);
-    return g && l ? { ...g, lut: { ...g.lut!, input: l.input, output: l.output, tonemap: l.tonemap, kind: l.kind } } : g;
+    // The video's own settings for its LUT (each file its own: one needs Cineon, another the camera's log); a video
+    // that never set them takes the library's (what a new video starts with).
+    if (!g?.lut || g.lut.input) return g;
+    const l = lutLibraryRef.current?.find((x) => x.id === g.lut!.id);
+    return l ? { ...g, lut: { ...g.lut, input: l.input, output: l.output, tonemap: l.tonemap, kind: l.kind } } : g;
   };
   const grade = useMemo(() => withLutSettings(settings.grade), [settings.grade, lutLibrary]); // eslint-disable-line react-hooks/exhaustive-deps
   const [look, setLook] = useState<CubeLut | null>(null);
@@ -5173,7 +5176,6 @@ export default function VideoStudio({
                   onToast?.(same ? t("Preset replaced") : t("Preset saved"));
                 }}
                 library={lutChoices} onRemoveLut={onRemoveLut}
-                onLutSettings={(l) => onLutLibrary?.((cur) => cur.map((x) => (x.id === l.id ? { ...x, input: l.input, output: l.output, tonemap: l.tonemap, kind: undefined } : x)))}
                 onImported={(l) => { lutSent.current.delete(l.id); onLutLibrary?.((cur) => (cur.some((x) => x.id === l.id) ? cur.map((x) => (x.id === l.id ? l : x)) : [...cur, l])); }} />
                       </div>
           {/* How the video file is made: the settings recommended for TikTok and Instagram (at the take's own rate), shown;
