@@ -71,6 +71,7 @@ dans ton Google Drive.
 - **Paroles incrustées** sur la vidéo. — En ligne
 - **Cadrage** 9:16 ou 16:9, zoom, **zoom progressif** (réglable, ou à l'intérieur de l'image seulement). — En ligne
 - **Étalonnage** : log vers une image normale, LUT au choix, export 10 bits. — En ligne
+- **Presets de couleur** : enregistrer un look (LUT, exposition, couleurs, grain) et le poser sur une autre vidéo d'un clic, puis le retoucher ; le profil caméra reste celui de la vidéo. — En ligne
 - **Bandes noires** au format voulu. — En ligne
 - **Presets de style** des textes, à garder et réappliquer. — En ligne
 - **Plein écran**, zones TikTok, lecture qui revient au départ à la pause (réglable). — En ligne

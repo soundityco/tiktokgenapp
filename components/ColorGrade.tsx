@@ -4,8 +4,8 @@ import { uid } from "@/lib/defaults";
 import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
-import type { VideoGrade } from "@/lib/types";
-import { Menu, Range, Section, Select, Hint } from "./ui";
+import type { GradePreset, VideoGrade } from "@/lib/types";
+import { Range, Section, Select, Hint } from "./ui";
 import Icon from "./Icon";
 
 const LUTS_KEY = "tktgen-luts";
@@ -28,16 +28,17 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, onRaw, lookErr, others, onApplyTo, onLutStored, sdr }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   grade: VideoGrade | undefined;
   onChange: (g: VideoGrade | undefined) => void;
   onRaw: (v: boolean) => void;
   lookErr: string | null;
-  /** The release's other videos: this grade can be put on the ones ticked (two takes of one shoot…). */
-  others: { id: string; name: string }[];
-  onApplyTo: (ids: string[]) => void;
+  /** The account's colour presets: saved from this grade, put on it (its camera profile stays), deleted. */
+  presets: GradePreset[];
+  onSavePreset: (name: string) => void;
+  onDeletePreset: (id: string) => void;
   /** A LUT file was stored (also a missing one put back under its id): read it again. */
   onLutStored: (id: string) => void;
 }) {
@@ -65,9 +66,21 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, others, on
     }
   };
 
+  // A preset put on: its look, the video's own camera profile kept (an iPhone video stays iPhone, a log one log).
+  const applyPreset = (p: GradePreset) => {
+    onRaw(false);
+    onChange({ ...p.grade, profile: grade ? grade.profile : sdr ? "rec709" : p.grade.profile, sdrOverride: grade?.sdrOverride });
+  };
+  const presetsPart = (
+    <Section id="color-presets" title={<>{t("Colour presets")}{grade && gradePresetOf(presets, grade) && <span className="sec-sub"> · {gradePresetOf(presets, grade)!.name}</span>}</>} open={false}>
+      <GradePresets presets={presets} current={grade} onSave={onSavePreset} onApply={applyPreset} onDelete={onDeletePreset} />
+    </Section>
+  );
+
   if (!grade) {
     return (
       <div className="stack">
+        {presets.length > 0 && presetsPart}
         <div className="row">
           <button className="btn sm primary" onClick={() => onChange(sdr
             ? { ...NEUTRAL_GRADE, profile: "rec709" } // standard video: the simple settings only
@@ -83,6 +96,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, others, on
   const simple = !!sdr && !g.sdrOverride;
   return (
     <>
+      {presetsPart}
       {simple && (
         <p className="notice xs">
           {t("Standard SDR video detected (a phone, S-Cinetone, Rec.709): the camera profile and the look LUT are turned off, they do not apply to this kind of video. The simple settings below start at zero.")}{" "}
@@ -157,44 +171,46 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, others, on
         )}
       </Section>
 
-      {/* This grade on other videos of the release, the ones ticked (its versions share it already). */}
-      {others.length > 0 && <ApplyTo others={others} onApply={onApplyTo} />}
     </>
   );
 }
 
-/** "Apply to…": the release's other videos to tick, then Apply. */
-function ApplyTo({ others, onApply }: { others: { id: string; name: string }[]; onApply: (ids: string[]) => void }) {
+/** The same look (the camera profile apart: it is the video's own). */
+const lookKey = (g: VideoGrade) => JSON.stringify([g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize]);
+export const gradePresetOf = (presets: GradePreset[], g: VideoGrade) => presets.find((p) => lookKey(p.grade) === lookKey(g));
+
+/** The colour presets, as the text's: a name and "Save the current colour", then each one to put on, or delete. */
+function GradePresets({ presets, current, onSave, onApply, onDelete }: {
+  presets: GradePreset[]; current?: VideoGrade; onSave: (name: string) => void; onApply: (p: GradePreset) => void; onDelete: (id: string) => void;
+}) {
   const { t } = useT();
-  const [picked, setPicked] = useState<string[]>([]);
+  const [name, setName] = useState("");
+  const save = () => { const n = name.trim(); if (n) { onSave(n); setName(""); } };
   return (
-    <div className="row">
-      <Menu float trigger={(open, toggle) => (
-        <button className={"btn sm" + (open ? " on" : "")} onClick={toggle} title={t("Put this grade on other videos of the release (shot the same way)")}>
-          {t("Apply to other videos")}<Icon name="chevron" size={13} />
-        </button>
-      )}>
-        {(close) => (
-          <div className="pick-pane">
-            <span className="pick-k">{t("Videos of the release")}</span>
-            <div className="pick-list">
-              {others.map((o) => {
-                const on = picked.includes(o.id);
-                return (
-                  <button key={o.id} className={"pick-line" + (on ? " on" : "")} aria-pressed={on}
-                    onClick={() => setPicked(on ? picked.filter((x) => x !== o.id) : [...picked, o.id])}>
-                    <span className="dd-check" aria-hidden>{on ? "✓" : ""}</span><span>{o.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="row pick-foot">
-              <span className="muted xs grow">{t("Their own grade is replaced.")}</span>
-              <button className="btn sm primary" disabled={!picked.length} onClick={() => { onApply(picked); setPicked([]); close(); }}>{t("Apply")}</button>
-            </div>
+    <div className="stack">
+      {current && (
+        <form className="row nowrap" onSubmit={(e) => { e.preventDefault(); save(); }}>
+          <input className="input sm grow" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Preset name")} aria-label={t("Preset name")} maxLength={60} />
+          <button className="btn sm" type="submit" disabled={!name.trim()} title={t("Save the current colour")}>{t("Save")}</button>
+        </form>
+      )}
+      {!presets.length && <span className="muted xs">{t("No presets yet.")}</span>}
+      {presets.map((p) => {
+        const on = !!current && lookKey(p.grade) === lookKey(current);
+        return (
+          <div className="row nowrap" key={p.id}>
+            <button className={"btn sm grow preset" + (on ? " on" : "")} onClick={() => onApply(p)} title={on ? t("This is the colour now") : t("Apply")} aria-pressed={on}>
+              {on && <Icon name="check" size={13} />}
+              <span className="truncate">{p.name}</span>
+              <span className="muted xs truncate">{p.grade.lut?.name ?? t("No LUT")}</span>
+            </button>
+            <button className="btn sm quiet icon" aria-label={t("Delete preset")} title={t("Delete preset")} onClick={() => onDelete(p.id)}>
+              <Icon name="trash" size={13} />
+            </button>
           </div>
-        )}
-      </Menu>
+        );
+      })}
+      <p className="muted xs">{t("A preset keeps the look (LUT, exposure, colours, grain), not the camera profile: it stays the video's own.")}</p>
     </div>
   );
 }

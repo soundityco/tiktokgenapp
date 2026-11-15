@@ -10,7 +10,7 @@ import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTimi
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
-import type { AudioVersion, VideoExportPrefs } from "@/lib/types";
+import type { AudioVersion, GradePreset, VideoExportPrefs } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -330,6 +330,8 @@ export default function VideoStudio({
   onDeletePreset,
   exportPrefs,
   onExportPrefs,
+  gradePresets,
+  onGradePresets,
 }: {
   /** History of the workspace, shared with the carousel. */
   canUndo: boolean;
@@ -382,6 +384,9 @@ export default function VideoStudio({
   /** The account's export settings (the recommended ones unless turned on), and changing them. */
   exportPrefs?: VideoExportPrefs;
   onExportPrefs?: (p: VideoExportPrefs) => void;
+  /** The account's colour presets, and changing them. */
+  gradePresets?: GradePreset[];
+  onGradePresets?: (list: GradePreset[]) => void;
 }) {
   const { t, lang } = useT();
   // The release as the open video's audio version (lib/audioVersions): its file and its lyrics timing in the project's
@@ -4546,8 +4551,8 @@ export default function VideoStudio({
               <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} onRaw={setRawView} lookErr={lookErr}
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
-                others={clips.filter((c) => c.id !== clip.id).map((c) => ({ id: c.id, name: clipName(c) }))}
-                onApplyTo={(ids) => onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (ids.includes(c.id) ? { ...c, grade } : c)) }))} />
+                presets={gradePresets ?? []} onDeletePreset={(id) => onGradePresets?.((gradePresets ?? []).filter((x) => x.id !== id))}
+                onSavePreset={(name) => grade && onGradePresets?.([...(gradePresets ?? []), { id: uid(), name, grade }])} />
                       </div>
           {/* How the video file is made: the settings recommended for TikTok and Instagram (at the take's own rate), shown;
               "Change" unfolds the user's own (for every video of the account). */}

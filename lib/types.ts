@@ -246,6 +246,8 @@ export interface VideoExportPrefs {
   audioKbps?: number;
 }
 
+export interface GradePreset { id: string; name: string; grade: VideoGrade }
+
 export interface VideoTake {
   offset: number;
   musicStart: number;
@@ -488,6 +490,8 @@ export interface Workspace {
   noRepeat: boolean;
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag
   exportFormat: "jpg" | "png";
+  /** Colour looks kept to put on a video (its LUT and sliders; the camera profile stays the video's own). */
+  gradePresets?: GradePreset[];
   /** How videos are exported (lib/exportVideo exportSettings): the recommended settings, or the user's own. */
   videoExport?: VideoExportPrefs;
   zones: boolean;
