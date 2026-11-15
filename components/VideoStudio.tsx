@@ -1823,11 +1823,14 @@ export default function VideoStudio({
     ro.observe(r);
     return () => { ro.disconnect(); r.removeEventListener("pointerdown", touched); r.removeEventListener("wheel", touched); };
   }, [clip.id, clips.length]);
-  /** The videos by kind of file: camera files, then phone ones, then the others (no file yet, unknown); one group
-   *  alone has no title. */
+  /** The videos by what their file needs: to be graded (log, HDR, from a camera or a phone), standard (SDR), then
+   *  the others (no file yet, colours unknown); one group alone has no title. */
   const clipGroups = (list: VideoSetup[]) => {
-    const kind = (c: VideoSetup) => (c.source?.kind === "camera" ? 0 : c.source?.kind === "phone" ? 1 : 2);
-    const groups = [t("Camera"), t("Phone"), t("Others")].map((label, k) => ({ label, items: list.filter((c) => kind(c) === k) })).filter((g) => g.items.length);
+    const kind = (c: VideoSetup) => {
+      const col = c.source?.colour === "unknown" && c.source.kind === "phone" ? "sdr" : c.source?.colour; // as describeVideo
+      return col === "log" || col === "hdr" ? 0 : col === "sdr" ? 1 : 2;
+    };
+    const groups = [t("Log / HDR"), t("Standard"), t("Others")].map((label, k) => ({ label, items: list.filter((c) => kind(c) === k) })).filter((g) => g.items.length);
     return groups.length > 1 ? groups : [{ label: "", items: list }];
   };
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };

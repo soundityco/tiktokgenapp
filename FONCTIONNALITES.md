@@ -78,7 +78,7 @@ dans ton Google Drive.
 - **Bibliothèque de LUT du compte** : une LUT importée est disponible sur tous tes appareils (sa copie va sur ton Drive) ; jamais deux fois la même ; une corbeille au survol pour en supprimer une (confirmation, les vidéos qui l'utilisent repassent en Rec.709). — En ligne
 - **Bandes noires** au format voulu. — En ligne
 - **Presets de style** des textes, à garder et réappliquer. — En ligne
-- **Vidéos rangées par type** dans le sélecteur (Caméra, Téléphone, Autres), aussi dans le choix des caméras du multicam. — En ligne
+- **Vidéos rangées** dans le sélecteur : à étalonner (log / HDR), standard (SDR), autres, aussi dans le choix des caméras du multicam. — En ligne
 - **Plein écran**, zones TikTok, lecture qui revient au départ à la pause (réglable). — En ligne
 - **Montage multicam** : jusqu'à 4 caméras (d'autres vidéos de la release, synchronisées sur le même audio, chacune avec son cadrage et son étalonnage) ; en lecture, les touches 1 à 4 coupent vers une caméra ; à l'arrêt, elles changent le plan sous la tête de lecture, C le coupe, Suppr retire le cut ; les cuts se glissent sur la piste des plans ; l'export suit les cuts. — En test
 
