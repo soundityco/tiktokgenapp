@@ -1823,6 +1823,13 @@ export default function VideoStudio({
     ro.observe(r);
     return () => { ro.disconnect(); r.removeEventListener("pointerdown", touched); r.removeEventListener("wheel", touched); };
   }, [clip.id, clips.length]);
+  /** The videos by kind of file: camera files, then phone ones, then the others (no file yet, unknown); one group
+   *  alone has no title. */
+  const clipGroups = (list: VideoSetup[]) => {
+    const kind = (c: VideoSetup) => (c.source?.kind === "camera" ? 0 : c.source?.kind === "phone" ? 1 : 2);
+    const groups = [t("Camera"), t("Phone"), t("Others")].map((label, k) => ({ label, items: list.filter((c) => kind(c) === k) })).filter((g) => g.items.length);
+    return groups.length > 1 ? groups : [{ label: "", items: list }];
+  };
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
   const renameClip = (name: string) => {
     const n = name.trim();
@@ -3408,9 +3415,10 @@ export default function VideoStudio({
             <Select key={i} className={"input sm cam-pick cam-" + (i + 1)} aria-label={t("Camera {n}", { n: i + 2 })} value={angles[i] ?? ""}
               onChange={(e) => setAngle(i, e.target.value)}>
               <option value="">{angles[i] ? t("No camera {n}", { n: i + 2 }) : t("+ Camera {n}", { n: i + 2 })}</option>
-              {camChoices.filter((c) => c.id === angles[i] || !angles.includes(c.id)).map((c) => (
-                <option key={c.id} value={c.id}>{`${i + 2} · ${clipName(c)}${c.score === undefined ? ` (${t("not synced")})` : ""}`}</option>
-              ))}
+              {clipGroups(camChoices.filter((c) => c.id === angles[i] || !angles.includes(c.id))).map((g) => {
+                const opts = g.items.map((c) => <option key={c.id} value={c.id}>{`${i + 2} · ${clipName(c)}${c.score === undefined ? ` (${t("not synced")})` : ""}`}</option>);
+                return g.label ? <optgroup key={g.label} label={g.label}>{opts}</optgroup> : opts;
+              })}
             </Select>
           ))}
         </div>
@@ -3944,7 +3952,9 @@ export default function VideoStudio({
           <label className="field h-pick" style={{ margin: 0 }}>{t("Video")}
             <Select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
-              {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
+              {clipGroups(clips).map((g) => g.label
+                ? <optgroup key={g.label} label={g.label}>{g.items.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}</optgroup>
+                : g.items.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>))}
             </Select>
           </label>
           <button className="btn icon h-new" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
@@ -3968,7 +3978,7 @@ export default function VideoStudio({
             </button>
           )}>
             {(close) => (<div className="ver-list">
-              {clips.map((c) => {
+              {clipGroups(clips).map((g) => [g.label && <div key={"g" + g.label} className="dd-group">{g.label}</div>, ...g.items.map((c) => {
                 const on = c.id === clip.id;
                 const show = () => { if (!on) { onProject((p) => ({ ...p, videoId: c.id })); onSaveNow(); } };
                 return (
@@ -3980,7 +3990,7 @@ export default function VideoStudio({
                     {clips.length > 1 && <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { close(); show(); setClipDialog("delete"); }}><Icon name="trash" size={12} /></button>}
                   </div>
                 );
-              })}
+              })])}
               <div className="sep" />
               <button className="ver-new" title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => { close(); void addVideo(); }}>
                 <Icon name="plus" size={12} />{t("New video")}
