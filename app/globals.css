@@ -2552,21 +2552,29 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 
 .hook-head .hook-gen { flex: none; }
 .hook-item .hook-del { margin-left: auto; }
-/* Colour wheels (Final Cut's way): two by two, each a disc with its puck and a brightness bar beside it. */
-.cw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 14px; }
-.cw { display: grid; gap: 6px; min-width: 0; }
-.cw-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: center; }
-.cw-on { margin-left: 4px; color: var(--text); }
-.cw-body { display: grid; grid-template-columns: minmax(0, 1fr) 8px; gap: 8px; align-items: stretch; }
-.cw-disc { position: relative; aspect-ratio: 1; border-radius: 50%; touch-action: none; cursor: grab; box-shadow: inset 0 0 0 1px var(--line-2); }
+/* Colour wheels: two by two, each its name and brightness, a dark disc with a thin ring of hues, its dot (the app's
+   slider knob) on a line from the centre, and the app's slider under it, filled from the middle. */
+.cw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }
+.cw { display: grid; gap: 8px; min-width: 0; }
+.cw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; cursor: default; }
+.cw-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.cw.on .cw-k { color: var(--text); }
+.cw-v { font-size: var(--fs-xs); color: var(--text); }
+.cw-disc { position: relative; aspect-ratio: 1; border-radius: 50%; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); touch-action: none; cursor: grab; }
 .cw-disc:active { cursor: grabbing; }
-.cw-disc > canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
-.cw-disc::after { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--muted); opacity: .6; pointer-events: none; }
-.cw-puck { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid var(--text); box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.5); pointer-events: none; }
-.cw-bar { position: relative; border-radius: 4px; background: linear-gradient(var(--text), var(--line-2) 50%, var(--bg)); box-shadow: inset 0 0 0 1px var(--line-2); touch-action: none; cursor: ns-resize; }
-.cw-mid { position: absolute; left: -3px; right: -3px; top: 50%; height: 1px; background: var(--muted); opacity: .5; }
-.cw-knob { position: absolute; left: -4px; right: -4px; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--text); box-shadow: 0 0 0 1px rgba(0,0,0,.6); pointer-events: none; }
-.cw-disc:focus-visible, .cw-bar:focus-visible { outline: 1px solid var(--text); outline-offset: 2px; }
+.cw-disc > canvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
+/* Guides: the cross and the middle circle, faint. */
+.cw-disc::before { content: ""; position: absolute; inset: 25%; border-radius: 50%; border: 1px solid var(--line); pointer-events: none; }
+.cw-disc::after { content: ""; position: absolute; inset: 6%; pointer-events: none;
+  background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat, linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat; }
+.cw-vec { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.cw-vec line { stroke: var(--text); stroke-width: .8; stroke-linecap: round; opacity: .55; }
+.cw-puck { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 3px var(--bg); pointer-events: none; transition: transform .12s; }
+.cw-disc:hover .cw-puck, .cw-disc:focus-visible .cw-puck { transform: scale(1.2); }
+.cw-disc:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--line), 0 0 0 1px var(--accent-hi); }
+/* The brightness slider: the app's, filled from its middle to its value. */
+input[type=range].cw-range::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--line-2) var(--lo), var(--accent-hi) var(--lo), var(--accent-hi) var(--hi), var(--line-2) var(--hi)); }
+input[type=range].cw-range::-moz-range-progress { background: transparent; }
 
 /* The video's Export part: what the file will be (label, value), then the user's own settings when "Change" is on. */
 .exp-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: var(--fs-sm); color: var(--muted); }

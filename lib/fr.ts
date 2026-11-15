@@ -716,7 +716,7 @@ export const FR: Record<string, string> = {
   "Import a look LUT": "Importer une LUT de look",
   "Colour wheels": "Roues",
   "on": "actives",
-  "Drag a wheel's dot to add a colour, its bar for brightness. Shift: finer. Double-click: back to zero.": "Glisse le point d'une roue pour ajouter une couleur, sa barre pour la luminosité. Maj : plus fin. Double-clic : retour à zéro.",
+  "Drag a wheel's dot to add a colour, its slider for brightness. Shift: finer. Double-click: back to zero.": "Glisse le point d'une roue pour ajouter une couleur, son curseur pour la luminosité. Maj : plus fin. Double-clic : retour à zéro.",
   "Global": "Global",
   "Shadows": "Ombres",
   "Midtones": "Tons moyens",
