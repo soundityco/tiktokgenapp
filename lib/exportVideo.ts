@@ -29,14 +29,20 @@ const AVC = ["avc1.640028", "avc1.4d0028", "avc1.640033", "avc1.42002a"];
 const AVC_FAST = ["avc1.64002a", "avc1.4d002a", "avc1.640033", "avc1.42002a"];
 
 /**
- * The recommended export of a camera file playing at `src` frames per second: at its own rate (24, 25, 30, 50, 60…;
- * unknown: 30), so no frame is doubled or dropped; and at least as many bits per frame as 12 Mb/s at 30 fps (the
- * quality chosen for TikTok / Reels / Shorts): 12 Mb/s up to 30 fps, more above (20 at 50, 24 at 60).
+ * The recommended export for TikTok and Instagram of a camera file playing at `src` frames per second: at its own rate
+ * (24, 25, 30, 50, 60…; unknown: 30), so no frame is doubled or dropped; 16 Mb/s up to 30 fps (a clean source for
+ * their own compression, above what they keep), and as many bits per frame above, up to 24 Mb/s (Instagram
+ * recompresses harder what passes 25 Mb/s).
  */
 export function recommendedRate(src?: number): { fps: number; bitrate: number } {
   const fps = !src || src < 23 ? 30 : Math.min(60, Math.round(src * 1000) / 1000);
-  return { fps, bitrate: Math.max(12_000_000, Math.round((12_000_000 * fps) / 30 / 1e6) * 1e6) };
+  return { fps, bitrate: Math.min(24_000_000, Math.max(16_000_000, Math.round((16_000_000 * fps) / 30 / 1e6) * 1e6)) };
 }
+
+/** The sound's bitrates, best first: 256 kb/s in stereo (as music sold online), 160 in mono; less when the browser won't. */
+const AUDIO_BITRATES = (channels: number) => (channels > 1 ? [256_000, 192_000, 128_000] : [160_000, 128_000]);
+/** A sample rate every platform takes (Instagram: 48 kHz at most): 88.2 / 176.4 kHz to 44.1, 96 / 192 to 48. */
+export const exportSampleRate = (sr: number) => (sr <= 48000 ? sr : sr % 44100 === 0 ? 44100 : 48000);
 
 /** Codecs this browser can encode for an MP4, or null (then the realtime fallback is used). */
 export async function mp4Support(width: number, height: number, sampleRate: number, channels: number, fps = 30, bitrate = 12_000_000) {
@@ -49,11 +55,13 @@ export async function mp4Support(width: number, height: number, sampleRate: numb
     } catch { /* next */ }
   }
   if (!video) return null;
-  // AAC only: Opus inside an MP4 is silent in QuickTime, on iPhones and in some editors.
-  try {
-    const r = await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: channels, bitrate: 192_000 });
-    if (r.supported) return { video, audio: "mp4a.40.2" };
-  } catch { /* not supported */ }
+  // AAC only: Opus inside an MP4 is silent in QuickTime, on iPhones and in some editors. The best bitrate it takes.
+  for (const audioBitrate of AUDIO_BITRATES(channels)) {
+    try {
+      const r = await AudioEncoder.isConfigSupported({ codec: "mp4a.40.2", sampleRate, numberOfChannels: channels, bitrate: audioBitrate });
+      if (r.supported) return { video, audio: "mp4a.40.2", audioBitrate };
+    } catch { /* next */ }
+  }
   return null;
 }
 
@@ -70,9 +78,23 @@ export function aacConfig(sampleRate: number, channels: number): Uint8Array {
 
 const aborted = () => new DOMException("aborted", "AbortError");
 
+/** The part of the sound exported, at a sample rate every platform takes (resampled by the browser if need be). */
+async function soundPart(audio: AudioBuffer, from: number, until: number, channels: number): Promise<{ audio: AudioBuffer; from: number; until: number }> {
+  const rate = exportSampleRate(audio.sampleRate);
+  if (rate === audio.sampleRate) return { audio, from, until };
+  const ctx = new OfflineAudioContext(channels, Math.max(1, Math.ceil((until - from) * rate)), rate);
+  const src = ctx.createBufferSource();
+  src.buffer = audio;
+  src.connect(ctx.destination);
+  src.start(0, from, until - from);
+  return { audio: await ctx.startRendering(), from: 0, until: until - from };
+}
+
 export async function exportMp4(job: ExportJob): Promise<Blob> {
-  const { width, height, fps, from, until, audio, signal } = job;
-  const channels = Math.min(2, audio.numberOfChannels);
+  const { width, height, fps, signal } = job;
+  const channels = Math.min(2, job.audio.numberOfChannels);
+  const { audio, from: a0, until: a1 } = await soundPart(job.audio, job.from, job.until, channels);
+  const { from, until } = job;
   const sr = audio.sampleRate;
   const codecs = await mp4Support(width, height, sr, channels, fps, job.bitrate);
   if (!codecs) throw new Error("unsupported");
@@ -99,8 +121,8 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
     },
     error: (e) => { failure = e; },
   });
-  aenc.configure({ codec: codecs.audio, sampleRate: sr, numberOfChannels: channels, bitrate: 192_000, aac: { format: "aac" } } as AudioEncoderConfig);
-  const s0 = Math.round(from * sr), s1 = Math.min(audio.length, Math.round(until * sr));
+  aenc.configure({ codec: codecs.audio, sampleRate: sr, numberOfChannels: channels, bitrate: codecs.audioBitrate, aac: { format: "aac" } } as AudioEncoderConfig);
+  const s0 = Math.round(a0 * sr), s1 = Math.min(audio.length, Math.round(a1 * sr));
   const BLOCK = 4096;
   for (let a = s0; a < s1; a += BLOCK) {
     if (signal.aborted) throw aborted();

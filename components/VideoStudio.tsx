@@ -18,7 +18,7 @@ import { probeVideo } from "@/lib/probe";
 import { compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
-import { exportMp4, ExportStep, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
+import { exportMp4, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
 import { fastWorkCopy } from "@/lib/fastCopy";
@@ -2843,7 +2843,7 @@ export default function VideoStudio({
       let blob: Blob | null = null, ext = "mp4";
       // At the camera file's own frame rate (25p stays 25p), with as many bits per frame as at 30 fps.
       const rate = recommendedRate(settingsRef.current.source?.fps);
-      if (await mp4Support(W, H, audioBuf.sampleRate, Math.min(2, audioBuf.numberOfChannels), rate.fps, rate.bitrate)) {
+      if (await mp4Support(W, H, exportSampleRate(audioBuf.sampleRate), Math.min(2, audioBuf.numberOfChannels), rate.fps, rate.bitrate)) {
         // Frames decoded from the file itself (works in a background tab); the hidden <video> only as a fallback.
         setExp({ p: 0, step: "read" });
         // A colour grade is applied by ffmpeg on the camera file itself (10-bit), not on the 8-bit frames of the browser.
