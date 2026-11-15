@@ -451,6 +451,8 @@ export interface VideoSetup extends VideoSettings {
   /** Its files on the device (camera file, its picture) are those kept under this key: a duplicate reads the ones of
    *  the video it was made from (never copied: a camera file weighs gigabytes). None: its own id. */
   media?: string;
+  /** A take imported in the release's library (lib: "Prises"): not a project of its own, used as a camera by projects. */
+  takeOnly?: boolean;
 }
 
 export interface Project {

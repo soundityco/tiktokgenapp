@@ -10,7 +10,7 @@ import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTimi
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
-import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade } from "@/lib/types";
+import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -418,7 +418,9 @@ export default function VideoStudio({
     return writeFor(p, audioIdOf(p, c), fn);
   }), [onRelease]);
   const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
-  const clip = clips.find((c) => c.id === project.videoId) ?? clips[0];
+  const clip = clips.find((c) => c.id === project.videoId) ?? clips.find((c) => !c.takeOnly) ?? clips[0];
+  /** The release's projects (posts): its videos, the takes only imported for the library apart. */
+  const projects = useMemo(() => clips.filter((c) => !c.takeOnly), [clips]);
   const settings = useMemo<VideoSettings>(() => ({ ...DEFAULT_VIDEO, ...clip }), [clip]);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -1649,22 +1651,23 @@ export default function VideoStudio({
   const describeVideo = async (f: Blob, fresh: boolean) => {
     const info = await probeVideo(f);
     const cur = settingsRef.current;
-    const patch: Partial<VideoSettings> = { source: info };
+    if (cur.grade && !fresh) { setV({ source: info }); return; } // an older video read again: its grade stays as set
+    setV({ source: info, ...gradeForSource(info, cur.grade) });
+  };
+  /** The grade a file gets when it comes in. */
+  const gradeForSource = (info: VideoSourceInfo, prevGrade: VideoGrade | undefined): { grade?: VideoGrade } => {
     // A phone that says nothing about its colours films standard SDR.
     const colour = info.colour === "unknown" && info.kind === "phone" ? "sdr" : info.colour;
-    if (cur.grade && !fresh) { setV(patch); return; } // an older video read again: its grade stays as set
     if (colour === "log" && info.profile) {
       // Log: the camera's conversion, the look LUT and the sliders of the previous video (same camera, most likely).
-      const prev = cur.grade?.profile !== "none" && cur.grade?.profile !== "hlg" && cur.grade?.profile !== "pq" ? cur.grade : undefined;
-      patch.grade = { ...NEUTRAL_GRADE, ...(prev ?? {}), profile: info.profile, lut: prev?.lut ?? lastLut() };
-    } else if (colour === "hdr" && info.profile) {
-      // HDR: brought down to SDR, no look LUT (made for log footage) and no log sliders.
-      patch.grade = { ...NEUTRAL_GRADE, profile: info.profile };
-    } else if (colour === "sdr") {
-      // Standard video: no log conversion, no LUT; the simple sliders are there, all at zero (the picture as it is).
-      patch.grade = { ...NEUTRAL_GRADE, profile: "rec709" };
+      const prev = prevGrade?.profile !== "none" && prevGrade?.profile !== "hlg" && prevGrade?.profile !== "pq" && prevGrade?.profile !== "rec709" ? prevGrade : undefined;
+      return { grade: { ...NEUTRAL_GRADE, ...(prev ?? {}), profile: info.profile, lut: prev?.lut ?? lastLut() } };
     }
-    setV(patch);
+    // HDR: brought down to SDR, no look LUT (made for log footage) and no log sliders.
+    if (colour === "hdr" && info.profile) return { grade: { ...NEUTRAL_GRADE, profile: info.profile } };
+    // Standard video: no log conversion, no LUT; the simple sliders are there, all at zero (the picture as it is).
+    if (colour === "sdr") return { grade: { ...NEUTRAL_GRADE, profile: "rec709" } };
+    return {};
   };
   // Standard SDR video: no log conversion, no LUT, nothing applied (sliders at zero) unless turned back on by hand.
   // Also puts right a video graded by an older version (LUT, vignette and grain copied from a log video).
@@ -1999,6 +2002,32 @@ export default function VideoStudio({
   }, [head, settings.offset, playing, exporting, videoBlob, videoDur, drawAt]);
 
   // ---- audio sync ----
+  /** The sound of a camera / phone file, mono: the browser's decoder for a file that fits in memory (quick), else
+   *  ffmpeg reading the sound track only (a camera file of several GB, sound in PCM…: seconds). Null: neither could. */
+  const readSound = async (recording: Blob, duration: number, onP: (p: number) => void, signal: AbortSignal) => {
+    if (recording.size <= SYNC_DECODE_MAX) {
+      try {
+        const vbuf = await Promise.race([
+          decodeAudio(getCtx(), recording),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
+        ]);
+        return { samples: monoOf(vbuf), rate: vbuf.sampleRate };
+      } catch { /* next way */ }
+    }
+    if (signal.aborted) return null;
+    try {
+      const RATE = 22050;
+      const raw = await ffmpegAlone(recording, ["-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "1", "-ar", String(RATE), "-f", "f32le", "sound.raw"],
+        "sound.raw", Math.max(1, duration), onP, signal);
+      const bytes = raw.byteOffset % 4 ? raw.slice() : raw;
+      const samples = new Float32Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
+      if (samples.length > RATE) return { samples, rate: RATE };
+    } catch (e) {
+      if (signal.aborted) throw e;
+      console.info("[sync] sound not read by ffmpeg", e);
+    }
+    return null;
+  };
   const autoSync = async () => {
     const official = audioBuf;
     const recording = videoBlob;
@@ -2024,31 +2053,7 @@ export default function VideoStudio({
       : null;
     if (capture) void capture.catch(() => {});
     try {
-      let clip: { samples: Float32Array; rate: number } | null = null;
-      // 1. The browser's decoder, on the whole file: quick, but only for a file that fits in memory.
-      if (recording.size <= SYNC_DECODE_MAX) {
-        try {
-          const vbuf = await Promise.race([
-            decodeAudio(getCtx(), recording),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
-          ]);
-          clip = { samples: monoOf(vbuf), rate: vbuf.sampleRate };
-        } catch { /* next way */ }
-      }
-      // 2. ffmpeg reading the sound track only (a camera file of several GB, sound in PCM…): seconds.
-      if (!clip && !ac.signal.aborted) {
-        try {
-          const RATE = 22050;
-          const raw = await ffmpegAlone(recording, ["-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "1", "-ar", String(RATE), "-f", "f32le", "sound.raw"],
-            "sound.raw", Math.max(1, videoRef.current?.duration || videoDur || 60), (p) => setSyncPct(p), ac.signal);
-          const bytes = raw.byteOffset % 4 ? raw.slice() : raw;
-          const samples = new Float32Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
-          if (samples.length > RATE) clip = { samples, rate: RATE };
-        } catch (e) {
-          if (ac.signal.aborted) throw e;
-          console.info("[sync] sound not read by ffmpeg", e);
-        }
-      }
+      let clip = await readSound(recording, videoRef.current?.duration || videoDur || 60, (p) => setSyncPct(p), ac.signal);
       if (clip) capAc.abort(); // read: no need for the real-time capture
       else {
         // 3. Last resort: the sound captured while the video plays (real time). Phone MOV/MP4 the others refused.
@@ -3392,39 +3397,138 @@ export default function VideoStudio({
   /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
   const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
-  // ---- multicam: the cameras (this video, then up to 3 others synced on the same audio) and the shots ----
+  // ---- takes: the release's camera / phone files (lib "Prises"), up to 4 per project (multicam) ----
+  /** Takes of this release on the same audio as this project, other than its own (camera 1). */
   const camChoices = clips.filter((c) => c.id !== clip.id && audioIdOf(release, c) === audioId && c.videoName);
+  const [takeJobs, setTakeJobs] = useState<Record<string, { p: number; err?: string }>>({});
+  const patchTake = (id: string, patch: Partial<VideoSetup>) =>
+    onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+  /** A take read (what it is, the grade it gets) and synced on the official audio, in the background. */
+  const prepareTake = async (id: string, file: Blob, grade0: VideoGrade | undefined, fresh: boolean) => {
+    const official = audioBuf;
+    setTakeJobs((j) => ({ ...j, [id]: { p: 0 } }));
+    try {
+      const info = await probeVideo(file);
+      patchTake(id, { source: info, ...(fresh ? gradeForSource(info, grade0) : null) });
+      if (!official) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return; }
+      const sound = await readSound(file, info.duration ?? 60, (p) => setTakeJobs((j) => ({ ...j, [id]: { p: p * 0.9 } })), new AbortController().signal);
+      if (!sound) throw new Error(t("Its sound could not be read."));
+      await new Promise((r) => setTimeout(r, 30));
+      const cfg = settingsRef.current;
+      const r = syncAudio(sound.samples, sound.rate, monoOf(official), official.sampleRate, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
+      if (!r.anchors || r.score < 0.4) throw new Error(t("No match found in the official audio."));
+      patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: false });
+      onSaveNow();
+      setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; });
+    } catch (e) {
+      console.warn("[takes] not synced", e);
+      setTakeJobs((j) => ({ ...j, [id]: { p: 0, err: e instanceof Error ? e.message : String(e) } }));
+    }
+  };
+  /** Takes imported (one or many): each a take of the release, the first ones joining this project as cameras. */
+  const importTakes = async (files: File[]) => {
+    const cur = settingsRef.current;
+    const made: { c: VideoSetup; f: File }[] = files.filter((f) => f.type.startsWith("video/") || /\.(mp4|mov|m4v|mxf)$/i.test(f.name)).map((f) => ({ f, c: {
+      ...cur, id: uid(), name: f.name.replace(/\.[^.]+$/, ""), takeOnly: true, media: undefined, videoName: f.name, videoSize: f.size,
+      source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined,
+      takes: undefined, linked: false, versions: undefined, angles: undefined, cuts: undefined,
+    } as VideoSetup }));
+    if (!made.length) return;
+    for (const m of made) await putMedia(`video:${m.c.id}`, m.f).catch(() => {});
+    const have = (cur.angles ?? []).filter(Boolean);
+    const join = made.slice(0, Math.max(0, MAX_CAMS - 1 - have.length)).map((m) => m.c.id);
+    onProject((p) => ({ ...p, videos: [...clipsOf(p), ...made.map((m) => m.c)] }));
+    if (join.length) setV({ angles: [...have, ...join] });
+    onSaveNow();
+    void askPersistentStorage();
+    for (const m of made) await prepareTake(m.c.id, m.f, cur.grade, true);
+  };
+  const resyncTake = async (c: VideoSetup) => {
+    const b = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
+    if (!b) { setTakeJobs((j) => ({ ...j, [c.id]: { p: 0, err: t("Not in this browser: pick it again.") } })); return; }
+    await prepareTake(c.id, b, c.grade, false);
+  };
+  /** Camera `i + 2` taken out of this project: its shots go back to camera 1. */
+  const removeAngle = (i: number) => {
+    const angles = [...(settings.angles ?? [])];
+    angles.splice(i, 1);
+    const cuts = settings.cuts?.map((c) => (c.cam === i + 1 ? { ...c, cam: 0 } : c.cam > i + 1 ? { ...c, cam: c.cam - 1 } : c));
+    setV({ angles: angles.length ? angles : undefined, cuts: angles.length ? cuts : undefined });
+  };
+  const addAngle = (id: string) => setV({ angles: [...(settings.angles ?? []).filter(Boolean), id].slice(0, MAX_CAMS - 1) });
+  /** A take only imported, used by no project: off the release, its file off this device. */
+  const deleteTake = (c: VideoSetup) => {
+    onProject((p) => ({ ...p, videos: clipsOf(p).filter((x) => x.id !== c.id) }));
+    void delMedia(`video:${c.id}`).catch(() => {});
+    onSaveNow();
+  };
+  const usedAsCamera = (id: string) => clips.some((c) => c.angles?.includes(id));
   const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);
+  const takeInput = useRef<HTMLInputElement>(null);
+  /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
+  const takesEl = () => {
+    const angles = (settings.angles ?? []).filter(Boolean);
+    const others = camChoices.filter((c) => !angles.includes(c.id));
+    const room = angles.length < MAX_CAMS - 1;
+    const card = (c: VideoSetup, cam: number | null) => {
+      const job = takeJobs[c.id];
+      const i = cam === null ? -1 : cam - 1;
+      // One slim line each (all the cameras seen at once): number and colour as on the shots track, name, length, sync.
+      return (
+        <div key={c.id} className={"take-row" + (cam === null ? " other" : " cam-" + cam) + (job && !job.err ? " shine-box" : "")}>
+          {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name="film" size={13} />}
+          <span className="take-name" title={c.videoName ?? ""}>{clipName(c)}</span>
+          {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
+          {job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
+            : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
+            : <Icon name="check" size={12} />}
+          {cam === null && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
+          <Menu float trigger={(_, toggle) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={toggle}><Icon name="more" size={14} /></button>}>
+            {(close) => (<>
+              {cam !== null && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
+              {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
+              <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}>{t("Sync again")}</button>
+              {c.takeOnly && <>
+                <div className="sep" />
+                <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
+                  title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
+                  onClick={() => { close(); deleteTake(c); }}>{t("Delete this take")}</button>
+              </>}
+            </>)}
+          </Menu>
+        </div>
+      );
+    };
+    return (
+      <div className="takes">
+        {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
+        <button className="btn sm take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
+          <Icon name="plus" size={14} />{t("Import takes")}
+        </button>
+        <input ref={takeInput} type="file" accept="video/*,.mxf" multiple hidden
+          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void importTakes(f); }} />
+        {others.length > 0 && (
+          <details className="takes-more">
+            <summary>{t("Other takes of the release ({n})", { n: others.length })}</summary>
+            {clipGroups(others).map((g) => (
+              <div key={g.label || "all"} className="takes-group">
+                {g.label && <div className="dd-group">{g.label}</div>}
+                {g.items.map((c) => card(c, null))}
+              </div>
+            ))}
+          </details>
+        )}
+      </div>
+    );
+  };
   const camsEl = () => {
-    if (!camChoices.length) return null;
     const angles = settings.angles ?? [];
     const used = angles.filter(Boolean).length;
-    const setAngle = (i: number, id: string) => {
-      const next = [...angles];
-      next[i] = id;
-      while (next.length && !next[next.length - 1]) next.pop();
-      // A camera taken away: its shots go back to this video's.
-      const cuts = id ? settings.cuts : settings.cuts?.map((c) => (c.cam === i + 1 ? { ...c, cam: 0 } : c));
-      setV({ angles: next.length ? next : undefined, cuts: next.length ? cuts : undefined });
-    };
+    if (!used) return null;
     const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
     const pct = (x: number) => `${(clamp(x - settings.crop.start, 0, segLen) / segLen) * 100}%`;
     return (
       <div className="cams">
-        <div className="row cams-row">
-          <span className="label">{t("Cameras")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
-          <span className="cam-chip cam-0"><b>1</b>{clipName(clip)}</span>
-          {Array.from({ length: Math.min(MAX_CAMS - 1, used + 1) }, (_, i) => (
-            <Select key={i} className={"input sm cam-pick cam-" + (i + 1)} aria-label={t("Camera {n}", { n: i + 2 })} value={angles[i] ?? ""}
-              onChange={(e) => setAngle(i, e.target.value)}>
-              <option value="">{angles[i] ? t("No camera {n}", { n: i + 2 }) : t("+ Camera {n}", { n: i + 2 })}</option>
-              {clipGroups(camChoices.filter((c) => c.id === angles[i] || !angles.includes(c.id))).map((g) => {
-                const opts = g.items.map((c) => <option key={c.id} value={c.id}>{`${i + 2} · ${clipName(c)}${c.score === undefined ? ` (${t("not synced")})` : ""}`}</option>);
-                return g.label ? <optgroup key={g.label} label={g.label}>{opts}</optgroup> : opts;
-              })}
-            </Select>
-          ))}
-        </div>
         {used > 0 && (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
             {shots.map((x, i) => {
@@ -3860,12 +3964,12 @@ export default function VideoStudio({
                 its own button to open it in the studio (swiping never changes the studio's video). */}
             <div className="tree-branch">
             {/* One title, still ("Video"): each card has its video's name, as the audio tile has "Audio". */}
-            <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
-              <span className="label">{t("Video")}</span>
+            <div className="tree-head" title={t("Camera 1 is the project's own take; up to 3 more for a multicam edit.")}>
+              <span className="label">{t("Project takes")}</span>
             </div>
-            <div className={"clip-strip" + (clips.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}
+            <div className={"clip-strip" + (projects.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}
               onScrollEnd={onStripScroll}>
-            {clips.map((c) => c.id !== clip.id ? (
+            {projects.map((c) => c.id !== clip.id ? (
               <div key={c.id} className={"clip-card ghost" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
                 <MediaTile icon="film" label={clipName(c)} name={c.videoName ?? null}
                   meta={c.videoName ? <>
@@ -3942,6 +4046,7 @@ export default function VideoStudio({
             </div>
             ))}
             </div>
+            {takesEl()}
             </div>
           </div>
           <div className="lib-desk">{library}</div>
@@ -3952,10 +4057,10 @@ export default function VideoStudio({
       <div className="video-head studio-head">
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
-          <label className="field h-pick" style={{ margin: 0 }}>{t("Video")}
+          <label className="field h-pick" style={{ margin: 0 }}>{t("Project")}
             <Select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
-              {clipGroups(clips).map((g) => g.label
+              {clipGroups(projects).map((g) => g.label
                 ? <optgroup key={g.label} label={g.label}>{g.items.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}</optgroup>
                 : g.items.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>))}
             </Select>
@@ -3966,7 +4071,7 @@ export default function VideoStudio({
               <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
               <button onClick={() => { closeMenu(); duplicateClip(); }} title={t("Same camera file, sync and versions: to change anything on a copy")}>{t("Duplicate")}</button>
               <div className="sep" />
-              <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
+              <button className="danger" style={{ color: "var(--danger)" }} disabled={projects.length < 2}
                 onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
             </>)}
           </Menu></div>
@@ -3981,7 +4086,7 @@ export default function VideoStudio({
             </button>
           )}>
             {(close) => (<div className="ver-list">
-              {clipGroups(clips).map((g) => [g.label && <div key={"g" + g.label} className="dd-group">{g.label}</div>, ...g.items.map((c) => {
+              {clipGroups(projects).map((g) => [g.label && <div key={"g" + g.label} className="dd-group">{g.label}</div>, ...g.items.map((c) => {
                 const on = c.id === clip.id;
                 const show = () => { if (!on) { onProject((p) => ({ ...p, videoId: c.id })); onSaveNow(); } };
                 return (
@@ -3990,7 +4095,7 @@ export default function VideoStudio({
                       <Icon name="check" size={12} />{clipName(c)}
                     </button>
                     <button className="btn icon sm quiet" aria-label={t("Rename")} title={t("Rename")} onClick={() => { close(); show(); setClipDialog("rename"); }}><Icon name="pencil" size={12} /></button>
-                    {clips.length > 1 && <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { close(); show(); setClipDialog("delete"); }}><Icon name="trash" size={12} /></button>}
+                    {projects.length > 1 && <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { close(); show(); setClipDialog("delete"); }}><Icon name="trash" size={12} /></button>}
                   </div>
                 );
               })])}

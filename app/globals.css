@@ -417,6 +417,19 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
+/* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */
+.takes { display: flex; flex-direction: column; gap: 6px; }
+.take-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 4px 0 10px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam, var(--line-2)); border-radius: var(--r); font-size: 13px; }
+.take-row .take-n { color: var(--cam); font-weight: 700; }
+.take-row .take-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.take-row.other { opacity: .6; }
+.take-row.other:hover { opacity: 1; }
+.take-import { align-self: flex-start; }
+.takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
+.takes-more > summary::before { content: "▸ "; }
+.takes-more[open] > summary::before { content: "▾ "; }
+.takes-group { display: flex; flex-direction: column; gap: 6px; }
+.media-meta .warn-text { color: var(--warn); }
 /* Multicam: the cameras (one colour each, from the app's own) and the shots of the segment. */
 .cams { display: flex; flex-direction: column; gap: 6px; }
 .cams-row { flex-wrap: wrap; gap: 6px; }
