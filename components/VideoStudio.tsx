@@ -667,7 +667,7 @@ export default function VideoStudio({
     let off = false;
     const map = anglesRef.current;
     const want = new Set(angleClips.filter(Boolean).map((c) => c!.id));
-    for (const [id, a] of map) if (!want.has(id)) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); URL.revokeObjectURL(a.url); map.delete(id); }
+    for (const [id, a] of map) if (!want.has(id)) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); map.delete(id); }
     void (async () => {
       for (const c of angleClips) {
         if (!c || off) continue;
@@ -680,12 +680,16 @@ export default function VideoStudio({
           if (!blob) { map.delete(c.id); continue; }
           const el = document.createElement("video");
           el.muted = true; el.playsInline = true; el.preload = "auto";
+          // In the page, tiny and nearly transparent, as the studio's own player: a video out of the page (or seen as
+          // hidden) is no longer decoded by the browser, its first pictures after a cut were frozen, then catching up.
+          el.className = "video-src";
+          (videoRef.current?.parentElement ?? document.body).appendChild(el);
           const url = URL.createObjectURL(blob);
           el.src = url;
           const redraw = () => { if (!sourceRef.current) drawAt(headRef.current); };
           el.addEventListener("seeked", redraw);
           el.addEventListener("loadeddata", redraw);
-          if (a) { a.el.removeAttribute("src"); a.el.load(); URL.revokeObjectURL(a.url); }
+          if (a) { a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); }
           a = { id: c.id, media, blob, el, url, offset: 0, frame: undefined, desqueeze: undefined, grade: undefined, look: null, lut: null };
           map.set(c.id, a);
         }
@@ -708,7 +712,7 @@ export default function VideoStudio({
     })();
     return () => { off = true; };
   }, [anglesKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { for (const a of anglesRef.current.values()) { a.el.removeAttribute("src"); a.el.load(); URL.revokeObjectURL(a.url); } }, []);
+  useEffect(() => () => { for (const a of anglesRef.current.values()) { a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); } }, []);
   /** The camera (2 to 4) of the shot at official time `time`; null: this video's own. */
   const angleAt = (time: number): Angle | null => {
     const cfg = settingsRef.current;
