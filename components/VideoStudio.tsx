@@ -10,7 +10,7 @@ import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTimi
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
-import type { AudioVersion, GradePreset, VideoExportPrefs } from "@/lib/types";
+import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -332,6 +332,8 @@ export default function VideoStudio({
   onExportPrefs,
   gradePresets,
   onGradePresets,
+  lutLibrary,
+  onLutLibrary,
 }: {
   /** History of the workspace, shared with the carousel. */
   canUndo: boolean;
@@ -387,6 +389,9 @@ export default function VideoStudio({
   /** The account's colour presets, and changing them. */
   gradePresets?: GradePreset[];
   onGradePresets?: (list: GradePreset[]) => void;
+  /** The account's LUTs, and changing them (`silent`: no undo step, for what the app does by itself). */
+  lutLibrary?: LutRef[];
+  onLutLibrary?: (fn: (list: LutRef[]) => LutRef[], silent?: boolean) => void;
 }) {
   const { t, lang } = useT();
   // The release as the open video's audio version (lib/audioVersions): its file and its lyrics timing in the project's
@@ -608,7 +613,7 @@ export default function VideoStudio({
         if (twin) b = await getMedia(`lut:${twin.id}`);
         if (!b) {
           try {
-            const id = want.driveId ?? await findInAppFolder(`${want.name}.cube`);
+            const id = want.driveId ?? lutLibraryRef.current?.find((l) => l.id === lutId)?.driveId ?? await findInAppFolder(`${want.name}.cube`);
             if (id) b = await downloadDriveFile(id);
           } catch (e) { console.warn("[grade] LUT download from Drive failed", e); }
         }
@@ -945,6 +950,41 @@ export default function VideoStudio({
     } finally { setDriveJob(null); } // even when gone: never a fetch shown forever
   };
   const driveName = (what: string) => safeName(`${project.name || "Rollout"} - ${clip.name} - ${what}.mp4`);
+  // ---- the account's LUTs: listed on every device, each file on the Drive (Utils / LUTS) as soon as it is imported ----
+  const lutLibraryRef = useRef(lutLibrary);
+  lutLibraryRef.current = lutLibrary;
+  /** The LUTs to choose from: the account's, and the ones of this device it does not list yet. */
+  const lutChoices = useMemo(() => {
+    const lib = lutLibrary ?? [];
+    return [...lib, ...knownLuts().filter((l) => !lib.some((x) => x.id === l.id))];
+  }, [lutLibrary, lutReload]);
+  // The LUTs of this device the account does not list (imported before the library, or on another address of the
+  // app): they join it.
+  useEffect(() => {
+    if (!onLutLibrary) return;
+    const lib = lutLibrary ?? [];
+    const missing = knownLuts().filter((l) => !lib.some((x) => x.id === l.id));
+    if (missing.length) onLutLibrary((cur) => [...cur, ...missing.filter((m) => !cur.some((x) => x.id === m.id))], true);
+  }, [!!lutLibrary, lutReload]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Each LUT of the account whose file is on this device and not yet on the Drive: sent there, its copy noted.
+  const lutSent = useRef(new Set<string>());
+  useEffect(() => {
+    if (!driveWrite || !onLutLibrary) return;
+    for (const l of lutLibrary ?? []) {
+      if (l.driveId || lutSent.current.has(l.id)) continue;
+      lutSent.current.add(l.id);
+      void (async () => {
+        const b = await getMedia(`lut:${l.id}`).catch(() => undefined);
+        if (!b) return; // imported on another device: it sends it from there
+        try {
+          const driveId = await uploadToDrive(b, `${l.name}.cube`, () => {}, new AbortController().signal, "application/octet-stream", { tktgen: "lut" }, DRIVE_PATHS.luts);
+          onLutLibrary((cur) => cur.map((x) => (x.id === l.id ? { ...x, driveId } : x)), true);
+          onSaveNow();
+        } catch (e) { console.warn("[grade] LUT upload to Drive failed", e); lutSent.current.delete(l.id); }
+      })();
+    }
+  }, [lutLibrary, driveWrite]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The look LUT is small: it goes to Drive by itself, so every browser and device finds it (see the LUT loading above).
   const lutUp = useRef<string | null>(null);
   useEffect(() => {
@@ -4552,7 +4592,14 @@ export default function VideoStudio({
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 presets={gradePresets ?? []} onDeletePreset={(id) => onGradePresets?.((gradePresets ?? []).filter((x) => x.id !== id))}
-                onSavePreset={(name) => grade && onGradePresets?.([...(gradePresets ?? []), { id: uid(), name, grade }])} />
+                onSavePreset={(name) => {
+                  if (!grade) return;
+                  // The LUT with its Drive copy, so the preset finds it on any device.
+                  const lib = grade.lut && lutChoices.find((l) => l.id === grade.lut!.id);
+                  const kept = grade.lut && lib?.driveId ? { ...grade, lut: { ...grade.lut, driveId: lib.driveId } } : grade;
+                  onGradePresets?.([...(gradePresets ?? []), { id: uid(), name, grade: kept }]);
+                }}
+                library={lutChoices} onImported={(l) => onLutLibrary?.((cur) => [...cur.filter((x) => x.id !== l.id), l])} />
                       </div>
           {/* How the video file is made: the settings recommended for TikTok and Instagram (at the take's own rate), shown;
               "Change" unfolds the user's own (for every video of the account). */}

@@ -5,13 +5,12 @@ import { NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
 import ColorWheels from "./ColorWheels";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
-import type { GradePreset, VideoGrade } from "@/lib/types";
+import type { GradePreset, LutRef, VideoGrade } from "@/lib/types";
 import { Range, Section, Select, Hint } from "./ui";
 import Icon from "./Icon";
 
 const LUTS_KEY = "tktgen-luts";
 
-type LutRef = { id: string; name: string; kind?: "look" | "camera" };
 /** LUTs this browser has (the files are in IndexedDB "lut:<id>"): looks made in DaVinci, and camera LUTs. */
 export function knownLuts(): LutRef[] {
   try { return JSON.parse(localStorage.getItem(LUTS_KEY) ?? "[]"); } catch { return []; }
@@ -30,7 +29,7 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   grade: VideoGrade | undefined;
@@ -43,9 +42,12 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   onDeletePreset: (id: string) => void;
   /** A LUT file was stored (also a missing one put back under its id): read it again. */
   onLutStored: (id: string) => void;
+  /** The account's LUTs (every device), and a LUT just imported here (it joins them, its file goes to the Drive). */
+  library: LutRef[];
+  onImported: (lut: LutRef) => void;
 }) {
   const { t, lang } = useT();
-  const [luts, setLuts] = useState(knownLuts);
+  const luts = library;
   const [err, setErr] = useState<string | null>(null);
   const g = grade ?? NEUTRAL_GRADE;
   const set = (patch: Partial<VideoGrade>) => onChange({ ...g, ...patch });
@@ -60,18 +62,23 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
       const id = lookErr && g.lut && g.lut.name === name0 ? g.lut.id : uid();
       await putMedia(`lut:${id}`, f);
       const name = f.name.replace(/\.cube$/i, "");
-      setLuts(rememberLut(id, name, kind));
-      set({ lut: { id, name, ...(kind === "camera" ? { kind } : null) } });
+      rememberLut(id, name, kind);
+      const ref: LutRef = { id, name, ...(kind === "camera" ? { kind } : null) };
+      onImported(ref);
+      set({ lut: ref });
       onLutStored(id);
     } catch (e) {
       setErr(t("This file is not a 3D LUT (.cube): {why}", { why: e instanceof Error ? e.message : String(e) }));
     }
   };
 
-  // A preset put on: its look, the video's own camera profile kept (an iPhone video stays iPhone, a log one log).
+  // A preset put on: the whole grade (camera profile, output LUT, settings, wheels). Its LUT found in the account's
+  // library (its Drive copy); on a standard video, its profile and LUT turned on.
   const applyPreset = (p: GradePreset) => {
     onRaw(false);
-    onChange({ ...p.grade, profile: grade ? grade.profile : sdr ? "rec709" : p.grade.profile, sdrOverride: grade?.sdrOverride });
+    const lib = p.grade.lut && luts.find((l) => l.id === p.grade.lut!.id);
+    const lut = p.grade.lut ? { ...p.grade.lut, ...(lib?.driveId ? { driveId: lib.driveId } : null) } : undefined;
+    onChange({ ...p.grade, lut, sdrOverride: sdr && (p.grade.profile !== "rec709" || !!lut) ? true : p.grade.sdrOverride });
   };
   const presetsPart = (
     <Section id="color-presets" title={<>{t("Colour presets")}{grade && gradePresetOf(presets, grade) && <span className="sec-sub"> · {gradePresetOf(presets, grade)!.name}</span>}</>} open={false}>
@@ -127,7 +134,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
             <label className="field">
               <span className="row" style={{ gap: 6 }}>{t("Colour output")}<Hint text={t("Rec.709: the app's own neutral conversion. Camera LUT: a LUT made for the camera's log (Sony's, Alister Chapman's…), the picture is turned back into that log before it. Look LUT: one made in DaVinci (input DaVinci Wide Gamut / Intermediate). Your settings and wheels always go before it.")} /></span>
               <Select className="input" value={g.lut?.id ?? ""}
-                onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); set({ lut: l ? { id: l.id, name: l.name, ...(l.kind === "camera" ? { kind: "camera" as const } : null) } : undefined }); }}>
+                onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); set({ lut: l ? { id: l.id, name: l.name, ...(l.kind === "camera" ? { kind: "camera" as const } : null), ...(l.driveId ? { driveId: l.driveId } : null) } : undefined }); }}>
                 <option value="">{t("Rec.709 (the app's own conversion)")}</option>
                 {luts.map((l) => <option key={l.id} value={l.id}>{`${l.name} · ${l.kind === "camera" ? t("camera LUT") : t("look LUT")}`}</option>)}
                 {g.lut && !luts.some((l) => l.id === g.lut!.id) && <option value={g.lut.id}>{g.lut.name}</option>}
@@ -190,7 +197,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
 }
 
 /** The same look (the camera profile apart: it is the video's own). */
-const lookKey = (g: VideoGrade) => JSON.stringify([g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null]);
+const lookKey = (g: VideoGrade) => JSON.stringify([g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null]);
 export const gradePresetOf = (presets: GradePreset[], g: VideoGrade) => presets.find((p) => lookKey(p.grade) === lookKey(g));
 
 /** The colour presets, as the text's: a name and "Save the current colour", then each one to put on, or delete. */
@@ -224,7 +231,7 @@ function GradePresets({ presets, current, onSave, onApply, onDelete }: {
           </div>
         );
       })}
-      <p className="muted xs">{t("A preset keeps the look (LUT, exposure, colours, grain), not the camera profile: it stays the video's own.")}</p>
+      <p className="muted xs">{t("A preset keeps the whole grade: the camera profile, the output LUT, the settings and the wheels.")}</p>
     </div>
   );
 }

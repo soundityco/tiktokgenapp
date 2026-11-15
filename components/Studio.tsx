@@ -1869,6 +1869,12 @@ export default function Studio({ userName }: { userName: string }) {
             presets={presets}
             onSavePreset={savePreset}
             onDeletePreset={deletePreset}
+            lutLibrary={ws.luts}
+            onLutLibrary={(fn, silent) => {
+              if (!silent) { upd((w) => ({ ...w, luts: fn(w.luts ?? []) })); return; }
+              const cur = wsRef.current;
+              if (cur) apply({ ...cur, luts: fn(cur.luts ?? []) }, false);
+            }}
             gradePresets={ws.gradePresets}
             onGradePresets={(list) => upd((w) => ({ ...w, gradePresets: list }))}
             exportPrefs={ws.videoExport}

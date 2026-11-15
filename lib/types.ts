@@ -247,6 +247,8 @@ export interface VideoExportPrefs {
 }
 
 export interface GradePreset { id: string; name: string; grade: VideoGrade }
+/** A LUT of the account: a look made in DaVinci, or a camera LUT; its copy in the user's Drive (Utils / LUTS). */
+export interface LutRef { id: string; name: string; kind?: "look" | "camera"; driveId?: string }
 
 export interface VideoTake {
   offset: number;
@@ -500,8 +502,10 @@ export interface Workspace {
   noRepeat: boolean;
   bags: Record<string, string[]>; // poolId -> items still available in the current shuffle bag
   exportFormat: "jpg" | "png";
-  /** Colour looks kept to put on a video (its LUT and sliders; the camera profile stays the video's own). */
+  /** Colour grades kept to put on a video: the whole grade (camera profile, output LUT, settings, wheels). */
   gradePresets?: GradePreset[];
+  /** The account's LUTs (every device lists them; the files are on each device, else fetched from the Drive copy). */
+  luts?: LutRef[];
   /** How videos are exported (lib/exportVideo exportSettings): the recommended settings, or the user's own. */
   videoExport?: VideoExportPrefs;
   zones: boolean;
