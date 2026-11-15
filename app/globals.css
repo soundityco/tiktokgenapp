@@ -2552,6 +2552,22 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 
 .hook-head .hook-gen { flex: none; }
 .hook-item .hook-del { margin-left: auto; }
+/* Colour wheels (Final Cut's way): two by two, each a disc with its puck and a brightness bar beside it. */
+.cw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 14px; }
+.cw { display: grid; gap: 6px; min-width: 0; }
+.cw-k { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: center; }
+.cw-on { margin-left: 4px; color: var(--text); }
+.cw-body { display: grid; grid-template-columns: minmax(0, 1fr) 8px; gap: 8px; align-items: stretch; }
+.cw-disc { position: relative; aspect-ratio: 1; border-radius: 50%; touch-action: none; cursor: grab; box-shadow: inset 0 0 0 1px var(--line-2); }
+.cw-disc:active { cursor: grabbing; }
+.cw-disc > canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.cw-disc::after { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--muted); opacity: .6; pointer-events: none; }
+.cw-puck { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid var(--text); box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.5); pointer-events: none; }
+.cw-bar { position: relative; border-radius: 4px; background: linear-gradient(var(--text), var(--line-2) 50%, var(--bg)); box-shadow: inset 0 0 0 1px var(--line-2); touch-action: none; cursor: ns-resize; }
+.cw-mid { position: absolute; left: -3px; right: -3px; top: 50%; height: 1px; background: var(--muted); opacity: .5; }
+.cw-knob { position: absolute; left: -4px; right: -4px; height: 4px; margin-top: -2px; border-radius: 2px; background: var(--text); box-shadow: 0 0 0 1px rgba(0,0,0,.6); pointer-events: none; }
+.cw-disc:focus-visible, .cw-bar:focus-visible { outline: 1px solid var(--text); outline-offset: 2px; }
+
 /* The video's Export part: what the file will be (label, value), then the user's own settings when "Change" is on. */
 .exp-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: var(--fs-sm); color: var(--muted); }
 .exp-rows > .mono { color: var(--text); font-size: var(--fs-xs); align-self: center; }

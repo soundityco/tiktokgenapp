@@ -612,7 +612,7 @@ export default function VideoStudio({
             if (id) b = await downloadDriveFile(id);
           } catch (e) { console.warn("[grade] LUT download from Drive failed", e); }
         }
-        if (b) { void putMedia(`lut:${lutId}`, b).catch(() => {}); rememberLut(lutId, want.name); }
+        if (b) { void putMedia(`lut:${lutId}`, b).catch(() => {}); rememberLut(lutId, want.name, want.kind); }
       }
       if (off) return;
       if (!b) { setLookErr(t("This LUT is not on this device: import it again.")); return; }

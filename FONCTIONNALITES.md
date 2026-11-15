@@ -70,7 +70,8 @@ dans ton Google Drive.
 - **Hooks par-dessus la vidéo** : plusieurs, chacun avec son moment, tirés de leurs listes et tags. — En ligne
 - **Paroles incrustées** sur la vidéo. — En ligne
 - **Cadrage** 9:16 ou 16:9, zoom, **zoom progressif** (réglable, ou à l'intérieur de l'image seulement). — En ligne
-- **Étalonnage** : log vers une image normale, LUT au choix, export 10 bits. — En ligne
+- **Étalonnage** : log vers une image normale, export 10 bits ; trois sorties au choix : le Rec.709 neutre de l'app, une **LUT caméra** (faite pour le log de la caméra, comme celles de Sony ou d'Alister Chapman) ou une **LUT de look** faite dans DaVinci. — En ligne
+- **Roues de couleur** à la Final Cut (Global, Ombres, Tons moyens, Hautes lumières, comme les primaires de DaVinci), avant la LUT, avec un point de couleur et une réglette de luminosité chacune. — En test
 - **Presets de couleur** : enregistrer un look (LUT, exposition, couleurs, grain) et le poser sur une autre vidéo d'un clic, puis le retoucher ; le profil caméra reste celui de la vidéo. — En ligne
 - **Bandes noires** au format voulu. — En ligne
 - **Presets de style** des textes, à garder et réappliquer. — En ligne

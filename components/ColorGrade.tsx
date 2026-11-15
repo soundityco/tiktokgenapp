@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { uid } from "@/lib/defaults";
-import { NEUTRAL_GRADE, parseCube, PROFILES } from "@/lib/grade";
+import { NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
+import ColorWheels from "./ColorWheels";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { GradePreset, VideoGrade } from "@/lib/types";
@@ -10,13 +11,14 @@ import Icon from "./Icon";
 
 const LUTS_KEY = "tktgen-luts";
 
-/** Look LUTs this browser has (the files are in IndexedDB "lut:<id>"). */
-export function knownLuts(): { id: string; name: string }[] {
+type LutRef = { id: string; name: string; kind?: "look" | "camera" };
+/** LUTs this browser has (the files are in IndexedDB "lut:<id>"): looks made in DaVinci, and camera LUTs. */
+export function knownLuts(): LutRef[] {
   try { return JSON.parse(localStorage.getItem(LUTS_KEY) ?? "[]"); } catch { return []; }
 }
 /** Note that this browser now has this LUT file. */
-export function rememberLut(id: string, name: string) {
-  const next = [...knownLuts().filter((l) => l.id !== id), { id, name }];
+export function rememberLut(id: string, name: string, kind?: LutRef["kind"]) {
+  const next = [...knownLuts().filter((l) => l.id !== id), { id, name, ...(kind === "camera" ? { kind } : null) }];
   try { localStorage.setItem(LUTS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
   return next;
 }
@@ -49,7 +51,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   const set = (patch: Partial<VideoGrade>) => onChange({ ...g, ...patch });
   const num = (v: number, d = 2) => v.toFixed(d).replace(".", lang === "fr" ? "," : ".");
 
-  const importLut = async (f: File) => {
+  const importLut = async (f: File, kind: "look" | "camera") => {
     setErr(null);
     try {
       parseCube(await f.text()); // refuse a file that is not a 3D .cube before keeping it
@@ -58,8 +60,8 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
       const id = lookErr && g.lut && g.lut.name === name0 ? g.lut.id : uid();
       await putMedia(`lut:${id}`, f);
       const name = f.name.replace(/\.cube$/i, "");
-      setLuts(rememberLut(id, name));
-      set({ lut: { id, name } });
+      setLuts(rememberLut(id, name, kind));
+      set({ lut: { id, name, ...(kind === "camera" ? { kind } : null) } });
       onLutStored(id);
     } catch (e) {
       setErr(t("This file is not a 3D LUT (.cube): {why}", { why: e instanceof Error ? e.message : String(e) }));
@@ -109,7 +111,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
           <button className="btn sm quiet" onClick={() => { onRaw(false); onChange({ ...NEUTRAL_GRADE, profile: "rec709" }); }}>{t("Turn off again")}</button>
         </p>
       )}
-      <Section id="color-profile" title={t("Profile and LUT")}>
+      <Section id="color-profile" title={t("Profile and output")}>
         {/* Standard video: the camera conversion and the LUT are off (greyed), the simple sliders below stay. */}
         <fieldset className={"plain-set" + (simple ? " off" : "")} disabled={simple} title={simple ? t("Off for a standard SDR video") : undefined}>
         <label className="field">
@@ -120,19 +122,25 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         </label>
         {colour && (
           <>
+            {/* The output: the app's own Rec.709, a camera LUT (the camera's log in: Sony's, Alister Chapman's…), or a
+                look made in DaVinci (DaVinci Wide Gamut / Intermediate in). The grade above goes before it. */}
             <label className="field">
-              <span>{t("Look LUT (made in DaVinci, input DaVinci Wide Gamut / Intermediate)")}</span>
+              <span className="row" style={{ gap: 6 }}>{t("Colour output")}<Hint text={t("Rec.709: the app's own neutral conversion. Camera LUT: a LUT made for the camera's log (Sony's, Alister Chapman's…), the picture is turned back into that log before it. Look LUT: one made in DaVinci (input DaVinci Wide Gamut / Intermediate). Your settings and wheels always go before it.")} /></span>
               <Select className="input" value={g.lut?.id ?? ""}
-                onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); set({ lut: l }); }}>
-                <option value="">{t("None (plain conversion to Rec.709)")}</option>
-                {luts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); set({ lut: l ? { id: l.id, name: l.name, ...(l.kind === "camera" ? { kind: "camera" as const } : null) } : undefined }); }}>
+                <option value="">{t("Rec.709 (the app's own conversion)")}</option>
+                {luts.map((l) => <option key={l.id} value={l.id}>{`${l.name} · ${l.kind === "camera" ? t("camera LUT") : t("look LUT")}`}</option>)}
                 {g.lut && !luts.some((l) => l.id === g.lut!.id) && <option value={g.lut.id}>{g.lut.name}</option>}
               </Select>
             </label>
             <div className="row">
               <label className="btn sm">
-                {t("Import a LUT (.cube)")}
-                <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f); e.target.value = ""; }} />
+                {t("Import a camera LUT")}
+                <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f, "camera"); e.target.value = ""; }} />
+              </label>
+              <label className="btn sm">
+                {t("Import a look LUT")}
+                <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f, "look"); e.target.value = ""; }} />
               </label>
             </div>
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}
@@ -156,6 +164,12 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         </Section>
       )}
 
+      {colour && (
+        <Section id="color-wheels" title={<>{t("Colour wheels")}{wheelsOn(g) && <span className="sec-sub"> · {t("on")}</span>}</>} open={false}>
+          <ColorWheels wheels={g.wheels ?? {}} onChange={(wheels) => set({ wheels })} />
+        </Section>
+      )}
+
       <Section id="color-finish" title={t("Finish")} open={false}>
         <Range label={t("Vignette")} value={g.vignette} display={`${g.vignette}`} min={0} max={100}
           onChange={(v) => set({ vignette: v })} onReset={() => set({ vignette: 0 })} />
@@ -176,7 +190,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
 }
 
 /** The same look (the camera profile apart: it is the video's own). */
-const lookKey = (g: VideoGrade) => JSON.stringify([g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize]);
+const lookKey = (g: VideoGrade) => JSON.stringify([g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null]);
 export const gradePresetOf = (presets: GradePreset[], g: VideoGrade) => presets.find((p) => lookKey(p.grade) === lookKey(g));
 
 /** The colour presets, as the text's: a name and "Save the current colour", then each one to put on, or delete. */

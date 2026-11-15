@@ -73,3 +73,49 @@ describe("photo edits of a slide", () => {
     expect(photoGrade({ grain: -20 })).toBeNull(); // grain only adds
   });
 });
+
+describe("colour wheels and the outputs", async () => {
+  const G = await import("../lib/grade");
+  const N = 17;
+  const at = (lut: Float32Array, r: number, g: number, b: number) => { const k = ((b * N + g) * N + r) * 3; return [lut[k], lut[k + 1], lut[k + 2]]; };
+  const base = { ...G.NEUTRAL_GRADE, exposure: 0.4 };
+  const plain = G.buildGradeLut(base, null, N);
+
+  it("at zero the wheels change nothing (the grades made before stay as they were)", () => {
+    const z = G.buildGradeLut({ ...base, wheels: { lift: { x: 0, y: 0, l: 0 }, gain: { x: 0, y: 0, l: 0 } } }, null, N);
+    expect(Array.from(z)).toEqual(Array.from(plain));
+    expect(G.wheelsOn({ ...base, wheels: { gamma: { x: 0, y: 0, l: 0 } } })).toBe(false);
+  });
+  it("shadows lift the blacks most, highlights the top most, a red puck makes it redder", () => {
+    const lift = G.buildGradeLut({ ...base, wheels: { lift: { x: 0, y: 0, l: 1 } } }, null, N);
+    const dark = 4, bright = 13;
+    const up = (l: Float32Array, i: number) => at(l, i, i, i)[1] - at(plain, i, i, i)[1];
+    expect(up(lift, dark)).toBeGreaterThan(up(lift, bright));
+    const gain = G.buildGradeLut({ ...base, wheels: { gain: { x: 0, y: 0, l: -0.5 } } }, null, N);
+    expect(at(gain, bright, bright, bright)[1]).toBeLessThan(at(plain, bright, bright, bright)[1]);
+    const red = G.buildGradeLut({ ...base, wheels: { gamma: { x: 0, y: 0.8, l: 0 } } }, null, N);
+    const [r0, g0] = at(plain, 9, 9, 9), [r1, g1] = at(red, 9, 9, 9);
+    expect(r1 - g1).toBeGreaterThan(r0 - g0 + 0.02);
+  });
+  it("a camera LUT gets the camera's own log: one that makes the app's Rec.709 gives the same picture, the grade before it kept", () => {
+    // A camera LUT (S-Log3 code / 1023 in) made of the app's own conversion, without grade.
+    // (65 points, as fine camera LUTs: a coarser one made from another LUT would only measure its own interpolation.)
+    const S = 65, ref = G.buildGradeLut(G.NEUTRAL_GRADE, null, S), data = new Float32Array(S * S * S * 3);
+    const sampled = (v: number[]) => { const o = [0, 0, 0]; G.sampleCube({ size: S, data: ref, min: [0, 0, 0], max: [1, 1, 1] }, v[0], v[1], v[2], o); return o; };
+    for (let b = 0, k = 0; b < S; b++) for (let g = 0; g < S; g++) for (let r = 0; r < S; r++, k += 3) {
+      const v = [r, g, b].map((i) => ((i / (S - 1)) * 1023 - 64) / 876); // its input as the app's video levels
+      data.set(sampled(v), k);
+    }
+    const cam = { size: S, data, min: [0, 0, 0] as [number, number, number], max: [1, 1, 1] as [number, number, number] };
+    // A grade before it (exposure down: the picture stays within the codes this test LUT covers, 64 to 940).
+    const graded = { ...G.NEUTRAL_GRADE, exposure: -0.4 }, plainGraded = G.buildGradeLut(graded, null, N);
+    const viaCamera = G.buildGradeLut({ ...graded, lut: { id: "a", name: "Alister", kind: "camera" } }, cam, N);
+    let worst = 0;
+    // Greys and warm tones (skin…); very saturated cyans fall under this test LUT's floor (code 64, a real one goes to 0).
+    for (let i = 3; i < N - 2; i++) for (const [r, g, b] of [[i, i, i], [i, i - 1, i - 2], [i, i - 1, i - 1]]) {
+      const a = at(viaCamera, r, g, b), p = at(plainGraded, r, g, b);
+      worst = Math.max(worst, ...a.map((x, c) => Math.abs(x - p[c])));
+    }
+    expect(worst).toBeLessThan(0.02);
+  });
+});

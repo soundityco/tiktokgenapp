@@ -272,13 +272,23 @@ export interface VideoHook {
 }
 
 /** Colour grade of a camera clip (see lib/grade.ts). Sliders are applied in linear light / DaVinci Intermediate. */
+/** A colour wheel: its puck (x to the right = blue, y up = red, as on a vectorscope; within the unit circle) and its
+ *  brightness (-1 to 1). */
+export interface Wheel { x: number; y: number; l: number }
+export type WheelId = "offset" | "lift" | "gamma" | "gain";
+
 export interface VideoGrade {
   /** Standard SDR video: the camera profile and the LUT were turned back on by hand (off by default). */
   sdrOverride?: boolean;
   /** How the camera recorded the colours: converted to DaVinci Wide Gamut / Intermediate first. */
   profile: "slog3-cine" | "slog3" | "rec709" | "applelog" | "hlg" | "pq" | "none";
-  /** Look LUT made in DaVinci (input DWG / Intermediate), kept on this device (IndexedDB "lut:<id>"). */
-  lut?: { id: string; name: string; /** Copy in the user's Drive: any browser or device gets it from there. */ driveId?: string };
+  /** The LUT at the end, kept on this device (IndexedDB "lut:<id>"): a look made in DaVinci (input DWG / Intermediate,
+   *  `kind` "look" or none), or a camera LUT (`kind` "camera": input the camera's own log, as Sony's or Alister
+   *  Chapman's S-Log3 → Rec.709). None: the app's own conversion to Rec.709. */
+  lut?: { id: string; name: string; kind?: "look" | "camera"; /** Copy in the user's Drive: any browser or device gets it from there. */ driveId?: string };
+  /** Colour wheels, as DaVinci's primaries (lib/grade wheelsOf): Global (offset), Shadows (lift), Midtones (gamma),
+   *  Highlights (gain). None: all at zero. */
+  wheels?: Partial<Record<WheelId, Wheel>>;
   /** Stops. */
   exposure: number;
   /** 1 = unchanged, around `pivot` (DaVinci Intermediate, default middle grey). */

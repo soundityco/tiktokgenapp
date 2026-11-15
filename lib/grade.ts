@@ -1,14 +1,16 @@
 /**
  * Colour grading of camera log footage, like a DaVinci node tree:
- * camera log → DaVinci Wide Gamut / Intermediate (CST IN) → exposure, white balance (linear light),
- * contrast, saturation → the user's look LUT (made in DaVinci, input DWG / Intermediate).
+ * camera log → DaVinci Wide Gamut / Intermediate (CST IN) → exposure, white balance (linear light) → contrast →
+ * colour wheels (offset, lift, gamma, gain) → saturation → the output: the app's own conversion to Rec.709, the
+ * user's look LUT (made in DaVinci, input DWG / Intermediate), or a camera LUT (input the camera's own log: the grade
+ * is turned back into it first, as nodes before a LUT in DaVinci).
  *
  * Everything is folded into one 3D LUT whose input is the camera's own code values: the preview applies it
  * on the GPU (lib/gradeGL.ts), the export hands it to ffmpeg, which applies it on the 10-bit source.
  * Vignette and grain depend on the position in the picture: they are drawn on the frame (see drawLook).
  */
 
-import type { PhotoAdjust, VideoGrade } from "./types";
+import type { PhotoAdjust, VideoGrade, Wheel, WheelId } from "./types";
 
 export type CameraProfile = VideoGrade["profile"];
 
@@ -138,6 +140,30 @@ export function pqToLin(v: number): number {
   const p = Math.pow(Math.max(0, v), 1 / m2);
   return (Math.pow(Math.max(0, p - c1) / (c2 - c3 * p), 1 / m1) * 10000) / 203;
 }
+/** Scene linear → Sony S-Log3, as the 10-bit code value (the inverse of slog3ToLin before its video levels). */
+export function linToSlog3Code(l: number): number {
+  return l >= 0.01125 ? 420 + Math.log10((l + 0.01) / 0.19) * 261.5 : (l * (171.2102946929 - 95)) / 0.01125 + 95;
+}
+/** Scene linear → Apple Log. */
+function linToAppleLog(l: number): number {
+  const R0 = -0.05641088, Rt = 0.01, c = 47.28711236, beta = 0.00964052, gamma = 0.08550479, delta = 0.69336945;
+  if (l >= Rt) return gamma * Math.log2(l + beta) + delta;
+  if (l >= R0) return c * (l - R0) * (l - R0);
+  return 0;
+}
+/** Linear (reference white 1) → HLG. */
+function linToHlg(l: number): number {
+  const a = 0.17883277, b = 0.28466892, c = 0.55991073;
+  const e = Math.max(0, l * 0.26496);
+  return e <= 1 / 12 ? Math.sqrt(3 * e) : a * Math.log(12 * e - b) + c;
+}
+/** Linear (203 nits = 1) → PQ. */
+function linToPq(l: number): number {
+  const m1 = 0.1593017578125, m2 = 78.84375, c1 = 0.8359375, c2 = 18.8515625, c3 = 18.6875;
+  const y = Math.pow(Math.max(0, (l * 203) / 10000), m1);
+  return Math.pow((c1 + c2 * y) / (1 + c3 * y), m2);
+}
+
 /** Scene linear → DaVinci Intermediate. */
 export function linToDI(l: number): number {
   return l <= 0.00262409 ? l * 10.44426855 : (Math.log2(l + 0.0075) + 7) * 0.07329248;
@@ -148,20 +174,56 @@ export function diToLin(v: number): number {
 /** DaVinci Intermediate of middle grey: the default contrast pivot. */
 export const DI_GREY = linToDI(0.18);
 
-const INPUT: Record<Exclude<CameraProfile, "none">, { decode: (v: number) => number; toDWG: M3 }> = {
-  "slog3-cine": { decode: slog3ToLin, toDWG: mul(XYZ_TO_DWG, GAMUTS.sgamut3cine) },
-  slog3: { decode: slog3ToLin, toDWG: mul(XYZ_TO_DWG, GAMUTS.sgamut3) },
-  rec709: { decode: (v) => Math.pow(Math.max(0, v), 2.4), toDWG: mul(XYZ_TO_DWG, GAMUTS.rec709) },
-  applelog: { decode: appleLogToLin, toDWG: mul(XYZ_TO_DWG, GAMUTS.rec2020) },
-  hlg: { decode: hlgToLin, toDWG: mul(XYZ_TO_DWG, GAMUTS.rec2020) },
-  pq: { decode: pqToLin, toDWG: mul(XYZ_TO_DWG, GAMUTS.rec2020) },
+/** Each camera profile: its curve to scene linear and back (`lutIn`: the linear light as a camera LUT's input, the
+ *  .cube convention: S-Log3 as its 10-bit code over 1023, the others as their own signal), and its gamut to DWG. */
+const INPUT: Record<Exclude<CameraProfile, "none">, { decode: (v: number) => number; lutIn: (l: number) => number; toDWG: M3 }> = {
+  "slog3-cine": { decode: slog3ToLin, lutIn: (l) => linToSlog3Code(l) / 1023, toDWG: mul(XYZ_TO_DWG, GAMUTS.sgamut3cine) },
+  slog3: { decode: slog3ToLin, lutIn: (l) => linToSlog3Code(l) / 1023, toDWG: mul(XYZ_TO_DWG, GAMUTS.sgamut3) },
+  rec709: { decode: (v) => Math.pow(Math.max(0, v), 2.4), lutIn: (l) => Math.pow(Math.max(0, l), 1 / 2.4), toDWG: mul(XYZ_TO_DWG, GAMUTS.rec709) },
+  applelog: { decode: appleLogToLin, lutIn: linToAppleLog, toDWG: mul(XYZ_TO_DWG, GAMUTS.rec2020) },
+  hlg: { decode: hlgToLin, lutIn: linToHlg, toDWG: mul(XYZ_TO_DWG, GAMUTS.rec2020) },
+  pq: { decode: pqToLin, lutIn: linToPq, toDWG: mul(XYZ_TO_DWG, GAMUTS.rec2020) },
 };
+
+// ---- colour wheels (DaVinci's primaries, in DaVinci Intermediate) ----
+
+export const WHEEL_IDS: WheelId[] = ["offset", "lift", "gamma", "gain"];
+/** How far a wheel goes, at its edge: its brightness ring, and its colour. */
+const WHEEL_RANGE: Record<WheelId, { l: number; c: number }> = {
+  offset: { l: 0.1, c: 0.05 }, lift: { l: 0.15, c: 0.08 }, gamma: { l: 0.6, c: 0.35 }, gain: { l: 1, c: 0.4 },
+};
+/** A puck's colour as an RGB shift with no brightness of its own: the vectorscope's axes (x = B−Y, y = R−Y, BT.709). */
+export function wheelRgb(w: Pick<Wheel, "x" | "y">): [number, number, number] {
+  return [1.5748 * w.y, -0.1873 * w.x - 0.4681 * w.y, 1.8556 * w.x];
+}
+const isZero = (w?: Wheel) => !w || (!w.x && !w.y && !w.l);
+/** The wheels of a grade that do something (none: nothing to compute). */
+export const wheelsOn = (g: VideoGrade) => WHEEL_IDS.some((id) => !isZero(g.wheels?.[id]));
+/** Each wheel's amount per channel (R, G, B), at its range. */
+function wheelAmounts(g: VideoGrade): Record<WheelId, [number, number, number]> | null {
+  if (!wheelsOn(g)) return null;
+  const out = {} as Record<WheelId, [number, number, number]>;
+  for (const id of WHEEL_IDS) {
+    const w = g.wheels?.[id], r = WHEEL_RANGE[id];
+    if (isZero(w)) { out[id] = [0, 0, 0]; continue; }
+    const c = wheelRgb(w!);
+    out[id] = [w!.l * r.l + c[0] * r.c, w!.l * r.l + c[1] * r.c, w!.l * r.l + c[2] * r.c];
+  }
+  return out;
+}
+/** One channel through the wheels: offset adds, lift raises the blacks (1 stays), gamma bends the mids, gain multiplies. */
+function wheel(x: number, a: Record<WheelId, [number, number, number]>, c: number): number {
+  let v = x + a.offset[c];
+  v = v + a.lift[c] * (1 - v);
+  if (a.gamma[c] && v > 0) v = Math.pow(v, Math.pow(2, -a.gamma[c]));
+  return v * Math.pow(2, a.gain[c]);
+}
 
 /** Does this grade change the picture's colours (otherwise no LUT is applied at all)? */
 export function gradesColour(g: VideoGrade | undefined): g is VideoGrade {
   if (!g || g.profile === "none") return false;
   // Standard footage with every slider at zero and no LUT: the picture as it is, nothing to compute.
-  return !(g.profile === "rec709" && !g.lut && g.exposure === 0 && g.contrast === 1 && g.temp === 0 && g.tint === 0 && g.sat === 1);
+  return !(g.profile === "rec709" && !g.lut && g.exposure === 0 && g.contrast === 1 && g.temp === 0 && g.tint === 0 && g.sat === 1 && !wheelsOn(g));
 }
 
 /** The grade turns log or HDR footage into SDR (the part worth doing on the 10-bit camera file). */
@@ -169,7 +231,8 @@ export const convertsFootage = (g: VideoGrade | undefined) => !!g && g.profile !
 
 /**
  * The whole colour grade as one size³ LUT (RGB, red fastest), input = the camera's code values.
- * `look`: the user's LUT (DWG / Intermediate in). None: a plain conversion to Rec.709 with a soft highlight roll-off.
+ * `look`: the user's LUT, a look (DWG / Intermediate in) or a camera LUT (the camera's log in, `g.lut.kind` "camera").
+ * None: a plain conversion to Rec.709 with a soft highlight roll-off.
  */
 export function buildGradeLut(g: VideoGrade, look: CubeLut | null, size: number): Float32Array {
   const out = new Float32Array(size * size * size * 3);
@@ -188,6 +251,9 @@ export function buildGradeLut(g: VideoGrade, look: CubeLut | null, size: number)
   const ev = Math.pow(2, g.exposure) / norm;
   wr *= ev; wg *= ev; wb *= ev;
   const pivot = g.pivot ?? DI_GREY;
+  const wa = wheelAmounts(g);
+  const camera = g.lut?.kind === "camera";
+  const Mi = inv(M);
   const decode = new Float64Array(size);
   for (let i = 0; i < size; i++) decode[i] = inp.decode(i / (size - 1));
   const s = [0, 0, 0];
@@ -202,11 +268,16 @@ export function buildGradeLut(g: VideoGrade, look: CubeLut | null, size: number)
     let dr = (linToDI(R) - pivot) * g.contrast + pivot;
     let dg = (linToDI(G) - pivot) * g.contrast + pivot;
     let db = (linToDI(B) - pivot) * g.contrast + pivot;
+    if (wa) { dr = wheel(dr, wa, 0); dg = wheel(dg, wa, 1); db = wheel(db, wa, 2); }
     if (g.sat !== 1) {
       const y = DWG_Y[0] * dr + DWG_Y[1] * dg + DWG_Y[2] * db;
       dr = y + (dr - y) * g.sat; dg = y + (dg - y) * g.sat; db = y + (db - y) * g.sat;
     }
-    if (look) {
+    if (look && camera) {
+      // A camera LUT: the graded picture back into the camera's own log (linear, its gamut, its curve), then the LUT.
+      const x = diToLin(dr), y = diToLin(dg), z = diToLin(db);
+      sampleCube(look, inp.lutIn(Mi[0] * x + Mi[1] * y + Mi[2] * z), inp.lutIn(Mi[3] * x + Mi[4] * y + Mi[5] * z), inp.lutIn(Mi[6] * x + Mi[7] * y + Mi[8] * z), s);
+    } else if (look) {
       sampleCube(look, dr, dg, db, s);
     } else {
       const x = diToLin(dr), y = diToLin(dg), z = diToLin(db);
@@ -250,7 +321,7 @@ export function photoGrade(a: PhotoAdjust | undefined): VideoGrade | null {
 /** Everything that changes the colours, to know when a converted copy must be made again. */
 export function gradeKey(g: VideoGrade | undefined): string {
   if (!gradesColour(g)) return "";
-  return [g.profile, g.lut?.id ?? "", g.exposure, g.contrast, g.pivot ?? "", g.temp, g.tint, g.sat].join(",");
+  return [g.profile, g.lut?.id ?? "", g.lut?.kind ?? "", g.exposure, g.contrast, g.pivot ?? "", g.temp, g.tint, g.sat, JSON.stringify(g.wheels ?? {})].join(",");
 }
 
 /** Grain plates: a few different frames of film-like grain, per grain size (made once). */
