@@ -634,6 +634,11 @@ details.more[open] > summary::after { content: "−"; }
 
 /* A part's on / off switch, at the right of its title (before the arrow). */
 details.sec > summary .sec-switch { margin-left: auto; margin-right: 12px; display: inline-flex; align-items: center; }
+/* (Compact there: the title keeps the height of the others.) */
+details.sec > summary .sec-switch .switch { height: 16px; padding: 0; }
+details.sec > summary .sec-switch .switch-track { width: 28px; height: 16px; border-radius: 8px; }
+details.sec > summary .sec-switch .switch-knob { top: 3px; left: 3px; width: 10px; height: 10px; }
+details.sec > summary .sec-switch .switch.on .switch-knob { translate: 12px 0; }
 details.sec > summary .sec-sub:has(+ .sec-switch) { margin-right: 0; }
 details.sec > summary .sec-sub { margin-right: auto; padding-left: .4em; color: var(--faint); text-transform: none; letter-spacing: 0; font-family: var(--sans); }
 
@@ -668,7 +673,7 @@ details.sec > summary .sec-sub { margin-right: auto; padding-left: .4em; color: 
    Between two panels the gap of the container is cancelled, so the two never add up. */
 .stack { --gap: var(--s3); }
 .video-shell > .col.side { --gap: var(--s4); }
-:where(.stack, .col.side) > details.sec + details.sec { margin-top: calc(-1 * var(--gap, 0px)); }
+:where(.stack, .col.side, .cg-parts) > details.sec + details.sec { margin-top: calc(-1 * var(--gap, 0px)); }
 /* Safari marks a clicked panel title as keyboard focus: a quiet grey ring, not the blue one. */
 details.sec > summary:focus-visible { outline: 1px solid var(--line-2); outline-offset: 2px; }
 /* The header of both studios: the same names of fields (small, plain) above their controls. */
