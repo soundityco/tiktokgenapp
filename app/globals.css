@@ -432,6 +432,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .take.other { opacity: .6; }
 .take.other:hover, .take.other.open { opacity: 1; }
 .take-import { align-self: flex-start; }
+.clip-strip.folded { display: none; }
+.take.open .take-fold svg { transform: rotate(180deg); }
 .takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
 .takes-more > summary::before { content: "▸ "; }
 .takes-more[open] > summary::before { content: "▾ "; }

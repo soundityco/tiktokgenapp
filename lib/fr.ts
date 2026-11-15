@@ -471,6 +471,7 @@ export const FR: Record<string, string> = {
   "Sign out": "Se déconnecter",
   "Size": "Taille",
   "Threshold": "Seuil",
+  "Details": "Détails",
   "“{name}” is already in the release: not imported again.": "« {name} » est déjà dans la release : pas importée une deuxième fois.",
   "{n} files are already in the release: not imported again.": "{n} fichiers sont déjà dans la release : pas importés une deuxième fois.",
   "Synced at {at} in the official audio": "Calée à {at} dans l'audio officiel",

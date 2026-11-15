@@ -716,17 +716,15 @@ export default function VideoStudio({
     return cam > 0 ? anglesRef.current.get(cfg.angles?.[cam - 1] ?? "") ?? null : null;
   };
   /** A camera's picture at official time `time` (paused: its player placed there first). */
-  const anglePicture = (a: Angle, time: number, still: boolean): Picture | null => {
+  const anglePicture = (a: Angle, time: number, still: boolean): Picture | null | undefined => {
     const el = a.el, target = time - a.offset;
     if (target < -0.001 || (Number.isFinite(el.duration) && target > el.duration + 0.001)) return null;
     if (still && !el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = Math.max(0, target);
-    return el.readyState >= 2 && el.videoWidth ? { src: el, w: el.videoWidth, h: el.videoHeight } : null;
+    return el.readyState >= 2 && el.videoWidth && !el.seeking ? { src: el, w: el.videoWidth, h: el.videoHeight } : undefined;
   };
-  /** While playing: the camera on screen plays with the sound (the others wait, paused). */
+  /** While playing: every camera plays with the sound, so a cut shows the next one at once (no black frame). */
   const syncAngles = (heard: number) => {
-    const on = angleAt(heard);
     for (const a of anglesRef.current.values()) {
-      if (a !== on) { if (!a.el.paused) a.el.pause(); continue; }
       const target = Math.max(0, heard - a.offset), diff = target - a.el.currentTime;
       if (a.el.paused) { if (Math.abs(diff) > 0.05) a.el.currentTime = target; void a.el.play().catch(() => {}); }
       else if (Math.abs(diff) > 0.4) { a.el.currentTime = target; a.el.playbackRate = 1; }
@@ -879,6 +877,8 @@ export default function VideoStudio({
     const ang = angleAt(time);
     const keep = !ang && !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
     const pic = ang ? anglePicture(ang, time, !sourceRef.current) : pictureOf(el, time);
+    // A camera not ready yet (starting, placing itself): the last picture stays on screen, never a black frame.
+    if (pic === undefined) return;
     const boxes = drawScene(g, c.width, c.height, pic, time, { raw: rawRef.current, keep }, ang ?? undefined);
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
@@ -3473,12 +3473,38 @@ export default function VideoStudio({
     onSaveNow();
   };
   const usedAsCamera = (id: string) => clips.some((c) => c.angles?.includes(id));
+  // The same file imported twice (same name and size: before the check, or on two devices): one take kept (a
+  // project's own first), every project using the other one uses it, its cuts kept on the right camera.
+  useEffect(() => {
+    const all = clips;
+    const winner = new Map<string, string>();
+    for (const c of all) {
+      if (!c.takeOnly || !c.videoName) continue;
+      const w = all.find((x) => x !== c && x.videoName === c.videoName && x.videoSize === c.videoSize && (!x.takeOnly || all.indexOf(x) < all.indexOf(c)));
+      if (w) winner.set(c.id, w.id);
+    }
+    if (!winner.size) return;
+    onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => !winner.has(c.id)).map((c) => {
+      if (!c.angles?.length) return c;
+      // Old camera number (1-3) → new one (0 when it went: its shots back on camera 1).
+      const next: string[] = [], to = new Map<number, number>();
+      c.angles.forEach((id0, k) => {
+        const id = winner.get(id0) ?? id0;
+        if (!id || id === c.id) { to.set(k + 1, 0); return; }
+        const at = next.indexOf(id);
+        if (at >= 0) to.set(k + 1, at + 1); else { next.push(id); to.set(k + 1, next.length); }
+      });
+      return { ...c, angles: next.length ? next : undefined, cuts: next.length ? c.cuts?.map((x) => ({ ...x, cam: x.cam ? to.get(x.cam) ?? 0 : 0 })) : undefined };
+    }) }));
+    for (const id of winner.keys()) void delMedia(`video:${id}`).catch(() => {});
+    onSaveNow();
+  }, [clips]); // eslint-disable-line react-hooks/exhaustive-deps
   const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);
   const takeInput = useRef<HTMLInputElement>(null);
   /** The take whose line is unfolded (its details), one at a time. */
   const [takeOpen, setTakeOpen] = useState<string | null>(null);
   /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
-  const takesEl = () => {
+  const takesEl = (part: "first" | "rest") => {
     const angles = (settings.angles ?? []).filter(Boolean);
     const others = camChoices.filter((c) => !angles.includes(c.id));
     const room = angles.length < MAX_CAMS - 1;
@@ -3491,12 +3517,13 @@ export default function VideoStudio({
         <div className={"take-row" + (job && !job.err ? " shine-box" : "")}>
           <button className="take-main" aria-expanded={takeOpen === c.id} onClick={() => setTakeOpen(takeOpen === c.id ? null : c.id)}>
             {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name="film" size={13} />}
-            <span className="take-name" title={c.videoName ?? ""}>{clipName(c)}</span>
+            <span className="take-name" title={c.videoName ?? ""}>{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
           </button>
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
           {job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
             : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
             : <Icon name="check" size={12} />}
+          {cam === 0 ? <button className="btn icon sm quiet take-fold" aria-label={t("Details")} onClick={() => setTakeOpen(takeOpen === c.id ? null : c.id)}><Icon name="chevron" size={12} /></button> : <>
           {cam === null && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
           <Menu float trigger={(_, toggle) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={toggle}><Icon name="more" size={14} /></button>}>
             {(close) => (<>
@@ -3511,8 +3538,9 @@ export default function VideoStudio({
               </>}
             </>)}
           </Menu>
+          </>}
         </div>
-        {takeOpen === c.id && (
+        {takeOpen === c.id && cam !== 0 && (
           <div className="take-more xs">
             <span className="media-name" title={c.videoName ?? ""}>{c.videoName}</span>
             <span className="muted">{[c.source?.device ?? (c.source?.kind === "camera" ? t("Camera") : c.source?.kind === "phone" ? t("Phone") : null), c.source?.codec,
@@ -3523,6 +3551,7 @@ export default function VideoStudio({
         </div>
       );
     };
+    if (part === "first") return <div className="takes">{card(clip, 0)}</div>;
     return (
       <div className="takes">
         {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
@@ -3868,7 +3897,9 @@ export default function VideoStudio({
       // Multicam: 1 to 4 = a camera (playing: cut to it now; paused: the shot under the playhead shows it),
       // C = cut the shot here, Delete = remove the cut that starts it.
       const cfg = settingsRef.current;
-      const cam = /^[1-4]$/.test(k) ? Number(k) - 1 : -1;
+      // By the key's place (Digit1…, the keypad too): on an AZERTY keyboard the top row gives & é " ' without Shift.
+      const dig = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
+      const cam = dig ? Number(dig[1]) - 1 : -1;
       if (cam >= 0) {
         if (cam > 0 && !cfg.angles?.[cam - 1]) return;
         e.preventDefault();
@@ -4006,7 +4037,9 @@ export default function VideoStudio({
             <div className="tree-head" title={t("Camera 1 is the project's own take; up to 3 more for a multicam edit.")}>
               <span className="label">{t("Project takes")}</span>
             </div>
-            <div className={"clip-strip" + (projects.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}
+            {settings.videoName && takesEl("first")}
+            {/* Camera 1's card (its file, Drive copy, sync…): unfolded from its line, or always while it has no file. */}
+            <div className={"clip-strip" + (projects.length > 1 ? " many" : "") + (settings.videoName && takeOpen !== clip.id ? " folded" : "")} ref={clipStrip} onScroll={onStripScroll}
               onScrollEnd={onStripScroll}>
             {projects.map((c) => c.id !== clip.id ? (
               <div key={c.id} className={"clip-card ghost" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
@@ -4085,7 +4118,7 @@ export default function VideoStudio({
             </div>
             ))}
             </div>
-            {takesEl()}
+            {takesEl("rest")}
             </div>
           </div>
           <div className="lib-desk">{library}</div>
