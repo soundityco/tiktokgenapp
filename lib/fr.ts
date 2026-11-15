@@ -1188,6 +1188,7 @@ export const FR: Record<string, string> = {
   "Density": "Densité",
   "Towards the top": "Vers le haut",
   "Tone": "Teinte",
-  "A diffusion filter, as a Black Mist on the lens: the light of the bright parts spreads around them, the highlights soften, the blacks lift a little.": "Un filtre de diffusion, comme un Black Mist sur l'objectif : la lumière des zones claires se diffuse autour d'elles, les hautes lumières s'adoucissent, les noirs se lèvent un peu.",
+  "A diffusion filter, as a Black Mist on the lens: part of the light spreads around it, a glow next to the lights, softer highlights and contrast.": "Un filtre de diffusion, comme un Black Mist sur l'objectif : une partie de la lumière se diffuse autour d'elle, un halo près des lumières, des hautes lumières et un contraste plus doux.",
+  "As on film: a red-orange fringe around the strongest lights (a lamp, the sun, a reflection).": "Comme sur pellicule : un liseré rouge orangé autour des lumières les plus fortes (une lampe, le soleil, un reflet).",
   "A cinematic fog: denser towards the top of the frame and over the bright, flat parts (sky, background), lit by the scene's own light.": "Un brouillard cinéma : plus dense vers le haut de l'image et sur les zones claires et unies (ciel, fond), éclairé par la lumière de la scène.",
 };

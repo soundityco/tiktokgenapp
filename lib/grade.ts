@@ -15,7 +15,7 @@ import { drawEffects, effectsOn, type Effects } from "./effectsGL";
 
 /** The grade's Black Mist and Haze, their defaults filled in. */
 export const effectsOf = (g: VideoGrade): Effects => ({
-  mist: g.mist ?? 0, mistSize: g.mistSize ?? 50, halation: g.halation ?? 0,
+  mist: g.mist ?? 0, mistSize: g.mistSize ?? 50, halation: g.halation ?? 0, halationSize: g.halationSize ?? 40,
   haze: g.haze ?? 0, hazeHeight: g.hazeHeight ?? 60, hazeTone: g.hazeTone ?? 0,
 });
 
@@ -243,7 +243,7 @@ export function effectiveGrade(g: VideoGrade): VideoGrade {
     ...g,
     ...(b.corrections ? { exposure: 0, contrast: 1, pivot: undefined, temp: 0, tint: 0, sat: 1 } : null),
     ...(b.wheels ? { wheels: undefined } : null),
-    ...(b.effects ? { mist: 0, haze: 0 } : null),
+    ...(b.effects ? { mist: 0, halation: 0, haze: 0 } : null),
     ...(b.finish ? { vignette: 0, grain: 0 } : null),
   };
 }
