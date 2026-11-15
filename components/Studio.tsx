@@ -479,10 +479,29 @@ export default function Studio({ userName }: { userName: string }) {
     }, 500);
   }, []);
   const syncHistory = () => { setHistory({ past: past.current.length, future: future.current.length }); persistHistory(); };
+  // A press (mouse, finger, pen) from down to up is one undo step, however long it lasts and wherever it stops on the
+  // way (a slider dragged, paused, dragged again): only where it was let go is kept. A new press is a new step.
+  const pressing = useRef(false);
+  const pressStep = useRef(false);
+  useEffect(() => {
+    const down = () => { pressing.current = true; pressStep.current = false; lastHistory.current = 0; };
+    const up = () => { pressing.current = false; };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    window.addEventListener("blur", up);
+    return () => {
+      window.removeEventListener("pointerdown", down, true); window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true); window.removeEventListener("blur", up);
+    };
+  }, []);
   const remember = useCallback((snapshot: Workspace) => {
     const now = Date.now();
-    // Coalesce quick successive edits (typing, dragging) into one undo step.
-    if (now - lastHistory.current < 700 && past.current.length) { future.current = []; syncHistory(); return; }
+    // During a press: its first change makes the step, the next ones only move it on (the state before it is kept).
+    if (pressing.current && pressStep.current) { future.current = []; syncHistory(); return; }
+    if (pressing.current) pressStep.current = true;
+    // Coalesce quick successive edits (typing) into one undo step.
+    else if (now - lastHistory.current < 700 && past.current.length) { future.current = []; syncHistory(); return; }
     past.current.push(snapshot);
     if (past.current.length > 80) past.current.shift();
     future.current = [];
