@@ -302,6 +302,8 @@ export interface VideoSourceInfo {
   convert: boolean;
   /** Seconds, from the file's index. */
   duration?: number;
+  /** Frames per second it plays at (25, 29.97, 50…), from the file's index. */
+  fps?: number;
 }
 
 export interface VideoSettings {

@@ -227,3 +227,16 @@ describe("TikTok callback address", () => {
     expect(redirectUri(local)).toBe("http://localhost:3000/api/tiktok/callback");
   });
 });
+
+describe("the recommended export", async () => {
+  const { recommendedRate } = await import("../lib/exportVideo");
+  it("at the camera file's own rate, never fewer bits per frame than 12 Mb/s at 30 fps", () => {
+    expect(recommendedRate(25)).toEqual({ fps: 25, bitrate: 12_000_000 });
+    expect(recommendedRate(23.976)).toEqual({ fps: 23.976, bitrate: 12_000_000 });
+    expect(recommendedRate(29.97)).toEqual({ fps: 29.97, bitrate: 12_000_000 });
+    expect(recommendedRate(50)).toEqual({ fps: 50, bitrate: 20_000_000 });
+    expect(recommendedRate(59.94)).toEqual({ fps: 59.94, bitrate: 24_000_000 });
+    expect(recommendedRate(120)).toEqual({ fps: 60, bitrate: 24_000_000 });
+    expect(recommendedRate(undefined)).toEqual({ fps: 30, bitrate: 12_000_000 });
+  });
+});

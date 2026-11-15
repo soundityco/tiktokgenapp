@@ -11,6 +11,8 @@ export interface ExportJob {
   width: number;
   height: number;
   fps: number;
+  /** Bits per second of the picture (see recommendedRate). */
+  bitrate: number;
   /** Part of the official track exported (seconds). */
   from: number;
   until: number;
@@ -21,16 +23,28 @@ export interface ExportJob {
   signal: AbortSignal;
 }
 
-// High then Main then Baseline profile; levels high enough for 1080×1920 at 30 fps.
+// High then Main then Baseline profile; levels high enough for 1080×1920: 4.0 up to 30 fps, 4.2 above (a player may
+// refuse a file whose level says less than it holds).
 const AVC = ["avc1.640028", "avc1.4d0028", "avc1.640033", "avc1.42002a"];
+const AVC_FAST = ["avc1.64002a", "avc1.4d002a", "avc1.640033", "avc1.42002a"];
+
+/**
+ * The recommended export of a camera file playing at `src` frames per second: at its own rate (24, 25, 30, 50, 60…;
+ * unknown: 30), so no frame is doubled or dropped; and at least as many bits per frame as 12 Mb/s at 30 fps (the
+ * quality chosen for TikTok / Reels / Shorts): 12 Mb/s up to 30 fps, more above (20 at 50, 24 at 60).
+ */
+export function recommendedRate(src?: number): { fps: number; bitrate: number } {
+  const fps = !src || src < 23 ? 30 : Math.min(60, Math.round(src * 1000) / 1000);
+  return { fps, bitrate: Math.max(12_000_000, Math.round((12_000_000 * fps) / 30 / 1e6) * 1e6) };
+}
 
 /** Codecs this browser can encode for an MP4, or null (then the realtime fallback is used). */
-export async function mp4Support(width: number, height: number, sampleRate: number, channels: number) {
+export async function mp4Support(width: number, height: number, sampleRate: number, channels: number, fps = 30, bitrate = 12_000_000) {
   if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined" || typeof VideoFrame === "undefined") return null;
   let video: string | null = null;
-  for (const codec of AVC) {
+  for (const codec of fps > 30.5 ? AVC_FAST : AVC) {
     try {
-      const r = await VideoEncoder.isConfigSupported({ codec, width, height, bitrate: 12_000_000, framerate: 30 });
+      const r = await VideoEncoder.isConfigSupported({ codec, width, height, bitrate, framerate: fps });
       if (r.supported) { video = codec; break; }
     } catch { /* next */ }
   }
@@ -60,7 +74,7 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
   const { width, height, fps, from, until, audio, signal } = job;
   const channels = Math.min(2, audio.numberOfChannels);
   const sr = audio.sampleRate;
-  const codecs = await mp4Support(width, height, sr, channels);
+  const codecs = await mp4Support(width, height, sr, channels, fps, job.bitrate);
   if (!codecs) throw new Error("unsupported");
 
   const { ArrayBufferTarget, Muxer } = await import("mp4-muxer");
@@ -109,7 +123,8 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
   const venc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => { failure = e; } });
-  venc.configure({ codec: codecs.video, width, height, bitrate: 12_000_000, framerate: fps, latencyMode: "quality", avc: { format: "avc" } });
+  venc.configure({ codec: codecs.video, width, height, bitrate: job.bitrate, framerate: fps, latencyMode: "quality", avc: { format: "avc" } });
+  const gop = Math.max(1, Math.round(fps * 2)); // a key frame every 2 s (29.97 fps too: a whole number of frames)
   const n = Math.max(1, Math.round((until - from) * fps));
   const step = 1e6 / fps;
   try {
@@ -118,7 +133,7 @@ export async function exportMp4(job: ExportJob): Promise<Blob> {
       if (failure) throw failure;
       await job.frame(ctx, from + i / fps);
       const vf = new VideoFrame(canvas, { timestamp: Math.round(i * step), duration: Math.round(step) });
-      venc.encode(vf, { keyFrame: i % (fps * 2) === 0 });
+      venc.encode(vf, { keyFrame: i % gop === 0 });
       vf.close();
       // Do not let frames pile up in the encoder (memory). Wait on the encoder itself, not on a timer:
       // timers are slowed down to once a second in a background tab.

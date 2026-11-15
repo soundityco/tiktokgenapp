@@ -122,8 +122,24 @@ export function describeBytes(b: Uint8Array): Probe {
     const len = v1 ? u32(b, mvhd + 28) * 2 ** 32 + u32(b, mvhd + 32) : u32(b, mvhd + 20);
     if (scale > 0 && len > 0) duration = len / scale;
   }
+  // Frames per second: the camera's own note (Sony: formatFps="25p", the rate it plays at, also in slow motion), else
+  // the video track's frame duration (stts) over its time scale (mdhd).
+  let fps: number | undefined;
+  const noted = /formatFps="([\d.]+)[pi]?"/.exec(text);
+  if (noted) fps = parseFloat(noted[1]);
+  for (let t = find(b, "trak"); !fps && t >= 0; t = find(b, "trak", t + 4)) {
+    const next = find(b, "trak", t + 4), end = next >= 0 ? next : b.length;
+    const h = find(b, "hdlr", t);
+    if (h < 0 || h > end || String.fromCharCode(b[h + 12], b[h + 13], b[h + 14], b[h + 15]) !== "vide") continue;
+    const m = find(b, "mdhd", t), st = find(b, "stts", t);
+    if (m < 0 || st < 0 || m > end || st > end) continue;
+    const scale = u32(b, m + (b[m + 4] === 1 ? 24 : 16));
+    const delta = u32(b, st + 8) ? u32(b, st + 16) : 0;
+    if (scale > 0 && delta > 0) fps = scale / delta;
+  }
+  if (fps && !(fps > 1 && fps < 1000)) fps = undefined;
   return {
-    kind, device, colour, duration, profile: profile ?? undefined, curve: curve || undefined,
+    kind, device, colour, duration, fps: fps ? Math.round(fps * 1000) / 1000 : undefined, profile: profile ?? undefined, curve: curve || undefined,
     codec: codecName ? `${codecName} ${chroma} ${bitDepth}-bit` : undefined, convert,
   };
 }

@@ -18,7 +18,7 @@ import { probeVideo } from "@/lib/probe";
 import { compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
-import { exportMp4, ExportStep, mp4Support, seekVideo } from "@/lib/exportVideo";
+import { exportMp4, ExportStep, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
 import { fastWorkCopy } from "@/lib/fastCopy";
@@ -64,7 +64,8 @@ function clipsOf(p: Project): VideoSetup[] {
 
 /** Export size for each shape of video. */
 const OUT_SIZE = (f?: VideoSettings["format"]): [number, number] => (f === "16:9" ? [1920, 1080] : [1080, 1920]);
-const EXPORT_FPS = 30;
+/** The grade's grain changes this many times a second (whatever the export's frame rate). */
+const GRAIN_FPS = 30;
 /** The video frame settings in the carousel's photo terms, so both are drawn by the same code. */
 const picOf = (f: VideoFrame, matte?: number): PicSettings => ({ framing: f.framing ?? "fill", bars: f.bars ?? "blur", zoom: f.zoom, ox: f.ox, oy: f.oy, darken: 0 , matte });
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -721,7 +722,7 @@ export default function VideoStudio({
           drawPictureAt(g, pic.src, pic.w, pic.h, x + (w * (1 - k)) / 2, y + (h * (1 - k)) / 2, s * k, pic.part);
           g.restore();
         }
-        if (!raw && cfg.grade) drawLook(g, W, H, cfg.grade, Math.round(time * EXPORT_FPS));
+        if (!raw && cfg.grade) drawLook(g, W, H, cfg.grade, Math.round(time * GRAIN_FPS));
         if (preview?.keep && !raw) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
@@ -729,7 +730,7 @@ export default function VideoStudio({
     drawMatte(g, W, H, cfg.matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
-    const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / EXPORT_FPS);
+    const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / recommendedRate(cfg.source?.fps).fps);
     const text = cfg.captions ? activeRef.current(at) : null;
     const caption = text ? drawStyledText(g, text, styleRef.current, W, H) : null;
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
@@ -1523,9 +1524,9 @@ export default function VideoStudio({
     if (sdrSource && g && !g.sdrOverride && (g.lut || g.profile !== "rec709")) setV({ grade: { ...NEUTRAL_GRADE, profile: "rec709" } });
   }, [sdrSource, settings.grade]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Videos imported before the detection existed (or before it read the duration): read them once.
+  // Videos imported before the detection existed (or before it read the duration, the frame rate): read them once.
   useEffect(() => {
-    if (videoBlob && !onCopy && (!settings.source || settings.source.duration === undefined)) void describeVideo(videoBlob, false);
+    if (videoBlob && !onCopy && (!settings.source || settings.source.duration === undefined || settings.source.fps === undefined)) void describeVideo(videoBlob, false);
   }, [videoBlob, clip.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The duration read from the file's index: the video band shows at once, before the player opened the file.
   useEffect(() => {
@@ -2780,8 +2781,9 @@ export default function VideoStudio({
     src.connect(dest);
     const mime = ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
       .find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-    const rec = new MediaRecorder(new MediaStream([...canvas.captureStream(EXPORT_FPS).getVideoTracks(), ...dest.stream.getAudioTracks()]),
-      mime ? { mimeType: mime, videoBitsPerSecond: 10_000_000 } : undefined);
+    const rate = recommendedRate(settingsRef.current.source?.fps);
+    const rec = new MediaRecorder(new MediaStream([...canvas.captureStream(rate.fps).getVideoTracks(), ...dest.stream.getAudioTracks()]),
+      mime ? { mimeType: mime, videoBitsPerSecond: rate.bitrate } : undefined);
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     const type = mime.startsWith("video/mp4") ? "video/mp4" : "video/webm";
@@ -2839,7 +2841,9 @@ export default function VideoStudio({
     try {
       await whenReady(el);
       let blob: Blob | null = null, ext = "mp4";
-      if (await mp4Support(W, H, audioBuf.sampleRate, Math.min(2, audioBuf.numberOfChannels))) {
+      // At the camera file's own frame rate (25p stays 25p), with as many bits per frame as at 30 fps.
+      const rate = recommendedRate(settingsRef.current.source?.fps);
+      if (await mp4Support(W, H, audioBuf.sampleRate, Math.min(2, audioBuf.numberOfChannels), rate.fps, rate.bitrate)) {
         // Frames decoded from the file itself (works in a background tab); the hidden <video> only as a fallback.
         setExp({ p: 0, step: "read" });
         // A colour grade is applied by ffmpeg on the camera file itself (10-bit), not on the 8-bit frames of the browser.
@@ -2920,7 +2924,7 @@ export default function VideoStudio({
           ac.signal.addEventListener("abort", () => { document.removeEventListener("visibilitychange", back); resolve(); }, { once: true });
         });
         blob = await exportMp4({
-          width: W, height: H, fps: EXPORT_FPS, from, until, audio: audioBuf, signal: ac.signal,
+          width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, from, until, audio: audioBuf, signal: ac.signal,
           onProgress: (p, step) => setExp({ p: 0.05 + p * 0.95, step }),
           frame: async (g, time) => {
             const target = time - cfg.offset;
@@ -4648,7 +4652,7 @@ export default function VideoStudio({
             <div className={"bar export-bar" + (exp.done ? "" : " shine-bar")} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(exp.p * 100)}>
               <div style={{ width: `${exp.p * 100}%` }} />
             </div>
-            <p className="muted xs">{outW}×{outH} · H.264 + AAC · {EXPORT_FPS} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
+            <p className="muted xs">{outW}×{outH} · H.264 + AAC · {+recommendedRate(settings.source?.fps).fps.toFixed(2)} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
             {exp.step === "convert" && gpuWhy && <p className="muted xs">{t("Colour grade on the graphics card not possible here: {why}", { why: gpuWhy })}</p>}
             {expMode && (expMode.direct
               ? <p className="muted xs">{t("Camera frames decoded from the file ({codec}): you can switch tabs.", { codec: expMode.detail })}</p>

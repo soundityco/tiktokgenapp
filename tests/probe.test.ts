@@ -28,6 +28,17 @@ describe("probeVideo (what the imported file is)", () => {
     expect(describeBytes(bytes("moov", "hvc1", colr(9, 16)))).toMatchObject({ colour: "hdr", profile: "pq" });
     expect(describeBytes(bytes("moov", "avc1"))).toMatchObject({ kind: "unknown", colour: "unknown" });
   });
+  it("its frame rate: the camera's note (Sony, slow motion plays at its format's rate), else the video track's", () => {
+    const sony = '<VideoFrame captureFps="100p" formatFps="25p"/><Device manufacturer="Sony" modelName="ILME-FX30"/>';
+    expect(describeBytes(bytes("moov", "avc1", sony)).fps).toBe(25);
+    const be = (n: number) => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+    const track = (handler: string, scale: number, delta: number) => bytes("trak", "mdhd", [0, 0, 0, 0], be(0), be(0), be(scale), be(0), "hdlr", [0, 0, 0, 0], be(0), handler,
+      "stts", [0, 0, 0, 0], be(1), be(100), be(delta));
+    // A sound track first (48 kHz), then the video one at 30000 / 1001.
+    const file = bytes("moov", track("soun", 48000, 1024), track("vide", 30000, 1001), "avc1");
+    expect(describeBytes(file).fps).toBe(29.97);
+    expect(describeBytes(bytes("moov", "avc1")).fps).toBeUndefined();
+  });
   it("HDR curves: reference white is 1", () => {
     expect(hlgToLin(0.75)).toBeCloseTo(1, 3);
     expect(pqToLin(0.58069)).toBeCloseTo(1, 1);
