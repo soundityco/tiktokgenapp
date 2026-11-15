@@ -73,7 +73,7 @@ dans ton Google Drive.
 - **Étalonnage** : log vers une image normale, export 10 bits ; trois sorties au choix : le Rec.709 neutre de l'app, une **LUT caméra** (faite pour le log de la caméra, comme celles de Sony ou d'Alister Chapman) ou une **LUT de look** faite dans DaVinci. — En ligne
 - **Roues de couleur** à la Final Cut (Global, Ombres, Tons moyens, Hautes lumières, comme les primaires de DaVinci), avant la LUT, avec un point de couleur et une réglette de luminosité chacune. — En test
 - **Presets de couleur** : enregistrer tout un étalonnage (profil caméra, LUT, réglages, roues) et le poser sur une autre vidéo d'un clic, puis le retoucher. — En ligne
-- **Bibliothèque de LUT du compte** : une LUT importée est disponible sur tous tes appareils (sa copie va sur ton Drive). — En ligne
+- **Bibliothèque de LUT du compte** : une LUT importée est disponible sur tous tes appareils (sa copie va sur ton Drive) ; jamais deux fois la même ; une corbeille au survol pour en supprimer une (confirmation, les vidéos qui l'utilisent repassent en Rec.709). — En ligne
 - **Bandes noires** au format voulu. — En ligne
 - **Presets de style** des textes, à garder et réappliquer. — En ligne
 - **Plein écran**, zones TikTok, lecture qui revient au départ à la pause (réglable). — En ligne

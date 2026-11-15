@@ -20,7 +20,8 @@ import ShareDialog, { useHandheld } from "./ShareDialog";
 import LyricsEditor from "./LyricsEditor";
 import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf, sungOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
-import type { GenSlide, PicEdit, PicPool, Project, SlideCfg, StylePreset, TextPool, Workspace } from "@/lib/types";
+import type { GenSlide, LutRef, PicEdit, PicPool, Project, SlideCfg, StylePreset, TextPool, VideoGrade, Workspace } from "@/lib/types";
+import { forgetLut, sameLut } from "./ColorGrade";
 import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
 import Inspector from "./Inspector";
@@ -277,6 +278,49 @@ export default function Studio({ userName }: { userName: string }) {
     try { localStorage.setItem(KEY, String(Date.now())); } catch { /* private mode */ }
     console.info(`[drive] twins: ${merged} folders merged, ${drops} files in double put in the bin`);
     if (merged || drops) say(t("Drive tidied: {n} duplicates removed (in the Drive's bin for 30 days)", { n: merged + drops }));
+  };
+  // The account's LUTs: the same one twice (same name and kind: imported on two devices…) becomes one; every video and
+  // preset using the other one uses the one kept (the one with its Drive copy). Without an undo step.
+  useEffect(() => {
+    const cur = wsRef.current;
+    if (!cur?.luts || cur.luts.length < 2) return;
+    const keep: LutRef[] = [], drop = new Map<string, string>();
+    for (const l of cur.luts) {
+      const k = keep.findIndex((x) => sameLut(x, l));
+      if (k < 0) { keep.push(l); continue; }
+      const winner = !keep[k].driveId && l.driveId ? l : keep[k], loser = winner === l ? keep[k] : l;
+      keep[k] = winner;
+      drop.set(loser.id, winner.id);
+      for (const [a, b] of drop) if (b === loser.id) drop.set(a, winner.id);
+    }
+    if (!drop.size) return;
+    let json = JSON.stringify({ ...cur, luts: keep });
+    for (const [a, b] of drop) json = json.split(`"${a}"`).join(`"${b}"`);
+    apply(JSON.parse(json), false);
+  }, [ws?.luts]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** A LUT deleted from the account, asked first: off every video and preset (they go back on the app's Rec.709), off
+   *  this device, and its Drive copy to the bin. */
+  const askRemoveLut = (lut: LutRef) => {
+    const cur = wsRef.current;
+    if (!cur) return;
+    const uses = cur.projects.reduce((n, p) => n + (p.videos ?? []).filter((v) => v.grade?.lut?.id === lut.id || v.versions?.some((x) => x.v.grade?.lut?.id === lut.id)).length, 0);
+    setOverlay({ k: "confirm", title: t("Delete this LUT"), label: t("Delete"),
+      message: (uses === 1 ? t("“{name}” is used by 1 video: it goes back on the app's Rec.709 conversion.", { name: lut.name }) + " "
+        : uses ? t("“{name}” is used by {n} videos: they go back on the app's Rec.709 conversion.", { name: lut.name, n: uses }) + " " : "")
+        + t("“{name}” leaves your library on every device, and its copy goes to your Drive's bin.", { name: lut.name }),
+      run: () => {
+        const off = <T extends { grade?: VideoGrade }>(x: T): T => (x.grade?.lut?.id === lut.id ? { ...x, grade: { ...x.grade, lut: undefined } } : x);
+        upd((w) => ({
+          ...w,
+          luts: (w.luts ?? []).filter((x) => x.id !== lut.id),
+          gradePresets: w.gradePresets?.map((p) => (p.grade.lut?.id === lut.id ? { ...p, grade: { ...p.grade, lut: undefined } } : p)),
+          projects: w.projects.map((p) => ({ ...p, videos: (p.videos ?? []).map((v) => ({ ...off(v), versions: v.versions?.map((x) => ({ ...x, v: off(x.v) })) })) })),
+        }));
+        forgetLut(lut.id);
+        void delMedia(`lut:${lut.id}`).catch(() => {});
+        if (lut.driveId) void trashDriveFile(lut.driveId).catch(() => {});
+        say(t("LUT deleted"));
+      } });
   };
   // Each photo keeps its own edits (colour, framing): whatever is changed on a slide is remembered for its photo.
   // Only a slide changed since the last look writes: the same photo on two slides with different edits made each
@@ -1873,6 +1917,7 @@ export default function Studio({ userName }: { userName: string }) {
             presets={presets}
             onSavePreset={savePreset}
             onDeletePreset={deletePreset}
+            onRemoveLut={askRemoveLut}
             lutLibrary={ws.luts}
             onLutLibrary={(fn, silent) => {
               if (!silent) { upd((w) => ({ ...w, luts: fn(w.luts ?? []) })); return; }

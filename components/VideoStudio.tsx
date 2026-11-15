@@ -17,7 +17,7 @@ import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, grade
 import { probeVideo } from "@/lib/probe";
 import { compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
-import ColorGrade, { knownLuts, lastLut, rememberLut } from "./ColorGrade";
+import ColorGrade, { knownLuts, lastLut, rememberLut, sameLut } from "./ColorGrade";
 import { AUDIO_KBPS, exportMp4, exportSettings, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
@@ -334,6 +334,7 @@ export default function VideoStudio({
   onGradePresets,
   lutLibrary,
   onLutLibrary,
+  onRemoveLut,
 }: {
   /** History of the workspace, shared with the carousel. */
   canUndo: boolean;
@@ -392,6 +393,8 @@ export default function VideoStudio({
   /** The account's LUTs, and changing them (`silent`: no undo step, for what the app does by itself). */
   lutLibrary?: LutRef[];
   onLutLibrary?: (fn: (list: LutRef[]) => LutRef[], silent?: boolean) => void;
+  /** A LUT deleted from the account (asked first, by the shell: every release may use it). */
+  onRemoveLut?: (lut: LutRef) => void;
 }) {
   const { t, lang } = useT();
   // The release as the open video's audio version (lib/audioVersions): its file and its lyrics timing in the project's
@@ -956,14 +959,14 @@ export default function VideoStudio({
   /** The LUTs to choose from: the account's, and the ones of this device it does not list yet. */
   const lutChoices = useMemo(() => {
     const lib = lutLibrary ?? [];
-    return [...lib, ...knownLuts().filter((l) => !lib.some((x) => x.id === l.id))];
+    return [...lib, ...knownLuts().filter((l) => !lib.some((x) => sameLut(x, l)))];
   }, [lutLibrary, lutReload]);
   // The LUTs of this device the account does not list (imported before the library, or on another address of the
   // app): they join it.
   useEffect(() => {
     if (!onLutLibrary) return;
     const lib = lutLibrary ?? [];
-    const missing = knownLuts().filter((l) => !lib.some((x) => x.id === l.id));
+    const missing = knownLuts().filter((l) => !lib.some((x) => sameLut(x, l)));
     if (missing.length) onLutLibrary((cur) => [...cur, ...missing.filter((m) => !cur.some((x) => x.id === m.id))], true);
   }, [!!lutLibrary, lutReload]); // eslint-disable-line react-hooks/exhaustive-deps
   // Each LUT of the account whose file is on this device and not yet on the Drive: sent there, its copy noted.
@@ -4602,7 +4605,8 @@ export default function VideoStudio({
                   onGradePresets?.(same ? list.map((x) => (x.id === same.id ? { ...x, grade: kept } : x)) : [...list, { id: uid(), name, grade: kept }]);
                   onToast?.(same ? t("Preset replaced") : t("Preset saved"));
                 }}
-                library={lutChoices} onImported={(l) => onLutLibrary?.((cur) => [...cur.filter((x) => x.id !== l.id), l])} />
+                library={lutChoices} onRemoveLut={onRemoveLut}
+                onImported={(l) => { lutSent.current.delete(l.id); onLutLibrary?.((cur) => (cur.some((x) => x.id === l.id) ? cur.map((x) => (x.id === l.id ? l : x)) : [...cur, l])); }} />
                       </div>
           {/* How the video file is made: the settings recommended for TikTok and Instagram (at the take's own rate), shown;
               "Change" unfolds the user's own (for every video of the account). */}

@@ -2552,6 +2552,13 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 
 .hook-head .hook-gen { flex: none; }
 .hook-item .hook-del { margin-left: auto; }
+/* A drop-down option that can be deleted: its bin on the right, shown on hover (always on a touch screen). */
+.dd-opt:has(> .dd-remove) { grid-template-columns: 14px minmax(0, 1fr) auto; padding-top: 3px; padding-bottom: 3px; }
+.dd-opt .dd-remove { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r); background: none; color: var(--muted); cursor: pointer; opacity: 0; }
+.dd-opt:hover .dd-remove, .dd-opt.active .dd-remove { opacity: 1; }
+.dd-opt .dd-remove:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+@media (hover: none) { .dd-opt .dd-remove { opacity: 1; } }
+
 /* Colour wheels: two by two, each its name and brightness, a dark disc with a thin ring of hues, its dot (the app's
    slider knob) on a line from the centre, and the app's slider under it, filled from the middle. */
 .cw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }

@@ -12,6 +12,13 @@ import { presetNamed } from "./TextControls";
 
 const LUTS_KEY = "tktgen-luts";
 
+/** The same LUT: the same entry, or the same name and kind (imported twice, on two devices…). */
+export const sameLut = (a: LutRef, b: LutRef) =>
+  a.id === b.id || (a.name.trim().toLowerCase() === b.name.trim().toLowerCase() && (a.kind ?? "look") === (b.kind ?? "look"));
+/** This browser forgets a LUT (deleted from the account). */
+export function forgetLut(id: string) {
+  try { localStorage.setItem(LUTS_KEY, JSON.stringify(knownLuts().filter((l) => l.id !== id))); } catch { /* private mode */ }
+}
 /** LUTs this browser has (the files are in IndexedDB "lut:<id>"): looks made in DaVinci, and camera LUTs. */
 export function knownLuts(): LutRef[] {
   try { return JSON.parse(localStorage.getItem(LUTS_KEY) ?? "[]"); } catch { return []; }
@@ -30,7 +37,7 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   grade: VideoGrade | undefined;
@@ -46,6 +53,8 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   /** The account's LUTs (every device), and a LUT just imported here (it joins them, its file goes to the Drive). */
   library: LutRef[];
   onImported: (lut: LutRef) => void;
+  /** A LUT to delete from the account (asked first). */
+  onRemoveLut?: (lut: LutRef) => void;
 }) {
   const { t, lang } = useT();
   const luts = library;
@@ -60,7 +69,9 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
       parseCube(await f.text()); // refuse a file that is not a 3D .cube before keeping it
       // The LUT of this grade, missing in this browser: same name, same id, so every clip using it finds it.
       const name0 = f.name.replace(/\.cube$/i, "");
-      const id = lookErr && g.lut && g.lut.name === name0 ? g.lut.id : uid();
+      // The same LUT again (same name, same kind): it takes the place of the one there, never a second entry.
+      const same = luts.find((l) => l.name.trim().toLowerCase() === name0.trim().toLowerCase() && (l.kind ?? "look") === kind);
+      const id = same?.id ?? (lookErr && g.lut && g.lut.name === name0 ? g.lut.id : uid());
       await putMedia(`lut:${id}`, f);
       const name = f.name.replace(/\.cube$/i, "");
       rememberLut(id, name, kind);
@@ -134,7 +145,8 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
                 look made in DaVinci (DaVinci Wide Gamut / Intermediate in). The grade above goes before it. */}
             <label className="field">
               <span className="row" style={{ gap: 6 }}>{t("Colour output")}<Hint text={t("Rec.709: the app's own neutral conversion. Camera LUT: a LUT made for the camera's log (Sony's, Alister Chapman's…), the picture is turned back into that log before it. Look LUT: one made in DaVinci (input DaVinci Wide Gamut / Intermediate). Your settings and wheels always go before it.")} /></span>
-              <Select className="input" value={g.lut?.id ?? ""}
+              <Select className="input" value={g.lut?.id ?? ""} removeLabel={t("Delete this LUT")}
+                onRemove={onRemoveLut ? (id) => { const l = luts.find((x) => x.id === id); if (l) onRemoveLut(l); } : undefined}
                 onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); set({ lut: l ? { id: l.id, name: l.name, ...(l.kind === "camera" ? { kind: "camera" as const } : null), ...(l.driveId ? { driveId: l.driveId } : null) } : undefined }); }}>
                 <option value="">{t("Rec.709 (the app's own conversion)")}</option>
                 {luts.map((l) => <option key={l.id} value={l.id}>{`${l.name} · ${l.kind === "camera" ? t("camera LUT") : t("look LUT")}`}</option>)}

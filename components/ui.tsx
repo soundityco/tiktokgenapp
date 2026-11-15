@@ -573,7 +573,7 @@ function readOptions(children: ReactNode, group?: string): SelOpt[] {
  * `e.target.value`, same <option> / <optgroup> children. The list floats over everything (above when there is
  * no room below), with the keyboard: arrows, Enter, Escape, and the first letters of an option.
  */
-export function Select({ value, onChange, children, className = "input", style, disabled, title, id, onClick, ...aria }: {
+export function Select({ value, onChange, children, className = "input", style, disabled, title, id, onClick, onRemove, removeLabel, ...aria }: {
   value?: string | number;
   onChange?: (e: { target: { value: string }; currentTarget: { value: string } }) => void;
   children: ReactNode;
@@ -584,6 +584,9 @@ export function Select({ value, onChange, children, className = "input", style, 
   id?: string;
   onClick?: (e: React.MouseEvent) => void;
   "aria-label"?: string;
+  /** Options that can be deleted (any but the empty one): a bin on each, shown on hover, calls this (the list closes). */
+  onRemove?: (value: string) => void;
+  removeLabel?: string;
 }) {
   const opts = readOptions(children);
   const cur = String(value ?? "");
@@ -682,6 +685,10 @@ export function Select({ value, onChange, children, className = "input", style, 
                   onMouseEnter={() => !o.disabled && setActive(i)} onClick={() => choose(i)}>
                   <span className="dd-check" aria-hidden="true">{i === selected ? "✓" : ""}</span>
                   <span className="dd-text">{o.label}</span>
+                  {onRemove && o.value !== "" && (
+                    <button type="button" className="dd-remove" aria-label={removeLabel} title={removeLabel}
+                      onClick={(e) => { e.stopPropagation(); setOpen(false); onRemove(o.value); }}><Icon name="trash" size={13} /></button>
+                  )}
                 </div>
               </Fragment>
             );
