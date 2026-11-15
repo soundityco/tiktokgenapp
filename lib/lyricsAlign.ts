@@ -562,10 +562,38 @@ export function retimeCue(all: LyricWord[], cues: Cue[], i: number, what: "start
   const lo = prev ? prev.start + MIN - c.start : -c.start;
   const hi = next ? next.start - c.words[c.words.length - 1].e - 0.02 : 60;
   const d = Math.max(lo, Math.min(hi, delta));
+  // Glued to the next line, the whole line cannot come later: then only its start does (it shows later, leaves when it
+  // did, the line before stays until it), so a line shown too early can always wait for its singing.
+  if (delta > 0 && d < delta - 0.005) return moveCueStart(all, cues, i, c.start + delta);
   if (Math.abs(d) < 0.005) return null;
   let out = shiftCue(all, c, d);
   // The previous line leaves when this one now comes.
   if (prev && c.start + d < prev.end) out = setCueEnd(out, prev, c.start + d);
+  return out;
+}
+
+/**
+ * A caption's start dragged on the timeline to `at` (its end stays): later, its words sung before `at` wait for it (in
+ * order) and the line before stays on screen until it (no gap); earlier, its first word comes then and the line before
+ * leaves then. `free` (Alt held): the line before is left as it is (a gap where the singing pauses). Each line keeps
+ * 0.2 s at least. Null: nothing moved.
+ */
+export function moveCueStart(all: LyricWord[], cues: Cue[], i: number, at: number, free = false): LyricWord[] | null {
+  const c = cues[i], prev = cues[i - 1];
+  if (!c) return null;
+  const MIN = 0.2;
+  const to = r3(Math.max(prev ? prev.start + MIN : 0, Math.min(c.end - MIN, at)));
+  if (Math.abs(to - c.start) < 0.005) return null;
+  const moved = new Map<LyricWord, LyricWord>();
+  c.words.forEach((x, k) => {
+    const ns = k === 0 ? to : r3(Math.max(x.s, to + k * 0.01));
+    if (ns !== x.s) moved.set(x, { ...x, s: ns, e: r3(Math.max(x.e, ns + 0.05)), manual: true });
+  });
+  let out = all.map((x) => moved.get(x) ?? x);
+  // Its end stays where it was.
+  out = setCueEnd(out, { ...c, words: c.words.map((x) => moved.get(x) ?? x) }, c.end);
+  // The line before, glued to it: it leaves when this one comes (later or sooner), never a gap made by the drag.
+  if (prev && !free) out = setCueEnd(out, prev, to);
   return out;
 }
 

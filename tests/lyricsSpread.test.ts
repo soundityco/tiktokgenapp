@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignSong, cleanHeard, dropLoops, spreadOnHeard } from "@/lib/lyricsAlign";
+import { alignSong, buildCues, cleanHeard, dropLoops, moveCueStart, retimeCue, spreadOnHeard } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -55,5 +55,40 @@ describe("cleanHeard: words cut by the model, made-up sentences", () => {
     const heard = cleanHeard(h("J 'crois que j 'ai réuni tes mensonges ni tes appels"));
     const r = alignSong("J'crois que j'ai réuni tes mensonges, ni tes appels", heard)!;
     expect(r.coverage).toBeGreaterThan(0.9);
+  });
+});
+
+describe("moveCueStart (a caption's start dragged)", () => {
+  const words = [
+    { w: "un", s: 1, e: 1.4, line: 0 }, { w: "deux", s: 1.4, e: 2, line: 0 },
+    { w: "trois", s: 3, e: 3.4, line: 1 }, { w: "quatre", s: 3.4, e: 4, line: 1 },
+  ];
+  const cues = () => buildCues(words, "phrase");
+  it("later: the line comes later, the one before stays until it (no gap), its end kept", () => {
+    const out = moveCueStart(words, cues(), 1, 3.3)!;
+    const c = buildCues(out, "phrase");
+    expect(c[1].start).toBeCloseTo(3.3);
+    expect(c[1].end).toBeCloseTo(cues()[1].end);
+    expect(c[0].end).toBeCloseTo(3.3);
+  });
+  it("earlier: the line before leaves then; Alt: it stays (a gap is allowed)", () => {
+    const c = buildCues(moveCueStart(words, cues(), 1, 2.5)!, "phrase");
+    expect(c[1].start).toBeCloseTo(2.5);
+    expect(c[0].end).toBeCloseTo(2.5);
+    const free = buildCues(moveCueStart(words, cues(), 1, 3.6, true)!, "phrase");
+    expect(free[0].end).toBeCloseTo(cues()[0].end);
+  });
+});
+
+describe("retimeCue: + on a line glued to the next one", () => {
+  it("still makes it come later (its start only)", () => {
+    const glued = [
+      { w: "un", s: 1, e: 1.5, line: 0 }, { w: "deux", s: 1.5, e: 2, line: 0 },
+      { w: "trois", s: 2, e: 2.5, line: 1 }, { w: "quatre", s: 2.5, e: 3, line: 1 },
+    ];
+    const cues = buildCues(glued, "phrase");
+    const out = retimeCue(glued, cues, 0, "start", 0.1);
+    expect(out).not.toBeNull();
+    expect(buildCues(out!, "phrase")[0].start).toBeCloseTo(1.1);
   });
 });

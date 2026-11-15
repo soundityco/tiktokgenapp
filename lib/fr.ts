@@ -471,6 +471,7 @@ export const FR: Record<string, string> = {
   "Sign out": "Se déconnecter",
   "Size": "Taille",
   "Threshold": "Seuil",
+  "Drag to move when it starts (Alt: only this one, a gap allowed)": "Glisser pour déplacer son début (Alt : seulement celle-ci, un vide possible)",
   "Very precise (needs a graphics card)": "Très précis (carte graphique nécessaire)",
   "Very precise (about 560 MB, downloaded once)": "Très précis (environ 560 Mo, téléchargé une fois)",
   "Listen to the audio again": "Réécouter l'audio",

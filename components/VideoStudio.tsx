@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -3966,6 +3966,39 @@ export default function VideoStudio({
   const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
   const hooks = settings.hooks ?? [];
   const setHooks = (list: VideoHook[]) => setV({ hooks: list });
+  // ---- the start of a lyrics line or a hook dragged on its track (as a multicam cut): no gap made by the drag,
+  //      Alt held: only that one moves ----
+  const edgeRef = useRef<{ left: number; width: number } | null>(null);
+  const edgeDrag = (move: (at: number, free: boolean) => void) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
+      e.stopPropagation(); stop();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const r = e.currentTarget.parentElement!.getBoundingClientRect();
+      edgeRef.current = { left: r.left, width: r.width };
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLSpanElement>) => {
+      const d = edgeRef.current;
+      if (!d) return;
+      const cfg = settingsRef.current;
+      move(round2(cfg.crop.start + clamp((e.clientX - d.left) / d.width, 0, 1) * Math.max(0.1, cfg.crop.duration)), e.altKey);
+    },
+    onPointerUp: () => { if (edgeRef.current) { edgeRef.current = null; onSaveNow(); } },
+    onPointerCancel: () => { edgeRef.current = null; },
+  });
+  const moveLine = (i: number) => edgeDrag((at, free) => {
+    const out = moveCueStart(project.lyricWords ?? [], cues, i, at, free);
+    if (!out) return;
+    setHead(at);
+    onProject((p) => ({ ...p, lyricWords: out }));
+  });
+  const moveHook = (id: string) => edgeDrag((at, free) => {
+    const h = hooks.find((x) => x.id === id);
+    if (!h) return;
+    const prev = hooks.filter((x) => x.id !== id && x.from < h.from).sort((a, b) => b.from - a.from)[0];
+    const from = round2(clamp(at - settings.crop.start, prev ? prev.from + 0.2 : 0, (h.to ?? segLen) - 0.2));
+    setHead(round2(settings.crop.start + from));
+    setHooks(hooks.map((x) => (x.id === id ? { ...x, from } : !free && prev && x.id === prev.id ? { ...x, to: from } : x)));
+  });
   const editHook = (id: string, patch: Partial<VideoHook>) => setHooks(hooks.map((h) => (h.id === id ? { ...h, ...patch } : h)));
   // ---- hook lists: the same as the carousel's; by default the one of the first slide of the release ----
   const slide1Pool = (() => {
@@ -4669,6 +4702,10 @@ export default function VideoStudio({
                         {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                       </button>
                     ))}
+                    {hooks.map((h) => h.from > 0.01 && h.from < segLen && (
+                      <span key={"e" + h.id} className="cam-cut cue-edge" style={{ left: `${(h.from / segLen) * 100}%` }}
+                        title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveHook(h.id)} />
+                    ))}
                     <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                   </div>
                 )}
@@ -4683,6 +4720,10 @@ export default function VideoStudio({
                       onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       {c.text.replace(/\n/g, " ")}
                     </button>
+                  ))}
+                  {mode !== "word" && cues.map((c, i) => c.start > settings.crop.start + 0.01 && c.start < end && (
+                    <span key={"e" + i} className="cam-cut cue-edge" style={{ left: `${((c.start - settings.crop.start) / segLen) * 100}%` }}
+                      title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveLine(i)} />
                   ))}
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
