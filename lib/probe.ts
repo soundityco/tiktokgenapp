@@ -145,9 +145,12 @@ export function describeBytes(b: Uint8Array): Probe {
 }
 
 /** Describe a video file from its metadata. Never throws: unknown parts are left out. */
+/** Raised when the detection changes: every video's file still on the device is read again once (its grade kept). */
+export const PROBE_VERSION = 2;
+
 export async function probeVideo(file: Blob): Promise<Probe> {
   try {
-    return describeBytes(await metadataBytes(file));
+    return { ...describeBytes(await metadataBytes(file)), v: PROBE_VERSION };
   } catch (e) {
     console.warn("[probe] could not read the metadata", e);
     return { kind: "unknown", colour: "unknown", convert: false };

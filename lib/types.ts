@@ -330,6 +330,8 @@ export interface VideoGrade {
 /** What the imported camera / phone file is, read from its metadata (see lib/probe.ts). */
 export interface VideoSourceInfo {
   kind: "camera" | "phone" | "unknown";
+  /** The version of the detection that read it (lib/probe PROBE_VERSION): an older one is read again. */
+  v?: number;
   /** "Sony ILME-FX30", "iPhone 15 Pro"… */
   device?: string;
   colour: "log" | "hdr" | "sdr" | "unknown";

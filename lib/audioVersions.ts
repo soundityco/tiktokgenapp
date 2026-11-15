@@ -50,9 +50,9 @@ export function writeFor(p: Project, audioId: string, fn: (view: Project) => Pro
   return { ...out, ...own(p), audios: (out.audios ?? []).map((a) => (a.id === audioId ? { ...a, ...own(out) } : a)) };
 }
 
-/** The videos of a release on each version (by version id). */
+/** The videos (projects) of a release on each version (by version id); the takes imported for the library apart. */
 export function videosOn(p: Project, audioId: string): number {
-  return (p.videos ?? []).filter((v) => audioIdOf(p, v) === audioId).length;
+  return (p.videos ?? []).filter((v) => !v.takeOnly && audioIdOf(p, v) === audioId).length;
 }
 
 /** A version renamed (the main one's name is the project's `audioLabel`). */

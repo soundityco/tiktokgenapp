@@ -422,7 +422,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .takes, .take, .tree-branch > * { min-width: 0; }
 .take { border: 1px solid var(--line-2); border-left: 2px solid var(--cam, var(--line-2)); border-radius: var(--r); }
 .take.open { border: 0; }
-.take.open .media.m-film, .clip-card.multicam .media.m-film { border-left: 2px solid var(--cam); }
+.take.open .media.m-film, .clip-card .media.m-film { border-left: 2px solid var(--cam); }
 .take-row { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 2px 0 0; font-size: 13px; min-width: 0; }
 .take-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; padding: 0 0 0 10px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .take-more { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 8px; min-width: 0; }
@@ -436,13 +436,13 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .take.other { opacity: .6; }
 .take.other:hover, .take.other.open { opacity: 1; }
 .take-import { align-self: flex-start; }
-.clip-strip.folded { display: none; }
 .look-of { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam); border-radius: var(--r); font-size: 13px; min-width: 0; }
 .look-of b { color: var(--cam); }
 .look-of .take-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .take-label { display: inline-flex; align-items: center; gap: 4px; padding: 0; background: none; border: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .take-label b { color: var(--cam); }
 .take-label svg { transform: rotate(180deg); }
+span.take-label { cursor: default; }
 .takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
 .takes-more > summary::before { content: "▸ "; }
 .takes-more[open] > summary::before { content: "▾ "; }
@@ -1212,7 +1212,9 @@ button.media.warn .media-name { color: var(--warn); }
 .media.m-music { --kind: var(--music); }
 .media.m-film { --kind: var(--video); }
 /* Multicam: each take's card in its camera's colour (1 white, 2 violet, 3 green, 4 gold), as on the shots track. */
-.take[class*="cam-"] .media.m-film, .clip-card.multicam .media.m-film { --kind: var(--cam); }
+.take[class*="cam-"] .media.m-film, .clip-card .media.m-film { --kind: var(--cam); }
+/* Its Drive pills ("Drive copy", "Backed up") in its camera's colour too. */
+.take[class*="cam-"] .media, .clip-card .media { --video: var(--cam); --grad-video: var(--cam); }
 .media.m-lyrics, .media.m-music, .media.m-film { border-color: color-mix(in srgb, var(--kind) 42%, var(--line)); }
 .media.m-lyrics.empty, .media.m-music.empty, .media.m-film.empty { border-color: color-mix(in srgb, var(--kind) 34%, transparent); }
 .media.m-lyrics .media-ic, .media.m-music .media-ic, .media.m-film .media-ic { color: var(--kind); background: color-mix(in srgb, var(--kind) 10%, var(--bg)); }

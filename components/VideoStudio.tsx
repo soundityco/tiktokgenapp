@@ -3,7 +3,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
-import { signIn } from "next-auth/react";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
@@ -14,7 +13,7 @@ import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, V
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
-import { probeVideo } from "@/lib/probe";
+import { PROBE_VERSION, probeVideo } from "@/lib/probe";
 import { compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut, sameLut } from "./ColorGrade";
@@ -420,7 +419,7 @@ export default function VideoStudio({
     return writeFor(p, audioIdOf(p, c), fn);
   }), [onRelease]);
   const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
-  const clip = clips.find((c) => c.id === project.videoId) ?? clips.find((c) => !c.takeOnly) ?? clips[0];
+  const clip = clips.find((c) => c.id === project.videoId && !c.takeOnly) ?? clips.find((c) => !c.takeOnly) ?? clips[0];
   /** The release's projects (posts): its videos, the takes only imported for the library apart. */
   const projects = useMemo(() => clips.filter((c) => !c.takeOnly), [clips]);
   /** Multicam: a take put on the paused preview from the library ("main" = camera 1); playing gives it back to the cuts. */
@@ -1827,6 +1826,10 @@ export default function VideoStudio({
           anchors: undefined,
           takes: undefined,
           linked: false,
+          // A new project: its own take only (the cameras and cuts of the open one are its own edit).
+          angles: undefined,
+          cuts: undefined,
+          takeOnly: undefined,
         },
       ],
       videoId: id,
@@ -1841,8 +1844,10 @@ export default function VideoStudio({
   const clipGroups = (list: VideoSetup[]) => {
     const kind = (c: VideoSetup) => {
       const col = c.source?.colour === "unknown" && c.source.kind === "phone" ? "sdr" : c.source?.colour; // as describeVideo
+      // A file that does not say (a camera file without its Sony note…) graded with a log profile: log.
+      const logGraded = !!c.grade?.profile && ["slog3", "slog3-cine", "applelog"].includes(c.grade.profile);
       // Log (to grade), HDR (a phone's, mostly: brought down to SDR by itself), standard SDR, then the others.
-      return col === "log" ? 0 : col === "hdr" ? 1 : col === "sdr" ? 2 : 3;
+      return col === "log" || ((!col || col === "unknown") && logGraded) ? 0 : col === "hdr" ? 1 : col === "sdr" ? 2 : 3;
     };
     const groups = [t("Log"), "HDR", t("Standard"), t("Others")].map((label, k) => ({ label, items: list.filter((c) => kind(c) === k) })).filter((g) => g.items.length);
     return groups.length > 1 ? groups : [{ label: "", items: list }];
@@ -1856,12 +1861,22 @@ export default function VideoStudio({
   };
   /** Remove this video from the release: its camera file and its own settings. The audio and the lyrics stay. */
   const deleteClip = async () => {
-    if (clips.length < 2) return;
+    if (projects.length < 2) return;
     syncRef.current?.abort();
     stop();
+    setPinCam(null);
     const id = clip.id;
     const rest = clips.filter((c) => c.id !== id);
-    onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => c.id !== id), videoId: rest[Math.max(0, clips.indexOf(clip) - 1)].id }));
+    // The project before it opens (a project: never a take imported for the library).
+    const others = projects.filter((c) => c.id !== id);
+    const nextId = others[Math.max(0, projects.indexOf(clip) - 1)].id;
+    // Its file is a camera of another project: the project goes, its take stays (that edit is not broken).
+    if (clips.some((c) => c.id !== id && c.angles?.includes(id))) {
+      onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === id ? { ...c, takeOnly: true, angles: undefined, cuts: undefined, versions: undefined } : c)), videoId: nextId }));
+      onSaveNow();
+      return;
+    }
+    onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => c.id !== id), videoId: nextId }));
     onSaveNow();
     // Its Drive copy and its files on the device, unless another video still uses them (a duplicate).
     const copyId = clip.drive?.copy?.id;
@@ -2864,8 +2879,17 @@ export default function VideoStudio({
       onProject((p) => ({ ...p, songLyrics: text }));
     }
     if (!hasLyrics || !audioBuf) return;
-    if (next.heardWords?.length) resyncLyrics(writtenSrc, next);
-    else await generateLyrics(audioBuf, next, writtenSrc);
+    // Placed on the words already heard in this audio; when they do not fit these lyrics (heard on another file, an
+    // older analysis…), the audio is listened to again rather than failing each time.
+    if (next.heardWords?.length) {
+      const cfg = settingsRef.current;
+      const r = writtenOf(writtenSrc, next).trim() ? placeWords(next.heardWords, writtenSrc, next, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5) : null;
+      if (!r || r.words.length) { resyncLyrics(writtenSrc, next); return; }
+      console.info("[lyrics] the words heard before do not fit these lyrics: listening to the audio again");
+      onProject((p) => ({ ...p, heardWords: undefined }));
+      next = { ...next, heardWords: undefined };
+    }
+    await generateLyrics(audioBuf, next, writtenSrc);
   };
 
 
@@ -3218,7 +3242,7 @@ export default function VideoStudio({
    * video that was open comes back.
    */
   const exportAll = () => {
-    const ids = clips.map((c) => c.id);
+    const ids = projects.map((c) => c.id); // the projects (posts): never a take imported for the library
     if (!ids.length) return;
     void askNotifyPermission();
     setErr(null);
@@ -3505,6 +3529,9 @@ export default function VideoStudio({
   /** Camera `i + 2` taken out of this project: its shots go back to camera 1. */
   const removeAngle = (i: number) => {
     const angles = [...(settings.angles ?? [])];
+    // The take on the preview, or unfolded: back to the shots (never a black preview for a camera gone).
+    if (pinCam === angles[i]) setPinCam(null);
+    if (takeOpen === angles[i]) setTakeOpen(null);
     angles.splice(i, 1);
     const cuts = settings.cuts?.map((c) => (c.cam === i + 1 ? { ...c, cam: 0 } : c.cam > i + 1 ? { ...c, cam: c.cam - 1 } : c));
     setV({ angles: angles.length ? angles : undefined, cuts: angles.length ? cuts : undefined });
@@ -3526,6 +3553,27 @@ export default function VideoStudio({
     const atStart = !playing && (!shot || at - shot.from < 0.06);
     setV({ cuts: atStart ? setShotCam(cfg.cuts, at, cam, cfg.crop.start) : cutTo(cfg.cuts, at, cam) });
   };
+  // What each video's file is (log, HDR, SDR…), read again once per version of the detection, in the background, for
+  // the files on this device: a project could keep what an older reading said (a phone's SDR take shown as log). Its
+  // grade is never touched, only what the file is.
+  const probedOnce = useRef(new Set<string>());
+  useEffect(() => {
+    let off = false;
+    void (async () => {
+      for (const c of clips) {
+        if (off) return;
+        if (!c.videoName || c.source?.v === PROBE_VERSION || probedOnce.current.has(c.id)) continue;
+        probedOnce.current.add(c.id);
+        const b = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
+        if (!b || off) continue;
+        const info = await probeVideo(b);
+        if (off) return;
+        // What the player or the index read (length, rate) kept when this reading has none.
+        patchTake(c.id, { source: { ...c.source, ...info, duration: info.duration ?? c.source?.duration, fps: info.fps ?? c.source?.fps } });
+      }
+    })();
+    return () => { off = true; };
+  }, [release.id, clips.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const usedAsCamera = (id: string) => clips.some((c) => c.angles?.includes(id));
   // The same file imported twice (same name and size: before the check, or on two devices): one take kept (a
   // project's own first), every project using the other one uses it, its cuts kept on the right camera.
@@ -3621,7 +3669,7 @@ export default function VideoStudio({
       // A camera whose file is not on this device (its shots stay black: never another camera's picture instead).
       const missing = cam !== null && cam > 0 && angleRev > 0 && !anglesRef.current.has(c.id);
       const name = c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c);
-      const toggle = () => { foldTo(open ? null : c.id); if (cam !== null) { stop(); setPinCam(cam === 0 ? "main" : c.id); } };
+      const toggle = () => { stop(); foldTo(open ? null : c.id); if (cam !== null) setPinCam(cam === 0 ? "main" : c.id); };
       const sync = job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
         : missing ? <span className="xs warn-text">{t("File not on this device")}</span>
         : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
@@ -3671,7 +3719,8 @@ export default function VideoStudio({
         </div>
       );
     };
-    if (part === "first") { const one = card(clip, 0); return one && <div className="takes">{one}</div>; }
+    // Camera 1 (the project's own take): always its full card, just above (one take or several).
+    if (part === "first") return null;
     return (
       <div className="takes">
         {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
@@ -4208,17 +4257,16 @@ export default function VideoStudio({
             </div>
             {settings.videoName && takesEl("first")}
             {/* Camera 1's card (its file, Drive copy, sync…): unfolded from its line, or always while it has no file. */}
-            <div className={"clip-strip" + (settings.videoName && takeOpen !== clip.id ? " folded" : "")}>
-            <div className={"clip-card" + ((settings.angles ?? []).some(Boolean) ? " cam-0 multicam" : "")}>
+            <div className="clip-strip">
+            <div className="clip-card cam-0">
             {(() => {
               const d = settings.drive ?? {};
-              const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
               const src = videoBlob ? settings.source : undefined;
               const note = src && sourceNote(src);
               const missing = !videoBlob && !!settings.videoName;
               return (
                 <MediaTile icon="film" name={settings.videoName ?? null}
-                  label={settings.videoName ? <button className="take-label cam-0" onClick={() => foldTo(null)} title={t("Fold")}><b>1</b> · {clipName(clip)} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                  label={settings.videoName ? <span className="take-label cam-0"><b>1</b> · {settings.videoName.replace(/\.[^.]+$/, "")}</span> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
