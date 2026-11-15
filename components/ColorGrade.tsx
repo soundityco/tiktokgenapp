@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { uid } from "@/lib/defaults";
-import { guessLutInput, lutInputOf, NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
+import { effectsOf, guessLutInput, lutInputOf, NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
 import ColorWheels from "./ColorWheels";
+import { effectsOn } from "@/lib/effectsGL";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { GradePreset, LutInput, LutRef, VideoGrade } from "@/lib/types";
@@ -133,7 +134,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
 
   // Each part on / off (like a node bypassed in DaVinci): its settings stay, it changes nothing while off. The switch
   // sits in the part's title, a click on it never folds or unfolds the part.
-  type Part = "corrections" | "wheels" | "finish";
+  type Part = "corrections" | "wheels" | "effects" | "finish";
   const off = (p: Part) => !!g.bypass?.[p];
   const partSwitch = (p: Part) => (
     <span className="sec-switch" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} onKeyDown={(e) => e.stopPropagation()}>
@@ -141,6 +142,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         onChange={(v) => set({ bypass: { ...g.bypass, [p]: !v } })} />
     </span>
   );
+  const fx = effectsOf(g);
   const colour = g.profile !== "none";
   // Standard footage: only the simple sliders, unless the camera profile and LUT were turned back on.
   const simple = !!sdr && !g.sdrOverride;
@@ -242,6 +244,26 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         </Section>
       )}
 
+      <Section id="color-effects" title={<>{t("Effects")}{off("effects") ? <span className="sec-sub"> · {t("off")}</span> : effectsOn(g) && <span className="sec-sub"> · {t("on")}</span>}{partSwitch("effects")}</>} open={false}>
+        <div className="row" style={{ gap: 6 }}>{t("Black Mist")}<Hint text={t("A diffusion filter, as a Black Mist on the lens: the light of the bright parts spreads around them, the highlights soften, the blacks lift a little.")} /></div>
+        <Range label={t("Strength")} value={fx.mist} display={`${fx.mist}`} min={0} max={100}
+          onChange={(v) => set({ mist: v })} onReset={() => set({ mist: 0 })} />
+        {fx.mist > 0 && (<>
+          <Range label={t("Glow size")} value={fx.mistSize} display={`${fx.mistSize}`} min={0} max={100}
+            onChange={(v) => set({ mistSize: v })} onReset={() => set({ mistSize: 50 })} />
+          <Range label={t("Halation")} value={fx.halation} display={`${fx.halation}`} min={0} max={100}
+            onChange={(v) => set({ halation: v })} onReset={() => set({ halation: 0 })} />
+        </>)}
+        <div className="row" style={{ gap: 6 }}>{t("Haze")}<Hint text={t("A cinematic fog: denser towards the top of the frame and over the bright, flat parts (sky, background), lit by the scene's own light.")} /></div>
+        <Range label={t("Density")} value={fx.haze} display={`${fx.haze}`} min={0} max={100}
+          onChange={(v) => set({ haze: v })} onReset={() => set({ haze: 0 })} />
+        {fx.haze > 0 && (<>
+          <Range label={t("Towards the top")} value={fx.hazeHeight} display={`${fx.hazeHeight}`} min={0} max={100}
+            onChange={(v) => set({ hazeHeight: v })} onReset={() => set({ hazeHeight: 60 })} />
+          <Range label={t("Tone")} value={fx.hazeTone} display={`${fx.hazeTone > 0 ? "+" : ""}${fx.hazeTone}`} min={-100} max={100}
+            onChange={(v) => set({ hazeTone: v })} onReset={() => set({ hazeTone: 0 })} />
+        </>)}
+      </Section>
       <Section id="color-finish" title={<>{t("Finish")}{off("finish") && <span className="sec-sub"> · {t("off")}</span>}{partSwitch("finish")}</>} open={false}>
         <Range label={t("Vignette")} value={g.vignette} display={`${g.vignette}`} min={0} max={100}
           onChange={(v) => set({ vignette: v })} onReset={() => set({ vignette: 0 })} />
@@ -262,7 +284,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
 }
 
 /** The same look (the camera profile apart: it is the video's own). */
-const lookKey = (g: VideoGrade) => JSON.stringify([g.bypass ?? null, g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null]);
+const lookKey = (g: VideoGrade) => JSON.stringify([g.bypass ?? null, g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null, effectsOn(g) ? effectsOf(g) : null]);
 export const gradePresetOf = (presets: GradePreset[], g: VideoGrade) => presets.find((p) => lookKey(p.grade) === lookKey(g));
 
 /** The colour presets, as the text's: a name and "Save the current colour", then each one to put on, or delete. */

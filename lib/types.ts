@@ -301,7 +301,11 @@ export interface VideoGrade {
   /** The whole grade turned off (the Colour switch): kept, it changes nothing, on the preview as in the export. */
   off?: boolean;
   /** Parts turned off (like a node bypassed in DaVinci): their settings are kept, they change nothing. */
-  bypass?: { corrections?: boolean; wheels?: boolean; finish?: boolean };
+  bypass?: { corrections?: boolean; wheels?: boolean; effects?: boolean; finish?: boolean };
+  /** Black Mist (0-100), its glow size (0-100, 50 by default), its warm edge (halation, 0-100); Haze (0-100), how much it
+   *  gathers at the top (0-100, 60 by default), its tone (-100 cool to 100 warm). See lib/effectsGL. */
+  mist?: number; mistSize?: number; halation?: number;
+  haze?: number; hazeHeight?: number; hazeTone?: number;
   /** Stops. */
   exposure: number;
   /** 1 = unchanged, around `pivot` (DaVinci Intermediate, default middle grey). */

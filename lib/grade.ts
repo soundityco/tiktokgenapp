@@ -11,6 +11,13 @@
  */
 
 import type { LutInput, LutRef, PhotoAdjust, VideoGrade, Wheel, WheelId } from "./types";
+import { drawEffects, effectsOn, type Effects } from "./effectsGL";
+
+/** The grade's Black Mist and Haze, their defaults filled in. */
+export const effectsOf = (g: VideoGrade): Effects => ({
+  mist: g.mist ?? 0, mistSize: g.mistSize ?? 50, halation: g.halation ?? 0,
+  haze: g.haze ?? 0, hazeHeight: g.hazeHeight ?? 60, hazeTone: g.hazeTone ?? 0,
+});
 
 export type CameraProfile = VideoGrade["profile"];
 
@@ -231,11 +238,12 @@ function wheel(x: number, a: Record<WheelId, [number, number, number]>, c: numbe
 /** The grade as it acts: the parts turned off (`bypass`) count as untouched (their settings stay in the grade). */
 export function effectiveGrade(g: VideoGrade): VideoGrade {
   const b = g.bypass;
-  if (!b || (!b.corrections && !b.wheels && !b.finish)) return g;
+  if (!b || (!b.corrections && !b.wheels && !b.effects && !b.finish)) return g;
   return {
     ...g,
     ...(b.corrections ? { exposure: 0, contrast: 1, pivot: undefined, temp: 0, tint: 0, sat: 1 } : null),
     ...(b.wheels ? { wheels: undefined } : null),
+    ...(b.effects ? { mist: 0, haze: 0 } : null),
     ...(b.finish ? { vignette: 0, grain: 0 } : null),
   };
 }
@@ -435,6 +443,8 @@ function grainPlate(size: number, seed: number): HTMLCanvasElement {
 export function drawLook(ctx: CanvasRenderingContext2D, W: number, H: number, g0: VideoGrade, frame: number) {
   if (g0.off) return;
   const g = effectiveGrade(g0);
+  // Black Mist and Haze first (on the picture, as a filter and the air), then the vignette and the grain.
+  if (effectsOn(g)) drawEffects(ctx, effectsOf(g));
   if (g.vignette > 0) {
     const r = Math.hypot(W, H) / 2;
     const inner = r * (0.2 + 0.6 * (g.vignetteSize / 100));
