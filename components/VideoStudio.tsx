@@ -10,7 +10,7 @@ import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTimi
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
-import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
+import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -23,7 +23,6 @@ import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSour
 import { type Variant, videoVariants } from "@/lib/variants";
 import { fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
-import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -52,12 +51,6 @@ const LYRICS_LAP = 2;
 const DEFAULT_VIDEO: VideoSettings = defaultVideo();
 /** Look LUTs already read on this page (id → LUT). */
 const LOOKS = new Map<string, CubeLut>();
-/** A multicam camera's look: its framing and grade (its LUT for the preview, 33 points). */
-type AngleLook = { frame?: VideoSettings["frame"]; desqueeze?: VideoSettings["desqueeze"]; grade?: VideoGrade; lut: Float32Array | null };
-/** A multicam camera: another video of the release, its file played by a hidden player. */
-type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoElement; url: string; offset: number; look: CubeLut | null;
-  /** Its file here is its Drive working copy (the camera file is on another device). */
-  fromCopy: boolean };
 
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 /** A working copy on its way (shown in the top bar wherever the user is: see Studio). */
@@ -95,7 +88,7 @@ const LYRICS_ALIGN_V = 3;
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade", "matte"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
@@ -420,15 +413,7 @@ export default function VideoStudio({
     return writeFor(p, audioIdOf(p, c), fn);
   }), [onRelease]);
   const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
-  const clip = clips.find((c) => c.id === project.videoId) ?? clips.find((c) => !c.takeOnly) ?? clips[0];
-  /** The release's projects (posts): its videos, the takes only imported for the library apart. */
-  const projects = useMemo(() => clips.filter((c) => !c.takeOnly), [clips]);
-  /** Multicam: a take put on the paused preview from the library ("main" = camera 1); playing gives it back to the cuts. */
-  const [pinCam, setPinCam] = useState<string | null>(null);
-  const pinRef = useRef(pinCam);
-  pinRef.current = pinCam;
-  useEffect(() => { drawAtRef.current?.(headRef.current); }, [pinCam]); // eslint-disable-line react-hooks/exhaustive-deps
-  const drawAtRef = useRef<((t: number) => void) | null>(null);
+  const clip = clips.find((c) => c.id === project.videoId) ?? clips[0];
   const settings = useMemo<VideoSettings>(() => ({ ...DEFAULT_VIDEO, ...clip }), [clip]);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -478,8 +463,6 @@ export default function VideoStudio({
   const [audioBuf, setAudioBuf] = useState<AudioBuffer | null>(null);
   const [peaks, setPeaks] = useState<number[]>([]);
   const [videoDur, setVideoDur] = useState(0);
-  const videoDurRef = useRef(videoDur);
-  videoDurRef.current = videoDur;
   const [head, setHead] = useState(settings.crop.start);
   const [playing, setPlaying] = useState(false);
   const playingRef = useRef(false);
@@ -634,7 +617,19 @@ export default function VideoStudio({
     if (known) { setLook(known); return; }
     const want = settingsRef.current.grade?.lut;
     void (async () => {
-      const b = await lutFile(lutId, want);
+      let b = await getMedia(`lut:${lutId}`);
+      // Not in this browser under this id: the same LUT under another id here, else its copy in the user's Drive.
+      if (!b && want) {
+        const twin = knownLuts().find((l) => l.name === want.name && l.id !== lutId);
+        if (twin) b = await getMedia(`lut:${twin.id}`);
+        if (!b) {
+          try {
+            const id = want.driveId ?? lutLibraryRef.current?.find((l) => l.id === lutId)?.driveId ?? await findInAppFolder(`${want.name}.cube`);
+            if (id) b = await downloadDriveFile(id);
+          } catch (e) { console.warn("[grade] LUT download from Drive failed", e); }
+        }
+        if (b) { void putMedia(`lut:${lutId}`, b).catch(() => {}); rememberLut(lutId, want.name, want.kind); }
+      }
       if (off) return;
       if (!b) { setLookErr(t("This LUT is not on this device: import it again.")); return; }
       try { const l = parseCube(await b.text()); LOOKS.set(lutId, l); if (!off) setLook(l); }
@@ -643,22 +638,6 @@ export default function VideoStudio({
     return () => { off = true; };
   }, [lutId, lutReload]); // eslint-disable-line react-hooks/exhaustive-deps
   const colourKey = gradeKey(grade);
-  /** A LUT's file: on this device, else the same LUT under another id here, else its copy in the user's Drive (kept here then). */
-  async function lutFile(lutId: string, want: LutRef | undefined): Promise<Blob | undefined> {
-    let b = await getMedia(`lut:${lutId}`).catch(() => undefined);
-    if (!b && want) {
-      const twin = knownLuts().find((l) => l.name === want.name && l.id !== lutId);
-      if (twin) b = await getMedia(`lut:${twin.id}`).catch(() => undefined);
-      if (!b) {
-        try {
-          const id = want.driveId ?? lutLibraryRef.current?.find((l) => l.id === lutId)?.driveId ?? await findInAppFolder(`${want.name}.cube`);
-          if (id) b = await downloadDriveFile(id);
-        } catch (e) { console.warn("[grade] LUT download from Drive failed", e); }
-      }
-      if (b) { void putMedia(`lut:${lutId}`, b).catch(() => {}); rememberLut(lutId, want.name, want.kind); }
-    }
-    return b ?? undefined;
-  }
   /** The grade of this video is still loading (its LUT): the preview waits rather than showing the log. */
   const gradePendingRef = useRef(false);
   gradePendingRef.current = !!colourKey && !lookErr && (lutRev === 0 || (!!lutId && !look));
@@ -670,91 +649,6 @@ export default function VideoStudio({
     graderRef.current?.setLut(videoLut.current, 33);
     setLutRev((n) => n + 1);
   }, [colourKey, look, lookErr]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ---- multicam: the other cameras (videos of the release on the same audio), each with its sync, framing, grade ----
-  const anglesRef = useRef(new Map<string, Angle>());
-  const [angleRev, setAngleRev] = useState(0);
-  const angleClips = (settings.angles ?? []).map((id) => clips.find((c) => c.id === id && c.id !== clip.id) ?? null);
-  // What a camera needs (its file, its offset, framing and grade): read again when one of them changes.
-  const anglesKey = JSON.stringify(angleClips.map((c) => c && [c.id, c.media, c.videoSize, c.offset, c.frame, c.desqueeze, c.grade, lutLibrary?.find((l) => l.id === c.grade?.lut?.id)]));
-  useEffect(() => {
-    let off = false;
-    const map = anglesRef.current;
-    const want = new Set(angleClips.filter(Boolean).map((c) => c!.id));
-    for (const [id, a] of map) if (!want.has(id)) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); map.delete(id); }
-    void (async () => {
-      for (const c of angleClips) {
-        if (!c || off) continue;
-        const media = c.media ?? c.id;
-        let a = map.get(c.id);
-        if (!a || a.media !== media) {
-          // The camera file on this device, else its Drive working copy kept here, else that copy fetched from the Drive.
-          const own = await getMedia(`video:${media}`).catch(() => undefined);
-          let blob = own ?? (await getMedia(`copy:${c.id}`).catch(() => undefined));
-          if (!blob && c.drive?.copy?.id) {
-            try { blob = (await downloadDriveFile(c.drive.copy.id)) ?? undefined; if (blob) void putMedia(`copy:${c.id}`, blob).catch(() => {}); }
-            catch (e) { console.warn("[takes] Drive copy not fetched", e); }
-          }
-          if (off) return;
-          if (!blob) { map.delete(c.id); continue; }
-          const el = document.createElement("video");
-          el.muted = true; el.playsInline = true; el.preload = "auto";
-          // In the page, tiny and nearly transparent, as the studio's own player: a video out of the page (or seen as
-          // hidden) is no longer decoded by the browser, its first pictures after a cut were frozen, then catching up.
-          el.className = "video-src";
-          (videoRef.current?.parentElement ?? document.body).appendChild(el);
-          const url = URL.createObjectURL(blob);
-          el.src = url;
-          const redraw = () => { if (!sourceRef.current) drawAt(headRef.current); };
-          el.addEventListener("seeked", redraw);
-          el.addEventListener("loadeddata", redraw);
-          if (a) { a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); }
-          a = { id: c.id, media, blob, el, url, offset: 0, frame: undefined, desqueeze: undefined, grade: undefined, look: null, lut: null, fromCopy: !own };
-          map.set(c.id, a);
-        }
-        a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze;
-        a.grade = withLutSettings(c.grade);
-        a.look = null; a.lut = null;
-        const lutRef = a.grade?.lut;
-        if (lutRef) {
-          let look = LOOKS.get(lutRef.id) ?? null;
-          if (!look) {
-            const b = await lutFile(lutRef.id, lutRef);
-            try { if (b) { look = parseCube(await b.text()); LOOKS.set(lutRef.id, look); } } catch { /* not a LUT */ }
-          }
-          if (off) return;
-          a.look = look;
-        }
-        // Its LUT nowhere (not here, not on the Drive): graded without it rather than not at all, as camera 1.
-        if (gradesColour(a.grade)) a.lut = buildGradeLut(a.grade, lutRef ? a.look : null, 33);
-      }
-      if (!off) { setAngleRev((n) => n + 1); drawAt(headRef.current); }
-    })();
-    return () => { off = true; };
-  }, [anglesKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { for (const a of anglesRef.current.values()) { a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); } }, []);
-  /** The camera (2 to 4) of the shot at official time `time`; null: this video's own. */
-  const angleAt = (time: number): Angle | null => {
-    const cfg = settingsRef.current;
-    const cam = camAt(cfg.cuts, time);
-    return cam > 0 ? anglesRef.current.get(cfg.angles?.[cam - 1] ?? "") ?? null : null;
-  };
-  /** A camera's picture at official time `time` (paused: its player placed there first). */
-  const anglePicture = (a: Angle, time: number, still: boolean): Picture | null | undefined => {
-    const el = a.el, target = time - a.offset;
-    if (target < -0.001 || (Number.isFinite(el.duration) && target > el.duration + 0.001)) return null;
-    if (still && !el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = Math.max(0, target);
-    return el.readyState >= 2 && el.videoWidth && !el.seeking ? { src: el, w: el.videoWidth, h: el.videoHeight } : undefined;
-  };
-  /** While playing: every camera plays with the sound, so a cut shows the next one at once (no black frame). */
-  const syncAngles = (heard: number) => {
-    for (const a of anglesRef.current.values()) {
-      const target = Math.max(0, heard - a.offset), diff = target - a.el.currentTime;
-      if (a.el.paused) { if (Math.abs(diff) > 0.05) a.el.currentTime = target; void a.el.play().catch(() => {}); }
-      else if (Math.abs(diff) > 0.4) { a.el.currentTime = target; a.el.playbackRate = 1; }
-      else a.el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
-    }
-  };
 
   /** Frame of the camera file at the playhead, read with ffmpeg while the player gives none (see pictureOf). */
   const stillRef = useRef<{ src: string; at: number; bmp: ImageBitmap } | null>(null);
@@ -809,11 +703,8 @@ export default function VideoStudio({
    * The picture of the post at official time `time`: the framed camera video, the lyrics, then the hook.
    * Used by the preview and the export. Returns where the texts were drawn, to drag them on the preview.
    */
-  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number, preview?: { raw: boolean; keep: boolean },
-    /** Multicam: another camera's picture, with its own framing and grade. */
-    angle?: AngleLook) => {
+  const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number, preview?: { raw: boolean; keep: boolean }) => {
     const cfg = settingsRef.current;
-    const lookFrame = angle ? angle.frame : cfg.frame, lookGrade = angle ? angle.grade : cfg.grade;
     const raw = !!preview?.raw;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
@@ -821,21 +712,19 @@ export default function VideoStudio({
     if (preview && !pic && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
-      pic = desqueeze(pic, angle ? angle.desqueeze : cfg.desqueeze);
-      let f = picOf(lookFrame ?? DEFAULT_VIDEO.frame, cfg.matte);
+      pic = desqueeze(pic, cfg.desqueeze);
+      let f = picOf(cfg.frame ?? DEFAULT_VIDEO.frame, cfg.matte);
       // Progressive zoom: ×1 at the start of the segment, `push` on its last frame. The whole framed picture around the
       // centre, or (`pushIn`) only what is inside its frame, around the frame's centre (below).
       const push = cfg.push ?? 1;
       const k = push > 1 ? 1 + (push - 1) * clamp((time - cfg.crop.start) / Math.max(0.1, cfg.crop.duration), 0, 1) : 1;
       const inside = !!cfg.pushIn && k > 1;
       if (k > 1 && !inside) f = zoomPic(f, f.zoom * k);
-      // A camera of the multicam can be graded while camera 1 is not: the shared grader then made for it.
-      const grader = graderRef.current ?? (angle?.lut ? (graderRef.current = Grader.shared()) : null);
-      const wantGrade = !raw && !pic.graded && gradesColour(lookGrade);
-      const lut = angle ? angle.lut : videoLut.current;
-      if (wantGrade && (angle ? !lut : !grader?.ready && gradePendingRef.current)) { console.debug("[grade] waiting for the grade (LUT loading)"); pic = null; }
-      else if (wantGrade && grader && !grader.lost && lut) {
-        grader.setLut(lut, 33);
+      const grader = graderRef.current;
+      const wantGrade = !raw && !pic.graded && gradesColour(cfg.grade);
+      if (wantGrade && !grader?.ready && gradePendingRef.current) { console.debug("[grade] waiting for the grade (LUT loading)"); pic = null; }
+      else if (wantGrade && grader?.ready && videoLut.current) {
+        grader.setLut(videoLut.current, 33);
         // Grade only what the post shows, at the size it is drawn.
         const region = visibleRegion(f, pic.w, pic.h, W, H);
         const s = (f.framing === "fill" ? Math.max(W / pic.w, H / pic.h) : Math.min(W / pic.w, H / pic.h)) * f.zoom * (inside ? k : 1);
@@ -861,8 +750,8 @@ export default function VideoStudio({
           drawPictureAt(g, pic.src, pic.w, pic.h, x + (w * (1 - k)) / 2, y + (h * (1 - k)) / 2, s * k, pic.part);
           g.restore();
         }
-        if (!raw && lookGrade) drawLook(g, W, H, lookGrade, Math.round(time * GRAIN_FPS));
-        if (preview?.keep && !raw && !angle) keepPoster(g.canvas);
+        if (!raw && cfg.grade) drawLook(g, W, H, cfg.grade, Math.round(time * GRAIN_FPS));
+        if (preview?.keep && !raw) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
@@ -898,23 +787,15 @@ export default function VideoStudio({
     const g = c?.getContext("2d");
     if (!c || !g) return;
     const el = videoRef.current;
-    // Multicam: the camera of the shot at this time (its own picture, framing and grade).
-    const pin = !sourceRef.current ? pinRef.current : null;
-    const ang = pin ? (pin === "main" ? null : anglesRef.current.get(pin) ?? null) : angleAt(time);
-    // A camera chosen there whose file is not on this device: black (never camera 1's picture passed for it).
-    const lostCam = !ang && (pin ? pin !== "main" : camAt(settingsRef.current.cuts, time) > 0);
-    const keep = !ang && !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
-    const pic = lostCam ? null : ang ? anglePicture(ang, time, !sourceRef.current) : pictureOf(el, time);
-    // A camera not ready yet (starting, placing itself): the last picture stays on screen, never a black frame.
-    if (pic === undefined) return;
-    const boxes = drawScene(g, c.width, c.height, pic, time, lostCam ? undefined : { raw: rawRef.current, keep }, ang ?? (lostCam ? { lut: null } : undefined));
+    const keep = !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
+    const pic = pictureOf(el, time);
+    const boxes = drawScene(g, c.width, c.height, pic, time, { raw: rawRef.current, keep });
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
     drawHelpers(g, c.width, c.height, fullRef.current ? { ...aidsRef.current, zones: false } : aidsRef.current);
     // The first picture of the video (or its last picture kept from before) is on screen: the splash can go.
     if (!shownOnce.current && (pic || posterRef.current)) { shownOnce.current = true; window.dispatchEvent(new Event("rollout:video-ready")); }
   }, [drawScene]);
-  drawAtRef.current = drawAt;
   const shownOnce = useRef(false);
   // The camera file is read from this device: the splash's bar moves on.
   useEffect(() => { if (videoBlob) window.dispatchEvent(new Event("rollout:video-file")); }, [!!videoBlob]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -956,7 +837,6 @@ export default function VideoStudio({
       window.setTimeout(() => { src.disconnect(); fade?.disconnect(); }, fade ? FADE * 1000 + 60 : 0);
     }
     if (videoRef.current) { videoRef.current.pause(); videoRef.current.playbackRate = 1; }
-    for (const a of anglesRef.current.values()) { a.el.pause(); a.el.playbackRate = 1; }
     setPlaying(false);
   }, []);
 
@@ -1183,16 +1063,14 @@ export default function VideoStudio({
   // ---- The working copy for the other devices: made by itself once the take is synced ----
   // The passage used (+2 s), as rich as the take (lib/convert copyPlanFor), on the Drive; made again when the passage
   // moves out of it; 15 s after the last change (not while the sync is being set). Never from a copy.
-  const makeCopy = async (take?: { c: VideoSetup; blob: Blob; dur: number }) => {
-    const blob = take ? take.blob : videoBlob;
-    if (!blob || (!take && onCopy) || copyAc.current) return;
+  const makeCopy = async () => {
+    const blob = videoBlob;
+    if (!blob || onCopy || copyAc.current) return;
     const cur = settingsRef.current;
-    const clipId = take ? take.c.id : clip.id;
-    const videoDur = take ? take.dur : videoDurRef.current;
-    // A take of the multicam: the project's passage in its own time.
-    let segS = cur.crop.start - (take ? take.c.offset : cur.offset), segE = segS + cur.crop.duration;
+    const clipId = clip.id;
+    let segS = cur.crop.start - cur.offset, segE = segS + cur.crop.duration;
     // The passages of every version, when they sit close enough: switching versions then needs no new copy.
-    for (const v of take ? [] : cur.versions ?? []) {
+    for (const v of cur.versions ?? []) {
       if (!v.v.crop || v.v.offset === undefined) continue;
       const s0 = v.v.crop.start - v.v.offset, e0 = s0 + v.v.crop.duration;
       if (Math.max(segE, e0) - Math.min(segS, s0) <= 180) { segS = Math.min(segS, s0); segE = Math.max(segE, e0); }
@@ -1203,11 +1081,11 @@ export default function VideoStudio({
     const ac = new AbortController();
     copyAc.current = ac;
     copyClip.current = clipId;
-    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}` };
+    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(clip)}` };
     setCopyJob({ step: "make", p: 0, ...job });
     try {
-      const plan = copyPlanFor(take ? take.c.source : cur.source);
-      const name = take ? safeName(`${project.name || "Rollout"} - ${clipName(take.c)} - ${t("copy")}.mp4`) : driveName(t("copy"));
+      const plan = copyPlanFor(cur.source);
+      const name = driveName(t("copy"));
       // The device's video chip first (seconds), ffmpeg when it cannot (minutes).
       const t0 = performance.now();
       // The progress redraws the studio: once per percent, not once per picture (that made the playback stutter).
@@ -1272,24 +1150,6 @@ export default function VideoStudio({
     dueTimer.current = window.setTimeout(() => { dueTimer.current = null; setCopyDueAt(null); void makeCopy(); }, DELAY);
     return () => { if (dueTimer.current) clearTimeout(dueTimer.current); dueTimer.current = null; setCopyDueAt(null); };
   }, [videoBlob, onCopy, driveWrite, copyJob, settings.score, settings.offset, settings.crop.start, settings.crop.duration, settings.drive?.copy, videoDur]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The project's other cameras: each gets its Drive working copy too (one after the other, after this video's own),
-  // so another device opens the multicam. 15 s after the passage last moved, never while playing.
-  useEffect(() => {
-    if (!driveWrite || copyJob || copyDueAt || playing) return;
-    const segS0 = settings.crop.start, segE0 = segS0 + settings.crop.duration;
-    const next = (settings.angles ?? []).map((id) => [clips.find((c) => c.id === id), anglesRef.current.get(id)] as const).find(([c, a]) => {
-      if (!c || !a || a.fromCopy || c.score === undefined) return false;
-      const dur = a.el.duration;
-      if (!Number.isFinite(dur)) return false;
-      const s0 = segS0 - c.offset, e0 = segE0 - c.offset, cp = c.drive?.copy;
-      if (e0 <= 0 || s0 >= dur) return false;
-      return !(cp && cp.of === a.blob.size && cp.from <= Math.max(0, s0 - 0.3) + 1e-3 && cp.to >= Math.min(dur, e0 + 0.3) - 1e-3);
-    });
-    if (!next) return;
-    const [c, a] = next;
-    const id = window.setTimeout(() => void makeCopy({ c: c!, blob: a!.blob, dur: a!.el.duration }), 15_000);
-    return () => clearTimeout(id);
-  }, [driveWrite, copyJob, copyDueAt, playing, angleRev, settings.crop.start, settings.crop.duration, anglesKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
@@ -1700,23 +1560,22 @@ export default function VideoStudio({
   const describeVideo = async (f: Blob, fresh: boolean) => {
     const info = await probeVideo(f);
     const cur = settingsRef.current;
-    if (cur.grade && !fresh) { setV({ source: info }); return; } // an older video read again: its grade stays as set
-    setV({ source: info, ...gradeForSource(info, cur.grade) });
-  };
-  /** The grade a file gets when it comes in. */
-  const gradeForSource = (info: VideoSourceInfo, prevGrade: VideoGrade | undefined): { grade?: VideoGrade } => {
+    const patch: Partial<VideoSettings> = { source: info };
     // A phone that says nothing about its colours films standard SDR.
     const colour = info.colour === "unknown" && info.kind === "phone" ? "sdr" : info.colour;
+    if (cur.grade && !fresh) { setV(patch); return; } // an older video read again: its grade stays as set
     if (colour === "log" && info.profile) {
       // Log: the camera's conversion, the look LUT and the sliders of the previous video (same camera, most likely).
-      const prev = prevGrade?.profile !== "none" && prevGrade?.profile !== "hlg" && prevGrade?.profile !== "pq" && prevGrade?.profile !== "rec709" ? prevGrade : undefined;
-      return { grade: { ...NEUTRAL_GRADE, ...(prev ?? {}), profile: info.profile, lut: prev?.lut ?? lastLut() } };
+      const prev = cur.grade?.profile !== "none" && cur.grade?.profile !== "hlg" && cur.grade?.profile !== "pq" ? cur.grade : undefined;
+      patch.grade = { ...NEUTRAL_GRADE, ...(prev ?? {}), profile: info.profile, lut: prev?.lut ?? lastLut() };
+    } else if (colour === "hdr" && info.profile) {
+      // HDR: brought down to SDR, no look LUT (made for log footage) and no log sliders.
+      patch.grade = { ...NEUTRAL_GRADE, profile: info.profile };
+    } else if (colour === "sdr") {
+      // Standard video: no log conversion, no LUT; the simple sliders are there, all at zero (the picture as it is).
+      patch.grade = { ...NEUTRAL_GRADE, profile: "rec709" };
     }
-    // HDR: brought down to SDR, no look LUT (made for log footage) and no log sliders.
-    if (colour === "hdr" && info.profile) return { grade: { ...NEUTRAL_GRADE, profile: info.profile } };
-    // Standard video: no log conversion, no LUT; the simple sliders are there, all at zero (the picture as it is).
-    if (colour === "sdr") return { grade: { ...NEUTRAL_GRADE, profile: "rec709" } };
-    return {};
+    setV(patch);
   };
   // Standard SDR video: no log conversion, no LUT, nothing applied (sliders at zero) unless turned back on by hand.
   // Also puts right a video graded by an older version (LUT, vignette and grain copied from a log video).
@@ -1875,16 +1734,6 @@ export default function VideoStudio({
     ro.observe(r);
     return () => { ro.disconnect(); r.removeEventListener("pointerdown", touched); r.removeEventListener("wheel", touched); };
   }, [clip.id, clips.length]);
-  /** The videos by what their file needs: to be graded (log, HDR, from a camera or a phone), standard (SDR), then
-   *  the others (no file yet, colours unknown); one group alone has no title. */
-  const clipGroups = (list: VideoSetup[]) => {
-    const kind = (c: VideoSetup) => {
-      const col = c.source?.colour === "unknown" && c.source.kind === "phone" ? "sdr" : c.source?.colour; // as describeVideo
-      return col === "log" || col === "hdr" ? 0 : col === "sdr" ? 1 : 2;
-    };
-    const groups = [t("Log / HDR"), t("Standard"), t("Others")].map((label, k) => ({ label, items: list.filter((c) => kind(c) === k) })).filter((g) => g.items.length);
-    return groups.length > 1 ? groups : [{ label: "", items: list }];
-  };
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
   const renameClip = (name: string) => {
     const n = name.trim();
@@ -1936,7 +1785,6 @@ export default function VideoStudio({
     // Not before the video can play: a click would otherwise start everything later, by surprise.
     if (!audioBuf || (videoUrl && !playerReady)) return;
     const token = ++playToken.current;
-    setPinCam(null); // playing: the cuts choose the camera again
     const ctx = getCtx();
     await ctx.resume();
     if (token !== playToken.current) return;
@@ -1998,7 +1846,6 @@ export default function VideoStudio({
         if (Math.abs(diff) > 0.4) { el.currentTime = target; el.playbackRate = 1; }
         else el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
       }
-      syncAngles(heard);
       drawAt(heard);
       // Measure of the sync while playing (console, debug level): video behind (+) or ahead (−) of the sound.
       if (el && performance.now() - lastLog > 1000) {
@@ -2052,32 +1899,6 @@ export default function VideoStudio({
   }, [head, settings.offset, playing, exporting, videoBlob, videoDur, drawAt]);
 
   // ---- audio sync ----
-  /** The sound of a camera / phone file, mono: the browser's decoder for a file that fits in memory (quick), else
-   *  ffmpeg reading the sound track only (a camera file of several GB, sound in PCM…: seconds). Null: neither could. */
-  const readSound = async (recording: Blob, duration: number, onP: (p: number) => void, signal: AbortSignal) => {
-    if (recording.size <= SYNC_DECODE_MAX) {
-      try {
-        const vbuf = await Promise.race([
-          decodeAudio(getCtx(), recording),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
-        ]);
-        return { samples: monoOf(vbuf), rate: vbuf.sampleRate };
-      } catch { /* next way */ }
-    }
-    if (signal.aborted) return null;
-    try {
-      const RATE = 22050;
-      const raw = await ffmpegAlone(recording, ["-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "1", "-ar", String(RATE), "-f", "f32le", "sound.raw"],
-        "sound.raw", Math.max(1, duration), onP, signal);
-      const bytes = raw.byteOffset % 4 ? raw.slice() : raw;
-      const samples = new Float32Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
-      if (samples.length > RATE) return { samples, rate: RATE };
-    } catch (e) {
-      if (signal.aborted) throw e;
-      console.info("[sync] sound not read by ffmpeg", e);
-    }
-    return null;
-  };
   const autoSync = async () => {
     const official = audioBuf;
     const recording = videoBlob;
@@ -2103,7 +1924,31 @@ export default function VideoStudio({
       : null;
     if (capture) void capture.catch(() => {});
     try {
-      let clip = await readSound(recording, videoRef.current?.duration || videoDur || 60, (p) => setSyncPct(p), ac.signal);
+      let clip: { samples: Float32Array; rate: number } | null = null;
+      // 1. The browser's decoder, on the whole file: quick, but only for a file that fits in memory.
+      if (recording.size <= SYNC_DECODE_MAX) {
+        try {
+          const vbuf = await Promise.race([
+            decodeAudio(getCtx(), recording),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("decode")), 15000)),
+          ]);
+          clip = { samples: monoOf(vbuf), rate: vbuf.sampleRate };
+        } catch { /* next way */ }
+      }
+      // 2. ffmpeg reading the sound track only (a camera file of several GB, sound in PCM…): seconds.
+      if (!clip && !ac.signal.aborted) {
+        try {
+          const RATE = 22050;
+          const raw = await ffmpegAlone(recording, ["-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "1", "-ar", String(RATE), "-f", "f32le", "sound.raw"],
+            "sound.raw", Math.max(1, videoRef.current?.duration || videoDur || 60), (p) => setSyncPct(p), ac.signal);
+          const bytes = raw.byteOffset % 4 ? raw.slice() : raw;
+          const samples = new Float32Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
+          if (samples.length > RATE) clip = { samples, rate: RATE };
+        } catch (e) {
+          if (ac.signal.aborted) throw e;
+          console.info("[sync] sound not read by ffmpeg", e);
+        }
+      }
       if (clip) capAc.abort(); // read: no need for the real-time capture
       else {
         // 3. Last resort: the sound captured while the video plays (real time). Phone MOV/MP4 the others refused.
@@ -2166,7 +2011,7 @@ export default function VideoStudio({
    * Where the segment may sit while linked: the whole video, or, when it holds several takes, the
    * part between the neighbouring takes (what was filmed before and after the music of this take stays reachable).
    */
-  const linkRangeOf = (v: Pick<VideoSettings, "offset" | "musicStart" | "musicEnd" | "takes"> & { angles?: string[] }): [number, number] | null => {
+  const linkRangeOf = (v: Pick<VideoSettings, "offset" | "musicStart" | "musicEnd" | "takes">): [number, number] | null => {
     if (!audioBuf || !videoBlob || videoDur <= 0) return null;
     let a = 0, b = videoDur;
     if ((v.takes?.length ?? 0) > 1 && v.musicStart != null && v.musicEnd != null) {
@@ -2177,17 +2022,7 @@ export default function VideoStudio({
     }
     const lo = Math.max(0, v.offset + a);
     const hi = Math.min(audioBuf.duration, v.offset + b);
-    if (hi - lo < 1) return null;
-    // Multicam: the part every camera of the project filmed (a shorter take ends the segment's room), unless they
-    // share less than a second (then camera 1's alone, never a locked segment).
-    let clo = lo, chi = hi;
-    for (const id of v.angles ?? settingsRef.current.angles ?? []) {
-      const c = clips.find((x) => x.id === id);
-      const d = c?.source?.duration ?? anglesRef.current.get(id)?.el.duration;
-      if (!c || c.score === undefined || !d || !Number.isFinite(d)) continue;
-      clo = Math.max(clo, c.offset); chi = Math.min(chi, c.offset + d);
-    }
-    return chi - clo >= 1 ? [clo, chi] : [lo, hi];
+    return hi - lo >= 1 ? [lo, hi] : null;
   };
   /** Limits of the segment: the linked range, else the whole official track. */
   const boundsOf = (v: VideoSettings): [number, number] =>
@@ -3044,9 +2879,6 @@ export default function VideoStudio({
     const from = cfg.crop.start;
     const until = Math.min(audioBuf.duration, from + cfg.crop.duration);
     if (until - from < 0.5) { setErr(t("Video export failed")); return "failed"; }
-    // Multicam: every camera used in the segment must have its file on this device.
-    const lost = [...new Set(shotsOf(cfg.cuts, from, until).map((x) => x.cam))].filter((c) => c > 0 && !anglesRef.current.get(cfg.angles?.[c - 1] ?? ""));
-    if (lost.length) { setErr(t("Camera {n} has no file on this device: open its video and pick its camera file.", { n: lost[0] + 1 })); return "failed"; }
     void askNotifyPermission();
     const ac = new AbortController();
     exportRef.current = ac;
@@ -3056,8 +2888,6 @@ export default function VideoStudio({
     const name = safeName(`${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""} ${stamp()}`);
     let source: { frameAt: (t: number) => Promise<Picture | null>; close: () => void; codec: string } | null = null;
     let stopPlayer = () => {};
-    /** The multicam cameras' readers, closed at the end. */
-    const angleClose: (() => void)[] = [];
     const el = document.createElement("video");
     el.src = videoUrl;
     el.muted = true;
@@ -3148,38 +2978,10 @@ export default function VideoStudio({
           document.addEventListener("visibilitychange", back);
           ac.signal.addEventListener("abort", () => { document.removeEventListener("visibilitychange", back); resolve(); }, { once: true });
         });
-        // Multicam: each other camera read from its own file when its first shot comes (graded on the GPU from its
-        // 10-bit frames when it needs it), its player as the last resort; closed at the end.
-        const angleSrc = new Map<number, Promise<(time: number) => Promise<Picture | null>>>();
-        const openAngle = async (a: Angle): Promise<(time: number) => Promise<Picture | null>> => {
-          await whenReady(a.el);
-          const aw = a.el.videoWidth, ah = a.el.videoHeight;
-          const s0 = Math.max(0, from - a.offset), s1 = until - a.offset;
-          const g = a.grade;
-          if (g && aw && ah && gradesColour(g) && (convertsFootage(g) || !!g.lut) && (!g.lut || a.look)) {
-            const crop = cropFor(picOf(a.frame ?? DEFAULT_VIDEO.frame, cfg.matte), aw, ah, W, H, cfg.push ?? 1, a.desqueeze);
-            const gpu = await gpuGradedSource(a.blob, s0, s1, crop, aw, ah, buildGradeLut(g, g.lut ? a.look : null, 65), 65, () => {}, ac.signal).catch(() => null);
-            if (gpu) { angleClose.push(() => gpu.close()); return async (time) => { const p = await gpu.frameAt(time - a.offset); return p && { src: p.src, w: aw, h: ah, part: crop, graded: true }; }; }
-          }
-          const direct = await VideoSource.open(a.blob, s0, s1, undefined, ac.signal).catch(() => null);
-          if (direct) { angleClose.push(() => direct.close()); return (time) => direct.frameAt(time - a.offset); }
-          const pf = playerFrames(a.el, s0);
-          angleClose.push(() => pf.stop());
-          return async (time) => { await visible(); await pf.frameAt(time - a.offset); return a.el.readyState >= 2 ? { src: a.el, w: aw, h: ah } : null; };
-        };
         blob = await exportMp4({
           width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, audioBitrate: rate.audioBitrate, from, until, audio: audioBuf, signal: ac.signal,
           onProgress: (p, step) => setExp({ p: 0.05 + p * 0.95, step }),
           frame: async (g, time) => {
-            const cam = camAt(cfg.cuts, time);
-            const ang = cam > 0 ? anglesRef.current.get(cfg.angles?.[cam - 1] ?? "") : undefined;
-            if (ang) {
-              if (!angleSrc.has(cam)) angleSrc.set(cam, openAngle(ang));
-              const at = await angleSrc.get(cam)!;
-              const tt = time - ang.offset;
-              drawScene(g, W, H, tt >= -0.001 ? await at(time) : null, time, undefined, ang);
-              return;
-            }
             const target = time - cfg.offset;
             const inside = target >= -0.001 && (!Number.isFinite(vdur) || target <= vdur + 0.001);
             let pic: Picture | null = null;
@@ -3233,7 +3035,6 @@ export default function VideoStudio({
       return cancelled ? "cancelled" : "failed";
     } finally {
       source?.close();
-      for (const close of angleClose.splice(0)) close();
       stopPlayer();
       setExpPaused(false);
       el.pause();
@@ -3300,33 +3101,11 @@ export default function VideoStudio({
   const pushIsCustom = pushCustom || (!!settings.push && !PUSH_PRESETS.includes(settings.push));
   const timesText = (v: number) => `×${String(Math.round(v * 100) / 100).replace(".", lang === "fr" ? "," : ".")}`;
   // ---- framing on the preview: drag the video or the lyrics, wheel to zoom / resize, double-click to reset ----
-  // ---- multicam: the camera the right column sets (colour, effects, framing) = the one on the paused preview: a take
-  //      pinned from the library, else the shot under the playhead. Kept in the take (every project using it). ----
-  const shotTake = (() => { const k = camAt(settings.cuts, head); return k > 0 ? settings.angles?.[k - 1] ?? null : null; })();
-  const lookId = pinCam ?? (playing ? null : shotTake);
-  const camTake = lookId && lookId !== "main" && settings.angles?.includes(lookId) ? clips.find((c) => c.id === lookId) : undefined;
-  const camTakeRef = useRef(camTake);
-  camTakeRef.current = camTake;
-  /** Its look written where it belongs: the take's, or this project's own (camera 1). */
-  const writeLook = (patch: Partial<VideoSettings>) => { const c = camTakeRef.current; if (c) patchTake(c.id, patch); else setV(patch); };
-  const panelGrade = camTake ? withLutSettings(camTake.grade) : grade;
-  /** Log / HDR or standard: a colour is only copied between cameras of the same kind. */
-  const lookKind = (c: VideoSettings) => (c.source?.colour === "log" || c.source?.colour === "hdr" ? "graded" : "std");
-  const camsOfProject = [clip, ...(settings.angles ?? []).map((id) => clips.find((c) => c.id === id)).filter((c): c is VideoSetup => !!c)];
-  const lookOwner = camTake ?? clip;
-  const otherCams = camsOfProject.filter((c) => c.id !== lookOwner.id && lookKind(c) === lookKind(lookOwner));
-  const copyLookToCams = (g: VideoGrade) => {
-    for (const c of otherCams) { if (c.id === clip.id) setV({ grade: g }); else patchTake(c.id, { grade: g }); }
-    onToast?.(t("Colour copied on {n} cameras", { n: otherCams.length }));
-  };
-  const curFrame = () => (camTakeRef.current ? camTakeRef.current.frame : settingsRef.current.frame) ?? DEFAULT_VIDEO.frame;
-  const frame = (camTake ? camTake.frame : settings.frame) ?? DEFAULT_VIDEO.frame;
-  const desq = camTake ? camTake.desqueeze : settings.desqueeze;
-  const setFrame = (patch: Partial<VideoFrame>) => writeLook({ frame: { ...curFrame(), ...patch } });
+  const frame = settings.frame ?? DEFAULT_VIDEO.frame;
+  const setFrame = (patch: Partial<VideoFrame>) => setV({ frame: { ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ...patch } });
   /** Offsets kept in bounds, as for the carousel photos (a drag reacts at once in the other direction). */
-  const fitFrame = (f: VideoFrame, squeeze = (camTakeRef.current ? camTakeRef.current.desqueeze : settingsRef.current.desqueeze) ?? 1): VideoFrame => {
-    const take = camTakeRef.current;
-    const el = take ? anglesRef.current.get(take.id)?.el : videoRef.current, c = canvasRef.current;
+  const fitFrame = (f: VideoFrame, squeeze = settingsRef.current.desqueeze ?? 1): VideoFrame => {
+    const el = videoRef.current, c = canvasRef.current;
     if (!el?.videoWidth || !c) return f;
     const p = clampPic(picOf(f, settingsRef.current.matte), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
     return { ...f, ox: p.ox, oy: p.oy };
@@ -3350,7 +3129,7 @@ export default function VideoStudio({
     const c = toCv(e);
     e.currentTarget.setPointerCapture(e.pointerId);
     const kind = textAt(c.x, c.y);
-    const f = fitFrame(curFrame());
+    const f = fitFrame(settingsRef.current.frame ?? DEFAULT_VIDEO.frame);
     const st = kind === "hook" ? hookStyleRef.current : styleRef.current;
     pdrag.current = { kind: kind ?? "pic", sx: e.clientX, sy: e.clientY, ox: kind ? st.x : f.ox, oy: kind ? st.y : f.oy, k: c.k };
   };
@@ -3372,10 +3151,10 @@ export default function VideoStudio({
     } else {
       // Its centre snaps to the middle lines, as a text does (the blue guides show).
       const sn = snapPic(d.ox + dx / c.width, d.oy + dy / c.height, free ? 0 : undefined);
-      const room = fitFrame({ ...curFrame(), ox: 1, oy: 1 });
+      const room = fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: 1, oy: 1 });
       const gv = sn.v && room.ox > 0.001, gh = sn.h && room.oy > 0.001; // a guide only where it can move
       if (gv !== snap.v || gh !== snap.h) setSnap({ v: gv, h: gh });
-      writeLook({ frame: fitFrame({ ...curFrame(), ox: sn.ox, oy: sn.oy }) });
+      setV({ frame: fitFrame({ ...(settingsRef.current.frame ?? DEFAULT_VIDEO.frame), ox: sn.ox, oy: sn.oy }) });
     }
   };
   const cvUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {
@@ -3417,9 +3196,9 @@ export default function VideoStudio({
       setV(kind === "hook" ? { hookStyle: next } : { captionStyle: next });
       return;
     }
-    const f = fitFrame(curFrame());
+    const f = fitFrame(settingsRef.current.frame ?? DEFAULT_VIDEO.frame);
     const z = zoomPic(picOf(f), clamp(+(f.zoom + dir * 0.05).toFixed(2), 0.5, 4));
-    writeLook({ frame: fitFrame({ ...f, zoom: z.zoom, ox: z.ox, oy: z.oy }) });
+    setV({ frame: fitFrame({ ...f, zoom: z.zoom, ox: z.ox, oy: z.oy }) });
   };
   useEffect(() => {
     const el = canvasRef.current;
@@ -3479,326 +3258,6 @@ export default function VideoStudio({
   /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
   const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
-  // ---- takes: the release's camera / phone files (lib "Prises"), up to 4 per project (multicam) ----
-  /** Takes of this release on the same audio as this project, other than its own (camera 1). */
-  const camChoices = clips.filter((c) => c.id !== clip.id && audioIdOf(release, c) === audioId && c.videoName);
-  const [takeJobs, setTakeJobs] = useState<Record<string, { p: number; err?: string }>>({});
-  const patchTake = (id: string, patch: Partial<VideoSetup>) =>
-    onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
-  /** A take read (what it is, the grade it gets) and synced on the official audio, in the background. */
-  const prepareTake = async (id: string, file: Blob, grade0: VideoGrade | undefined, fresh: boolean) => {
-    const official = audioBuf;
-    setTakeJobs((j) => ({ ...j, [id]: { p: 0 } }));
-    try {
-      const info = await probeVideo(file);
-      patchTake(id, { source: info, ...(fresh ? gradeForSource(info, grade0) : null) });
-      if (!official) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return; }
-      const sound = await readSound(file, info.duration ?? 60, (p) => setTakeJobs((j) => ({ ...j, [id]: { p: p * 0.9 } })), new AbortController().signal);
-      if (!sound) throw new Error(t("Its sound could not be read."));
-      await new Promise((r) => setTimeout(r, 30));
-      const cfg = settingsRef.current;
-      const r = syncAudio(sound.samples, sound.rate, monoOf(official), official.sampleRate, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
-      if (!r.anchors || r.score < 0.4) throw new Error(t("No match found in the official audio."));
-      patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: false });
-      onSaveNow();
-      setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; });
-    } catch (e) {
-      console.warn("[takes] not synced", e);
-      setTakeJobs((j) => ({ ...j, [id]: { p: 0, err: e instanceof Error ? e.message : String(e) } }));
-    }
-  };
-  /** Takes imported (one or many): each a take of the release, the first ones joining this project as cameras. */
-  const importTakes = async (files: File[]) => {
-    const cur = settingsRef.current;
-    const made: { c: VideoSetup; f: File }[] = files.filter((f) => f.type.startsWith("video/") || /\.(mp4|mov|m4v|mxf)$/i.test(f.name)).map((f) => ({ f, c: {
-      ...cur, id: uid(), name: f.name.replace(/\.[^.]+$/, ""), takeOnly: true, media: undefined, videoName: f.name, videoSize: f.size,
-      source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined,
-      takes: undefined, linked: false, versions: undefined, angles: undefined, cuts: undefined,
-    } as VideoSetup }));
-    // A file already in the release (same name and size): not a new take; it joins this project if it is not in it.
-    const known = (f: File) => clips.find((c) => c.videoName === f.name && c.videoSize === f.size);
-    const again = made.filter((m) => known(m.f));
-    if (again.length) {
-      const ids = again.map((m) => known(m.f)!.id).filter((id) => id !== clip.id && !(cur.angles ?? []).includes(id));
-      if (ids.length) setV({ angles: [...(cur.angles ?? []).filter(Boolean), ...ids].slice(0, MAX_CAMS - 1) });
-      onToast?.(again.length === 1 ? t("“{name}” is already in the release: not imported again.", { name: again[0].f.name })
-        : t("{n} files are already in the release: not imported again.", { n: again.length }));
-      made.splice(0, made.length, ...made.filter((m) => !known(m.f)));
-    }
-    if (!made.length) return;
-    for (const m of made) await putMedia(`video:${m.c.id}`, m.f).catch(() => {});
-    const have = (settingsRef.current.angles ?? []).filter(Boolean);
-    const join = made.slice(0, Math.max(0, MAX_CAMS - 1 - have.length)).map((m) => m.c.id);
-    onProject((p) => ({ ...p, videos: [...clipsOf(p), ...made.map((m) => m.c)] }));
-    if (join.length) setV({ angles: [...have, ...join] });
-    onSaveNow();
-    void askPersistentStorage();
-    for (const m of made) await prepareTake(m.c.id, m.f, cur.grade, true);
-  };
-  const resyncTake = async (c: VideoSetup) => {
-    const b = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
-    if (!b) { setTakeJobs((j) => ({ ...j, [c.id]: { p: 0, err: t("Not in this browser: pick it again.") } })); return; }
-    await prepareTake(c.id, b, c.grade, false);
-  };
-  /** Camera `i + 2` taken out of this project: its shots go back to camera 1. */
-  const removeAngle = (i: number) => {
-    const angles = [...(settings.angles ?? [])];
-    angles.splice(i, 1);
-    const cuts = settings.cuts?.map((c) => (c.cam === i + 1 ? { ...c, cam: 0 } : c.cam > i + 1 ? { ...c, cam: c.cam - 1 } : c));
-    setV({ angles: angles.length ? angles : undefined, cuts: angles.length ? cuts : undefined });
-  };
-  const addAngle = (id: string) => setV({ angles: [...(settings.angles ?? []).filter(Boolean), id].slice(0, MAX_CAMS - 1) });
-  /** A take only imported, used by no project: off the release, its file off this device. */
-  const deleteTake = (c: VideoSetup) => {
-    onProject((p) => ({ ...p, videos: clipsOf(p).filter((x) => x.id !== c.id) }));
-    void delMedia(`video:${c.id}`).catch(() => {});
-    onSaveNow();
-  };
-  /** A camera chosen (button or key 1-4): playing, or paused in the middle of a shot, it cuts there to it; paused at a
-   *  shot's start (a click on a shot puts the playhead there), the whole shot takes it. */
-  const chooseCam = (cam: number) => {
-    const cfg = settingsRef.current;
-    if (cam > 0 && !cfg.angles?.[cam - 1]) return;
-    const at = playing ? headRef.current : head;
-    const shot = shotsOf(cfg.cuts, cfg.crop.start, cfg.crop.start + cfg.crop.duration).find((x) => at >= x.from - 1e-3 && at < x.to);
-    const atStart = !playing && (!shot || at - shot.from < 0.06);
-    setV({ cuts: atStart ? setShotCam(cfg.cuts, at, cam, cfg.crop.start) : cutTo(cfg.cuts, at, cam) });
-  };
-  const usedAsCamera = (id: string) => clips.some((c) => c.angles?.includes(id));
-  // The same file imported twice (same name and size: before the check, or on two devices): one take kept (a
-  // project's own first), every project using the other one uses it, its cuts kept on the right camera.
-  useEffect(() => {
-    const all = clips;
-    const winner = new Map<string, string>();
-    for (const c of all) {
-      if (!c.takeOnly || !c.videoName) continue;
-      const w = all.find((x) => x !== c && x.videoName === c.videoName && x.videoSize === c.videoSize && (!x.takeOnly || all.indexOf(x) < all.indexOf(c)));
-      if (w) winner.set(c.id, w.id);
-    }
-    if (!winner.size) return;
-    onProject((p) => ({ ...p, videos: clipsOf(p).filter((c) => !winner.has(c.id)).map((c) => {
-      if (!c.angles?.length) return c;
-      // Old camera number (1-3) → new one (0 when it went: its shots back on camera 1).
-      const next: string[] = [], to = new Map<number, number>();
-      c.angles.forEach((id0, k) => {
-        const id = winner.get(id0) ?? id0;
-        if (!id || id === c.id) { to.set(k + 1, 0); return; }
-        const at = next.indexOf(id);
-        if (at >= 0) to.set(k + 1, at + 1); else { next.push(id); to.set(k + 1, next.length); }
-      });
-      return { ...c, angles: next.length ? next : undefined, cuts: next.length ? c.cuts?.map((x) => ({ ...x, cam: x.cam ? to.get(x.cam) ?? 0 : 0 })) : undefined };
-    }) }));
-    for (const id of winner.keys()) void delMedia(`video:${id}`).catch(() => {});
-    onSaveNow();
-  }, [clips]); // eslint-disable-line react-hooks/exhaustive-deps
-  const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);
-  const takeInput = useRef<HTMLInputElement>(null);
-  /** What a file is (device, curve, codec) and what the app does with its colours: the (i) beside LOG / SDR. */
-  const sourceNote = (src: VideoSourceInfo) => [
-    [src.device ?? (src.kind === "camera" ? t("Camera") : src.kind === "phone" ? t("Phone") : null), src.curve, src.codec].filter(Boolean).join(" · "),
-    src.colour === "log" ? (src.profile
-      ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
-      : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab."))
-      : src.colour === "hdr" ? t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab.")
-      : src.colour === "unknown" ? t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab.")
-      : t("Standard video, used as it is."),
-    src.convert ? t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality.") : "",
-  ].filter(Boolean).join("\n");
-  const colourTag = (src?: VideoSourceInfo) => (src?.colour === "log" ? "LOG" : src?.colour === "hdr" ? "HDR" : src?.colour === "sdr" ? "SDR" : "?");
-  /** A take's Drive copy, as camera 1's: being made, "Backed up" (up to date), or "Drive copy" (the one used here). */
-  const takeCopyEl = (c: VideoSetup) => {
-    const a = anglesRef.current.get(c.id), cp = c.drive?.copy;
-    if (copyJob?.clip === c.id) return <span className="copy-status compact busy xs"><span className="shine">{copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) })}</span></span>;
-    if (a?.fromCopy && cp) return <span className="copy-status compact on-copy xs"><span className="pill-copy">{t("Drive copy")}</span></span>;
-    if (a && cp && cp.of === a.blob.size) return <span className="copy-status compact xs"><span className="pill-copy ready"><Icon name="check" size={10} />{t("Backed up")}</span></span>;
-    return null;
-  };
-  /** The take whose line is unfolded (its details), one at a time. */
-  const [takeOpen, setTakeOpen] = useState<string | null>(null);
-  // The block of takes slides to its new height when a take unfolds or folds (FLIP: its old height, then the new one).
-  // Each copy of the column (computer, phone) has its own block; their heights kept up to date between two folds.
-  const takesH = useRef(new WeakMap<HTMLElement, number>());
-  /** A take unfolded (or none): the blocks' heights noted first, for the slide. */
-  const foldTo = (id: string | null) => {
-    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch")) if (!el.style.height) takesH.current.set(el, el.offsetHeight);
-    setTakeOpen(id);
-  };
-  useLayoutEffect(() => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const undo: (() => void)[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch")) {
-      const before = takesH.current.get(el), after = el.offsetHeight;
-      takesH.current.set(el, after);
-      if (!before || before === after || !el.getClientRects().length) continue;
-      el.style.height = `${before}px`;
-      el.style.overflow = "hidden";
-      void el.offsetHeight;
-      el.style.transition = "height .22s ease";
-      el.style.height = `${after}px`;
-      const done = () => { el.style.height = ""; el.style.overflow = ""; el.style.transition = ""; el.removeEventListener("transitionend", end); };
-      // Its own transition only (a child's, a hover…, bubbles up here too).
-      const end = (e: TransitionEvent) => { if (e.target === el && e.propertyName === "height") done(); };
-      el.addEventListener("transitionend", end);
-      const id = window.setTimeout(done, 300);
-      undo.push(() => { window.clearTimeout(id); done(); });
-    }
-    return () => undo.forEach((f) => f());
-  }, [takeOpen]);
-
-  /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
-  const takesEl = (part: "first" | "rest") => {
-    const angles = (settings.angles ?? []).filter(Boolean);
-    const others = camChoices.filter((c) => !angles.includes(c.id));
-    const room = angles.length < MAX_CAMS - 1;
-    const card = (c: VideoSetup, cam: number | null) => {
-      const job = takeJobs[c.id];
-      const i = cam === null ? -1 : cam - 1;
-      const open = takeOpen === c.id;
-      // Camera 1 unfolded: its own full card (file, Drive copy, sync) shows in its place, just below.
-      if (open && cam === 0) return null;
-      // A camera whose file is not on this device (its shots stay black: never another camera's picture instead).
-      const missing = cam !== null && cam > 0 && angleRev > 0 && !anglesRef.current.has(c.id);
-      const name = c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c);
-      const toggle = () => { foldTo(open ? null : c.id); if (cam !== null) { stop(); setPinCam(cam === 0 ? "main" : c.id); } };
-      const sync = job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
-        : missing ? <span className="xs warn-text">{t("File not on this device")}</span>
-        : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
-        : null;
-      const menu = (close: () => void) => (<>
-        {cam !== null && cam > 0 && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
-        {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
-        <button disabled={(!!job && !job.err) || (cam === 0 && (!videoBlob || syncBusy))} onClick={() => { close(); if (cam === 0) void autoSync(); else void resyncTake(c); }}>{t("Sync again")}</button>
-        {c.takeOnly && <>
-          <div className="sep" />
-          <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
-            title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
-            onClick={() => { close(); deleteTake(c); }}>{t("Delete this take")}</button>
-        </>}
-      </>);
-      const cls = "take" + (cam === null ? " other" : " cam-" + cam) + (open ? " open" : "");
-      // Unfolded: the same full card as camera 1's (its name, file, what it is, its sync), in place of its line.
-      if (open) return (
-        <div key={c.id} className={cls}>
-          <MediaTile icon="film" name={c.videoName ?? null} warn={missing} loading={!!job && !job.err} menu={cam === 0 ? false : menu}
-            label={<button className="take-label" onClick={toggle} title={t("Fold")}>{cam !== null && <b>{cam + 1}</b>}{cam !== null && " · "}{clipName(c)} <Icon name="chevron" size={11} /></button>}
-            meta={<>
-              {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
-              {c.source && <span className="row" style={{ gap: 4 }}>{colourTag(c.source)}<Hint text={sourceNote(c.source)} /></span>}
-              {takeCopyEl(c)}
-              {sync}
-            </>} />
-        </div>
-      );
-      // Folded: one slim line (all the cameras seen at once), number and colour as on the shots track.
-      return (
-        <div key={c.id} className={cls}>
-        <div className={"take-row" + (job && !job.err ? " shine-box" : "")}>
-          <button className="take-main" aria-expanded={false}
-            title={cam !== null ? t("Show it on the preview and set its colour and framing") : undefined} onClick={toggle}>
-            {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name="film" size={13} />}
-            <span className="take-name" title={c.videoName ?? ""}>{name}</span>
-          </button>
-          {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
-          {/* On the line, an icon (its words in the unfolded card): the name keeps the room. */}
-          {job && !job.err ? sync
-            : missing || job?.err || c.score === undefined ? <span className="warn-text take-warn" title={missing ? t("File not on this device") : job?.err ?? t("Not synced")}><Icon name="alert" size={13} /></span>
-            : <Icon name="check" size={12} />}
-          {cam === null && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
-          {<Menu float trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
-        </div>
-        </div>
-      );
-    };
-    if (part === "first") { const one = card(clip, 0); return one && <div className="takes">{one}</div>; }
-    return (
-      <div className="takes">
-        {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
-        <button className="btn sm take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
-          <Icon name="plus" size={14} />{t("Import takes")}
-        </button>
-        <input ref={takeInput} type="file" accept="video/*,.mxf" multiple hidden
-          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void importTakes(f); }} />
-        {others.length > 0 && (
-          <details className="takes-more">
-            <summary>{t("Other takes of the release ({n})", { n: others.length })}</summary>
-            {clipGroups(others).map((g) => (
-              <div key={g.label || "all"} className="takes-group">
-                {g.label && <div className="dd-group">{g.label}</div>}
-                {g.items.map((c) => card(c, null))}
-              </div>
-            ))}
-          </details>
-        )}
-      </div>
-    );
-  };
-  const camsEl = () => {
-    const angles = settings.angles ?? [];
-    const used = angles.filter(Boolean).length;
-    if (!used) return null;
-    const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
-    const sortedCuts = [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at);
-    /** Camera `cam` (0-3) from a button: as its key (playing: cut to it now; paused: the shot under the playhead). */
-    const pickCam = chooseCam;
-    const camNow = camAt(settings.cuts, head);
-    const pct = (x: number) => `${(clamp(x - settings.crop.start, 0, segLen) / segLen) * 100}%`;
-    return (
-      <div className="cams">
-        {used > 0 && (
-          <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
-            {shots.map((x, i) => {
-              const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
-              // Its cut (the one that starts it, in the segment): its cross takes it away, the shot joins the one on its left.
-              const own = x.cut >= 0 && Math.abs(sortedCuts[x.cut].at - x.from) < 1e-3 ? sortedCuts[x.cut] : null;
-              const go = () => { stop(); setPinCam(null); setHead(round2(x.from + 0.01)); };
-              return (
-                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from}
-                  style={{ left: pct(x.from), width: `${((x.to - x.from) / segLen) * 100}%` }}
-                  title={`${x.cam + 1} · ${a ? clipName(a) : "?"}`}
-                  onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
-                  <b>{x.cam + 1}</b> {a ? clipName(a) : ""}
-                  {own && (
-                    <button className="shot-x" aria-label={t("Remove this cut")} title={t("Remove this cut: the shot joins the one on its left")}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((c) => c !== own && Math.abs(c.at - own.at) > 1e-6) }); }}>
-                      <Icon name="x" size={11} />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && (
-              <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut, double-click to remove it")}
-                onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
-                onPointerDown={(e) => {
-                  e.stopPropagation(); stop();
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                  const r = e.currentTarget.parentElement!.getBoundingClientRect();
-                  cutDrag.current = { i: [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at).indexOf(c), left: r.left, width: r.width };
-                }}
-                onPointerMove={(e) => {
-                  const d = cutDrag.current;
-                  if (!d) return;
-                  const cfg = settingsRef.current;
-                  const at = cfg.crop.start + clamp((e.clientX - d.left) / d.width, 0, 1) * Math.max(0.1, end - cfg.crop.start);
-                  setV({ cuts: moveCut(cfg.cuts ?? [], d.i, at) });
-                }}
-                onPointerUp={() => { cutDrag.current = null; }} onPointerCancel={() => { cutDrag.current = null; }} />
-            ))}
-            <span className="lyric-head" style={{ left: pct(head) }} />
-          </div>
-        )}
-        <div className="row cams-row">
-          <span className="label">{t("Edit")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
-          {[0, ...angles.map((_, k) => k + 1)].filter((k) => k === 0 || angles[k - 1]).map((k) => (
-            <button key={k} className={"btn sm cam-btn cam-" + k + (camNow === k ? " on" : "")} onClick={() => pickCam(k)}
-              title={t("Camera {n}: cut to it here (at a shot's start: the whole shot)", { n: k + 1 }) + ` (${k + 1})`}>{k + 1}</button>
-          ))}
-          <span className="muted xs">{t("A camera cuts to it at the playhead; at a shot's start, the whole shot.")}</span>
-        </div>
-      </div>
-    );
-  };
   /** The strip's passage and file (not its grade): a change of colour only waits longer before it is made again. */
   const stripBase = useRef("");
   useEffect(() => {
@@ -4059,20 +3518,6 @@ export default function VideoStudio({
     } else if (k === "ArrowLeft" || k === "ArrowRight") { e.preventDefault(); stop(); stepTo(k === "ArrowRight" ? 1 : -1); }
     else if (k.toLowerCase() === "i") markIn();
     else if (k.toLowerCase() === "o") markOut();
-    else if (settingsRef.current.angles?.some(Boolean)) {
-      // Multicam: 1 to 4 = a camera (playing: cut to it now; paused: the shot under the playhead shows it),
-      // C = cut the shot here, Delete = remove the cut that starts it.
-      const cfg = settingsRef.current;
-      // By the key's place (Digit1…, the keypad too): on an AZERTY keyboard the top row gives & é " ' without Shift.
-      const dig = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
-      const cam = dig ? Number(dig[1]) - 1 : -1;
-      if (cam >= 0) {
-        if (cam > 0 && !cfg.angles?.[cam - 1]) return;
-        e.preventDefault();
-        chooseCam(cam);
-      } else if (k.toLowerCase() === "c" && !playing) { e.preventDefault(); setV({ cuts: splitAt(cfg.cuts, head) }); }
-      else if ((k === "Backspace" || k === "Delete") && !playing && cfg.cuts?.length) { e.preventDefault(); setV({ cuts: removeCutAt(cfg.cuts, head) }); }
-    }
   };
   useEffect(() => {
     const h = (e: KeyboardEvent) => keyRef.current(e);
@@ -4198,16 +3643,14 @@ export default function VideoStudio({
             {/* The release's videos side by side (a phone swipes them; a computer shows only the open one, its picker is
                 above the board): the studio's one whole, the others greyed on each side, each with what it holds and
                 its own button to open it in the studio (swiping never changes the studio's video). */}
-            <div className="tree-branch takes-branch">
+            <div className="tree-branch">
             {/* One title, still ("Video"): each card has its video's name, as the audio tile has "Audio". */}
-            <div className="tree-head" title={t("Camera 1 is the project's own take; up to 3 more for a multicam edit.")}>
-              <span className="label">{t("Project takes")}</span>
+            <div className="tree-head" title={t("The camera file and the framing belong to this video only.")}>
+              <span className="label">{t("Video")}</span>
             </div>
-            {settings.videoName && takesEl("first")}
-            {/* Camera 1's card (its file, Drive copy, sync…): unfolded from its line, or always while it has no file. */}
-            <div className={"clip-strip" + (projects.length > 1 ? " many" : "") + (settings.videoName && takeOpen !== clip.id ? " folded" : "")} ref={clipStrip} onScroll={onStripScroll}
+            <div className={"clip-strip" + (clips.length > 1 ? " many" : "")} ref={clipStrip} onScroll={onStripScroll}
               onScrollEnd={onStripScroll}>
-            {projects.map((c) => c.id !== clip.id ? (
+            {clips.map((c) => c.id !== clip.id ? (
               <div key={c.id} className={"clip-card ghost" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
                 <MediaTile icon="film" label={clipName(c)} name={c.videoName ?? null}
                   meta={c.videoName ? <>
@@ -4219,16 +3662,24 @@ export default function VideoStudio({
                 <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
               </div>
             ) : (
-            <div key={c.id} className={"clip-card" + (c.id === stripShown ? " shown" : "") + ((settings.angles ?? []).some(Boolean) ? " cam-0 multicam" : "")} data-clip={c.id}>
+            <div key={c.id} className={"clip-card" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
             {(() => {
               const d = settings.drive ?? {};
               const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
               const src = videoBlob ? settings.source : undefined;
-              const note = src && sourceNote(src);
+              const note = src && [
+                [src.device ?? (src.kind === "camera" ? t("Camera") : src.kind === "phone" ? t("Phone") : null), src.curve, src.codec].filter(Boolean).join(" · "),
+                src.colour === "log" ? (src.profile
+                  ? t("Log footage: converted like a CST in DaVinci, with your look LUT. Adjust it in the Colour tab.")
+                  : t("Log footage this app does not convert yet: pick the closest profile in the Colour tab."))
+                  : src.colour === "hdr" ? t("HDR footage: brought down to standard SDR for TikTok, without burnt highlights. Adjust it in the Colour tab.")
+                  : src.colour === "unknown" ? t("The file does not say how it recorded the colours: if it looks flat and grey, it is log, pick its profile in the Colour tab.")
+                  : t("Standard video, used as it is."),
+                src.convert ? t("The browser cannot read this format frame by frame: the export converts it first (slower), without losing quality.") : "",
+              ].filter(Boolean).join("\n");
               const missing = !videoBlob && !!settings.videoName;
               return (
-                <MediaTile icon="film" name={settings.videoName ?? null}
-                  label={settings.videoName ? <button className="take-label cam-0" onClick={() => foldTo(null)} title={t("Fold")}><b>1</b> · {clipName(clip)} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                <MediaTile icon="film" label={clipName(clip)} name={settings.videoName ?? null} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>
@@ -4276,7 +3727,6 @@ export default function VideoStudio({
             </div>
             ))}
             </div>
-            {takesEl("rest")}
             </div>
           </div>
           <div className="lib-desk">{library}</div>
@@ -4287,12 +3737,10 @@ export default function VideoStudio({
       <div className="video-head studio-head">
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
-          <label className="field h-pick" style={{ margin: 0 }}>{t("Project")}
+          <label className="field h-pick" style={{ margin: 0 }}>{t("Video")}
             <Select className="input" style={{ width: 150 }} value={clip.id}
               onChange={(e) => { onProject((p) => ({ ...p, videoId: e.target.value })); onSaveNow(); }}>
-              {clipGroups(projects).map((g) => g.label
-                ? <optgroup key={g.label} label={g.label}>{g.items.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}</optgroup>
-                : g.items.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>))}
+              {clips.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>)}
             </Select>
           </label>
           <button className="btn icon h-new" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
@@ -4301,7 +3749,7 @@ export default function VideoStudio({
               <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
               <button onClick={() => { closeMenu(); duplicateClip(); }} title={t("Same camera file, sync and versions: to change anything on a copy")}>{t("Duplicate")}</button>
               <div className="sep" />
-              <button className="danger" style={{ color: "var(--danger)" }} disabled={projects.length < 2}
+              <button className="danger" style={{ color: "var(--danger)" }} disabled={clips.length < 2}
                 onClick={() => { closeMenu(); setClipDialog("delete"); }}>{t("Delete this video")}</button>
             </>)}
           </Menu></div>
@@ -4316,7 +3764,7 @@ export default function VideoStudio({
             </button>
           )}>
             {(close) => (<div className="ver-list">
-              {clipGroups(projects).map((g) => [g.label && <div key={"g" + g.label} className="dd-group">{g.label}</div>, ...g.items.map((c) => {
+              {clips.map((c) => {
                 const on = c.id === clip.id;
                 const show = () => { if (!on) { onProject((p) => ({ ...p, videoId: c.id })); onSaveNow(); } };
                 return (
@@ -4325,10 +3773,10 @@ export default function VideoStudio({
                       <Icon name="check" size={12} />{clipName(c)}
                     </button>
                     <button className="btn icon sm quiet" aria-label={t("Rename")} title={t("Rename")} onClick={() => { close(); show(); setClipDialog("rename"); }}><Icon name="pencil" size={12} /></button>
-                    {projects.length > 1 && <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { close(); show(); setClipDialog("delete"); }}><Icon name="trash" size={12} /></button>}
+                    {clips.length > 1 && <button className="btn icon sm quiet ver-del" aria-label={t("Delete")} title={t("Delete")} onClick={() => { close(); show(); setClipDialog("delete"); }}><Icon name="trash" size={12} /></button>}
                   </div>
                 );
-              })])}
+              })}
               <div className="sep" />
               <button className="ver-new" title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => { close(); void addVideo(); }}>
                 <Icon name="plus" size={12} />{t("New video")}
@@ -4558,48 +4006,6 @@ export default function VideoStudio({
                   </span>
                   {!phone && zoomEl("tr-zoom")}
                 </div>
-                {/* Phone: the lock and the zoom above the tracks they act on (on a computer: in the segment's row). */}
-                {phone && (
-                  <div className="row seg-tools">
-                    {lockEl()}
-                    <span className="grow" />
-                    {zoomEl()}
-                  </div>
-                )}
-                <div className="wave-wrap">
-                  <canvas ref={waveRef} className="wave"
-                    onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
-                    onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
-                </div>
-                {hooks.length > 0 && (
-                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
-                    {hooks.map((h, i) => (
-                      <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
-                        style={{ left: `${(clamp(h.from, 0, segLen) / segLen) * 100}%`, width: `${((clamp(h.to ?? segLen, 0, segLen) - clamp(h.from, 0, segLen)) / segLen) * 100}%` }}
-                        title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
-                        onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
-                        {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
-                      </button>
-                    ))}
-                    <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
-                  </div>
-                )}
-                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
-                  {cues.map((c, i) => (
-                    <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
-                      style={{
-                        left: `${(clamp(c.start - settings.crop.start, 0, segLen) / segLen) * 100}%`,
-                        width: `${((clamp(c.end, settings.crop.start, end) - clamp(c.start, settings.crop.start, end)) / segLen) * 100}%`,
-                      }}
-                      data-at={Math.max(settings.crop.start, c.start)}
-                      onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
-                      {c.text.replace(/\n/g, " ")}
-                    </button>
-                  ))}
-                  {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
-                  <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
-                </div>
-                {camsEl()}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
@@ -4682,6 +4088,47 @@ export default function VideoStudio({
                       </span>
                     );
                   })()}
+                </div>
+                {/* Phone: the lock and the zoom above the tracks they act on (on a computer: in the segment's row). */}
+                {phone && (
+                  <div className="row seg-tools">
+                    {lockEl()}
+                    <span className="grow" />
+                    {zoomEl()}
+                  </div>
+                )}
+                <div className="wave-wrap">
+                  <canvas ref={waveRef} className="wave"
+                    onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
+                    onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
+                </div>
+                {hooks.length > 0 && (
+                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
+                    {hooks.map((h, i) => (
+                      <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
+                        style={{ left: `${(clamp(h.from, 0, segLen) / segLen) * 100}%`, width: `${((clamp(h.to ?? segLen, 0, segLen) - clamp(h.from, 0, segLen)) / segLen) * 100}%` }}
+                        title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
+                        onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
+                        {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
+                      </button>
+                    ))}
+                    <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
+                  </div>
+                )}
+                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
+                  {cues.map((c, i) => (
+                    <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
+                      style={{
+                        left: `${(clamp(c.start - settings.crop.start, 0, segLen) / segLen) * 100}%`,
+                        width: `${((clamp(c.end, settings.crop.start, end) - clamp(c.start, settings.crop.start, end)) / segLen) * 100}%`,
+                      }}
+                      data-at={Math.max(settings.crop.start, c.start)}
+                      onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
+                      {c.text.replace(/\n/g, " ")}
+                    </button>
+                  ))}
+                  {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                 </div>
                 {genBusy && (
                   <div className="bar live" role="progressbar" aria-valuemin={0} aria-valuemax={100}
@@ -4991,17 +4438,6 @@ export default function VideoStudio({
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")} ref={rightColRef}>
           <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} tone="video" />
-          {/* Multicam: whose look the column sets (the camera on the preview). */}
-          {(settings.angles ?? []).some(Boolean) && (() => {
-            const k = camTake ? (settings.angles ?? []).indexOf(camTake.id) + 1 : 0;
-            const c = camTake ?? clip;
-            return (
-              <div className={"look-of cam-" + k}>
-                <span className="xs muted">{t("Settings of")}</span> <b>{k + 1}</b> <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
-                <Hint text={t("Colour, effects and framing are those of the camera on the preview: click a take in the library or a shot in the timeline to set another one. Kept in the take.")} />
-              </div>
-            );
-          })()}
           {/* How the camera picture fits the post: the first part of the video's style. */}
           <Section id="video-render" title={t("Framing")}>
           {/* Phone's Style page: its title, like the other parts' (the panel's own is hidden there). */}
@@ -5024,8 +4460,8 @@ export default function VideoStudio({
           </div>
           <div className="row" title={t("An anamorphic lens squeezes the picture across: pick its factor to see it as filmed. It goes with the camera file (all its versions).")}>
             <span className="label">{t("Anamorphic lens")}</span>
-            <Select className="input sm grow" aria-label={t("Anamorphic lens")} value={String(desq ?? 1)}
-              onChange={(e) => { const k = Number(e.target.value); writeLook({ desqueeze: k === 1 ? undefined : k, frame: fitFrame(frame, k) }); }}>
+            <Select className="input sm grow" aria-label={t("Anamorphic lens")} value={String(settings.desqueeze ?? 1)}
+              onChange={(e) => { const k = Number(e.target.value); setV({ desqueeze: k === 1 ? undefined : k, frame: fitFrame(frame, k) }); }}>
               <option value="1">{t("None")}</option>
               {DESQUEEZE.map((k) => <option key={k} value={String(k)}>{`×${String(k).replace(".", lang === "fr" ? "," : ".")}`}</option>)}
             </Select>
@@ -5148,25 +4584,23 @@ export default function VideoStudio({
           )}
           <div id="video-color" className="stack">
             <div className="row col-head"><span className="label">{t("Colour")}</span><Hint text={t("The look of the whole video: a LUT for log footage, then exposure, contrast and colour, the same on the preview and the export.")} />
-              {/* Before / after in one click: the picture as recorded, then the panelGrade again. */}
-              {/* The panelGrade on / off in one click (the switch alone: what it does shows on the picture), then Reset
-                  (the panelGrade removed), like the other parts' Reset. */}
-              {panelGrade && <span className="grow" />}
-              {panelGrade && <Switch checked={!panelGrade.off} onChange={(v) => { setRawView(false); writeLook({ grade: { ...panelGrade, off: !v } }); }}
-                title={panelGrade.off ? t("Colour turned off: the video is shown and exported as recorded. Click to turn it back on.") : t("Colour on: click to turn it all off (preview and export), your settings kept.")} />}
-              {panelGrade && otherCams.length > 0 && <button className="btn sm quiet" onClick={() => copyLookToCams(panelGrade)}
-                title={t("The same colour on the project's other cameras of the same kind (log with log, standard with standard).")}>{t("Other cameras")}</button>}
-              {panelGrade && <button className="btn sm quiet" onClick={() => { setRawView(false); writeLook({ grade: undefined }); }} title={t("Remove the grade")}>{t("Reset")}</button>}
+              {/* Before / after in one click: the picture as recorded, then the grade again. */}
+              {/* The grade on / off in one click (the switch alone: what it does shows on the picture), then Reset
+                  (the grade removed), like the other parts' Reset. */}
+              {grade && <span className="grow" />}
+              {grade && <Switch checked={!grade.off} onChange={(v) => { setRawView(false); setV({ grade: { ...grade, off: !v } }); }}
+                title={grade.off ? t("Colour turned off: the video is shown and exported as recorded. Click to turn it back on.") : t("Colour on: click to turn it all off (preview and export), your settings kept.")} />}
+              {grade && <button className="btn sm quiet" onClick={() => { setRawView(false); setV({ grade: undefined }); }} title={t("Remove the grade")}>{t("Reset")}</button>}
             </div>
-              <ColorGrade grade={panelGrade} onChange={(g) => writeLook({ grade: g })} onRaw={setRawView} lookErr={camTake ? null : lookErr} disabled={!!panelGrade?.off}
-                sdr={camTake ? camTake.source?.colour === "sdr" || (camTake.source?.kind === "phone" && camTake.source.colour === "unknown") : sdrSource}
+              <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} onRaw={setRawView} lookErr={lookErr} disabled={!!grade?.off}
+                sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 presets={gradePresets ?? []} onDeletePreset={(id) => onGradePresets?.((gradePresets ?? []).filter((x) => x.id !== id))}
                 onSavePreset={(name) => {
-                  if (!panelGrade) return;
+                  if (!grade) return;
                   // The LUT with its Drive copy, so the preset finds it on any device.
-                  const lib = panelGrade.lut && lutChoices.find((l) => l.id === panelGrade.lut!.id);
-                  const kept = panelGrade.lut && lib?.driveId ? { ...panelGrade, lut: { ...panelGrade.lut, driveId: lib.driveId } } : panelGrade;
+                  const lib = grade.lut && lutChoices.find((l) => l.id === grade.lut!.id);
+                  const kept = grade.lut && lib?.driveId ? { ...grade, lut: { ...grade.lut, driveId: lib.driveId } } : grade;
                   // The same name: that preset is replaced, in its place (the form said so).
                   const list = gradePresets ?? [], same = presetNamed(list, name);
                   onGradePresets?.(same ? list.map((x) => (x.id === same.id ? { ...x, grade: kept } : x)) : [...list, { id: uid(), name, grade: kept }]);

@@ -417,56 +417,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
-/* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */
-.takes { display: flex; flex-direction: column; gap: 6px; }
-.takes, .take, .tree-branch > * { min-width: 0; }
-.take { border: 1px solid var(--line-2); border-left: 2px solid var(--cam, var(--line-2)); border-radius: var(--r); }
-.take.open { border: 0; }
-.take.open .media.m-film, .clip-card.multicam .media.m-film { border-left: 2px solid var(--cam); }
-.take-row { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 2px 0 0; font-size: 13px; min-width: 0; }
-.take-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; padding: 0 0 0 10px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.take-more { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 8px; min-width: 0; }
-.take-more > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cam-btn { min-width: 30px; justify-content: center; color: var(--cam); border-color: color-mix(in srgb, var(--cam) 35%, var(--line-2)); font-weight: 700; }
-.cam-btn.on { background: color-mix(in srgb, var(--cam) 18%, transparent); border-color: var(--cam); }
-.take-row .take-n { color: var(--cam); font-weight: 700; }
-.take-row .take-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.take-row > :not(.take-main) { flex: none; }
-.take-row > .warn-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.take.other { opacity: .6; }
-.take.other:hover, .take.other.open { opacity: 1; }
-.take-import { align-self: flex-start; }
-.clip-strip.folded { display: none; }
-.look-of { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam); border-radius: var(--r); font-size: 13px; min-width: 0; }
-.look-of b { color: var(--cam); }
-.look-of .take-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.take-label { display: inline-flex; align-items: center; gap: 4px; padding: 0; background: none; border: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
-.take-label b { color: var(--cam); }
-.take-label svg { transform: rotate(180deg); }
-.takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
-.takes-more > summary::before { content: "▸ "; }
-.takes-more[open] > summary::before { content: "▾ "; }
-.takes-group { display: flex; flex-direction: column; gap: 6px; }
-.media-meta .warn-text { color: var(--warn); }
-/* Multicam: the cameras (one colour each, from the app's own) and the shots of the segment. */
-.cams { display: flex; flex-direction: column; gap: 6px; }
-.cams-row { flex-wrap: wrap; gap: 6px; }
-.cams-row .label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
-.cam-0 { --cam: var(--accent); } .cam-1 { --cam: var(--video); } .cam-2 { --cam: var(--music); } .cam-3 { --cam: var(--lyrics); }
-.cam-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: 12px; }
-.cam-chip b, .cam-shot b { color: var(--cam); font-weight: 700; }
-.cams-row .cam-pick { width: auto; flex: 0 1 230px; min-width: 0; border-color: color-mix(in srgb, var(--cam) 35%, var(--line-2)); }
-.lyric-track .cue.cam-shot { border-left-color: var(--cam); background: color-mix(in srgb, var(--cam) 12%, transparent); }
-.lyric-track .cue.cam-shot { display: flex; align-items: center; gap: 4px; }
-.shot-x { display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); align-items: center; justify-content: center; padding: 2px; border: 0; background: none; color: var(--muted); cursor: pointer; z-index: 3; }
-.shot-x:hover { color: var(--text); }
-.cam-shot:hover .shot-x { display: flex; }
-/* No hover on a phone: the cross of the shot under the playhead (a tap on a shot puts it there). */
-@media (hover: none) { .cam-shot.on .shot-x { display: flex; } }
-.cam-cut { position: absolute; top: 0; bottom: 0; width: 10px; margin-left: -5px; cursor: ew-resize; z-index: 2; touch-action: none; }
-.cam-cut::after { content: ""; position: absolute; left: 4px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: var(--text); opacity: 0.55; }
-.cam-cut:hover::after { opacity: 1; }
 .lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.hook-track { height: 26px; }
 .hook-track .cue { border-left-color: var(--blue); }
 .hook-track .cue.on { border-left-color: var(--blue); }
 /* A track whose text is not shown on the video (lyrics or hook switched off): dimmed in the timeline. */
@@ -1211,8 +1163,6 @@ button.media.warn .media-name { color: var(--warn); }
 .media.m-lyrics { --kind: var(--lyrics); }
 .media.m-music { --kind: var(--music); }
 .media.m-film { --kind: var(--video); }
-/* Multicam: each take's card in its camera's colour (1 white, 2 violet, 3 green, 4 gold), as on the shots track. */
-.take[class*="cam-"] .media.m-film, .clip-card.multicam .media.m-film { --kind: var(--cam); }
 .media.m-lyrics, .media.m-music, .media.m-film { border-color: color-mix(in srgb, var(--kind) 42%, var(--line)); }
 .media.m-lyrics.empty, .media.m-music.empty, .media.m-film.empty { border-color: color-mix(in srgb, var(--kind) 34%, transparent); }
 .media.m-lyrics .media-ic, .media.m-music .media-ic, .media.m-film .media-ic { color: var(--kind); background: color-mix(in srgb, var(--kind) 10%, var(--bg)); }
@@ -2255,8 +2205,6 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .wave-wrap { order: 3; }
 .video-side .timeline > .hook-track { order: 4; }
 .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
-/* The multicam edit (shots, then 1 to 4) right under the lyrics, before the versions (same order: after them in the page). */
-.video-side .timeline > .cams { order: 5; }
 /* Takes, everywhere: "Takes" then "Take 1 0:04–0:34"… on one line (the full detail stays in each one's tooltip). */
 
 /* The segment's tools, everywhere: lock, length, then the passage. */
