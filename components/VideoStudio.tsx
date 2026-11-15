@@ -3544,6 +3544,16 @@ export default function VideoStudio({
     void delMedia(`video:${c.id}`).catch(() => {});
     onSaveNow();
   };
+  /** A camera chosen (button or key 1-4): playing, or paused in the middle of a shot, it cuts there to it; paused at a
+   *  shot's start (a click on a shot puts the playhead there), the whole shot takes it. */
+  const chooseCam = (cam: number) => {
+    const cfg = settingsRef.current;
+    if (cam > 0 && !cfg.angles?.[cam - 1]) return;
+    const at = playing ? headRef.current : head;
+    const shot = shotsOf(cfg.cuts, cfg.crop.start, cfg.crop.start + cfg.crop.duration).find((x) => at >= x.from - 1e-3 && at < x.to);
+    const atStart = !playing && (!shot || at - shot.from < 0.06);
+    setV({ cuts: atStart ? setShotCam(cfg.cuts, at, cam, cfg.crop.start) : cutTo(cfg.cuts, at, cam) });
+  };
   const usedAsCamera = (id: string) => clips.some((c) => c.angles?.includes(id));
   // The same file imported twice (same name and size: before the check, or on two devices): one take kept (a
   // project's own first), every project using the other one uses it, its cuts kept on the right camera.
@@ -3717,11 +3727,9 @@ export default function VideoStudio({
     const used = angles.filter(Boolean).length;
     if (!used) return null;
     const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
+    const sortedCuts = [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at);
     /** Camera `cam` (0-3) from a button: as its key (playing: cut to it now; paused: the shot under the playhead). */
-    const pickCam = (cam: number) => {
-      const cfg = settingsRef.current;
-      setV({ cuts: playing ? cutTo(cfg.cuts, headRef.current, cam) : setShotCam(cfg.cuts, head, cam, cfg.crop.start) });
-    };
+    const pickCam = chooseCam;
     const camNow = camAt(settings.cuts, head);
     const pct = (x: number) => `${(clamp(x - settings.crop.start, 0, segLen) / segLen) * 100}%`;
     return (
@@ -3730,26 +3738,31 @@ export default function VideoStudio({
           <span className="label">{t("Edit")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
           {[0, ...angles.map((_, k) => k + 1)].filter((k) => k === 0 || angles[k - 1]).map((k) => (
             <button key={k} className={"btn sm cam-btn cam-" + k + (camNow === k ? " on" : "")} onClick={() => pickCam(k)}
-              title={(playing ? t("Cut to camera {n} now", { n: k + 1 }) : t("This shot on camera {n}", { n: k + 1 })) + ` (${k + 1})`}>{k + 1}</button>
+              title={t("Camera {n}: cut to it here (at a shot's start: the whole shot)", { n: k + 1 }) + ` (${k + 1})`}>{k + 1}</button>
           ))}
-          {!playing && <button className="btn sm quiet" onClick={() => setV({ cuts: splitAt(settings.cuts, head) })} title={t("Cut the shot here") + " (C)"}><Icon name="scissors" size={13} />{t("Cut")}</button>}
-          {!playing && (settings.cuts ?? []).some((c) => c.at <= head + 1e-6) && (
-            <button className="btn sm quiet" onClick={() => setV({ cuts: removeCutAt(settings.cuts, head) })}
-              title={t("The cut that starts this shot removed: the shot joins the one before (its camera with it).") + " (⌫)"}><Icon name="x" size={13} />{t("Remove the cut")}</button>
-          )}
-          <span className="muted xs">{playing ? t("Playing: a camera button cuts to it.") : t("Paused: a camera button changes this shot.")}</span>
+          <span className="muted xs">{t("A camera cuts to it at the playhead; at a shot's start, the whole shot.")}</span>
         </div>
         {used > 0 && (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
             {shots.map((x, i) => {
               const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
+              // Its cut (the one that starts it, in the segment): its cross takes it away, the shot joins the one on its left.
+              const own = x.cut >= 0 && Math.abs(sortedCuts[x.cut].at - x.from) < 1e-3 ? sortedCuts[x.cut] : null;
+              const go = () => { stop(); setPinCam(null); setHead(round2(x.from + 0.01)); };
               return (
-                <button key={i} className={"cue cam-shot cam-" + x.cam} data-at={x.from}
+                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from}
                   style={{ left: pct(x.from), width: `${((x.to - x.from) / segLen) * 100}%` }}
                   title={`${x.cam + 1} · ${a ? clipName(a) : "?"}`}
-                  onClick={(e) => { if (e.detail === 0) { stop(); setPinCam(null); setHead(round2(x.from + 0.01)); } }}>
+                  onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
                   <b>{x.cam + 1}</b> {a ? clipName(a) : ""}
-                </button>
+                  {own && (
+                    <button className="shot-x" aria-label={t("Remove this cut")} title={t("Remove this cut: the shot joins the one on its left")}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((c) => c !== own && Math.abs(c.at - own.at) > 1e-6) }); }}>
+                      <Icon name="x" size={11} />
+                    </button>
+                  )}
+                </div>
               );
             })}
             {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && (
@@ -4046,7 +4059,7 @@ export default function VideoStudio({
       if (cam >= 0) {
         if (cam > 0 && !cfg.angles?.[cam - 1]) return;
         e.preventDefault();
-        setV({ cuts: playing ? cutTo(cfg.cuts, headRef.current, cam) : setShotCam(cfg.cuts, head, cam, cfg.crop.start) });
+        chooseCam(cam);
       } else if (k.toLowerCase() === "c" && !playing) { e.preventDefault(); setV({ cuts: splitAt(cfg.cuts, head) }); }
       else if ((k === "Backspace" || k === "Delete") && !playing && cfg.cuts?.length) { e.preventDefault(); setV({ cuts: removeCutAt(cfg.cuts, head) }); }
     }

@@ -457,6 +457,12 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .cam-chip b, .cam-shot b { color: var(--cam); font-weight: 700; }
 .cams-row .cam-pick { width: auto; flex: 0 1 230px; min-width: 0; border-color: color-mix(in srgb, var(--cam) 35%, var(--line-2)); }
 .lyric-track .cue.cam-shot { border-left-color: var(--cam); background: color-mix(in srgb, var(--cam) 12%, transparent); }
+.lyric-track .cue.cam-shot { display: flex; align-items: center; gap: 4px; }
+.shot-x { display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); align-items: center; justify-content: center; padding: 2px; border: 0; background: none; color: var(--muted); cursor: pointer; z-index: 3; }
+.shot-x:hover { color: var(--text); }
+.cam-shot:hover .shot-x { display: flex; }
+/* No hover on a phone: the cross of the shot under the playhead (a tap on a shot puts it there). */
+@media (hover: none) { .cam-shot.on .shot-x { display: flex; } }
 .cam-cut { position: absolute; top: 0; bottom: 0; width: 10px; margin-left: -5px; cursor: ew-resize; z-index: 2; touch-action: none; }
 .cam-cut::after { content: ""; position: absolute; left: 4px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: var(--text); opacity: 0.55; }
 .cam-cut:hover::after { opacity: 1; }
