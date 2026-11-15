@@ -3734,14 +3734,6 @@ export default function VideoStudio({
     const pct = (x: number) => `${(clamp(x - settings.crop.start, 0, segLen) / segLen) * 100}%`;
     return (
       <div className="cams">
-        <div className="row cams-row">
-          <span className="label">{t("Edit")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
-          {[0, ...angles.map((_, k) => k + 1)].filter((k) => k === 0 || angles[k - 1]).map((k) => (
-            <button key={k} className={"btn sm cam-btn cam-" + k + (camNow === k ? " on" : "")} onClick={() => pickCam(k)}
-              title={t("Camera {n}: cut to it here (at a shot's start: the whole shot)", { n: k + 1 }) + ` (${k + 1})`}>{k + 1}</button>
-          ))}
-          <span className="muted xs">{t("A camera cuts to it at the playhead; at a shot's start, the whole shot.")}</span>
-        </div>
         {used > 0 && (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
             {shots.map((x, i) => {
@@ -3786,6 +3778,14 @@ export default function VideoStudio({
             <span className="lyric-head" style={{ left: pct(head) }} />
           </div>
         )}
+        <div className="row cams-row">
+          <span className="label">{t("Edit")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
+          {[0, ...angles.map((_, k) => k + 1)].filter((k) => k === 0 || angles[k - 1]).map((k) => (
+            <button key={k} className={"btn sm cam-btn cam-" + k + (camNow === k ? " on" : "")} onClick={() => pickCam(k)}
+              title={t("Camera {n}: cut to it here (at a shot's start: the whole shot)", { n: k + 1 }) + ` (${k + 1})`}>{k + 1}</button>
+          ))}
+          <span className="muted xs">{t("A camera cuts to it at the playhead; at a shot's start, the whole shot.")}</span>
+        </div>
       </div>
     );
   };
@@ -4548,6 +4548,48 @@ export default function VideoStudio({
                   </span>
                   {!phone && zoomEl("tr-zoom")}
                 </div>
+                {/* Phone: the lock and the zoom above the tracks they act on (on a computer: in the segment's row). */}
+                {phone && (
+                  <div className="row seg-tools">
+                    {lockEl()}
+                    <span className="grow" />
+                    {zoomEl()}
+                  </div>
+                )}
+                <div className="wave-wrap">
+                  <canvas ref={waveRef} className="wave"
+                    onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
+                    onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
+                </div>
+                {hooks.length > 0 && (
+                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
+                    {hooks.map((h, i) => (
+                      <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
+                        style={{ left: `${(clamp(h.from, 0, segLen) / segLen) * 100}%`, width: `${((clamp(h.to ?? segLen, 0, segLen) - clamp(h.from, 0, segLen)) / segLen) * 100}%` }}
+                        title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
+                        onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
+                        {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
+                      </button>
+                    ))}
+                    <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
+                  </div>
+                )}
+                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
+                  {cues.map((c, i) => (
+                    <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
+                      style={{
+                        left: `${(clamp(c.start - settings.crop.start, 0, segLen) / segLen) * 100}%`,
+                        width: `${((clamp(c.end, settings.crop.start, end) - clamp(c.start, settings.crop.start, end)) / segLen) * 100}%`,
+                      }}
+                      data-at={Math.max(settings.crop.start, c.start)}
+                      onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
+                      {c.text.replace(/\n/g, " ")}
+                    </button>
+                  ))}
+                  {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
+                </div>
+                {camsEl()}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
@@ -4631,48 +4673,6 @@ export default function VideoStudio({
                     );
                   })()}
                 </div>
-                {/* Phone: the lock and the zoom above the tracks they act on (on a computer: in the segment's row). */}
-                {phone && (
-                  <div className="row seg-tools">
-                    {lockEl()}
-                    <span className="grow" />
-                    {zoomEl()}
-                  </div>
-                )}
-                <div className="wave-wrap">
-                  <canvas ref={waveRef} className="wave"
-                    onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
-                    onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
-                </div>
-                {hooks.length > 0 && (
-                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
-                    {hooks.map((h, i) => (
-                      <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
-                        style={{ left: `${(clamp(h.from, 0, segLen) / segLen) * 100}%`, width: `${((clamp(h.to ?? segLen, 0, segLen) - clamp(h.from, 0, segLen)) / segLen) * 100}%` }}
-                        title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
-                        onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
-                        {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
-                      </button>
-                    ))}
-                    <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
-                  </div>
-                )}
-                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
-                  {cues.map((c, i) => (
-                    <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
-                      style={{
-                        left: `${(clamp(c.start - settings.crop.start, 0, segLen) / segLen) * 100}%`,
-                        width: `${((clamp(c.end, settings.crop.start, end) - clamp(c.start, settings.crop.start, end)) / segLen) * 100}%`,
-                      }}
-                      data-at={Math.max(settings.crop.start, c.start)}
-                      onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
-                      {c.text.replace(/\n/g, " ")}
-                    </button>
-                  ))}
-                  {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
-                  <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
-                </div>
-                {camsEl()}
                 {genBusy && (
                   <div className="bar live" role="progressbar" aria-valuemin={0} aria-valuemax={100}
                     aria-valuenow={Math.round((genStep === "model" && genDone === 0 ? genPct : genDone) * 100)}>

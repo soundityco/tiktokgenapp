@@ -467,7 +467,6 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .cam-cut::after { content: ""; position: absolute; left: 4px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: var(--text); opacity: 0.55; }
 .cam-cut:hover::after { opacity: 1; }
 .lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
-.hook-track { height: 26px; }
 .hook-track .cue { border-left-color: var(--blue); }
 .hook-track .cue.on { border-left-color: var(--blue); }
 /* A track whose text is not shown on the video (lyrics or hook switched off): dimmed in the timeline. */
@@ -2256,6 +2255,8 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .wave-wrap { order: 3; }
 .video-side .timeline > .hook-track { order: 4; }
 .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
+/* The multicam edit (shots, then 1 to 4) right under the lyrics, before the versions (same order: after them in the page). */
+.video-side .timeline > .cams { order: 5; }
 /* Takes, everywhere: "Takes" then "Take 1 0:04–0:34"… on one line (the full detail stays in each one's tooltip). */
 
 /* The segment's tools, everywhere: lock, length, then the passage. */
