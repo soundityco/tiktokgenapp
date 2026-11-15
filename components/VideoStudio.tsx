@@ -2277,15 +2277,15 @@ export default function VideoStudio({
   const viewRef = useRef(view);
   viewRef.current = view;
   const viewOf = () => viewRef.current ?? { s: 0, d: audioBuf?.duration ?? 1 };
-  // Kept on this device, per release: the zoom (and where it looks) comes back after a refresh, for the same audio
-  // (same length); another audio starts on the whole track.
-  const viewKey = `tktgen-tl-view:${project.id}`;
+  // Kept on this device, per release: the zoom and where it looks, the last one set, the same on every video of the
+  // release and after a refresh (on another version of the audio too, kept within its length).
+  const viewKey = `tktgen-tl-view:${release.id}`;
   useEffect(() => {
     if (!audioBuf) { setView(null); return; }
     try {
-      const v = JSON.parse(localStorage.getItem(viewKey) ?? "null") as { s: number; d: number; dur: number } | null;
+      const v = JSON.parse(localStorage.getItem(viewKey) ?? "null") as { s: number; d: number } | null;
       const dur = audioBuf.duration;
-      if (v && Math.abs(v.dur - dur) < 0.05 && v.d > 0 && v.d < dur) { setView({ s: clamp(v.s, 0, dur - v.d), d: v.d }); return; }
+      if (v && v.d > 0 && v.d < dur) { setView({ s: clamp(v.s, 0, dur - v.d), d: v.d }); return; }
     } catch { /* storage blocked: the whole track */ }
     setView(null);
   }, [audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2313,12 +2313,6 @@ export default function VideoStudio({
     if (d >= dur - 1e-3) return;
     setView({ s: clamp(c.start + c.duration / 2 - d / 2, 0, dur - d), d });
   };
-  // A segment moved out of sight (another version, a take): the view follows it.
-  useEffect(() => {
-    const v = viewRef.current, c = settings.crop;
-    if (!v || !audioBuf) return;
-    if (c.start + c.duration < v.s || c.start > v.s + v.d) setView({ s: clamp(c.start + c.duration / 2 - v.d / 2, 0, audioBuf.duration - v.d), d: v.d });
-  }, [settings.crop.start, settings.crop.duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** "press": down inside the segment, not moved yet: a click places the playhead, a drag moves the segment.
    *  "pan": down outside it, zoomed: a drag slides the view (a click does nothing: the segment never jumps). */
