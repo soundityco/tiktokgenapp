@@ -419,11 +419,18 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
 /* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */
 .takes { display: flex; flex-direction: column; gap: 6px; }
-.take-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 4px 0 10px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam, var(--line-2)); border-radius: var(--r); font-size: 13px; }
+.takes, .take, .tree-branch > * { min-width: 0; }
+.take { border: 1px solid var(--line-2); border-left: 2px solid var(--cam, var(--line-2)); border-radius: var(--r); }
+.take-row { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 2px 0 0; font-size: 13px; min-width: 0; }
+.take-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; padding: 0 0 0 10px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.take-more { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 8px; min-width: 0; }
+.take-more > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cam-btn { min-width: 30px; justify-content: center; color: var(--cam); border-color: color-mix(in srgb, var(--cam) 35%, var(--line-2)); font-weight: 700; }
+.cam-btn.on { background: color-mix(in srgb, var(--cam) 18%, transparent); border-color: var(--cam); }
 .take-row .take-n { color: var(--cam); font-weight: 700; }
 .take-row .take-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.take-row.other { opacity: .6; }
-.take-row.other:hover { opacity: 1; }
+.take.other { opacity: .6; }
+.take.other:hover, .take.other.open { opacity: 1; }
 .take-import { align-self: flex-start; }
 .takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
 .takes-more > summary::before { content: "▸ "; }

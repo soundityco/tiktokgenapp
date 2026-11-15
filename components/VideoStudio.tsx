@@ -3433,9 +3433,19 @@ export default function VideoStudio({
       source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined,
       takes: undefined, linked: false, versions: undefined, angles: undefined, cuts: undefined,
     } as VideoSetup }));
+    // A file already in the release (same name and size): not a new take; it joins this project if it is not in it.
+    const known = (f: File) => clips.find((c) => c.videoName === f.name && c.videoSize === f.size);
+    const again = made.filter((m) => known(m.f));
+    if (again.length) {
+      const ids = again.map((m) => known(m.f)!.id).filter((id) => id !== clip.id && !(cur.angles ?? []).includes(id));
+      if (ids.length) setV({ angles: [...(cur.angles ?? []).filter(Boolean), ...ids].slice(0, MAX_CAMS - 1) });
+      onToast?.(again.length === 1 ? t("“{name}” is already in the release: not imported again.", { name: again[0].f.name })
+        : t("{n} files are already in the release: not imported again.", { n: again.length }));
+      made.splice(0, made.length, ...made.filter((m) => !known(m.f)));
+    }
     if (!made.length) return;
     for (const m of made) await putMedia(`video:${m.c.id}`, m.f).catch(() => {});
-    const have = (cur.angles ?? []).filter(Boolean);
+    const have = (settingsRef.current.angles ?? []).filter(Boolean);
     const join = made.slice(0, Math.max(0, MAX_CAMS - 1 - have.length)).map((m) => m.c.id);
     onProject((p) => ({ ...p, videos: [...clipsOf(p), ...made.map((m) => m.c)] }));
     if (join.length) setV({ angles: [...have, ...join] });
@@ -3465,6 +3475,8 @@ export default function VideoStudio({
   const usedAsCamera = (id: string) => clips.some((c) => c.angles?.includes(id));
   const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);
   const takeInput = useRef<HTMLInputElement>(null);
+  /** The take whose line is unfolded (its details), one at a time. */
+  const [takeOpen, setTakeOpen] = useState<string | null>(null);
   /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
   const takesEl = () => {
     const angles = (settings.angles ?? []).filter(Boolean);
@@ -3475,9 +3487,12 @@ export default function VideoStudio({
       const i = cam === null ? -1 : cam - 1;
       // One slim line each (all the cameras seen at once): number and colour as on the shots track, name, length, sync.
       return (
-        <div key={c.id} className={"take-row" + (cam === null ? " other" : " cam-" + cam) + (job && !job.err ? " shine-box" : "")}>
-          {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name="film" size={13} />}
-          <span className="take-name" title={c.videoName ?? ""}>{clipName(c)}</span>
+        <div key={c.id} className={"take" + (cam === null ? " other" : " cam-" + cam) + (takeOpen === c.id ? " open" : "")}>
+        <div className={"take-row" + (job && !job.err ? " shine-box" : "")}>
+          <button className="take-main" aria-expanded={takeOpen === c.id} onClick={() => setTakeOpen(takeOpen === c.id ? null : c.id)}>
+            {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name="film" size={13} />}
+            <span className="take-name" title={c.videoName ?? ""}>{clipName(c)}</span>
+          </button>
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
           {job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
             : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
@@ -3496,6 +3511,15 @@ export default function VideoStudio({
               </>}
             </>)}
           </Menu>
+        </div>
+        {takeOpen === c.id && (
+          <div className="take-more xs">
+            <span className="media-name" title={c.videoName ?? ""}>{c.videoName}</span>
+            <span className="muted">{[c.source?.device ?? (c.source?.kind === "camera" ? t("Camera") : c.source?.kind === "phone" ? t("Phone") : null), c.source?.codec,
+              c.source?.colour && c.source.colour !== "unknown" ? c.source.colour.toUpperCase() : null, c.source?.fps ? `${c.source.fps} fps` : null].filter(Boolean).join(" · ")}</span>
+            <span className="muted">{c.score === undefined ? t("Not synced") : t("Synced at {at} in the official audio", { at: fmtTime(c.offset) })}</span>
+          </div>
+        )}
         </div>
       );
     };
@@ -3526,9 +3550,24 @@ export default function VideoStudio({
     const used = angles.filter(Boolean).length;
     if (!used) return null;
     const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
+    /** Camera `cam` (0-3) from a button: as its key (playing: cut to it now; paused: the shot under the playhead). */
+    const pickCam = (cam: number) => {
+      const cfg = settingsRef.current;
+      setV({ cuts: playing ? cutTo(cfg.cuts, headRef.current, cam) : setShotCam(cfg.cuts, head, cam, cfg.crop.start) });
+    };
+    const camNow = camAt(settings.cuts, head);
     const pct = (x: number) => `${(clamp(x - settings.crop.start, 0, segLen) / segLen) * 100}%`;
     return (
       <div className="cams">
+        <div className="row cams-row">
+          <span className="label">{t("Edit")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
+          {[0, ...angles.map((_, k) => k + 1)].filter((k) => k === 0 || angles[k - 1]).map((k) => (
+            <button key={k} className={"btn sm cam-btn cam-" + k + (camNow === k ? " on" : "")} onClick={() => pickCam(k)}
+              title={(playing ? t("Cut to camera {n} now", { n: k + 1 }) : t("This shot on camera {n}", { n: k + 1 })) + ` (${k + 1})`}>{k + 1}</button>
+          ))}
+          {!playing && <button className="btn sm quiet" onClick={() => setV({ cuts: splitAt(settings.cuts, head) })} title={t("Cut the shot here") + " (C)"}><Icon name="scissors" size={13} />{t("Cut")}</button>}
+          <span className="muted xs">{playing ? t("Playing: a camera button cuts to it.") : t("Paused: a camera button changes this shot.")}</span>
+        </div>
         {used > 0 && (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
             {shots.map((x, i) => {

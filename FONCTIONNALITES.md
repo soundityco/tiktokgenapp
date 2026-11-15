@@ -80,8 +80,8 @@ dans ton Google Drive.
 - **Presets de style** des textes, à garder et réappliquer. — En ligne
 - **Vidéos rangées** dans le sélecteur : à étalonner (log / HDR), standard (SDR), autres, aussi dans le choix des caméras du multicam. — En ligne
 - **Plein écran**, zones TikTok, lecture qui revient au départ à la pause (réglable). — En ligne
-- **Prises et projets** : les fichiers caméra / téléphone s'importent dans la release (un ou plusieurs d'un coup, « Importer des prises »), chacun se synchronise seul sur l'audio officiel en arrière-plan, sans créer de projet ; un projet (un post) prend jusqu'à 4 prises ; « Autres prises de la release » repliée sous celles du projet. — En test
-- **Montage multicam** : avec plusieurs prises dans un projet, en lecture les touches 1 à 4 coupent vers une caméra ; à l'arrêt, elles changent le plan sous la tête de lecture, C le coupe, Suppr retire le cut ; les cuts se glissent sur la piste des plans ; chaque caméra garde sa synchro, son cadrage et son étalonnage ; l'export suit les cuts. — En test
+- **Prises et projets** : les fichiers caméra / téléphone s'importent dans la release (un ou plusieurs d'un coup, « Importer des prises »), chacun se synchronise seul sur l'audio officiel en arrière-plan, sans créer de projet ; un projet (un post) prend jusqu'à 4 prises ; « Autres prises de la release » repliée sous celles du projet. Un fichier déjà importé (même nom, même taille) n'est pas recréé. Un clic sur une prise montre ses détails. — En test
+- **Montage multicam** : avec plusieurs prises dans un projet, boutons 1 à 4 et « Couper » au-dessus de la piste des plans (téléphone compris) ; en lecture les touches 1 à 4 coupent vers une caméra ; à l'arrêt, elles changent le plan sous la tête de lecture, C le coupe, Suppr retire le cut ; les cuts se glissent sur la piste des plans ; chaque caméra garde sa synchro, son cadrage et son étalonnage ; l'export suit les cuts. — En test
 
 ## Audio de la release
 
