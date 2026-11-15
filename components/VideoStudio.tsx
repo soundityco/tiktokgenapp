@@ -24,7 +24,8 @@ import { fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
-import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
+import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
+import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
 import { presetNamed, presetOf, StylePresets, TextQuickMenu, withPreset } from "./TextControls";
@@ -518,6 +519,10 @@ export default function VideoStudio({
   const [genDone, setGenDone] = useState(0);
   const [genInfo, setGenInfo] = useState<string | null>(null);
   const [model, setModel] = useState<AsrModel>("base");
+  // With a graphics card, the very precise model by default (it hears singing over a mix; downloaded once).
+  useEffect(() => { if (hasGpu()) setModel((m) => (m === "base" ? "turbo" : m)); }, []);
+  /** When the voice starts in the official audio (its attacks): each lyrics line is put on the one it is sung on. */
+  const onsetsRef = useRef<number[]>([]);
   const [language, setLanguage] = useState(lang === "fr" ? "french" : "auto");
   /**
    * Written lyrics the heard words are placed on: "song" (the lyrics pasted in the video studio),
@@ -2785,7 +2790,7 @@ export default function VideoStudio({
     if (src === "song" || src === "all") {
       const aligned = alignSong(written, heard);
       return aligned
-        ? { words: aligned.words, info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
+        ? { words: snapLines(aligned.words, onsetsRef.current), info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
         : rough(heard);
     }
     const inSeg = heard.filter((x) => x.e > segFrom && x.s < segTo);
@@ -2795,7 +2800,7 @@ export default function VideoStudio({
       return r.words.length ? { ...r, words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...r.words].sort((x, y) => x.s - y.s) } : r;
     }
     return {
-      words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...aligned.words].sort((x, y) => x.s - y.s),
+      words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...snapLines(aligned.words, onsetsRef.current)].sort((x, y) => x.s - y.s),
       info: t("{n} words heard, the segment placed on your written lyrics", { n: heard.length }),
     };
   };
@@ -2907,6 +2912,14 @@ export default function VideoStudio({
    * the windows of the post's segment go first, and the words show up as each window is done.
    * Runs by itself when the official audio is imported.
    */
+  // The voice's attacks of this audio, read once (a second or two, in the background) for the lyrics placed on it.
+  useEffect(() => {
+    onsetsRef.current = [];
+    if (!audioBuf) return;
+    let off = false;
+    void voiceOnsets(audioBuf).then((o) => { if (!off) onsetsRef.current = o; }).catch((e) => console.warn("[lyrics] voice attacks not read", e));
+    return () => { off = true; };
+  }, [audioBuf]);
   const generateLyrics = async (buf: AudioBuffer | null = audioBuf, proj: Project = project, src = writtenSrc) => {
     if (!buf) return;
     genRef.current?.abort();
@@ -2949,7 +2962,7 @@ export default function VideoStudio({
       // Too few words recognised for the lyrics: listened to again, once, by the other model; the better listening of the
       // two is kept (the one the lyrics hold on, else the one that heard more words), never simply the last one.
       if (writtenOf(src, proj).trim() && (!heard.length || placeWords(heard, src, proj, segFrom, segTo).approx)) {
-        const other: AsrModel = model === "small" ? "base" : "small";
+        const other: AsrModel = model === "turbo" ? "small" : hasGpu() ? "turbo" : model === "small" ? "base" : "small";
         console.info(`[lyrics] few words recognised: listening again with the ${other} model`);
         setGenInfo(t("Few words recognised: listening again with another model…"));
         const again = await listen(other);
@@ -4812,6 +4825,7 @@ export default function VideoStudio({
                           <option value="tiny">{t("Fast")}</option>
                           <option value="base">{t("Balanced")}</option>
                           <option value="small">{t("Precise (slower)")}</option>
+                          <option value="turbo" disabled={!hasGpu()}>{hasGpu() ? t("Very precise (about 560 MB, downloaded once)") : t("Very precise (needs a graphics card)")}</option>
                         </Select>
                       </label>
                     </div>

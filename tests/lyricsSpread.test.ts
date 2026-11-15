@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropLoops, spreadOnHeard } from "@/lib/lyricsAlign";
+import { alignSong, dropLoops, spreadOnHeard } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -26,5 +26,19 @@ describe("dropLoops (the speech model repeating itself)", () => {
   it("sung repeats (twice) and normal lines stay", () => {
     expect(dropLoops(w("jamais jamais tu es là")).map((x) => x.w).join(" ")).toBe("jamais jamais tu es là");
     expect(dropLoops(w("oh baby oh baby dis moi")).map((x) => x.w).join(" ")).toBe("oh baby oh baby dis moi");
+  });
+});
+
+describe("a line after a silence shows when the voice attacks it", () => {
+  it("its first words, not heard, come just before its first heard word, not at the start of the gap", () => {
+    // Line 1 heard at 10 s; line 2 ("dis moi pourquoi tu mens"): "dis moi" not heard, "pourquoi" heard at 20 s.
+    const heard = [
+      { w: "je", s: 10, e: 10.3 }, { w: "suis", s: 10.3, e: 10.6 }, { w: "là", s: 10.6, e: 11 },
+      { w: "pourquoi", s: 20, e: 20.4 }, { w: "tu", s: 20.4, e: 20.6 }, { w: "mens", s: 20.6, e: 21 },
+    ];
+    const r = alignSong("je suis là\ndis moi pourquoi tu mens", heard)!;
+    const dis = r.words.find((x) => x.w === "dis")!;
+    expect(dis.s).toBeGreaterThan(19);
+    expect(dis.s).toBeLessThan(20);
   });
 });

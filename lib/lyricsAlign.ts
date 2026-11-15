@@ -68,6 +68,19 @@ const MIN_MISSED = 0.15;
  */
 function placeMissed(out: LyricWord[], words: { w: string; line: number }[], nextS: number) {
   const prev = out[out.length - 1];
+  // A new line starting among them, over a long gap (an instrumental, a breath): the words of the line before stay
+  // with it, those of the new line come just before the next heard word, sung at a normal pace (the line shows when the
+  // voice attacks it, not at the start of the silence).
+  const cut = words.findIndex((x) => x.line !== prev.line);
+  const SUNG = 0.3;
+  if (cut >= 0 && nextS - prev.e > SUNG * words.length + 0.6) {
+    const tail = words.slice(0, cut), head = words.slice(cut);
+    let at = prev.e;
+    for (const x of tail) { out.push({ w: x.w, s: at, e: at + SUNG * 0.9, line: x.line }); at += SUNG; }
+    let s0 = Math.max(at, nextS - SUNG * head.length);
+    for (const x of head) { out.push({ w: x.w, s: s0, e: s0 + SUNG * 0.9, line: x.line }); s0 += SUNG; }
+    return;
+  }
   const need = MIN_MISSED * words.length;
   let a = prev.e;
   if (nextS - a < need) {

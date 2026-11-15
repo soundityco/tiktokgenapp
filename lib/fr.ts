@@ -471,6 +471,8 @@ export const FR: Record<string, string> = {
   "Sign out": "Se déconnecter",
   "Size": "Taille",
   "Threshold": "Seuil",
+  "Very precise (needs a graphics card)": "Très précis (carte graphique nécessaire)",
+  "Very precise (about 560 MB, downloaded once)": "Très précis (environ 560 Mo, téléchargé une fois)",
   "Listen to the audio again": "Réécouter l'audio",
   "Listen to the whole song again and place the lyrics from scratch (your retouches are kept).": "Réécouter toute la chanson et recaler les paroles depuis le début (tes retouches sont gardées).",
   "Few words recognised: listening again with another model…": "Peu de mots reconnus : nouvelle écoute avec un autre modèle…",

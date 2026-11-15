@@ -10,14 +10,22 @@ let device = "";
 /** The model on the graphics card when the browser has one that works (several times faster), else the processor. */
 async function load(pipeline, model, onProgress) {
   const gpu = device !== "wasm" && self.navigator && "gpu" in self.navigator && (await self.navigator.gpu.requestAdapter().catch(() => null));
+  // The very precise model (large-v3-turbo): 4-bit weights, in half floats when the card computes them (about 560 MB once).
+  const large = /large/.test(model);
+  const f16 = !!gpu && gpu.features && gpu.features.has("shader-f16");
+  if (large && !gpu) throw new Error("The very precise model needs a graphics card (WebGPU).");
   if (gpu) {
     try {
-      const p = await pipeline("automatic-speech-recognition", model, {
-        device: "webgpu", dtype: { encoder_model: "fp32", decoder_model_merged: "q4" }, progress_callback: onProgress,
-      });
+      const dtype = large
+        ? { encoder_model: f16 ? "q4f16" : "q4", decoder_model_merged: f16 ? "q4f16" : "q4" }
+        : { encoder_model: "fp32", decoder_model_merged: "q4" };
+      const p = await pipeline("automatic-speech-recognition", model, { device: "webgpu", dtype, progress_callback: onProgress });
       device = "webgpu";
       return p;
-    } catch (err) { console.warn("[asr] graphics card not usable, the processor instead", err); }
+    } catch (err) {
+      if (large) throw err;
+      console.warn("[asr] graphics card not usable, the processor instead", err);
+    }
   }
   device = "wasm";
   return pipeline("automatic-speech-recognition", model, { device: "wasm", dtype: "q8", progress_callback: onProgress });

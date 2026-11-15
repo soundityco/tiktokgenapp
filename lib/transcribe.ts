@@ -1,11 +1,16 @@
 import type { LyricWord } from "./types";
 
-export type AsrModel = "tiny" | "base" | "small";
+export type AsrModel = "tiny" | "base" | "small" | "turbo";
 export const ASR_MODELS: Record<AsrModel, string> = {
   tiny: "onnx-community/whisper-tiny_timestamped",
   base: "onnx-community/whisper-base_timestamped",
   small: "onnx-community/whisper-small_timestamped",
+  // Whisper large-v3-turbo: much better on singing over a mix; graphics card only, about 560 MB downloaded once.
+  turbo: "onnx-community/whisper-large-v3-turbo_timestamped",
 };
+
+/** The browser has a graphics card the speech models can run on (WebGPU): the very precise model needs it. */
+export const hasGpu = () => typeof navigator !== "undefined" && "gpu" in navigator;
 
 export type AsrStep = "library" | "model" | "listen";
 
