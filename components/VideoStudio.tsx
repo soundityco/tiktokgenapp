@@ -4109,7 +4109,7 @@ export default function VideoStudio({
                 <button className="clip-open" onClick={() => openClipCard(c.id)}><Icon name="reel" size={14} />{t("Open in the studio")}</button>
               </div>
             ) : (
-            <div key={c.id} className={"clip-card" + (c.id === stripShown ? " shown" : "")} data-clip={c.id}>
+            <div key={c.id} className={"clip-card" + (c.id === stripShown ? " shown" : "") + ((settings.angles ?? []).some(Boolean) ? " cam-0 multicam" : "")} data-clip={c.id}>
             {(() => {
               const d = settings.drive ?? {};
               const gb = (n: number) => `${(n / 1e9).toFixed(1).replace(".", lang === "fr" ? "," : ".")} ${t("GB")}`;
