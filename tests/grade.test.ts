@@ -194,6 +194,9 @@ describe("a LUT's input guessed from its file", async () => {
     expect(guessLutInput("look.cube", "TITLE \"Film Cineon to Rec709\"")).toBe("cineon709");
     expect(guessLutInput("Kodak 2383.cube", "# Input: DaVinci Wide Gamut / Intermediate")).toBe("dwg");
     expect(guessLutInput("Teal orange Rec709.cube", "")).toBe("gamma709");
-    expect(guessLutInput("ALISTER.cube", "LUT_3D_SIZE 33")).toBeNull();
+    // Alister Chapman's looks (V-Look…) are made for the camera's S-Log3.
+    expect(guessLutInput("ALISTER.cube", "LUT_3D_SIZE 33")).toBe("camera");
+    expect(guessLutInput("Alister_V-Look_V3_-2p00.cube", "LUT_3D_SIZE 33")).toBe("camera");
+    expect(guessLutInput("MyLook.cube", "LUT_3D_SIZE 33")).toBeNull();
   });
 });

@@ -268,6 +268,8 @@ export function guessLutInput(fileName: string, text: string): LutInput | null {
   const head = text.split(/\r?\n/).filter((l) => /^\s*(#|TITLE)/i.test(l)).slice(0, 40).join(" ");
   const said = `${fileName} ${head}`.replace(/[_.]/g, " ");
   if (/s ?-?log ?3|s ?-?gamut|apple ?log|v ?-?log|log ?-?c|c ?-?log|f ?-?log|n ?-?log|d ?-?log/i.test(said)) return "camera";
+  // Alister Chapman's looks (V-Look…): made for Sony's S-Log3 straight from the camera.
+  if (/alister|v ?-?look/i.test(said)) return "camera";
   if (/cineon/i.test(said)) return "cineon709";
   if (/davinci|dwg|intermediate|wide ?gamut/i.test(said)) return "dwg";
   if (/rec ?709|bt ?709|gamma ?2 ?4|\bsdr\b/i.test(said)) return "gamma709";
