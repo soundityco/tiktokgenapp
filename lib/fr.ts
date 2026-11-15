@@ -471,6 +471,8 @@ export const FR: Record<string, string> = {
   "Sign out": "Se déconnecter",
   "Size": "Taille",
   "Threshold": "Seuil",
+  "Few words recognised: listening again with the precise model…": "Peu de mots reconnus : nouvelle écoute avec le modèle précis…",
+  "Your lyrics were placed roughly on the singing (few words recognised in this mix): check them, retouch a line with − / +, or try the Precise model.": "Tes paroles ont été posées à peu près sur le chant (peu de mots reconnus dans ce mix) : vérifie-les, retouche une ligne avec − / +, ou essaie le modèle Précis.",
   "Drag to move this cut (it sticks to the lyrics, \u2318 to move it freely), double-click to remove it": "Glisser pour déplacer ce cut (il s'aimante aux paroles, ⌘ pour le placer librement), double-clic pour le retirer",
   "Log": "Log",
   "These settings are this video's: another video can use the same LUT another way.": "Ces réglages sont ceux de cette vidéo : une autre vidéo peut utiliser la même LUT autrement.",

@@ -54,6 +54,8 @@ dans ton Google Drive.
 
 ## Paroles
 
+- **Moteur des paroles plus rapide et plus fiable** : l'écoute tourne sur la carte graphique quand elle est disponible (une chanson de 2 min en ~40 s), le son est préparé pour la voix, les répétitions inventées par le modèle sont retirées ; si le calage est trop faible, nouvelle écoute avec le modèle précis, puis paroles posées à peu près sur le chant à vérifier (plus d'échec sec). — En test
+
 - **Un seul texte de paroles par release**, découpé en sections (couplet, refrain…), partagé par le carrousel et la vidéo. — En ligne
 - **Slides en paroles** : une slide affiche une section, et suit les changements du texte. — En ligne
 - **Paroles calées mot à mot sur l'audio** par une IA qui tourne dans le navigateur (Whisper) ; retouche à la main, gardée quand on recale. — En ligne

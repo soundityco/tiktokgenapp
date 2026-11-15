@@ -4,6 +4,24 @@ const LIB = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6";
 
 let pipe = null;
 let loadedModel = "";
+/** "webgpu" (the graphics card) when it works here, else "wasm" (the processor). */
+let device = "";
+
+/** The model on the graphics card when the browser has one that works (several times faster), else the processor. */
+async function load(pipeline, model, onProgress) {
+  const gpu = device !== "wasm" && self.navigator && "gpu" in self.navigator && (await self.navigator.gpu.requestAdapter().catch(() => null));
+  if (gpu) {
+    try {
+      const p = await pipeline("automatic-speech-recognition", model, {
+        device: "webgpu", dtype: { encoder_model: "fp32", decoder_model_merged: "q4" }, progress_callback: onProgress,
+      });
+      device = "webgpu";
+      return p;
+    } catch (err) { console.warn("[asr] graphics card not usable, the processor instead", err); }
+  }
+  device = "wasm";
+  return pipeline("automatic-speech-recognition", model, { device: "wasm", dtype: "q8", progress_callback: onProgress });
+}
 
 const post = (msg) => self.postMessage(msg);
 
@@ -17,24 +35,31 @@ self.onmessage = async (e) => {
     if (!pipe || loadedModel !== model) {
       post({ type: "status", step: "model" });
       const files = new Map();
-      pipe = await pipeline("automatic-speech-recognition", model, {
-        device: "wasm",
-        dtype: "q8",
-        progress_callback: (p) => {
-          if (p.status === "progress" && p.file) {
-            files.set(p.file, { loaded: p.loaded || 0, total: p.total || 0 });
-            let loaded = 0, total = 0;
-            for (const f of files.values()) { loaded += f.loaded; total += f.total; }
-            if (total) post({ type: "progress", pct: loaded / total });
-          }
-        },
+      pipe = await load(pipeline, model, (p) => {
+        if (p.status === "progress" && p.file) {
+          files.set(p.file, { loaded: p.loaded || 0, total: p.total || 0 });
+          let loaded = 0, total = 0;
+          for (const f of files.values()) { loaded += f.loaded; total += f.total; }
+          if (total) post({ type: "progress", pct: loaded / total });
+        }
       });
       loadedModel = model;
     }
+    post({ type: "device", device });
     post({ type: "status", step: "listen" });
     const opts = { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5, task: "transcribe" };
     if (language && language !== "auto") opts.language = language;
-    const out = await pipe(audio, opts);
+    let out;
+    try { out = await pipe(audio, opts); }
+    catch (err) {
+      // The graphics card failed on this audio: the processor, once (the model loaded again for it).
+      if (device !== "webgpu") throw err;
+      console.warn("[asr] graphics card failed while listening, the processor instead", err);
+      device = "wasm";
+      pipe = await load(pipeline, model, () => {});
+      post({ type: "device", device });
+      out = await pipe(audio, opts);
+    }
     const words = (out.chunks || [])
       .map((c) => ({ w: String(c.text || "").trim(), s: c.timestamp?.[0], e: c.timestamp?.[1] }))
       .filter((c) => c.w && typeof c.s === "number");

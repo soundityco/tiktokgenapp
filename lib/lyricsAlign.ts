@@ -282,11 +282,32 @@ export function alignSong(text: string, heard: LyricWord[]): AlignResult | null 
 }
 
 /** Words as the model heard them, tidied (no empty ones, ordered, no overlaps). */
+/**
+ * The speech model's loops cut: on music it can repeat the same phrase over and over ("je suis comme un thème de…" ×40),
+ * words that are not sung and spoil the placing. A phrase of 1 to 10 words said more than twice in a row keeps its first
+ * two times.
+ */
+export function dropLoops(words: LyricWord[]): LyricWord[] {
+  const out: LyricWord[] = [];
+  const key = (x: LyricWord) => norm(x.w);
+  for (let i = 0; i < words.length;) {
+    let cut = 0;
+    for (let p = 1; p <= 10 && !cut; p++) {
+      let reps = 1;
+      while (i + (reps + 1) * p <= words.length && words.slice(i + reps * p, i + (reps + 1) * p).every((x, k) => key(x) === key(words[i + k]))) reps++;
+      if (reps > 2) cut = p * reps;
+      if (cut) { out.push(...words.slice(i, i + 2 * p)); i += cut; }
+    }
+    if (!cut) { out.push(words[i]); i++; }
+  }
+  return out;
+}
+
 export function cleanHeard(words: LyricWord[]): LyricWord[] {
-  const sorted = words
+  const sorted = dropLoops(words
     .map((x) => ({ ...x, w: x.w.trim() }))
     .filter((x) => norm(x.w) && Number.isFinite(x.s))
-    .sort((a, b) => a.s - b.s);
+    .sort((a, b) => a.s - b.s));
   return sorted.map((x, i) => {
     const nextStart = sorted[i + 1]?.s ?? Infinity;
     const e = Number.isFinite(x.e) && x.e > x.s ? x.e : x.s + 0.3;
@@ -626,4 +647,19 @@ export function splitCue(all: LyricWord[], cue: Cue, k: number): LyricWord[] {
   const first = new Set(cue.words.slice(0, k));
   const line = (cue.words[0].line ?? 0) + 0.5;
   return all.map((x) => (second.has(x) ? { ...x, line, split: true, manual: true } : first.has(x) ? { ...x, manual: true } : x));
+}
+
+/**
+ * Last resort, when the heard words do not match the written ones well enough (a sung, busy mix): the written words
+ * spread over the singing heard, in order (the k-th written word at the time of the matching share of the heard ones).
+ * Rough: the lines land on the sung passages, to retouch. Null without heard words or written words.
+ */
+export function spreadOnHeard(written: string, heard: LyricWord[]): LyricWord[] | null {
+  const ws = splitWords(written), hs = [...heard].sort((a, b) => a.s - b.s);
+  if (!ws.length || !hs.length) return null;
+  const at = (k: number) => hs[Math.min(hs.length - 1, Math.floor((k * hs.length) / ws.length))].s;
+  return ws.map((x, k) => {
+    const s = at(k), next = k + 1 < ws.length ? at(k + 1) : hs[hs.length - 1].e;
+    return { w: x.w, s, e: Math.max(s + 0.08, Math.min(next, s + 1.2)), line: x.line };
+  });
 }

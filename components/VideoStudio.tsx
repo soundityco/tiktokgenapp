@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -2771,20 +2771,29 @@ export default function VideoStudio({
    * model only says when each word is sung. The whole song is placed on the whole track; one section
    * only on the post's segment.
    */
-  const placeWords = (heard: LyricWord[], src: string, p: Project, segFrom: number, segTo: number): { words: LyricWord[]; info: string } => {
+  const placeWords = (heard: LyricWord[], src: string, p: Project, segFrom: number, segTo: number): { words: LyricWord[]; info: string; approx?: boolean } => {
     const written = writtenOf(src, p);
     if (!written.trim()) return { words: [], info: t("No lyrics: paste them to show them on the video.") };
-    // Never words "as heard": without a match there are no lyrics rather than wrong ones.
-    const miss = { words: [], info: t("Your lyrics could not be placed on this audio. Check it is the same song, or set the language.") };
+    // Never words "as heard": the written ones always. Too few of them recognised in the audio (a sung, busy mix): they
+    // are spread over the singing heard, in order, to retouch, rather than no lyrics at all.
+    const rough = (on: LyricWord[]) => {
+      const words = spreadOnHeard(written, on);
+      return words
+        ? { words, approx: true, info: t("Your lyrics were placed roughly on the singing (few words recognised in this mix): check them, retouch a line with − / +, or try the Precise model.") }
+        : { words: [], info: t("Your lyrics could not be placed on this audio. Check it is the same song, or set the language.") };
+    };
     if (src === "song" || src === "all") {
       const aligned = alignSong(written, heard);
       return aligned
         ? { words: aligned.words, info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
-        : miss;
+        : rough(heard);
     }
     const inSeg = heard.filter((x) => x.e > segFrom && x.s < segTo);
     const aligned = inSeg.length ? alignLyrics(written, inSeg) : null;
-    if (!aligned) return miss;
+    if (!aligned) {
+      const r = rough(inSeg);
+      return r.words.length ? { ...r, words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...r.words].sort((x, y) => x.s - y.s) } : r;
+    }
     return {
       words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...aligned.words].sort((x, y) => x.s - y.s),
       info: t("{n} words heard, the segment placed on your written lyrics", { n: heard.length }),
@@ -2915,21 +2924,35 @@ export default function VideoStudio({
     }
     const near = (w: [number, number]) => (w[1] > segFrom && w[0] < segTo ? 0 : Math.min(Math.abs(w[0] - segTo), Math.abs(w[1] - segFrom)) + 1);
     const order = wins.map((_, i) => i).sort((i, j) => near(wins[i]) - near(wins[j]) || i - j);
-    const heard: LyricWord[] = [];
     let outcome: { title: string; body: string } | null = null;
-    try {
+    /** The whole track heard by model `m`, the segment's part first. */
+    const listen = async (m: AsrModel) => {
+      const out: LyricWord[] = [];
+      setGenDone(0);
       for (let k = 0; k < order.length; k++) {
         const i = order[k];
         const [a, b] = wins[i];
         const samples = await prepareAudio(buf, a, b);
-        const words = cleanHeard(await transcribe(samples, { model, language, base: a, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }));
-        if (ac.signal.aborted) return;
+        const words = cleanHeard(await transcribe(samples, { model: m, language, base: a, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }));
+        if (ac.signal.aborted) throw new Error("aborted");
         // The overlap between two windows belongs to the one that hears it whole (its middle).
         const lo = i === 0 ? -Infinity : a + LYRICS_LAP / 2;
         const hi = i === wins.length - 1 ? Infinity : b - LYRICS_LAP / 2;
-        heard.push(...words.filter((w) => { const m = (w.s + w.e) / 2; return m >= lo && m < hi; }));
-        heard.sort((x, y) => x.s - y.s);
+        out.push(...words.filter((w) => { const mid = (w.s + w.e) / 2; return mid >= lo && mid < hi; }));
+        out.sort((x, y) => x.s - y.s);
         setGenDone((k + 1) / order.length);
+      }
+      return out;
+    };
+    try {
+      let heard = await listen(model);
+      // Too few words recognised for the lyrics: listened to again, once, by the precise model (the singing over a busy
+      // mix needs it), before placing them roughly.
+      if (model !== "small" && writtenOf(src, proj).trim() && (!heard.length || placeWords(heard, src, proj, segFrom, segTo).approx)) {
+        console.info("[lyrics] few words recognised: listening again with the precise model");
+        setGenInfo(t("Few words recognised: listening again with the precise model…"));
+        const again = await listen("small");
+        if (again.length) heard = again;
       }
       if (!heard.length) {
         const msg = t("No words were heard in this track. Try a more accurate model or set the language.");
@@ -3624,7 +3647,9 @@ export default function VideoStudio({
     return null;
   };
   /** The take whose line is unfolded (its details), one at a time. */
-  const [takeOpen, setTakeOpen] = useState<string | null>(null);
+  // Camera 1 unfolded by default (its full card); unfolding another take folds it, one card open at a time.
+  const [takeOpen, setTakeOpen] = useState<string | null>(clip.id);
+  useEffect(() => { setTakeOpen(clip.id); }, [clip.id]);
   // The block of takes slides to its new height when a take unfolds or folds (FLIP: its old height, then the new one).
   // Each copy of the column (computer, phone) has its own block; their heights kept up to date between two folds.
   const takesH = useRef(new WeakMap<HTMLElement, number>());
@@ -3719,8 +3744,8 @@ export default function VideoStudio({
         </div>
       );
     };
-    // Camera 1 (the project's own take): always its full card, just above (one take or several).
-    if (part === "first") return null;
+    // Camera 1 (the project's own take): its line when another one is unfolded (its full card above otherwise).
+    if (part === "first") { const one = card(clip, 0); return one && <div className="takes">{one}</div>; }
     return (
       <div className="takes">
         {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
@@ -4257,7 +4282,7 @@ export default function VideoStudio({
             </div>
             {settings.videoName && takesEl("first")}
             {/* Camera 1's card (its file, Drive copy, sync…): unfolded from its line, or always while it has no file. */}
-            <div className="clip-strip">
+            <div className={"clip-strip" + (settings.videoName && takeOpen !== clip.id ? " folded" : "")}>
             <div className="clip-card cam-0">
             {(() => {
               const d = settings.drive ?? {};
@@ -4266,7 +4291,7 @@ export default function VideoStudio({
               const missing = !videoBlob && !!settings.videoName;
               return (
                 <MediaTile icon="film" name={settings.videoName ?? null}
-                  label={settings.videoName ? <span className="take-label cam-0"><b>1</b> · {settings.videoName.replace(/\.[^.]+$/, "")}</span> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                  label={settings.videoName ? <button className="take-label cam-0" onClick={() => foldTo(null)} title={t("Fold")}><b>1</b> · {settings.videoName.replace(/\.[^.]+$/, "")} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                   meta={settings.videoName && (missing
                     ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                     : <>

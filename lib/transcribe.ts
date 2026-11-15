@@ -9,20 +9,30 @@ export const ASR_MODELS: Record<AsrModel, string> = {
 
 export type AsrStep = "library" | "model" | "listen";
 
-/** Mono 16 kHz copy of a part of the track: the format speech models expect. */
+/**
+ * Mono 16 kHz copy of a part of the track: the format speech models expect. Turned towards the voice: the middle of
+ * the mix (mono = left + right: the voice, almost always centred), the deep bass and the highest highs cut (the voice
+ * lives between them): the model hears the singing better over the beat.
+ */
 export async function prepareAudio(buf: AudioBuffer, from: number, to: number): Promise<Float32Array> {
   const start = Math.max(0, from);
   const dur = Math.max(0.5, Math.min(buf.duration, to) - start);
   const ctx = new OfflineAudioContext(1, Math.ceil(dur * 16000), 16000);
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  src.connect(ctx.destination);
+  const low = ctx.createBiquadFilter();
+  low.type = "highpass"; low.frequency.value = 110; low.Q.value = 0.7;
+  const high = ctx.createBiquadFilter();
+  high.type = "lowpass"; high.frequency.value = 7000; high.Q.value = 0.7;
+  src.connect(low); low.connect(high); high.connect(ctx.destination);
   src.start(0, start, dur);
   const out = await ctx.startRendering();
   return out.getChannelData(0);
 }
 
 let worker: Worker | null = null;
+/** Where the speech model last ran: "webgpu" (graphics card) or "wasm" (processor). */
+export let asrDevice = "";
 
 /** Stop the speech worker (drops the loaded model). */
 export function stopTranscribe() {
@@ -46,6 +56,7 @@ export function transcribe(
     const onMsg = (e: MessageEvent) => {
       const m = e.data;
       if (m.type === "status") opts.onStep?.(m.step);
+      else if (m.type === "device") { asrDevice = m.device; console.info(`[asr] listening on the ${m.device === "webgpu" ? "graphics card" : "processor"}`); }
       else if (m.type === "progress") opts.onProgress?.(m.pct);
       else if (m.type === "done") {
         cleanup();
