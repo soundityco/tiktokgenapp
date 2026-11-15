@@ -433,6 +433,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .take.other:hover, .take.other.open { opacity: 1; }
 .take-import { align-self: flex-start; }
 .clip-strip.folded { display: none; }
+.look-of { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam); border-radius: var(--r); font-size: 13px; min-width: 0; }
+.look-of b { color: var(--cam); }
+.look-of .take-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .take.open .take-fold svg { transform: rotate(180deg); }
 .takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
 .takes-more > summary::before { content: "▸ "; }
