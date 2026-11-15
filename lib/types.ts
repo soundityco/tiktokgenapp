@@ -247,8 +247,15 @@ export interface VideoExportPrefs {
 }
 
 export interface GradePreset { id: string; name: string; grade: VideoGrade }
-/** A LUT of the account: a look made in DaVinci, or a camera LUT; its copy in the user's Drive (Utils / LUTS). */
-export interface LutRef { id: string; name: string; kind?: "look" | "camera"; driveId?: string }
+/** What a LUT expects in (lib/grade lutInputOf): the video's camera log (Sony's, Apple's LUTs…), DaVinci Wide Gamut /
+ *  Intermediate (a look from DaVinci), Rec.709 / Cineon film log (film LUTs), Rec.709 / gamma 2.4 (LUTs for a
+ *  standard picture). */
+export type LutInput = "camera" | "dwg" | "cineon709" | "gamma709";
+/** A LUT of the account, as a CST before it in DaVinci: what it expects in, what it gives out ("display": the final
+ *  Rec.709 picture; "same": the space it was given, the app's Rec.709 conversion after), the highlights eased into
+ *  its range first (`tonemap`, as the CST's tone mapping). Its copy in the user's Drive (Utils / LUTS). `kind`: the
+ *  older way ("camera" = the camera log in, else DWG / Intermediate). */
+export interface LutRef { id: string; name: string; input?: LutInput; output?: "display" | "same"; tonemap?: boolean; kind?: "look" | "camera"; driveId?: string }
 
 export interface VideoTake {
   offset: number;
@@ -287,7 +294,7 @@ export interface VideoGrade {
   /** The LUT at the end, kept on this device (IndexedDB "lut:<id>"): a look made in DaVinci (input DWG / Intermediate,
    *  `kind` "look" or none), or a camera LUT (`kind` "camera": input the camera's own log, as Sony's or Alister
    *  Chapman's S-Log3 → Rec.709). None: the app's own conversion to Rec.709. */
-  lut?: { id: string; name: string; kind?: "look" | "camera"; /** Copy in the user's Drive: any browser or device gets it from there. */ driveId?: string };
+  lut?: LutRef;
   /** Colour wheels, as DaVinci's primaries (lib/grade wheelsOf): Global (offset), Shadows (lift), Midtones (gamma),
    *  Highlights (gain). None: all at zero. */
   wheels?: Partial<Record<WheelId, Wheel>>;

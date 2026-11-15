@@ -70,7 +70,7 @@ dans ton Google Drive.
 - **Hooks par-dessus la vidéo** : plusieurs, chacun avec son moment, tirés de leurs listes et tags. — En ligne
 - **Paroles incrustées** sur la vidéo. — En ligne
 - **Cadrage** 9:16 ou 16:9, zoom, **zoom progressif** (réglable, ou à l'intérieur de l'image seulement). — En ligne
-- **Étalonnage** : log vers une image normale, export 10 bits ; trois sorties au choix : le Rec.709 neutre de l'app, une **LUT caméra** (faite pour le log de la caméra, comme celles de Sony ou d'Alister Chapman) ou une **LUT de look** faite dans DaVinci. — En ligne
+- **Étalonnage** : log vers une image normale, export 10 bits ; sortie par le Rec.709 neutre de l'app ou par **n'importe quelle LUT**, réglée comme un CST dans DaVinci : ce qu'elle attend (log de la caméra, DaVinci Wide Gamut / Intermediate, Rec.709 / Cineon, Rec.709 / gamma 2.4, deviné à l'import), ce qu'elle sort, et la compression des hautes lumières. — En ligne
 - **Roues de couleur** à la Final Cut (Global, Ombres, Tons moyens, Hautes lumières, comme les primaires de DaVinci), avant la LUT, avec un point de couleur et une réglette de luminosité chacune. — En test
 - **Couper sans perdre** : un interrupteur coupe toute la couleur (aperçu et export), d'autres coupent les Corrections, les Roues ou la Finition, comme un node désactivé dans DaVinci ; les réglages sont gardés. — En ligne
 - **Presets de couleur** : enregistrer tout un étalonnage (profil caméra, LUT, réglages, roues) et le poser sur une autre vidéo d'un clic, puis le retoucher. — En ligne

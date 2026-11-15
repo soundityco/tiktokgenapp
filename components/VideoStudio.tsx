@@ -10,7 +10,7 @@ import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTimi
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
-import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs } from "@/lib/types";
+import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
@@ -403,6 +403,8 @@ export default function VideoStudio({
   releaseRef.current = release;
   const exportPrefsRef = useRef(exportPrefs);
   exportPrefsRef.current = exportPrefs;
+  const lutLibraryRef = useRef(lutLibrary);
+  lutLibraryRef.current = lutLibrary;
   const versionClip = useMemo(() => { const l = clipsOf(release); return l.find((c) => c.id === release.videoId) ?? l[0]; }, [release]);
   const audioId = audioIdOf(release, versionClip);
   const project = useMemo(() => projectFor(release, audioId), [release, audioId]);
@@ -588,7 +590,13 @@ export default function VideoStudio({
   const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
 
   // ---- colour grade: one LUT (camera log → look), applied live on the GPU ----
-  const grade = settings.grade;
+  /** A grade with its LUT's own settings as the account has them now (its input, output, highlights): a video keeps a
+   *  copy of its LUT, the library says how it is used. */
+  const withLutSettings = (g: VideoGrade | undefined): VideoGrade | undefined => {
+    const l = g?.lut && lutLibraryRef.current?.find((x) => x.id === g.lut!.id);
+    return g && l ? { ...g, lut: { ...g.lut!, input: l.input, output: l.output, tonemap: l.tonemap, kind: l.kind } } : g;
+  };
+  const grade = useMemo(() => withLutSettings(settings.grade), [settings.grade, lutLibrary]); // eslint-disable-line react-hooks/exhaustive-deps
   const [look, setLook] = useState<CubeLut | null>(null);
   const [lookErr, setLookErr] = useState<string | null>(null);
   /** Show the camera picture as recorded (log), to compare. Preview only. */
@@ -954,8 +962,6 @@ export default function VideoStudio({
   };
   const driveName = (what: string) => safeName(`${project.name || "Rollout"} - ${clip.name} - ${what}.mp4`);
   // ---- the account's LUTs: listed on every device, each file on the Drive (Utils / LUTS) as soon as it is imported ----
-  const lutLibraryRef = useRef(lutLibrary);
-  lutLibraryRef.current = lutLibrary;
   /** The LUTs to choose from: the account's, and the ones of this device it does not list yet. */
   const lutChoices = useMemo(() => {
     const lib = lutLibrary ?? [];
@@ -2911,7 +2917,7 @@ export default function VideoStudio({
         // Log / HDR graded: on the GPU from the decoded 10-bit frames (seconds), else by ffmpeg below (minutes).
         if (bake && videoBlob && ow && oh && cfg.grade && !ac.signal.aborted) {
           const crop = cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame, cfg.matte), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze);
-          const lut = buildGradeLut(cfg.grade, cfg.grade.lut ? look : null, 65);
+          const lut = buildGradeLut(withLutSettings(cfg.grade)!, cfg.grade.lut ? look : null, 65);
           const t0 = performance.now();
           const gpu = await gpuGradedSource(videoBlob, Math.max(0, from - cfg.offset), until - cfg.offset, crop, ow, oh, lut, 65,
             (p) => setExp({ p: p * 0.05, step: "read" }), ac.signal).catch((e) => { console.info("[grade10] not used:", e); return null; });
@@ -2931,10 +2937,10 @@ export default function VideoStudio({
             try {
               // Only what the post shows, at the camera's resolution (unknown size: the whole picture, not scaled).
               const crop = ow && oh ? cropFor(picOf(cfg.frame ?? DEFAULT_VIDEO.frame, cfg.matte), ow, oh, W, H, cfg.push ?? 1, cfg.desqueeze) : undefined;
-              const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}|${JSON.stringify(crop ?? null)}|${bake ? gradeKey(cfg.grade) : ""}`;
+              const key = `${clip.id}|${videoBlob.size}|${vs.toFixed(2)}|${ve.toFixed(2)}|${JSON.stringify(crop ?? null)}|${bake ? gradeKey(withLutSettings(cfg.grade)) : ""}`;
               let proxy = proxyRef.current?.key === key ? proxyRef.current.blob : null;
               if (!proxy) {
-                const lut = bake && cfg.grade ? new TextEncoder().encode(toCube(buildGradeLut(cfg.grade, cfg.grade.lut ? look : null, 65), 65)) : undefined;
+                const lut = bake && cfg.grade ? new TextEncoder().encode(toCube(buildGradeLut(withLutSettings(cfg.grade)!, cfg.grade.lut ? look : null, 65), 65)) : undefined;
                 proxy = await convertSegment(videoBlob, vs, ve, (p, step) => setExp({ p, step }), ac.signal, crop, lut);
                 proxyRef.current = { key, blob: proxy }; // exporting the same segment again skips the conversion
               }
@@ -4601,6 +4607,7 @@ export default function VideoStudio({
                   onToast?.(same ? t("Preset replaced") : t("Preset saved"));
                 }}
                 library={lutChoices} onRemoveLut={onRemoveLut}
+                onLutSettings={(l) => onLutLibrary?.((cur) => cur.map((x) => (x.id === l.id ? { ...x, input: l.input, output: l.output, tonemap: l.tonemap, kind: undefined } : x)))}
                 onImported={(l) => { lutSent.current.delete(l.id); onLutLibrary?.((cur) => (cur.some((x) => x.id === l.id) ? cur.map((x) => (x.id === l.id ? l : x)) : [...cur, l])); }} />
                       </div>
           {/* How the video file is made: the settings recommended for TikTok and Instagram (at the take's own rate), shown;

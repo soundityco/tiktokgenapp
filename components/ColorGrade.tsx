@@ -1,11 +1,11 @@
 "use client";
 import { useState } from "react";
 import { uid } from "@/lib/defaults";
-import { NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
+import { guessLutInput, lutInputOf, NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
 import ColorWheels from "./ColorWheels";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
-import type { GradePreset, LutRef, VideoGrade } from "@/lib/types";
+import type { GradePreset, LutInput, LutRef, VideoGrade } from "@/lib/types";
 import { Range, Section, Select, Hint, Switch } from "./ui";
 import Icon from "./Icon";
 import { presetNamed } from "./TextControls";
@@ -14,7 +14,7 @@ const LUTS_KEY = "tktgen-luts";
 
 /** The same LUT: the same entry, or the same name and kind (imported twice, on two devices…). */
 export const sameLut = (a: LutRef, b: LutRef) =>
-  a.id === b.id || (a.name.trim().toLowerCase() === b.name.trim().toLowerCase() && (a.kind ?? "look") === (b.kind ?? "look"));
+  a.id === b.id || (a.name.trim().toLowerCase() === b.name.trim().toLowerCase() && lutInputOf(a) === lutInputOf(b));
 /** This browser forgets a LUT (deleted from the account). */
 export function forgetLut(id: string) {
   try { localStorage.setItem(LUTS_KEY, JSON.stringify(knownLuts().filter((l) => l.id !== id))); } catch { /* private mode */ }
@@ -37,7 +37,7 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut, disabled }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut, onLutSettings, disabled }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   grade: VideoGrade | undefined;
@@ -55,6 +55,8 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   onImported: (lut: LutRef) => void;
   /** A LUT to delete from the account (asked first). */
   onRemoveLut?: (lut: LutRef) => void;
+  /** The LUT's own settings changed (input, output, highlights): the account's LUT follows, every video with it. */
+  onLutSettings?: (lut: LutRef) => void;
   /** The whole colour turned off: every part greyed, nothing to change (the parts still open, to look). */
   disabled?: boolean;
 }) {
@@ -65,26 +67,41 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   const set = (patch: Partial<VideoGrade>) => onChange({ ...g, ...patch });
   const num = (v: number, d = 2) => v.toFixed(d).replace(".", lang === "fr" ? "," : ".");
 
-  const importLut = async (f: File, kind: "look" | "camera") => {
-    setErr(null);
+  // A LUT imported: its input guessed from its name and header (told when it could not be), the same file again
+  // (same name) taking the place of the one there, never a second entry.
+  const [guessNote, setGuessNote] = useState<string | null>(null);
+  const importLut = async (f: File) => {
+    setErr(null); setGuessNote(null);
     try {
-      parseCube(await f.text()); // refuse a file that is not a 3D .cube before keeping it
-      // The LUT of this grade, missing in this browser: same name, same id, so every clip using it finds it.
-      const name0 = f.name.replace(/\.cube$/i, "");
-      // The same LUT again (same name, same kind): it takes the place of the one there, never a second entry.
-      const same = luts.find((l) => l.name.trim().toLowerCase() === name0.trim().toLowerCase() && (l.kind ?? "look") === kind);
-      const id = same?.id ?? (lookErr && g.lut && g.lut.name === name0 ? g.lut.id : uid());
-      await putMedia(`lut:${id}`, f);
+      const text = await f.text();
+      parseCube(text); // refuse a file that is not a 3D .cube before keeping it
       const name = f.name.replace(/\.cube$/i, "");
-      rememberLut(id, name, kind);
-      const ref: LutRef = { id, name, ...(kind === "camera" ? { kind } : null) };
+      const guessed = guessLutInput(f.name, text);
+      const same = luts.find((l) => l.name.trim().toLowerCase() === name.trim().toLowerCase());
+      // The LUT of this grade, missing in this browser: same name, same id, so every clip using it finds it.
+      const id = same?.id ?? (lookErr && g.lut && g.lut.name === name ? g.lut.id : uid());
+      await putMedia(`lut:${id}`, f);
+      const input: LutInput = guessed ?? (same ? lutInputOf(same) : "dwg");
+      // (Into Cineon or Rec.709, the highlights eased in by default, as a CST's tone mapping in DaVinci.)
+      const ref: LutRef = { id, name, input, output: same?.output ?? "display", tonemap: same?.tonemap ?? (input === "cineon709" || input === "gamma709"), ...(same?.driveId ? { driveId: same.driveId } : null) };
+      rememberLut(id, name, input === "camera" ? "camera" : "look");
       onImported(ref);
       set({ lut: ref });
       onLutStored(id);
+      if (!guessed && !same) setGuessNote(t("The file does not say what it expects: check the LUT's input below."));
     } catch (e) {
       setErr(t("This file is not a 3D LUT (.cube): {why}", { why: e instanceof Error ? e.message : String(e) }));
     }
   };
+  /** A setting of the LUT chosen (its input, output, highlights): it is the LUT's, every video using it follows. */
+  const setLut = (patch: Partial<LutRef>) => { if (!g.lut) return; const lut = { ...g.lut, ...patch }; set({ lut }); onLutSettings?.(lut); };
+  const INPUTS: { id: LutInput; label: string }[] = [
+    { id: "camera", label: t("The camera's log (S-Log3, Apple Log…)") },
+    { id: "dwg", label: t("DaVinci Wide Gamut / Intermediate") },
+    { id: "cineon709", label: t("Rec.709 / Cineon film log") },
+    { id: "gamma709", label: t("Rec.709 / Gamma 2.4") },
+  ];
+  const inputShort = (l: LutRef) => ({ camera: t("camera log in"), dwg: t("DWG in"), cineon709: t("Cineon in"), gamma709: t("Rec.709 in") })[lutInputOf(l)];
 
   // A preset put on: the whole grade (camera profile, output LUT, settings, wheels). Its LUT found in the account's
   // library (its Drive copy); on a standard video, its profile and LUT turned on.
@@ -153,26 +170,49 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         </label>
         {colour && (
           <>
-            {/* The output: the app's own Rec.709, a camera LUT (the camera's log in: Sony's, Alister Chapman's…), or a
-                look made in DaVinci (DaVinci Wide Gamut / Intermediate in). The grade above goes before it. */}
+            {/* The output: the app's own Rec.709, or a LUT, given what it expects in (as a CST before it in DaVinci). The
+                grade above goes before it. */}
             <label className="field">
-              <span className="row" style={{ gap: 6 }}>{t("Colour output")}<Hint text={t("Rec.709: the app's own neutral conversion. Camera LUT: a LUT made for the camera's log (Sony's, Alister Chapman's…), the picture is turned back into that log before it. Look LUT: one made in DaVinci (input DaVinci Wide Gamut / Intermediate). Your settings and wheels always go before it.")} /></span>
+              <span className="row" style={{ gap: 6 }}>{t("Colour output")}<Hint text={t("Rec.709: the app's own neutral conversion. A LUT: the picture is turned into what it expects (its input, below) after your settings and wheels, as a CST before it in DaVinci.")} /></span>
               <Select className="input" value={g.lut?.id ?? ""} removeLabel={t("Delete this LUT")}
                 onRemove={onRemoveLut ? (id) => { const l = luts.find((x) => x.id === id); if (l) onRemoveLut(l); } : undefined}
-                onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); set({ lut: l ? { id: l.id, name: l.name, ...(l.kind === "camera" ? { kind: "camera" as const } : null), ...(l.driveId ? { driveId: l.driveId } : null) } : undefined }); }}>
+                onChange={(e) => { const l = luts.find((x) => x.id === e.target.value); setGuessNote(null); set({ lut: l ? { ...l } : undefined }); }}>
                 <option value="">{t("Rec.709 (the app's own conversion)")}</option>
-                {luts.map((l) => <option key={l.id} value={l.id}>{`${l.name} · ${l.kind === "camera" ? t("camera LUT") : t("look LUT")}`}</option>)}
+                {luts.map((l) => <option key={l.id} value={l.id}>{`${l.name} · ${inputShort(l)}`}</option>)}
                 {g.lut && !luts.some((l) => l.id === g.lut!.id) && <option value={g.lut.id}>{g.lut.name}</option>}
               </Select>
             </label>
+            {/* The LUT chosen: what it expects in, what it gives out, its highlights eased in (its own, for every video). */}
+            {g.lut && (
+              <div className="stack lut-cst">
+                <label className="field">{t("The LUT expects")}
+                  <Select className="input sm" value={lutInputOf(g.lut)} onChange={(e) => { const input = e.target.value as LutInput; setGuessNote(null); setLut({ input, kind: undefined, tonemap: input === "cineon709" || input === "gamma709" ? true : undefined }); }}>
+                    {INPUTS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                  </Select>
+                </label>
+                {lutInputOf(g.lut) !== "gamma709" && (
+                  <label className="field">{t("The LUT gives")}
+                    <Select className="input sm" value={g.lut.output ?? "display"} onChange={(e) => setLut({ output: e.target.value as LutRef["output"] })}>
+                      <option value="display">{t("The final picture (Rec.709)")}</option>
+                      <option value="same">{t("The same space (then the app's Rec.709)")}</option>
+                    </Select>
+                  </label>
+                )}
+                {(lutInputOf(g.lut) === "cineon709" || lutInputOf(g.lut) === "gamma709") && (
+                  <div className="row">
+                    <span className="grow">{t("Ease the highlights in")}</span>
+                    <Hint text={t("As the tone mapping of a CST in DaVinci: the brightest light bent smoothly into the LUT's range instead of clipped. Close to DaVinci's, not the very same curve.")} />
+                    <Switch checked={!!g.lut.tonemap} onChange={(v) => setLut({ tonemap: v })} title={t("Ease the highlights in")} />
+                  </div>
+                )}
+                {guessNote && <p className="notice warn xs">{guessNote}</p>}
+                <p className="muted xs">{t("These are the LUT's own settings: every video using it follows.")}</p>
+              </div>
+            )}
             <div className="row">
               <label className="btn sm">
-                {t("Import a camera LUT")}
-                <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f, "camera"); e.target.value = ""; }} />
-              </label>
-              <label className="btn sm">
-                {t("Import a look LUT")}
-                <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f, "look"); e.target.value = ""; }} />
+                {t("Import a LUT (.cube)")}
+                <input type="file" accept=".cube" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importLut(f); e.target.value = ""; }} />
               </label>
             </div>
             {(err || lookErr) && <p className="notice warn xs">{err ?? lookErr}</p>}

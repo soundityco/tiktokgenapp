@@ -137,3 +137,63 @@ describe("parts turned off", async () => {
     expect(G.gradeKey({ ...g, bypass: { wheels: true } })).not.toBe(G.gradeKey(g));
   });
 });
+
+describe("a LUT's input and output (as a CST before it)", async () => {
+  const G = await import("../lib/grade");
+  const N = 17;
+  const identity = (S: number) => {
+    const d = new Float32Array(S * S * S * 3);
+    for (let b = 0, k = 0; b < S; b++) for (let g = 0; g < S; g++) for (let r = 0; r < S; r++, k += 3) d.set([r / (S - 1), g / (S - 1), b / (S - 1)], k);
+    return { size: S, data: d, min: [0, 0, 0] as [number, number, number], max: [1, 1, 1] as [number, number, number] };
+  };
+  const id = identity(65);
+  const base = { ...G.NEUTRAL_GRADE, exposure: -0.3, sat: 1.1 };
+  const plain = G.buildGradeLut(base, null, N);
+  // Over the colours the picture can show (none of its channels clipped by the app's own conversion): far out of gamut,
+  // a value under zero is clamped by any LUT's domain, an identity one too.
+  const worst = (a: Float32Array) => {
+    let w = 0;
+    for (let i = 0; i < a.length; i += 3) {
+      if ([0, 1, 2].some((c) => plain[i + c] < 0.02 || plain[i + c] > 0.98)) continue;
+      for (let c = 0; c < 3; c++) w = Math.max(w, Math.abs(a[i + c] - plain[i + c]));
+    }
+    return w;
+  };
+  const lut = (input: "camera" | "dwg" | "cineon709" | "gamma709", extra = {}) => ({ id: "x", name: "x", input, output: "same" as const, ...extra });
+
+  it("Cineon: middle grey near code 470, black at 95, and back", () => {
+    expect(G.linToCineon(0.18) * 1023).toBeCloseTo(470, -1);
+    expect(G.linToCineon(0) * 1023).toBeCloseTo(95, 3);
+    expect(G.cineonToLin(G.linToCineon(0.42))).toBeCloseTo(0.42, 6);
+  });
+  it("an identity LUT given back to the app's Rec.709: the same picture as no LUT, whatever its input", () => {
+    expect(worst(G.buildGradeLut({ ...base, lut: lut("dwg") }, id, N))).toBeLessThan(0.01);
+    expect(worst(G.buildGradeLut({ ...base, lut: lut("cineon709") }, id, N))).toBeLessThan(0.01);
+    expect(worst(G.buildGradeLut({ ...base, lut: lut("camera") }, id, N))).toBeLessThan(0.01);
+    // A gamma 2.4 LUT gives the final picture: with the highlights eased it is the app's own conversion.
+    expect(worst(G.buildGradeLut({ ...base, lut: { ...lut("gamma709"), output: "display", tonemap: true } }, id, N))).toBeLessThan(0.01);
+  });
+  it("the highlights eased (Cineon): bright light comes down, the mids stay", () => {
+    const hot = { ...G.NEUTRAL_GRADE, exposure: 2.5 };
+    const off = G.buildGradeLut({ ...hot, lut: lut("cineon709") }, id, N), on = G.buildGradeLut({ ...hot, lut: lut("cineon709", { tonemap: true }) }, id, N);
+    const at = (l: Float32Array, i: number) => l[((i * N + i) * N + i) * 3];
+    expect(at(on, 3)).toBeCloseTo(at(off, 3), 3);
+    expect(at(on, N - 2)).toBeLessThanOrEqual(at(off, N - 2));
+  });
+  it("older LUTs: a camera kind is the camera log in, the others DWG / Intermediate", () => {
+    expect(G.lutInputOf({ kind: "camera" })).toBe("camera");
+    expect(G.lutInputOf({})).toBe("dwg");
+    expect(G.lutInputOf({ input: "cineon709", kind: "camera" })).toBe("cineon709");
+  });
+});
+
+describe("a LUT's input guessed from its file", async () => {
+  const { guessLutInput } = await import("../lib/grade");
+  it("from its name or its header", () => {
+    expect(guessLutInput("SLog3SGamut3.CineToLC-709.cube", "")).toBe("camera");
+    expect(guessLutInput("look.cube", "TITLE \"Film Cineon to Rec709\"")).toBe("cineon709");
+    expect(guessLutInput("Kodak 2383.cube", "# Input: DaVinci Wide Gamut / Intermediate")).toBe("dwg");
+    expect(guessLutInput("Teal orange Rec709.cube", "")).toBe("gamma709");
+    expect(guessLutInput("ALISTER.cube", "LUT_3D_SIZE 33")).toBeNull();
+  });
+});

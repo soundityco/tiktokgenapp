@@ -10,7 +10,7 @@
  * Vignette and grain depend on the position in the picture: they are drawn on the frame (see drawLook).
  */
 
-import type { PhotoAdjust, VideoGrade, Wheel, WheelId } from "./types";
+import type { LutInput, LutRef, PhotoAdjust, VideoGrade, Wheel, WheelId } from "./types";
 
 export type CameraProfile = VideoGrade["profile"];
 
@@ -164,6 +164,15 @@ function linToPq(l: number): number {
   return Math.pow((c1 + c2 * y) / (1 + c3 * y), m2);
 }
 
+/** Scene linear → Cineon film log (as DaVinci's "Cineon Film Log": 685 = linear 1, 95 = black), 0-1 over 1023. */
+const CINEON_BLACK = Math.pow(10, ((95 - 685) * 0.002) / 0.6);
+export function linToCineon(l: number): number {
+  return (685 + 300 * Math.log10(Math.max(0, l) * (1 - CINEON_BLACK) + CINEON_BLACK)) / 1023;
+}
+export function cineonToLin(v: number): number {
+  return (Math.pow(10, ((v * 1023 - 685) * 0.002) / 0.6) - CINEON_BLACK) / (1 - CINEON_BLACK);
+}
+
 /** Scene linear → DaVinci Intermediate. */
 export function linToDI(l: number): number {
   return l <= 0.00262409 ? l * 10.44426855 : (Math.log2(l + 0.0075) + 7) * 0.07329248;
@@ -243,6 +252,32 @@ export function gradesColour(g0: VideoGrade | undefined): g0 is VideoGrade {
 export const convertsFootage = (g: VideoGrade | undefined) => !!g && g.profile !== "none" && g.profile !== "rec709";
 
 /**
+ * What a LUT file says it expects in, from its name and its header (TITLE, comments): a camera log (S-Log3, Apple Log,
+ * V-Log, LogC…), Cineon, DaVinci Wide Gamut / Intermediate, else Rec.709; null when it says nothing.
+ */
+export function guessLutInput(fileName: string, text: string): LutInput | null {
+  const head = text.split(/\r?\n/).filter((l) => /^\s*(#|TITLE)/i.test(l)).slice(0, 40).join(" ");
+  const said = `${fileName} ${head}`.replace(/[_.]/g, " ");
+  if (/s ?-?log ?3|s ?-?gamut|apple ?log|v ?-?log|log ?-?c|c ?-?log|f ?-?log|n ?-?log|d ?-?log/i.test(said)) return "camera";
+  if (/cineon/i.test(said)) return "cineon709";
+  if (/davinci|dwg|intermediate|wide ?gamut/i.test(said)) return "dwg";
+  if (/rec ?709|bt ?709|gamma ?2 ?4|\bsdr\b/i.test(said)) return "gamma709";
+  return null;
+}
+
+/** What a LUT expects in (the older refs: "camera" kind = the camera log, else DWG / Intermediate). */
+export const lutInputOf = (l: Pick<LutRef, "input" | "kind">): LutInput => l.input ?? (l.kind === "camera" ? "camera" : "dwg");
+/** Highlights eased into a smaller range (as the CST's tone mapping): linear light kept up to 1 (diffuse white), above
+ *  it bent smoothly towards `max`, the colours kept (on the brightest channel). */
+function easeHighlights(rgb: number[], max: number) {
+  const m = Math.max(rgb[0], rgb[1], rgb[2]);
+  if (m <= 1) return rgb;
+  const to = 1 + (max - 1) * (1 - Math.exp(-(m - 1) / (max - 1)));
+  const k = to / m;
+  return [rgb[0] * k, rgb[1] * k, rgb[2] * k];
+}
+
+/**
  * The whole colour grade as one size³ LUT (RGB, red fastest), input = the camera's code values.
  * `look`: the user's LUT, a look (DWG / Intermediate in) or a camera LUT (the camera's log in, `g.lut.kind` "camera").
  * None: a plain conversion to Rec.709 with a soft highlight roll-off.
@@ -266,12 +301,20 @@ export function buildGradeLut(g0: VideoGrade, look: CubeLut | null, size: number
   wr *= ev; wg *= ev; wb *= ev;
   const pivot = g.pivot ?? DI_GREY;
   const wa = wheelAmounts(g);
-  const camera = g.lut?.kind === "camera";
   const Mi = inv(M);
   const decode = new Float64Array(size);
   for (let i = 0; i < size; i++) decode[i] = inp.decode(i / (size - 1));
   const s = [0, 0, 0];
   const rolloff = (x: number) => (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14);
+  /** Linear Rec.709 → the app's own Rec.709 picture: standard footage as it came, log footage with a film-like
+   *  highlight roll-off, gamma 2.4. */
+  const display = (lin: number[], o: number[]) => {
+    for (let c = 0; c < 3; c++) {
+      const v = Math.max(0, lin[c]);
+      o[c] = Math.pow(Math.min(1, g.profile === "rec709" ? v : rolloff(v)), 1 / 2.4);
+    }
+  };
+  const mul3 = (m: M3, v: number[]) => [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
   for (let b = 0, k = 0; b < size; b++) for (let gi = 0; gi < size; gi++) for (let r = 0; r < size; r++, k += 3) {
     const lr = decode[r], lg = decode[gi], lb = decode[b];
     // CST IN: camera gamut → DWG (linear), then exposure and white balance.
@@ -287,20 +330,35 @@ export function buildGradeLut(g0: VideoGrade, look: CubeLut | null, size: number
       const y = DWG_Y[0] * dr + DWG_Y[1] * dg + DWG_Y[2] * db;
       dr = y + (dr - y) * g.sat; dg = y + (dg - y) * g.sat; db = y + (db - y) * g.sat;
     }
-    if (look && camera) {
-      // A camera LUT: the graded picture back into the camera's own log (linear, its gamut, its curve), then the LUT.
-      const x = diToLin(dr), y = diToLin(dg), z = diToLin(db);
-      sampleCube(look, inp.lutIn(Mi[0] * x + Mi[1] * y + Mi[2] * z), inp.lutIn(Mi[3] * x + Mi[4] * y + Mi[5] * z), inp.lutIn(Mi[6] * x + Mi[7] * y + Mi[8] * z), s);
-    } else if (look) {
-      sampleCube(look, dr, dg, db, s);
+    if (look) {
+      const mode = lutInputOf(g.lut ?? {}), back = g.lut?.output === "same";
+      if (mode === "camera") {
+        // The graded picture back into the camera's own log (linear, its gamut, its curve), then the LUT.
+        const x = diToLin(dr), y = diToLin(dg), z = diToLin(db);
+        sampleCube(look, inp.lutIn(Mi[0] * x + Mi[1] * y + Mi[2] * z), inp.lutIn(Mi[3] * x + Mi[4] * y + Mi[5] * z), inp.lutIn(Mi[6] * x + Mi[7] * y + Mi[8] * z), s);
+        if (back) {
+          // It gives the camera log back: to linear Rec.709, then the app's conversion.
+          const enc = [s[0], s[1], s[2]].map((v) => (g.profile === "slog3" || g.profile === "slog3-cine" ? inp.decode((v * 1023 - 64) / 876) : inp.decode(v)));
+          display(mul3(DWG_TO_709, mul3(M, enc)), s);
+        }
+      } else if (mode === "dwg") {
+        sampleCube(look, dr, dg, db, s);
+        if (back) display(mul3(DWG_TO_709, [diToLin(s[0]), diToLin(s[1]), diToLin(s[2])]), s);
+      } else {
+        // Rec.709 primaries, in Cineon film log or gamma 2.4 (a CST out before the LUT, its highlights eased if asked).
+        let lin = mul3(DWG_TO_709, [diToLin(dr), diToLin(dg), diToLin(db)]);
+        if (mode === "cineon709") {
+          if (g.lut?.tonemap) lin = easeHighlights(lin, 10);
+          sampleCube(look, linToCineon(lin[0]), linToCineon(lin[1]), linToCineon(lin[2]), s);
+          if (back) display([cineonToLin(s[0]), cineonToLin(s[1]), cineonToLin(s[2])], s);
+        } else {
+          const v = lin.map((x) => Math.pow(Math.min(1, Math.max(0, g.lut?.tonemap ? rolloff(Math.max(0, x)) : x)), 1 / 2.4));
+          sampleCube(look, v[0], v[1], v[2], s);
+        }
+      }
     } else {
       const x = diToLin(dr), y = diToLin(dg), z = diToLin(db);
-      const lin = [DWG_TO_709[0] * x + DWG_TO_709[1] * y + DWG_TO_709[2] * z, DWG_TO_709[3] * x + DWG_TO_709[4] * y + DWG_TO_709[5] * z, DWG_TO_709[6] * x + DWG_TO_709[7] * y + DWG_TO_709[8] * z];
-      // Standard footage goes back as it came; log footage gets a film-like highlight roll-off.
-      for (let c = 0; c < 3; c++) {
-        const v = Math.max(0, lin[c]);
-        s[c] = Math.pow(Math.min(1, g.profile === "rec709" ? v : rolloff(v)), 1 / 2.4);
-      }
+      display([DWG_TO_709[0] * x + DWG_TO_709[1] * y + DWG_TO_709[2] * z, DWG_TO_709[3] * x + DWG_TO_709[4] * y + DWG_TO_709[5] * z, DWG_TO_709[6] * x + DWG_TO_709[7] * y + DWG_TO_709[8] * z], s);
     }
     out[k] = Math.min(1, Math.max(0, s[0]));
     out[k + 1] = Math.min(1, Math.max(0, s[1]));
@@ -336,7 +394,7 @@ export function photoGrade(a: PhotoAdjust | undefined): VideoGrade | null {
 export function gradeKey(g0: VideoGrade | undefined): string {
   if (!gradesColour(g0)) return "";
   const g = effectiveGrade(g0);
-  return [g.profile, g.lut?.id ?? "", g.lut?.kind ?? "", g.exposure, g.contrast, g.pivot ?? "", g.temp, g.tint, g.sat, JSON.stringify(g.wheels ?? {})].join(",");
+  return [g.profile, g.lut?.id ?? "", g.lut ? lutInputOf(g.lut) : "", g.lut?.output ?? "", g.lut?.tonemap ? 1 : 0, g.exposure, g.contrast, g.pivot ?? "", g.temp, g.tint, g.sat, JSON.stringify(g.wheels ?? {})].join(",");
 }
 
 /** Grain plates: a few different frames of film-like grain, per grain size (made once). */
