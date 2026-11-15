@@ -339,6 +339,45 @@ async function topBoxes(blob: Blob) {
   return boxes;
 }
 
+/** The boxes inside `buf` from `from` to `to`: type, start, header length, size (null if one is broken). */
+function childBoxes(buf: Uint8Array, from: number, to: number) {
+  const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const out: { type: string; start: number; head: number; size: number }[] = [];
+  for (let at = from; at + 8 <= to;) {
+    let size = v.getUint32(at), head = 8;
+    const type = String.fromCharCode(buf[at + 4], buf[at + 5], buf[at + 6], buf[at + 7]);
+    if (size === 1) { if (at + 16 > to) return null; size = Number(v.getBigUint64(at + 8)); head = 16; }
+    else if (size === 0) size = to - at;
+    if (size < head || at + size > to) return null;
+    out.push({ type, start: at, head, size });
+    at += size;
+  }
+  return out;
+}
+
+/** A moov box with only its video tracks (the sound and timecode tracks out); as it was when it cannot be read. */
+export function videoOnlyMoov(moov: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+  const top = childBoxes(moov, 0, moov.length)?.[0];
+  if (!top || top.type !== "moov") return moov;
+  const kids = childBoxes(moov, top.head, top.size);
+  if (!kids) return moov;
+  const handler = (trak: { start: number; head: number; size: number }) => {
+    const mdia = childBoxes(moov, trak.start + trak.head, trak.start + trak.size)?.find((b) => b.type === "mdia");
+    const hdlr = mdia && childBoxes(moov, mdia.start + mdia.head, mdia.start + mdia.size)?.find((b) => b.type === "hdlr");
+    // hdlr: version and flags (4), pre_defined (4), then the handler type.
+    return hdlr && hdlr.size >= hdlr.head + 12 ? String.fromCharCode(...moov.subarray(hdlr.start + hdlr.head + 8, hdlr.start + hdlr.head + 12)) : "";
+  };
+  const keep = kids.filter((b) => b.type !== "trak" || handler(b) === "vide");
+  if (keep.length === kids.length || !keep.some((b) => b.type === "trak")) return moov;
+  const size = 8 + keep.reduce((n, b) => n + b.size, 0);
+  const out = new Uint8Array(size);
+  new DataView(out.buffer).setUint32(0, size);
+  out.set([0x6d, 0x6f, 0x6f, 0x76], 4); // "moov"
+  let at = 8;
+  for (const b of keep) { out.set(moov.subarray(b.start, b.start + b.size), at); at += b.size; }
+  return out;
+}
+
 /**
  * The index of an MP4 / MOV (its moov box, wherever it is), read alone: the video track, every sample with its place
  * in the file (no data), the edit list's shift. Null for a fragmented file or no video track.
@@ -352,7 +391,13 @@ export async function readIndex(blob: Blob) {
   let info: Parameters<NonNullable<typeof file.onReady>>[0] | null = null;
   file.onReady = (i) => { info = i; };
   // Read one after the other as if they were side by side (the samples' places are written in the index itself).
-  const head = await new Blob(boxes.filter((x) => x.type === "ftyp" || x.type === "moov").map((b) => blob.slice(b.start, b.start + b.size))).arrayBuffer();
+  // The index keeps only its video tracks: mp4box makes one object per sample, and the PCM sound of a camera file
+  // (XAVC) counts each sound sample, 48 000 a second: millions for a take, gigabytes (the page crashed out of memory).
+  const ftyp = boxes.find((b) => b.type === "ftyp");
+  const parts: BlobPart[] = [];
+  if (ftyp) parts.push(await blob.slice(ftyp.start, ftyp.start + ftyp.size).arrayBuffer());
+  parts.push(videoOnlyMoov(new Uint8Array(await blob.slice(moov.start, moov.start + moov.size).arrayBuffer())));
+  const head = await new Blob(parts).arrayBuffer();
   file.appendBuffer(MP4BoxBuffer.fromArrayBuffer(head, 0), true);
   file.flush();
   const ready = info as Parameters<NonNullable<typeof file.onReady>>[0] | null;
