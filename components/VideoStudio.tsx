@@ -3733,6 +3733,10 @@ export default function VideoStudio({
               title={(playing ? t("Cut to camera {n} now", { n: k + 1 }) : t("This shot on camera {n}", { n: k + 1 })) + ` (${k + 1})`}>{k + 1}</button>
           ))}
           {!playing && <button className="btn sm quiet" onClick={() => setV({ cuts: splitAt(settings.cuts, head) })} title={t("Cut the shot here") + " (C)"}><Icon name="scissors" size={13} />{t("Cut")}</button>}
+          {!playing && (settings.cuts ?? []).some((c) => c.at <= head + 1e-6) && (
+            <button className="btn sm quiet" onClick={() => setV({ cuts: removeCutAt(settings.cuts, head) })}
+              title={t("The cut that starts this shot removed: the shot joins the one before (its camera with it).") + " (⌫)"}><Icon name="x" size={13} />{t("Remove the cut")}</button>
+          )}
           <span className="muted xs">{playing ? t("Playing: a camera button cuts to it.") : t("Paused: a camera button changes this shot.")}</span>
         </div>
         {used > 0 && (
@@ -3749,7 +3753,8 @@ export default function VideoStudio({
               );
             })}
             {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && (
-              <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut")}
+              <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut, double-click to remove it")}
+                onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
                 onPointerDown={(e) => {
                   e.stopPropagation(); stop();
                   e.currentTarget.setPointerCapture(e.pointerId);
