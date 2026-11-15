@@ -470,6 +470,7 @@ export const FR: Record<string, string> = {
   "Shortcut: G": "Raccourci : G",
   "Sign out": "Se déconnecter",
   "Size": "Taille",
+  "Threshold": "Seuil",
   "Slide text": "Texte de la slide",
   "Slide {n}": "Slide {n}",
   "Start": "Lancer",

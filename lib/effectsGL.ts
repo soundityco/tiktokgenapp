@@ -9,10 +9,10 @@
  */
 
 export interface Effects {
-  /** Black Mist strength, 0-100; its glow size, 0-100. */
-  mist: number; mistSize: number;
-  /** Halation strength, 0-100; its size, 0-100. */
-  halation: number; halationSize: number;
+  /** Black Mist strength, 0-100; its glow size, 0-100; from which brightness the light spreads, 0-100. */
+  mist: number; mistSize: number; mistThreshold: number;
+  /** Halation strength, 0-100; its size, 0-100; from which brightness a light gets its fringe, 0-100. */
+  halation: number; halationSize: number; halationThreshold: number;
   /** Haze density, 0-100; how much it gathers at the top (0 = everywhere alike), 0-100; its tone, -100 cool to 100 warm. */
   haze: number; hazeHeight: number; hazeTone: number;
 }
@@ -30,15 +30,13 @@ const PRE = `#version 300 es
 precision highp float;
 uniform sampler2D src;
 uniform float lod;
-uniform float bright; // 0: the scene, 1: the strongest lights (halation), 2: the bright parts (mist)
+uniform float bright; // 0: the scene, else only the light above the threshold knee (from, to)
+uniform vec2 knee;
 in vec2 uv;
 out vec4 o;
 void main() {
   vec3 c = pow(textureLod(src, uv, lod).rgb, vec3(2.2));
-  if (bright > 0.5) {
-    float y = max(c.r, max(c.g, c.b));
-    c *= bright > 1.5 ? smoothstep(0.3, 0.95, y) : smoothstep(0.6, 0.95, y);
-  }
+  if (bright > 0.5) c *= smoothstep(knee.x, knee.y, dot(c, vec3(0.2126, 0.7152, 0.0722)));
   o = vec4(c, 1.0);
 }`;
 
@@ -69,6 +67,7 @@ uniform sampler2D mistW;  // the same, blurred wide (its faint tail)
 uniform sampler2D halT;  // the brightest parts, blurred (the halation)
 uniform sampler2D hazeT; // the scene, blurred wide (the air's light)
 uniform float mist, halation, haze, hazeHeight, hazeTone;
+uniform vec2 mistKnee, halKnee; // the thresholds: from, to (linear light)
 in vec2 uv;
 out vec4 o;
 void main() {
@@ -83,20 +82,21 @@ void main() {
     vec3 air = tone * (0.18 + 0.5 * dot(s, vec3(0.3333))) + s * 0.55; // the air, lit by the scene
     c = mix(c, air, haze * 0.8 * height * clamp(far, 0.0, 1.0));
   }
-  float own = max(c.r, max(c.g, c.b));
+  float own = dot(c, vec3(0.2126, 0.7152, 0.0722));
   if (mist > 0.0) {
     // The filter moves light, it adds none: the bright parts give some of theirs away (softer highlights), it falls
     // around them, mostly close to their edges (a halo), a little further (a faint tail). Dark and mid tones far from
     // a light stay as they are: no veil over the picture.
-    vec3 lit = c * smoothstep(0.3, 0.95, own);
-    vec3 m = 0.75 * texture(mistT, uv).rgb + 0.25 * texture(mistW, uv).rgb;
-    c += mist * (m - lit);
+    vec3 lit = c * smoothstep(mistKnee.x, mistKnee.y, own);
+    // The close halo comes from the light above the threshold; the wide tail from all the scene's light, so the dark
+    // parts take a little of the light around them too (one mood over the picture, no break between dark and bright).
+    c += mist * (0.7 * (texture(mistT, uv).rgb - lit) + 0.3 * (texture(mistW, uv).rgb - c));
   }
   if (halation > 0.0) {
     // Film's halation: a red-orange fringe around the strongest lights, on the darker side of their edge (inside a
     // light, already white, it would only tint it).
     vec3 h = texture(halT, uv).rgb;
-    float here = own * smoothstep(0.6, 0.95, own); // this point's own strong light (as the blurred one was made)
+    float here = own * smoothstep(halKnee.x, halKnee.y, own); // this point's own strong light (as the blurred one)
     c += halation * max(dot(h, vec3(0.3333)) - here, 0.0) * vec3(1.0, 0.3, 0.1) * 2.5;
   }
   o = vec4(pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
@@ -187,14 +187,14 @@ class EffectsGL {
   }
 
   /** The source made smaller (by `d`) and blurred (`sigma` source pixels), the bright parts only or the whole scene. */
-  private blurred(name: string, W: number, H: number, sigma: number, bright: 0 | 1 | 2): WebGLTexture {
+  private blurred(name: string, W: number, H: number, sigma: number, knee: [number, number] | null): WebGLTexture {
     const gl = this.gl;
     // The blur's own sigma is about 4 of its pixels, twice over: the picture made small enough for the size asked.
     const d = Math.min(32, Math.max(2, sigma / 5.5));
     const w = Math.max(4, Math.round(W / d)), h = Math.max(4, Math.round(H / d));
     const a = this.target(name + "a", w, h), b = this.target(name + "b", w, h);
     this.bind(0, this.src);
-    this.draw(this.pre, a, w, h, (u) => { gl.uniform1i(u("src"), 0); gl.uniform1f(u("lod"), Math.max(0, Math.log2(d) - 0.5)); gl.uniform1f(u("bright"), bright); });
+    this.draw(this.pre, a, w, h, (u) => { gl.uniform1i(u("src"), 0); gl.uniform1f(u("lod"), Math.max(0, Math.log2(d) - 0.5)); gl.uniform1f(u("bright"), knee ? 1 : 0); gl.uniform2f(u("knee"), ...(knee ?? [0, 1])); });
     for (let i = 0; i < 2; i++) {
       this.bind(0, a.tex);
       this.draw(this.blur, b, w, h, (u) => { gl.uniform1i(u("src"), 0); gl.uniform2f(u("dir"), 1 / w, 0); });
@@ -212,19 +212,25 @@ class EffectsGL {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
     gl.generateMipmap(gl.TEXTURE_2D);
     const side = Math.min(W, H);
-    const mistT = e.mist > 0 ? this.blurred("mist", W, H, side * (0.006 + 0.03 * (e.mistSize / 100)), 2) : this.black;
-    const mistW = e.mist > 0 ? this.blurred("mistw", W, H, side * (0.03 + 0.08 * (e.mistSize / 100)), 2) : this.black;
-    const halT = e.halation > 0 ? this.blurred("hal", W, H, side * (0.004 + 0.025 * (e.halationSize / 100)), 1) : this.black;
-    const hazeT = e.haze > 0 ? this.blurred("haze", W, H, side * 0.09, 0) : this.black;
+    const mk = kneeOf(e.mistThreshold), hk = kneeOf(e.halationThreshold);
+    const mistT = e.mist > 0 ? this.blurred("mist", W, H, side * (0.006 + 0.03 * (e.mistSize / 100)), mk) : this.black;
+    const mistW = e.mist > 0 ? this.blurred("mistw", W, H, side * (0.03 + 0.08 * (e.mistSize / 100)), null) : this.black;
+    const halT = e.halation > 0 ? this.blurred("hal", W, H, side * (0.004 + 0.025 * (e.halationSize / 100)), hk) : this.black;
+    const hazeT = e.haze > 0 ? this.blurred("haze", W, H, side * 0.09, null) : this.black;
     this.bind(0, this.src); this.bind(1, mistT); this.bind(2, halT); this.bind(3, hazeT); this.bind(4, mistW);
     this.draw(this.mix, null, W, H, (u) => {
       gl.uniform1i(u("src"), 0); gl.uniform1i(u("mistT"), 1); gl.uniform1i(u("halT"), 2); gl.uniform1i(u("hazeT"), 3); gl.uniform1i(u("mistW"), 4);
       gl.uniform1f(u("mist"), (e.mist / 100) * 0.45); gl.uniform1f(u("halation"), e.halation / 100);
+      gl.uniform2f(u("mistKnee"), ...mk); gl.uniform2f(u("halKnee"), ...hk);
       gl.uniform1f(u("haze"), e.haze / 100); gl.uniform1f(u("hazeHeight"), e.hazeHeight / 100); gl.uniform1f(u("hazeTone"), e.hazeTone / 100);
     });
     return this.canvas;
   }
 }
+
+/** A threshold 0-100 as a soft knee in linear light (from, to): 0 = all the light, 100 = only near white. Wide, so
+ *  the parts just under it still give a little (an even glow, not patches). */
+const kneeOf = (t: number): [number, number] => { const at = 0.02 + 0.8 * Math.pow(t / 100, 1.5); return [Math.max(0, at - 0.15), Math.min(1.2, at + 0.3)]; };
 
 let shared: EffectsGL | null = null;
 let failed = false;

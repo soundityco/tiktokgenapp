@@ -15,7 +15,8 @@ import { drawEffects, effectsOn, type Effects } from "./effectsGL";
 
 /** The grade's Black Mist and Haze, their defaults filled in. */
 export const effectsOf = (g: VideoGrade): Effects => ({
-  mist: g.mist ?? 0, mistSize: g.mistSize ?? 50, halation: g.halation ?? 0, halationSize: g.halationSize ?? 40,
+  mist: g.mist ?? 0, mistSize: g.mistSize ?? 50, mistThreshold: g.mistThreshold ?? 40,
+  halation: g.halation ?? 0, halationSize: g.halationSize ?? 40, halationThreshold: g.halationThreshold ?? 70,
   haze: g.haze ?? 0, hazeHeight: g.hazeHeight ?? 60, hazeTone: g.hazeTone ?? 0,
 });
 

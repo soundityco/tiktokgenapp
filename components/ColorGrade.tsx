@@ -248,17 +248,21 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         <div className="row" style={{ gap: 6 }}>{t("Black Mist")}<Hint text={t("A diffusion filter, as a Black Mist on the lens: part of the light spreads around it, a glow next to the lights, softer highlights and contrast.")} /></div>
         <Range label={t("Strength")} value={fx.mist} display={`${fx.mist}`} min={0} max={100}
           onChange={(v) => set({ mist: v })} onReset={() => set({ mist: 0 })} />
-        {fx.mist > 0 && (
+        {fx.mist > 0 && (<>
           <Range label={t("Glow size")} value={fx.mistSize} display={`${fx.mistSize}`} min={0} max={100}
             onChange={(v) => set({ mistSize: v })} onReset={() => set({ mistSize: 50 })} />
-        )}
+          <Range label={t("Threshold")} value={fx.mistThreshold} display={`${fx.mistThreshold}`} min={0} max={100}
+            onChange={(v) => set({ mistThreshold: v })} onReset={() => set({ mistThreshold: 40 })} />
+        </>)}
         <div className="row" style={{ gap: 6 }}>{t("Halation")}<Hint text={t("As on film: a red-orange fringe around the strongest lights (a lamp, the sun, a reflection).")} /></div>
         <Range label={t("Strength")} value={fx.halation} display={`${fx.halation}`} min={0} max={100}
           onChange={(v) => set({ halation: v })} onReset={() => set({ halation: 0 })} />
-        {fx.halation > 0 && (
+        {fx.halation > 0 && (<>
           <Range label={t("Size")} value={fx.halationSize} display={`${fx.halationSize}`} min={0} max={100}
             onChange={(v) => set({ halationSize: v })} onReset={() => set({ halationSize: 40 })} />
-        )}
+          <Range label={t("Threshold")} value={fx.halationThreshold} display={`${fx.halationThreshold}`} min={0} max={100}
+            onChange={(v) => set({ halationThreshold: v })} onReset={() => set({ halationThreshold: 70 })} />
+        </>)}
         <div className="row" style={{ gap: 6 }}>{t("Haze")}<Hint text={t("A cinematic fog: denser towards the top of the frame and over the bright, flat parts (sky, background), lit by the scene's own light.")} /></div>
         <Range label={t("Density")} value={fx.haze} display={`${fx.haze}`} min={0} max={100}
           onChange={(v) => set({ haze: v })} onReset={() => set({ haze: 0 })} />

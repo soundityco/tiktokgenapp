@@ -302,10 +302,10 @@ export interface VideoGrade {
   off?: boolean;
   /** Parts turned off (like a node bypassed in DaVinci): their settings are kept, they change nothing. */
   bypass?: { corrections?: boolean; wheels?: boolean; effects?: boolean; finish?: boolean };
-  /** Black Mist (0-100) and its glow size (0-100, 50 by default); film halation (0-100) and its size (0-100, 40 by
-   *  default); Haze (0-100), how much it gathers at the top (0-100, 60 by default), its tone (-100 cool to 100 warm).
+  /** Black Mist (0-100), its glow size (0-100, 50 by default) and threshold (0-100, 40); film halation (0-100), its size
+   *  (0-100, 40 by default) and threshold (0-100, 70); Haze (0-100), how much it gathers at the top (0-100, 60 by default), its tone (-100 cool to 100 warm).
    *  See lib/effectsGL. */
-  mist?: number; mistSize?: number; halation?: number; halationSize?: number;
+  mist?: number; mistSize?: number; mistThreshold?: number; halation?: number; halationSize?: number; halationThreshold?: number;
   haze?: number; hazeHeight?: number; hazeTone?: number;
   /** Stops. */
   exposure: number;
