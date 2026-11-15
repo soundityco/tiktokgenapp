@@ -1883,9 +1883,10 @@ export default function VideoStudio({
   const clipGroups = (list: VideoSetup[]) => {
     const kind = (c: VideoSetup) => {
       const col = c.source?.colour === "unknown" && c.source.kind === "phone" ? "sdr" : c.source?.colour; // as describeVideo
-      return col === "log" || col === "hdr" ? 0 : col === "sdr" ? 1 : 2;
+      // Log (to grade), HDR (a phone's, mostly: brought down to SDR by itself), standard SDR, then the others.
+      return col === "log" ? 0 : col === "hdr" ? 1 : col === "sdr" ? 2 : 3;
     };
-    const groups = [t("Log / HDR"), t("Standard"), t("Others")].map((label, k) => ({ label, items: list.filter((c) => kind(c) === k) })).filter((g) => g.items.length);
+    const groups = [t("Log"), "HDR", t("Standard"), t("Others")].map((label, k) => ({ label, items: list.filter((c) => kind(c) === k) })).filter((g) => g.items.length);
     return groups.length > 1 ? groups : [{ label: "", items: list }];
   };
   const clipName = (c: VideoSetup) => { const m = /^Video (\d+)$/.exec(c.name); return m ? t("Video {n}", { n: m[1] }) : c.name; };
@@ -3757,9 +3758,9 @@ export default function VideoStudio({
               return (
                 <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from}
                   style={{ left: pct(x.from), width: `${((x.to - x.from) / segLen) * 100}%` }}
-                  title={`${x.cam + 1} · ${a ? clipName(a) : "?"}`}
+                  title={`${x.cam + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
                   onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
-                  <b>{x.cam + 1}</b> {a ? clipName(a) : ""}
+                  <b>{x.cam + 1}</b> {a ? a.videoName?.replace(/\.[^.]+$/, "") ?? clipName(a) : ""}
                   {own && (
                     <button className="shot-x" aria-label={t("Remove this cut")} title={t("Remove this cut: the shot joins the one on its left")}
                       onPointerDown={(e) => e.stopPropagation()}
@@ -3814,7 +3815,9 @@ export default function VideoStudio({
     // Its pictures wear the video's colour grade (once ready: the LUT may still be loading), as the preview does.
     const gradeNow = gradesColour(settings.grade) && !gradePendingRef.current && graderRef.current?.ready && videoLut.current ? settings.grade : undefined;
     const base = `${clip.id}|${videoBlob?.size ?? videoUrl}|${from.toFixed(2)}|${len.toFixed(2)}|${offset.toFixed(3)}${squeeze === 1 ? "" : `|${squeeze}`}`;
-    const key = base + (gradeNow ? `|${colourKey}` : "");
+    // Multicam: each picture from the camera of its shot (its cuts and cameras' looks in the key).
+    const multi = (settings.angles ?? []).some(Boolean) && (settings.cuts?.length ?? 0) > 0;
+    const key = base + (gradeNow ? `|${colourKey}` : "") + (multi ? `|${JSON.stringify(settings.cuts)}|${anglesKey}|${angleRev}` : "");
     const disk = `strip:${clip.id}`;
     const known = STRIPS.get(key);
     if (known) { stripBase.current = base; setStrip(known); return; }
@@ -3831,6 +3834,18 @@ export default function VideoStudio({
       if (off) return;
       const v = document.createElement("video");
       v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = videoUrl;
+      /** The other cameras' players for the strip (their own, never the preview's). */
+      const others = new Map<string, HTMLVideoElement>();
+      const playerOf = async (a: Angle) => {
+        let el = others.get(a.id);
+        if (!el) {
+          el = document.createElement("video");
+          el.muted = true; el.playsInline = true; el.preload = "auto"; el.src = a.url;
+          others.set(a.id, el);
+          await new Promise<void>((ok) => { el!.onloadeddata = () => ok(); el!.onerror = () => ok(); window.setTimeout(ok, 4000); });
+        }
+        return el;
+      };
       try {
         await new Promise<void>((ok, ko) => { v.onloadeddata = () => ok(); v.onerror = () => ko(new Error("load")); });
         // Big enough to stay sharp on a computer's wide strip (and on a Retina screen), lightly compressed.
@@ -3838,13 +3853,31 @@ export default function VideoStudio({
         const cv = document.createElement("canvas");
         const out: string[] = [];
         for (let i = 0; i < N && !off; i++) {
+          const T = from + ((i + 0.5) / N) * len;
+          const k = multi ? camAt(settings.cuts, T) : 0;
+          const ang = k > 0 ? anglesRef.current.get(settings.angles?.[k - 1] ?? "") : undefined;
+          const el = ang ? await playerOf(ang) : v;
+          const sq = ang ? ang.desqueeze ?? 1 : squeeze;
           // Song time → camera time (the take is that far into the song).
-          v.currentTime = clamp(from + ((i + 0.5) / N) * len - offset, 0, Math.max(0, v.duration - 0.05));
-          await new Promise<void>((ok) => { v.onseeked = () => ok(); window.setTimeout(ok, 2000); });
-          if (!v.videoWidth) break;
-          cv.width = Math.round((H * v.videoWidth * squeeze) / v.videoHeight); cv.height = H;
+          el.currentTime = clamp(T - (ang ? ang.offset : offset), 0, Math.max(0, (el.duration || 0) - 0.05));
+          await new Promise<void>((ok) => { el.onseeked = () => ok(); window.setTimeout(ok, 2000); });
+          if (!el.videoWidth) { if (ang) { out.push(out[out.length - 1] ?? ""); continue; } break; }
+          cv.width = Math.round((H * el.videoWidth * sq) / el.videoHeight); cv.height = H;
           const g = cv.getContext("2d")!;
-          g.drawImage(v, 0, 0, cv.width, cv.height);
+          g.drawImage(el, 0, 0, cv.width, cv.height);
+          if (ang) {
+            // That camera's own grade, as the preview shows it.
+            const grader = graderRef.current ?? (ang.lut ? (graderRef.current = Grader.shared()) : null);
+            if (ang.grade && gradesColour(ang.grade) && ang.lut && grader && !grader.lost) {
+              grader.setLut(ang.lut, 33);
+              const done = grader.grade({ src: cv, w: cv.width, h: cv.height }, { x: 0, y: 0, w: cv.width, h: cv.height }, cv.width, cv.height);
+              g.drawImage(done.src, 0, 0);
+              drawLook(g, cv.width, cv.height, { ...ang.grade, grain: 0 }, 0);
+            }
+            out.push(cv.toDataURL("image/jpeg", 0.82));
+            if (!off && !wait) setStrip([...out]);
+            continue;
+          }
           const grader = graderRef.current;
           if (gradeNow && grader?.ready && videoLut.current) {
             // The same grade as the preview (its LUT put back: the slides share the grader), the vignette too
@@ -3864,10 +3897,10 @@ export default function VideoStudio({
         }
         if (!off && out.length) setStrip(out);
       } catch { if (!off) setStrip([]); }
-      finally { v.removeAttribute("src"); v.load(); }
+      finally { v.removeAttribute("src"); v.load(); for (const el of others.values()) { el.removeAttribute("src"); el.load(); } }
     }, wait);
     return () => { off = true; clearTimeout(timer); };
-  }, [active, videoUrl, settings.crop.start, segLen, settings.offset, settings.desqueeze, colourKey, lutRev]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, videoUrl, settings.crop.start, segLen, settings.offset, settings.desqueeze, colourKey, lutRev, JSON.stringify(settings.cuts ?? []), anglesKey, angleRev]); // eslint-disable-line react-hooks/exhaustive-deps
   const placed = (project.lyricWords?.length ?? 0) > 0;
   /** Nothing synced yet: one button does both. Afterwards each has its own, so changing the video never touches the lyrics. */
   const firstSync = hasLyrics && !placed && !!videoBlob && settings.score === undefined;
