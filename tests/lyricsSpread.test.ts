@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignSong, dropLoops, spreadOnHeard } from "@/lib/lyricsAlign";
+import { alignSong, cleanHeard, dropLoops, spreadOnHeard } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -40,5 +40,20 @@ describe("a line after a silence shows when the voice attacks it", () => {
     const dis = r.words.find((x) => x.w === "dis")!;
     expect(dis.s).toBeGreaterThan(19);
     expect(dis.s).toBeLessThan(20);
+  });
+});
+
+describe("cleanHeard: words cut by the model, made-up sentences", () => {
+  const h = (text: string) => text.split(" ").map((x, i) => ({ w: x, s: i * 0.3, e: i * 0.3 + 0.25 }));
+  it("puts words cut at an apostrophe or a hyphen back together", () => {
+    expect(cleanHeard(h("J 'crois que c 'est fini Est -ce que")).map((x) => x.w).join(" ")).toBe("J'crois que c'est fini Est-ce que");
+  });
+  it("drops Whisper's made-up subtitles", () => {
+    expect(cleanHeard(h("tu mens Sous -titrage Société Radio -Canada")).map((x) => x.w).join(" ")).toBe("tu mens");
+  });
+  it("so a verse full of elisions is placed on its words", () => {
+    const heard = cleanHeard(h("J 'crois que j 'ai réuni tes mensonges ni tes appels"));
+    const r = alignSong("J'crois que j'ai réuni tes mensonges, ni tes appels", heard)!;
+    expect(r.coverage).toBeGreaterThan(0.9);
   });
 });

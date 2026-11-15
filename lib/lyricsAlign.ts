@@ -318,8 +318,46 @@ export function dropLoops(words: LyricWord[]): LyricWord[] {
   return out;
 }
 
+/**
+ * Words the model cut at an apostrophe or a hyphen put back together ("c" + "'est" → "c'est", "Est" + "-ce" → "Est-ce"):
+ * the written lyrics have them whole (the very precise model cuts them, the verses full of j'crois, t'as… missed).
+ */
+export function joinPieces(words: LyricWord[]): LyricWord[] {
+  const out: LyricWord[] = [];
+  for (const x of words) {
+    const prev = out[out.length - 1];
+    const w = x.w.trim();
+    if (prev && (/^['’-]/.test(w) || /['’]$/.test(prev.w)) && x.s - prev.e < 0.6) {
+      out[out.length - 1] = { ...prev, w: prev.w + w, e: Math.max(prev.e, x.e) };
+      continue;
+    }
+    out.push({ ...x, w });
+  }
+  return out;
+}
+
+/** Sentences the speech model makes up on music (learnt from subtitles), never sung: taken out. */
+const MADE_UP = [
+  "sous titrage", "sous titres", "société radio canada", "radio canada", "merci d avoir regardé", "merci de votre attention",
+  "amara org", "thank you for watching", "thanks for watching", "subtitles by",
+];
+export function dropMadeUp(words: LyricWord[]): LyricWord[] {
+  // Compared without spaces, however the model cut them into words ("Sous-titrage" or "Sous" "titrage").
+  const keys = words.map((x) => norm(x.w).replace(/\s+/g, ""));
+  const drop = new Set<number>();
+  for (const m of MADE_UP) {
+    const want = norm(m).replace(/\s+/g, "");
+    for (let i = 0; i < keys.length; i++) {
+      let got = "", k = i;
+      while (k < keys.length && got.length < want.length) got += keys[k++];
+      if (got === want) for (let q = i; q < k; q++) drop.add(q);
+    }
+  }
+  return drop.size ? words.filter((_, i) => !drop.has(i)) : words;
+}
+
 export function cleanHeard(words: LyricWord[]): LyricWord[] {
-  const sorted = dropLoops(words
+  const sorted = dropLoops(dropMadeUp(joinPieces([...words].sort((a, b) => a.s - b.s)))
     .map((x) => ({ ...x, w: x.w.trim() }))
     .filter((x) => norm(x.w) && Number.isFinite(x.s))
     .sort((a, b) => a.s - b.s));

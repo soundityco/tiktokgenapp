@@ -2946,7 +2946,9 @@ export default function VideoStudio({
         const i = order[k];
         const [a, b] = wins[i];
         const samples = await prepareAudio(buf, a, b);
-        const words = cleanHeard(await transcribe(samples, { model: m, language, base: a, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }));
+        // A word timed outside the excerpt heard is made up (the model's "Sous-titrage…" after the end): left out.
+        const words = cleanHeard((await transcribe(samples, { model: m, language, base: a, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
+          .filter((w) => w.s >= a - 0.5 && w.s <= b + 0.5));
         if (ac.signal.aborted) throw new Error("aborted");
         // The overlap between two windows belongs to the one that hears it whole (its middle).
         const lo = i === 0 ? -Infinity : a + LYRICS_LAP / 2;
