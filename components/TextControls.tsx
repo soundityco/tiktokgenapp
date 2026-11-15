@@ -285,6 +285,11 @@ export function sameLook(a: TextStyle, b: TextStyle): boolean {
 }
 /** The preset this style is exactly, if any. */
 export const presetOf = (presets: StylePreset[], st: TextStyle) => presets.find((p) => sameLook(p.style, st));
+/** The preset of this name (case and spaces apart), if any: saving under it replaces it. */
+export const presetNamed = <T extends { name: string }>(presets: T[], name: string) => {
+  const n = name.trim().toLowerCase();
+  return n ? presets.find((p) => p.name.trim().toLowerCase() === n) : undefined;
+};
 
 export function StylePresets({
   presets, onSave, onApply, onDelete, current,
@@ -304,13 +309,16 @@ export function StylePresets({
     onSave(n);
     setName("");
   };
+  // The same name as a preset there: saving replaces it (said before, the button says so).
+  const clash = presetNamed(presets, name);
   return (
     <div className="stack">
       <form className="row nowrap" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <input className="input sm grow" value={name} onChange={(e) => setName(e.target.value)}
           placeholder={t("Preset name")} aria-label={t("Preset name")} maxLength={60} />
-        <button className="btn sm" type="submit" disabled={!name.trim()}>{t("Save current style")}</button>
+        <button className="btn sm" type="submit" disabled={!name.trim()}>{clash ? t("Replace") : t("Save current style")}</button>
       </form>
+      {clash && <p className="notice warn xs">{t("A preset “{name}” exists already: it will be replaced.", { name: clash.name })}</p>}
       {!presets.length && <span className="muted xs">{t("No presets yet.")}</span>}
       {presets.map((p) => {
         const on = !!current && sameLook(p.style, current);

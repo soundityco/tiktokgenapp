@@ -8,6 +8,7 @@ import { putMedia } from "@/lib/idb";
 import type { GradePreset, LutRef, VideoGrade } from "@/lib/types";
 import { Range, Section, Select, Hint } from "./ui";
 import Icon from "./Icon";
+import { presetNamed } from "./TextControls";
 
 const LUTS_KEY = "tktgen-luts";
 
@@ -207,14 +208,16 @@ function GradePresets({ presets, current, onSave, onApply, onDelete }: {
   const { t } = useT();
   const [name, setName] = useState("");
   const save = () => { const n = name.trim(); if (n) { onSave(n); setName(""); } };
+  const clash = presetNamed(presets, name);
   return (
     <div className="stack">
       {current && (
         <form className="row nowrap" onSubmit={(e) => { e.preventDefault(); save(); }}>
           <input className="input sm grow" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Preset name")} aria-label={t("Preset name")} maxLength={60} />
-          <button className="btn sm" type="submit" disabled={!name.trim()} title={t("Save the current colour")}>{t("Save")}</button>
+          <button className="btn sm" type="submit" disabled={!name.trim()} title={t("Save the current colour")}>{clash ? t("Replace") : t("Save")}</button>
         </form>
       )}
+      {current && clash && <p className="notice warn xs">{t("A preset “{name}” exists already: it will be replaced.", { name: clash.name })}</p>}
       {!presets.length && <span className="muted xs">{t("No presets yet.")}</span>}
       {presets.map((p) => {
         const on = !!current && lookKey(p.grade) === lookKey(current);

@@ -26,7 +26,7 @@ import Icon from "./Icon";
 import Inspector from "./Inspector";
 import Wordmark from "./Wordmark";
 import { PicPoolEditor, TextPoolEditor } from "./PoolEditors";
-import { withPreset } from "./TextControls";
+import { presetNamed, withPreset } from "./TextControls";
 import SlidePreview from "./SlidePreview";
 import VersionHistory from "./VersionHistory";
 import SlideCard from "./SlideCard";
@@ -1527,8 +1527,12 @@ export default function Studio({ userName }: { userName: string }) {
   const nSlides = project.slides.length;
   const presets = ws.presets ?? [];
   const savePreset = (name: string, style: SlideCfg["style"]) => {
-    upd((w) => ({ ...w, presets: [...(w.presets ?? []), { id: uid(), name, style: { ...style } }] }));
-    say(t("Preset saved"));
+    // The same name: that preset is replaced, in its place (the form said so).
+    const same = presetNamed(wsRef.current?.presets ?? [], name);
+    upd((w) => ({ ...w, presets: same
+      ? (w.presets ?? []).map((x) => (x.id === same.id ? { ...x, style: { ...style } } : x))
+      : [...(w.presets ?? []), { id: uid(), name, style: { ...style } }] }));
+    say(same ? t("Preset replaced") : t("Preset saved"));
   };
   const applyPreset = (preset: StylePreset) => {
     updSlide(sel, (s) => ({ ...s, style: withPreset(s.style, preset) }));

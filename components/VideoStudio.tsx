@@ -27,7 +27,7 @@ import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkC
 import { ASR_MODELS, AsrModel, AsrStep, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
-import { presetOf, StylePresets, TextQuickMenu, withPreset } from "./TextControls";
+import { presetNamed, presetOf, StylePresets, TextQuickMenu, withPreset } from "./TextControls";
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
@@ -4597,7 +4597,10 @@ export default function VideoStudio({
                   // The LUT with its Drive copy, so the preset finds it on any device.
                   const lib = grade.lut && lutChoices.find((l) => l.id === grade.lut!.id);
                   const kept = grade.lut && lib?.driveId ? { ...grade, lut: { ...grade.lut, driveId: lib.driveId } } : grade;
-                  onGradePresets?.([...(gradePresets ?? []), { id: uid(), name, grade: kept }]);
+                  // The same name: that preset is replaced, in its place (the form said so).
+                  const list = gradePresets ?? [], same = presetNamed(list, name);
+                  onGradePresets?.(same ? list.map((x) => (x.id === same.id ? { ...x, grade: kept } : x)) : [...list, { id: uid(), name, grade: kept }]);
+                  onToast?.(same ? t("Preset replaced") : t("Preset saved"));
                 }}
                 library={lutChoices} onImported={(l) => onLutLibrary?.((cur) => [...cur.filter((x) => x.id !== l.id), l])} />
                       </div>
