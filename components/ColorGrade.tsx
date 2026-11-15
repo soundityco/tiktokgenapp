@@ -6,7 +6,7 @@ import ColorWheels from "./ColorWheels";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { GradePreset, LutRef, VideoGrade } from "@/lib/types";
-import { Range, Section, Select, Hint } from "./ui";
+import { Range, Section, Select, Hint, Switch } from "./ui";
 import Icon from "./Icon";
 import { presetNamed } from "./TextControls";
 
@@ -37,7 +37,7 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut, disabled }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   grade: VideoGrade | undefined;
@@ -55,6 +55,8 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   onImported: (lut: LutRef) => void;
   /** A LUT to delete from the account (asked first). */
   onRemoveLut?: (lut: LutRef) => void;
+  /** The whole colour turned off: every part greyed, nothing to change (the parts still open, to look). */
+  disabled?: boolean;
 }) {
   const { t, lang } = useT();
   const luts = library;
@@ -112,11 +114,21 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
     );
   }
 
+  // Each part on / off (like a node bypassed in DaVinci): its settings stay, it changes nothing while off. The switch
+  // sits in the part's title, a click on it never folds or unfolds the part.
+  type Part = "corrections" | "wheels" | "finish";
+  const off = (p: Part) => !!g.bypass?.[p];
+  const partSwitch = (p: Part) => (
+    <span className="sec-switch" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} onKeyDown={(e) => e.stopPropagation()}>
+      <Switch checked={!off(p)} title={off(p) ? t("Turned off: click to turn it back on") : t("On: click to turn this part off")}
+        onChange={(v) => set({ bypass: { ...g.bypass, [p]: !v } })} />
+    </span>
+  );
   const colour = g.profile !== "none";
   // Standard footage: only the simple sliders, unless the camera profile and LUT were turned back on.
   const simple = !!sdr && !g.sdrOverride;
   return (
-    <>
+    <div className={"cg-parts" + (disabled ? " off" : "")} aria-disabled={disabled || undefined}>
       {presetsPart}
       {simple && (
         <p className="notice xs">
@@ -170,7 +182,7 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
       </Section>
 
       {colour && (
-        <Section id="color-corrections" title={t("Corrections")} open={false}>
+        <Section id="color-corrections" title={<>{t("Corrections")}{off("corrections") && <span className="sec-sub"> · {t("off")}</span>}{partSwitch("corrections")}</>} open={false}>
           <Range label={t("Exposure")} value={g.exposure} display={`${g.exposure > 0 ? "+" : ""}${num(g.exposure)} EV`} min={-3} max={3} step={0.05}
             onChange={(v) => set({ exposure: v })} onReset={() => set({ exposure: 0 })} />
           <Range label={t("Contrast")} value={g.contrast} display={num(g.contrast)} min={0.5} max={2} step={0.01}
@@ -185,12 +197,12 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
       )}
 
       {colour && (
-        <Section id="color-wheels" title={<>{t("Colour wheels")}{wheelsOn(g) && <span className="sec-sub"> · {t("on")}</span>}</>} open={false}>
+        <Section id="color-wheels" title={<>{t("Colour wheels")}{off("wheels") ? <span className="sec-sub"> · {t("off")}</span> : wheelsOn(g) && <span className="sec-sub"> · {t("on")}</span>}{partSwitch("wheels")}</>} open={false}>
           <ColorWheels wheels={g.wheels ?? {}} onChange={(wheels) => set({ wheels })} />
         </Section>
       )}
 
-      <Section id="color-finish" title={t("Finish")} open={false}>
+      <Section id="color-finish" title={<>{t("Finish")}{off("finish") && <span className="sec-sub"> · {t("off")}</span>}{partSwitch("finish")}</>} open={false}>
         <Range label={t("Vignette")} value={g.vignette} display={`${g.vignette}`} min={0} max={100}
           onChange={(v) => set({ vignette: v })} onReset={() => set({ vignette: 0 })} />
         {g.vignette > 0 && (
@@ -205,12 +217,12 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         )}
       </Section>
 
-    </>
+    </div>
   );
 }
 
 /** The same look (the camera profile apart: it is the video's own). */
-const lookKey = (g: VideoGrade) => JSON.stringify([g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null]);
+const lookKey = (g: VideoGrade) => JSON.stringify([g.bypass ?? null, g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null]);
 export const gradePresetOf = (presets: GradePreset[], g: VideoGrade) => presets.find((p) => lookKey(p.grade) === lookKey(g));
 
 /** The colour presets, as the text's: a name and "Save the current colour", then each one to put on, or delete. */

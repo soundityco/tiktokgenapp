@@ -219,9 +219,22 @@ function wheel(x: number, a: Record<WheelId, [number, number, number]>, c: numbe
   return v * Math.pow(2, a.gain[c]);
 }
 
+/** The grade as it acts: the parts turned off (`bypass`) count as untouched (their settings stay in the grade). */
+export function effectiveGrade(g: VideoGrade): VideoGrade {
+  const b = g.bypass;
+  if (!b || (!b.corrections && !b.wheels && !b.finish)) return g;
+  return {
+    ...g,
+    ...(b.corrections ? { exposure: 0, contrast: 1, pivot: undefined, temp: 0, tint: 0, sat: 1 } : null),
+    ...(b.wheels ? { wheels: undefined } : null),
+    ...(b.finish ? { vignette: 0, grain: 0 } : null),
+  };
+}
+
 /** Does this grade change the picture's colours (otherwise no LUT is applied at all)? */
-export function gradesColour(g: VideoGrade | undefined): g is VideoGrade {
-  if (!g || g.profile === "none") return false;
+export function gradesColour(g0: VideoGrade | undefined): g0 is VideoGrade {
+  if (!g0 || g0.profile === "none" || g0.off) return false;
+  const g = effectiveGrade(g0);
   // Standard footage with every slider at zero and no LUT: the picture as it is, nothing to compute.
   return !(g.profile === "rec709" && !g.lut && g.exposure === 0 && g.contrast === 1 && g.temp === 0 && g.tint === 0 && g.sat === 1 && !wheelsOn(g));
 }
@@ -234,7 +247,8 @@ export const convertsFootage = (g: VideoGrade | undefined) => !!g && g.profile !
  * `look`: the user's LUT, a look (DWG / Intermediate in) or a camera LUT (the camera's log in, `g.lut.kind` "camera").
  * None: a plain conversion to Rec.709 with a soft highlight roll-off.
  */
-export function buildGradeLut(g: VideoGrade, look: CubeLut | null, size: number): Float32Array {
+export function buildGradeLut(g0: VideoGrade, look: CubeLut | null, size: number): Float32Array {
+  const g = effectiveGrade(g0);
   const out = new Float32Array(size * size * size * 3);
   if (g.profile === "none") {
     for (let b = 0, k = 0; b < size; b++) for (let gg = 0; gg < size; gg++) for (let r = 0; r < size; r++, k += 3) {
@@ -319,8 +333,9 @@ export function photoGrade(a: PhotoAdjust | undefined): VideoGrade | null {
 }
 
 /** Everything that changes the colours, to know when a converted copy must be made again. */
-export function gradeKey(g: VideoGrade | undefined): string {
-  if (!gradesColour(g)) return "";
+export function gradeKey(g0: VideoGrade | undefined): string {
+  if (!gradesColour(g0)) return "";
+  const g = effectiveGrade(g0);
   return [g.profile, g.lut?.id ?? "", g.lut?.kind ?? "", g.exposure, g.contrast, g.pivot ?? "", g.temp, g.tint, g.sat, JSON.stringify(g.wheels ?? {})].join(",");
 }
 
@@ -359,7 +374,9 @@ function grainPlate(size: number, seed: number): HTMLCanvasElement {
  * Vignette and film grain on the framed picture (before the texts). `frame`: number of the frame, so the
  * grain moves like film and is the same each time a given frame is drawn.
  */
-export function drawLook(ctx: CanvasRenderingContext2D, W: number, H: number, g: VideoGrade, frame: number) {
+export function drawLook(ctx: CanvasRenderingContext2D, W: number, H: number, g0: VideoGrade, frame: number) {
+  if (g0.off) return;
+  const g = effectiveGrade(g0);
   if (g.vignette > 0) {
     const r = Math.hypot(W, H) / 2;
     const inner = r * (0.2 + 0.6 * (g.vignetteSize / 100));

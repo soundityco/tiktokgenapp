@@ -119,3 +119,21 @@ describe("colour wheels and the outputs", async () => {
     expect(worst).toBeLessThan(0.02);
   });
 });
+
+describe("parts turned off", async () => {
+  const G = await import("../lib/grade");
+  it("a part off changes nothing and keeps its settings; back on, all is as before", () => {
+    const g = { ...G.NEUTRAL_GRADE, exposure: 1, sat: 1.3, wheels: { gain: { x: 0.2, y: 0, l: 0.5 } }, vignette: 40, grain: 20 };
+    const all = Array.from(G.buildGradeLut(g, null, 9));
+    const plain = Array.from(G.buildGradeLut(G.NEUTRAL_GRADE, null, 9));
+    const off = { ...g, bypass: { corrections: true, wheels: true, finish: true } };
+    expect(Array.from(G.buildGradeLut(off, null, 9))).toEqual(plain);
+    expect(G.effectiveGrade(off)).toMatchObject({ exposure: 0, sat: 1, vignette: 0, grain: 0 });
+    expect(off.exposure).toBe(1); // kept
+    expect(Array.from(G.buildGradeLut({ ...g, bypass: {} }, null, 9))).toEqual(all);
+    // only the wheels off: the corrections still act
+    const noWheels = Array.from(G.buildGradeLut({ ...g, bypass: { wheels: true } }, null, 9));
+    expect(noWheels).toEqual(Array.from(G.buildGradeLut({ ...g, wheels: undefined }, null, 9)));
+    expect(G.gradeKey({ ...g, bypass: { wheels: true } })).not.toBe(G.gradeKey(g));
+  });
+});

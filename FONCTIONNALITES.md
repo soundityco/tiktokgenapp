@@ -72,6 +72,7 @@ dans ton Google Drive.
 - **Cadrage** 9:16 ou 16:9, zoom, **zoom progressif** (réglable, ou à l'intérieur de l'image seulement). — En ligne
 - **Étalonnage** : log vers une image normale, export 10 bits ; trois sorties au choix : le Rec.709 neutre de l'app, une **LUT caméra** (faite pour le log de la caméra, comme celles de Sony ou d'Alister Chapman) ou une **LUT de look** faite dans DaVinci. — En ligne
 - **Roues de couleur** à la Final Cut (Global, Ombres, Tons moyens, Hautes lumières, comme les primaires de DaVinci), avant la LUT, avec un point de couleur et une réglette de luminosité chacune. — En test
+- **Couper sans perdre** : un interrupteur coupe toute la couleur (aperçu et export), d'autres coupent les Corrections, les Roues ou la Finition, comme un node désactivé dans DaVinci ; les réglages sont gardés. — En ligne
 - **Presets de couleur** : enregistrer tout un étalonnage (profil caméra, LUT, réglages, roues) et le poser sur une autre vidéo d'un clic, puis le retoucher. — En ligne
 - **Bibliothèque de LUT du compte** : une LUT importée est disponible sur tous tes appareils (sa copie va sur ton Drive) ; jamais deux fois la même ; une corbeille au survol pour en supprimer une (confirmation, les vidéos qui l'utilisent repassent en Rec.709). — En ligne
 - **Bandes noires** au format voulu. — En ligne

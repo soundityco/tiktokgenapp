@@ -4582,10 +4582,11 @@ export default function VideoStudio({
               {/* The grade on / off in one click (the switch alone: what it does shows on the picture), then Reset
                   (the grade removed), like the other parts' Reset. */}
               {grade && <span className="grow" />}
-              {gradesColour(grade) && <Switch checked={!rawView} onChange={(v) => setRawView(!v)} title={t("Grade on / off: the picture as recorded, to compare")} />}
+              {grade && <Switch checked={!grade.off} onChange={(v) => { setRawView(false); setV({ grade: { ...grade, off: !v } }); }}
+                title={grade.off ? t("Colour turned off: the video is shown and exported as recorded. Click to turn it back on.") : t("Colour on: click to turn it all off (preview and export), your settings kept.")} />}
               {grade && <button className="btn sm quiet" onClick={() => { setRawView(false); setV({ grade: undefined }); }} title={t("Remove the grade")}>{t("Reset")}</button>}
             </div>
-              <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} onRaw={setRawView} lookErr={lookErr}
+              <ColorGrade grade={grade} onChange={(g) => setV({ grade: g })} onRaw={setRawView} lookErr={lookErr} disabled={!!grade?.off}
                 sdr={sdrSource}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 presets={gradePresets ?? []} onDeletePreset={(id) => onGradePresets?.((gradePresets ?? []).filter((x) => x.id !== id))}

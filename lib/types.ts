@@ -291,6 +291,10 @@ export interface VideoGrade {
   /** Colour wheels, as DaVinci's primaries (lib/grade wheelsOf): Global (offset), Shadows (lift), Midtones (gamma),
    *  Highlights (gain). None: all at zero. */
   wheels?: Partial<Record<WheelId, Wheel>>;
+  /** The whole grade turned off (the Colour switch): kept, it changes nothing, on the preview as in the export. */
+  off?: boolean;
+  /** Parts turned off (like a node bypassed in DaVinci): their settings are kept, they change nothing. */
+  bypass?: { corrections?: boolean; wheels?: boolean; finish?: boolean };
   /** Stops. */
   exposure: number;
   /** 1 = unchanged, around `pivot` (DaVinci Intermediate, default middle grey). */
