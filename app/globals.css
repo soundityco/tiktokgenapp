@@ -2563,13 +2563,13 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 .cw-disc { position: relative; aspect-ratio: 1; border-radius: 50%; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); touch-action: none; cursor: grab; }
 .cw-disc:active { cursor: grabbing; }
 .cw-disc > canvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
-/* Guides: the cross and the middle circle, faint. */
+/* Guides: the cross and the middle circle, faint (under the line and the dot). */
 .cw-disc::before { content: ""; position: absolute; inset: 25%; border-radius: 50%; border: 1px solid var(--line); pointer-events: none; }
 .cw-disc::after { content: ""; position: absolute; inset: 6%; pointer-events: none;
   background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat, linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat; }
-.cw-vec { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.cw-vec { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .cw-vec line { stroke: var(--text); stroke-width: .8; stroke-linecap: round; opacity: .55; }
-.cw-puck { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 3px var(--bg); pointer-events: none; transition: transform .12s; }
+.cw-puck { position: absolute; z-index: 2; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 3px var(--bg); pointer-events: none; transition: transform .12s; }
 .cw-disc:hover .cw-puck, .cw-disc:focus-visible .cw-puck { transform: scale(1.2); }
 .cw-disc:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--line), 0 0 0 1px var(--accent-hi); }
 /* The brightness slider: the app's, filled from its middle to its value. */
