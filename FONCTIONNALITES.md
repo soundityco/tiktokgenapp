@@ -71,7 +71,7 @@ dans ton Google Drive.
 - **Synchro automatique** de la prise sur l'audio officiel, même filmée avec le son du téléphone, une voix seule au casque, ou le passage filmé plusieurs fois (chaque prise est retrouvée). — En ligne
 - **Fichiers caméra pro** : log (S-Log3, Apple Log…), HDR, 10 bits, ProRes, objectif anamorphique. — En ligne
 - **Copie de travail sur le Drive** : la vidéo s'ouvre sur un autre appareil sans le fichier caméra ; l'appareil qui a l'original exporte depuis l'original. — En ligne
-- **Choisir le passage (segment)** sur la forme d'onde : zoom (pincer, Ctrl + molette, boutons) gardé en mémoire ; se déplacer zoomé sans bouger le segment (deux doigts, Alt + glisser, Maj + molette). — En ligne
+- **Choisir le passage (segment)** sur la forme d'onde : zoom (pincer, Ctrl + molette, boutons) gardé en mémoire ; se déplacer zoomé sans bouger le segment (deux doigts, Alt + glisser, Maj + molette). Les pistes en dessous (paroles, hooks, plans multicam) suivent le zoom, pour retoucher leurs bords et leurs coupes dans le détail. — En ligne
 - **Versions A / B d'un post** (segment, textes, styles, cadrage, étalonnage) pour comparer. — En ligne
 - **Hooks par-dessus la vidéo** : plusieurs, chacun avec son moment, tirés de leurs listes et tags. — En ligne
 - **Paroles incrustées** sur la vidéo. — En ligne
