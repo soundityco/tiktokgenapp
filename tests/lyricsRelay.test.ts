@@ -26,7 +26,8 @@ describe("relayWeakLines", () => {
     expect(relayWeakLines(words, [], 20)).toEqual(words);
   });
   it("a line the alignment placed within a second of its phrase keeps its own (finer) time", () => {
-    const near = words.map((x) => (x.line === 1 ? { ...x, s: x.s + 8.5 } : x.line ? { ...x, s: x.s + 9 } : x));
+    // (line 1 not packed: a packed line always goes to its phrase)
+    const near = words.map((x) => (x.line === 1 ? { ...x, s: x.s + 8.5, doubt: undefined } : x.line ? { ...x, s: x.s + 9 } : x));
     const out = relayWeakLines(near, [{ w: "Bonjour toi", s: 12, e: 13 }], 20);
     expect(out[2].s).toBeCloseTo(11.5);
   });

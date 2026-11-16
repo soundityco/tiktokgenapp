@@ -50,9 +50,10 @@ export function relayWeakLines(words: LyricWord[], phrases: Phrase[], duration: 
         for (let p = pi; p < Math.min(cand.length, pi + 4); p++) {
           if (matchScore(lw, cand[p].w.split(/\s+/).map(norm).filter(Boolean)) >= 0.5) {
             // The alignment is finer than the phrases: its time stays unless the phrase says it is off by more than MOVE.
+            // (a line packed on the others always goes to its phrase)
             const mine = words[l.idx[0]].s;
-            at[k] = Math.abs(mine - cand[p].s) > MOVE ? Math.max(lo, cand[p].s) : mine;
-            until[k] = Math.abs(mine - cand[p].s) > MOVE ? cand[p].e : null;
+            at[k] = l.doubt || Math.abs(mine - cand[p].s) > MOVE ? Math.max(lo, cand[p].s) : mine;
+            until[k] = cand[p].e;
             pi = p + 1;
             break;
           }
@@ -82,7 +83,13 @@ export function relayWeakLines(words: LyricWord[], phrases: Phrase[], duration: 
         }
         run.forEach((l, k) => {
           const s0 = starts[k]!;
-          if (Math.abs(s0 - words[l.idx[0]].s) < 1e-6) return; // its own time: its words untouched
+          if (Math.abs(s0 - words[l.idx[0]].s) < 1e-6) {
+            // Its own time: its words untouched, but it lasts as long as its phrase (the lines after it moved later).
+            const next = k + 1 < run.length ? starts[k + 1]! : hi;
+            const last = l.idx[l.idx.length - 1];
+            if (until[k] !== null) out[last] = { ...words[last], e: Math.max(words[last].e, Math.min(until[k]!, next - 0.04)) };
+            return;
+          }
           const next = k + 1 < run.length ? starts[k + 1]! : hi;
           // Up to the next line, a held end at most (a phrase the speech model cut short does not cut the line).
           const end = Math.max(s0 + 0.2, Math.min(next - 0.04, Math.max(until[k] ?? 0, s0 + 0.5 + 0.12 * letters(l))));

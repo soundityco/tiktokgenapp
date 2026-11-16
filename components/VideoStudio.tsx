@@ -2482,7 +2482,6 @@ export default function VideoStudio({
   };
   const waveDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!audioBuf) return;
-    stop();
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, e.clientX);
     const rect = e.currentTarget.getBoundingClientRect();
@@ -2497,11 +2496,14 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     const px = e.clientX;
     // Zoomed, Alt + drag or a drag with the wheel button: the view slides, wherever it starts (the segment too).
+    // (sliding the view, pinching or pressing the wheel never stops what is playing)
     if (viewRef.current && (e.altKey || e.button === 1)) {
       e.preventDefault();
       dragWave.current = { mode: "pan", x: f, px, vs: v.s, vd: v.d, start: cfg.crop.start, duration: cfg.crop.duration };
       return;
     }
+    if (e.button === 1) { e.preventDefault(); dragWave.current = null; return; }
+    stop();
     const xOf = (t: number) => rect.left + ((t - v.s) / v.d) * rect.width;
     const near = (t: number, r = 6) => Math.abs(e.clientX - xOf(t)) <= r;
     const t = v.s + f * v.d;
@@ -2533,6 +2535,7 @@ export default function VideoStudio({
     };
     return {
       onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+        if (e.button === 1) return; // the wheel pressed: not a click on the track, playback goes on
         stop();
         e.currentTarget.setPointerCapture(e.pointerId);
         const cue = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
@@ -3023,6 +3026,7 @@ export default function VideoStudio({
         setGenStep("library"); setGenPct(0); setGenDone(0);
         // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
         // there, are heard again by the speech model, and its phrases' times are used for those lines (lib/lyricsRelay).
+        if (forced && !forced.some((x) => x.weak && x.doubt)) console.info("[align] no passage hard to hear: no relay");
         if (forced?.some((x) => x.weak && x.doubt)) {
           const weak = forced.filter((x) => x.weak);
           const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
@@ -3038,11 +3042,13 @@ export default function VideoStudio({
               phrases.push(...got.filter((p) => { const m = (p.s + p.e) / 2; return m >= from && m < to; }));
               setGenDone((n + 1) / near.length);
             }
+            const before = forced;
             forced = relayWeakLines(forced, phrases, buf.duration);
-            console.debug(`[align] relay: ${phrases.length} phrases heard on ${lo.toFixed(1)}–${hi.toFixed(1)} s`, phrases);
+            const moved = forced.filter((x, i) => Math.abs(x.s - before[i].s) > 0.01).length;
+            console.info(`[align] relay on ${lo.toFixed(1)}–${hi.toFixed(1)} s: ${phrases.length} phrases heard, ${moved} words moved`, phrases.map((p) => `${p.s.toFixed(1)}–${p.e.toFixed(1)} ${p.w}`));
           } catch (e) {
             if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
-            console.warn("[align] relay not available, the alignment kept as it is", e);
+            console.warn("[align] relay not available (the speech model could not run), the alignment kept as it is", e);
           }
           setGenStep("library"); setGenPct(0); setGenDone(0);
         }
@@ -3943,6 +3949,7 @@ export default function VideoStudio({
               <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
                 onPointerDown={(e) => {
+                  if (e.button === 1) return;
                   e.stopPropagation(); stop();
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const r = e.currentTarget.parentElement!.getBoundingClientRect();
@@ -4088,6 +4095,7 @@ export default function VideoStudio({
   const edgeRef = useRef<{ left: number; width: number } | null>(null);
   const edgeDrag = (move: (at: number, free: boolean) => void) => ({
     onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
+      if (e.button === 1) return;
       e.stopPropagation(); stop();
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = e.currentTarget.parentElement!.getBoundingClientRect();
