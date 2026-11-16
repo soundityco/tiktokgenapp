@@ -2920,7 +2920,8 @@ export default function VideoStudio({
     void voiceOnsets(audioBuf).then((o) => { if (!off) onsetsRef.current = o; }).catch((e) => console.warn("[lyrics] voice attacks not read", e));
     return () => { off = true; };
   }, [audioBuf]);
-  const generateLyrics = async (buf: AudioBuffer | null = audioBuf, proj: Project = project, src = writtenSrc) => {
+  /** `fresh`: the new placing replaces everything (the lines retimed by hand too): "Listen to the audio again". */
+  const generateLyrics = async (buf: AudioBuffer | null = audioBuf, proj: Project = project, src = writtenSrc, fresh = false) => {
     if (!buf) return;
     genRef.current?.abort();
     const ac = new AbortController();
@@ -2990,7 +2991,7 @@ export default function VideoStudio({
       } else {
         const { words, info } = placeWords(heard, src, proj, segFrom, segTo);
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
-        onProject((p) => ({ ...p, heardWords: heard, lyricWords: keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
+        onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? words : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
         setGenInfo(info);
         outcome = { title: t("Lyrics ready"), body: info };
@@ -4668,8 +4669,8 @@ export default function VideoStudio({
                         </button>
                         {/* A new listening of the whole song (the words heard before dropped): after a new mix, another model… */}
                         {placed && audioBuf && (
-                          <button onClick={() => { closeMenu(); onProject((p) => ({ ...p, heardWords: undefined })); void generateLyrics(audioBuf, { ...project, heardWords: undefined }, writtenSrc); }}
-                            title={t("Listen to the whole song again and place the lyrics from scratch (your retouches are kept).")}>
+                          <button onClick={() => { closeMenu(); onProject((p) => ({ ...p, heardWords: undefined })); void generateLyrics(audioBuf, { ...project, heardWords: undefined }, writtenSrc, true); }}
+                            title={t("Listen to the whole song again and place the lyrics from scratch (the lines retimed by hand too).")}>
                             <Icon name="refresh" size={14} />{t("Listen to the audio again")}
                           </button>
                         )}
