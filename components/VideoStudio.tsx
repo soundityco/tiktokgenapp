@@ -3698,12 +3698,13 @@ export default function VideoStudio({
    * playing moved. Every frame while playing; after each render too (the tracks laid out again for a new view).
    */
   /** The timeline's moving parts, found once per layout (not searched for at every frame). */
-  const timelineEls = useRef<{ contents: HTMLElement[]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
+  const timelineEls = useRef<{ contents: HTMLElement[]; clips: HTMLElement[][]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
   const findTimelineEls = () => {
     const root = waveRef.current?.closest(".timeline");
     const all = (sel: string, r: ParentNode | null | undefined = root) => (r ? [...r.querySelectorAll<HTMLElement>(sel)] : []);
+    const contents = all(".lyric-track .track-content");
     timelineEls.current = {
-      contents: all(".lyric-track .track-content"), heads: all(".lyric-track .lyric-head"),
+      contents, clips: contents.map((c) => all(":scope > .cue[data-a]", c)), heads: all(".lyric-track .lyric-head"),
       bars: all(".lyric-track .cue-bar-glow[data-a]"), playing: all(".lyric-track .cue.on[data-a]"),
       dock: all(".dp-track .dp-played", document), dockHeads: all(".dp-track .dp-head", document),
     };
@@ -3723,12 +3724,24 @@ export default function VideoStudio({
     els.contents.forEach((el) => { el.style.transform = `translate3d(${dx}px,0,0)`; });
     const hx = xOf(clamp(at, live.s, live.s + live.d));
     els.heads.forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
-    // The playing clip and its bar stick to the left edge of what is on screen once their start has gone past it, whole,
-    // until the next one (coming from the right, over it) takes its place; its text glows under the playhead.
+    // On each track the clip that has reached the left edge of what is on screen sticks to it, whole (its text read in
+    // full), played or not, until the next one, sliding in over it from the right, reaches the edge and takes its place
+    // (as the sticky headers of a list). The others sit at their time.
+    const stuckAt = new Map<HTMLElement, number>();
+    els.clips.forEach((list) => {
+      let stuck: HTMLElement | null = null, best = -Infinity;
+      for (const el of list) { const a = Number(el.dataset.a); if (a < live.s && a > best) { best = a; stuck = el; } }
+      for (const el of list) {
+        const from = el === stuck ? live.s : Number(el.dataset.a);
+        stuckAt.set(el, from);
+        el.style.transform = `translate3d(${xOf(from)}px,0,0)`;
+        el.style.zIndex = el === stuck ? "0" : "1"; // the stuck one under: the next slides in over it
+      }
+    });
+    // The playing clip's bar: at its start, or on the left edge once its start has gone past it; its text glows under the playhead.
     els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
     els.playing.forEach((el) => {
-      const a = Number(el.dataset.a), b = Number(el.dataset.b), from = Math.max(a, live.s);
-      el.style.transform = `translate3d(${xOf(from)}px,0,0)`;
+      const a = Number(el.dataset.a), b = Number(el.dataset.b), from = stuckAt.get(el) ?? a;
       el.style.setProperty("--hx", `${b > a ? clamp((at - from) / (b - a), 0, 1) * 100 : 0}%`);
     });
   };
@@ -5008,7 +5021,7 @@ export default function VideoStudio({
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
-                    <span key={"o" + i} className="cue outside" title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
+                    <span key={"o" + i} className="cue outside" data-a={c.start} data-b={c.end} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
                       style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{c.text.replace(/\n/g, " ")}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
