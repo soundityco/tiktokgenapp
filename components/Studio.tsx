@@ -1221,17 +1221,19 @@ export default function Studio({ userName }: { userName: string }) {
   }, [openPicsPath]); // eslint-disable-line react-hooks/exhaustive-deps
   // The open photo list: the look of each photo it holds (once, kept with it), so the same photo twice is found.
   const [hashing, setHashing] = useState<string | null>(null);
+  // Photos that could not be read here (missing from the Drive, offline): not fetched again at each change of the list.
+  const unreadable = useRef(new Set<string>());
   useEffect(() => {
     const pool = openPics;
-    if (!pool || !pool.pics.some((x) => !x.hash)) return;
+    if (!pool || !pool.pics.some((x) => !x.hash && !unreadable.current.has(x.id))) return;
     let off = false;
     setHashing(pool.id);
     void (async () => {
       const found = new Map<string, string>();
       for (const pic of pool.pics) {
         if (off) return;
-        if (pic.hash) continue;
-        try { found.set(pic.id, pictureHash(await loadDriveImage(pic.id))); } catch { /* not readable here: left out */ }
+        if (pic.hash || unreadable.current.has(pic.id)) continue;
+        try { found.set(pic.id, pictureHash(await loadDriveImage(pic.id))); } catch { unreadable.current.add(pic.id); /* not readable here: left out */ }
       }
       const cur = wsRef.current;
       if (off || !cur || !found.size) return;
@@ -1335,19 +1337,26 @@ export default function Studio({ userName }: { userName: string }) {
   // The lists sorted by the local model once: the texts added since (an import, a hook kept, typed) get their tags
   // by themselves, a moment after the last change, without an undo step. One list at a time.
   const autoTagging = useRef(false);
+  // Each list's waiting texts already tried (the model failed, or sorted them without settling them): not tried again
+  // until those texts change, else it ran over and over (every 2 s, or at every edit anywhere, the model loaded each time).
+  const autoTried = useRef(new Set<string>());
+  const [autoTick, setAutoTick] = useState(0);
   useEffect(() => {
     if (!ws || autoTagging.current) return;
-    const pool = ws.textPools.find((p) => isLineList(p) && modelWork(p).length);
+    const keyOf = (p: TextPool) => `${p.id}:${JSON.stringify(modelWork(p))}`;
+    const pool = ws.textPools.find((p) => isLineList(p) && modelWork(p).length && !autoTried.current.has(keyOf(p)));
     if (!pool) return;
     const timer = setTimeout(() => {
       autoTagging.current = true;
+      autoTried.current.add(keyOf(pool));
       void sortWithModel(pool, modelWork(pool))
         .then((fn) => { const cur = wsRef.current; if (cur) apply({ ...cur, textPools: cur.textPools.map((x) => (x.id === pool.id ? fn(x) : x)) }, false); })
         .catch(() => { /* the model could not run here: the lexicon's tags stay */ })
-        .finally(() => { autoTagging.current = false; });
+        // (a change made while it ran is looked at now)
+        .finally(() => { autoTagging.current = false; setAutoTick((n) => n + 1); });
     }, 2000);
     return () => clearTimeout(timer);
-  }, [ws?.textPools]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ws?.textPools, autoTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const refreshViews = async (pool: TextPool) => {
     setViewsBusy(true);
     try {

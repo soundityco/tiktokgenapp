@@ -726,20 +726,22 @@ export default function VideoStudio({
           map.set(c.id, a);
         }
         a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze;
-        a.grade = withLutSettings(c.grade);
-        a.look = null; a.lut = null;
-        const lutRef = a.grade?.lut;
+        // The new grade is made ready apart and put in at once: the camera keeps its current look until then (cleared
+        // first, it was drawn black while its LUT was being read, at each move of a colour setting).
+        const grade = withLutSettings(c.grade);
+        const lutRef = grade?.lut;
+        let look: CubeLut | null = null;
         if (lutRef) {
-          let look = LOOKS.get(lutRef.id) ?? null;
+          look = LOOKS.get(lutRef.id) ?? null;
           if (!look) {
             const b = await lutFile(lutRef.id, lutRef);
             try { if (b) { look = parseCube(await b.text()); LOOKS.set(lutRef.id, look); } } catch { /* not a LUT */ }
           }
           if (off) return;
-          a.look = look;
         }
         // Its LUT nowhere (not here, not on the Drive): graded without it rather than not at all, as camera 1.
-        if (gradesColour(a.grade)) a.lut = buildGradeLut(a.grade, lutRef ? a.look : null, 33);
+        a.grade = grade; a.look = look;
+        a.lut = gradesColour(grade) ? buildGradeLut(grade, lutRef ? look : null, 33) : null;
       }
       if (!off) { setAngleRev((n) => n + 1); drawAt(headRef.current); }
     })();
