@@ -3999,6 +3999,7 @@ export default function VideoStudio({
   const moveLine = (i: number) => edgeDrag((at, free) => {
     const out = moveCueStart(project.lyricWords ?? [], cues, i, at, free);
     if (!out) return;
+    setTab("lyrics");
     setHead(at);
     onProject((p) => ({ ...p, lyricWords: out }));
   });
@@ -4006,6 +4007,7 @@ export default function VideoStudio({
   const moveLineEnd = (i: number) => edgeDrag((at) => {
     const out = moveCueEnd(project.lyricWords ?? [], cues, i, at);
     if (!out) return;
+    setTab("lyrics");
     setHead(round2(Math.max(settings.crop.start, at - 0.3)));
     onProject((p) => ({ ...p, lyricWords: out }));
   });
@@ -4015,6 +4017,7 @@ export default function VideoStudio({
     if (!h) return;
     const next = hooks.filter((x) => x.id !== id && x.from > h.from).sort((a, b) => a.from - b.from)[0];
     const to = round2(clamp(at - settings.crop.start, h.from + 0.2, next ? (next.to ?? segLen) - 0.2 : segLen));
+    setTab("hook");
     setHead(round2(settings.crop.start + Math.max(h.from, to - 0.3)));
     setHooks(hooks.map((x) => (x.id === id ? { ...x, to } : next && x.id === next.id && to > next.from ? { ...x, from: to } : x)));
   });
@@ -4023,6 +4026,7 @@ export default function VideoStudio({
     if (!h) return;
     const prev = hooks.filter((x) => x.id !== id && x.from < h.from).sort((a, b) => b.from - a.from)[0];
     const from = round2(clamp(at - settings.crop.start, prev ? prev.from + 0.2 : 0, (h.to ?? segLen) - 0.2));
+    setTab("hook");
     setHead(round2(settings.crop.start + from));
     setHooks(hooks.map((x) => (x.id === id ? { ...x, from } : !free && prev && x.id === prev.id ? { ...x, to: from } : x)));
   });
@@ -4746,7 +4750,7 @@ export default function VideoStudio({
                     <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                   </div>
                 )}
-                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub()}>
+                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
                   {cues.map((c, i) => (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
                       style={{
@@ -4754,7 +4758,7 @@ export default function VideoStudio({
                         width: `${((clamp(c.end, settings.crop.start, end) - clamp(c.start, settings.crop.start, end)) / segLen) * 100}%`,
                       }}
                       data-at={Math.max(settings.crop.start, c.start)}
-                      onClick={(e) => { if (e.detail === 0) { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
+                      onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       {c.text.replace(/\n/g, " ")}
                     </button>
                   ))}
