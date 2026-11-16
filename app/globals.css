@@ -683,6 +683,7 @@ details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::after { content: "+"; font-family: var(--mono); color: var(--faint); font-size: 12px; }
 details.more[open] > summary::after { content: "−"; }
 .btn.preset.on .muted { color: var(--muted); }
+.preset-kind { flex: none; font-family: var(--mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--muted); }
 
 /* ---------- Video studio, lighter: red only for the actions, quieter names of the settings ---------- */
 /* A chosen option: white with black text (red is for the actions). */
@@ -2546,6 +2547,7 @@ html.pv-full, html.pv-full body { overflow: hidden; }
 html.pv-board .pv-full-layer { left: var(--fs-l); top: var(--fs-t); width: var(--fs-w); height: var(--fs-h); right: auto; bottom: auto; }
 html.pv-board .pv-full-cv { max-height: calc(var(--fs-h) - 32px - 42px); }
 html.pv-board .has-player .pv-full-cv { max-height: calc(var(--fs-h) - 176px); }
+html.pv-full .ov { z-index: 88; } /* a window opened from a column (a preset that does not fit…): over the full screen */
 html.pv-full.pv-board:not(.pv-pinned) .board-player { left: calc(var(--fs-l) + var(--fs-w) / 2); width: min(640px, calc(var(--fs-w) - 48px)); }
 /* Computer: the slide's zones button only when the pointer is over the slide (the selected one too). */
 @media (hover: hover) and (min-width: 1001px) {

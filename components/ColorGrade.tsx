@@ -7,7 +7,7 @@ import { effectsOn } from "@/lib/effectsGL";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
 import type { GradePreset, LutInput, LutRef, VideoGrade } from "@/lib/types";
-import { Range, Section, Select, Hint, Switch } from "./ui";
+import { Modal, Range, Section, Select, Hint, Switch } from "./ui";
 import Icon from "./Icon";
 import { presetNamed } from "./TextControls";
 
@@ -38,9 +38,11 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut, onLutSettings, disabled }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, footage, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut, onLutSettings, disabled }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
+  /** What the video was recorded in, when known: a preset made for another kind is advised against before it goes on. */
+  footage?: Footage;
   grade: VideoGrade | undefined;
   onChange: (g: VideoGrade | undefined) => void;
   onRaw: (v: boolean) => void;
@@ -107,6 +109,11 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
 
   // A preset put on: the whole grade (camera profile, output LUT, settings, wheels). Its LUT found in the account's
   // library (its Drive copy); on a standard video, its profile and LUT turned on.
+  const [mismatch, setMismatch] = useState<GradePreset | null>(null);
+  const askPreset = (p: GradePreset) => {
+    if (footage && gradeFootage(p.grade) !== footage) setMismatch(p);
+    else applyPreset(p);
+  };
   const applyPreset = (p: GradePreset) => {
     onRaw(false);
     const lib = p.grade.lut && luts.find((l) => l.id === p.grade.lut!.id);
@@ -115,7 +122,22 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   };
   const presetsPart = (
     <Section id="color-presets" title={<>{t("Colour presets")}{grade && gradePresetOf(presets, grade) && <span className="sec-sub"> · {gradePresetOf(presets, grade)!.name}</span>}</>} open={false}>
-      <GradePresets presets={presets} current={grade} onSave={onSavePreset} onApply={applyPreset} onDelete={onDeletePreset} />
+      <GradePresets presets={presets} current={grade} onSave={onSavePreset} onApply={askPreset} onDelete={onDeletePreset} />
+      {mismatch && footage && (
+        <Modal title={t("This preset is not made for this video")} onClose={() => setMismatch(null)}>
+          <p>{t("“{name}” was made for {preset} footage, and this video is {video}.", { name: mismatch.name, preset: FOOTAGE_LABEL[gradeFootage(mismatch.grade)], video: FOOTAGE_LABEL[footage] })}{" "}
+            {gradeFootage(mismatch.grade) === "sdr"
+              ? t("Its settings do not convert the camera's log: the picture would stay flat and washed out.")
+              : footage === "sdr"
+                ? t("It converts a log picture that this video does not have: the colours would come out far too contrasted and saturated.")
+                : t("It converts another kind of picture than this video's: the colours would come out wrong.")}</p>
+          <p className="muted xs">{t("We advise against it. You can still apply it, and undo it after.")}</p>
+          <div className="modal-foot">
+            <button className="btn" onClick={() => setMismatch(null)}>{t("Cancel")}</button>
+            <button className="btn primary" onClick={() => { applyPreset(mismatch); setMismatch(null); }}>{t("Apply anyway")}</button>
+          </div>
+        </Modal>
+      )}
     </Section>
   );
 
@@ -293,6 +315,14 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   );
 }
 
+/** The kind of footage a grade is made for: log (a log camera profile, or a LUT that expects the camera's log), HDR
+ *  (HLG / PQ), else standard SDR. */
+export type Footage = "sdr" | "log" | "hdr";
+export const gradeFootage = (g: VideoGrade): Footage =>
+  g.profile === "hlg" || g.profile === "pq" ? "hdr"
+    : g.profile === "slog3" || g.profile === "slog3-cine" || g.profile === "applelog" || (g.lut && lutInputOf(g.lut) === "camera") ? "log" : "sdr";
+const FOOTAGE_LABEL: Record<Footage, string> = { sdr: "SDR", log: "LOG", hdr: "HDR" };
+
 /** The same look (the camera profile apart: it is the video's own). */
 const lookKey = (g: VideoGrade) => JSON.stringify([g.bypass ?? null, g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null, effectsOn(g) ? effectsOf(g) : null]);
 export const gradePresetOf = (presets: GradePreset[], g: VideoGrade) => presets.find((p) => lookKey(p.grade) === lookKey(g));
@@ -322,6 +352,7 @@ function GradePresets({ presets, current, onSave, onApply, onDelete }: {
             <button className={"btn sm grow preset" + (on ? " on" : "")} onClick={() => onApply(p)} title={on ? t("This is the colour now") : t("Apply")} aria-pressed={on}>
               {on && <Icon name="check" size={13} />}
               <span className="truncate">{p.name}</span>
+              <span className="preset-kind" title={t("Made for {kind} footage", { kind: FOOTAGE_LABEL[gradeFootage(p.grade)] })}>{FOOTAGE_LABEL[gradeFootage(p.grade)]}</span>
               <span className="muted xs truncate">{p.grade.lut?.name ?? t("No LUT")}</span>
             </button>
             <button className="btn sm quiet icon" aria-label={t("Delete preset")} title={t("Delete preset")} onClick={() => onDelete(p.id)}>

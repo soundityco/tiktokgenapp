@@ -5690,6 +5690,11 @@ export default function VideoStudio({
             </div>
               <ColorGrade grade={panelGrade} onChange={(g) => writeLook({ grade: g })} onRaw={setRawView} lookErr={camTake ? null : lookErr} disabled={!!panelGrade?.off}
                 sdr={camTake ? camTake.source?.colour === "sdr" || (camTake.source?.kind === "phone" && camTake.source.colour === "unknown") : sdrSource}
+                footage={(() => {
+                  const src = camTake ? camTake.source : settings.source;
+                  if (camTake ? src?.colour === "sdr" || (src?.kind === "phone" && src.colour === "unknown") : sdrSource) return "sdr";
+                  return src?.colour === "log" || src?.colour === "hdr" ? src.colour : undefined;
+                })()}
                 onLutStored={(id) => { LOOKS.delete(id); setLutReload((n) => n + 1); }}
                 presets={gradePresets ?? []} onDeletePreset={(id) => onGradePresets?.((gradePresets ?? []).filter((x) => x.id !== id))}
                 onSavePreset={(name) => {
