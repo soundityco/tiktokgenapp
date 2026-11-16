@@ -418,10 +418,24 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
-/* The line being sung: the Generate button's gradient, drifting, with a soft glow (the shots keep their camera colour). */
-.lyric-track .cue.on:not(.cam-shot) { background: var(--grad-holo); background-size: 220% 100%; animation: holo-drift-1 6s ease-in-out infinite alternate;
-  color: var(--on-accent); border-left-color: transparent; box-shadow: 0 0 14px color-mix(in srgb, var(--holo-glow) 45%, transparent); z-index: 1; }
-@media (prefers-reduced-motion: reduce) { .lyric-track .cue.on:not(.cam-shot) { animation: none; } }
+/* The clip playing (a line, a hook, a shot): its text and the bar on its left shimmer with the Generate button's colours;
+   a shot's bar glows in its camera's colour. */
+.lyric-track .cue.on { animation: cue-shimmer 2.4s ease-in-out infinite alternate; z-index: 1; }
+.lyric-track .cue.on:not(.cam-shot) { border-left-color: var(--accent-hi); }
+.lyric-track .cue.cam-shot.on { animation-name: cue-shimmer-text; box-shadow: -3px 0 10px -3px var(--cam); }
+@keyframes cue-shimmer {
+  0% { text-shadow: 0 0 6px var(--holo-a), 0 0 12px var(--holo-a); box-shadow: -3px 0 10px -3px var(--holo-a); }
+  33% { text-shadow: 0 0 6px var(--holo-b), 0 0 12px var(--holo-b); box-shadow: -3px 0 10px -3px var(--holo-b); }
+  66% { text-shadow: 0 0 6px var(--holo-c), 0 0 12px var(--holo-c); box-shadow: -3px 0 10px -3px var(--holo-c); }
+  100% { text-shadow: 0 0 6px var(--holo-d), 0 0 12px var(--holo-d); box-shadow: -3px 0 10px -3px var(--holo-d); }
+}
+@keyframes cue-shimmer-text {
+  0% { text-shadow: 0 0 6px var(--holo-a), 0 0 12px var(--holo-a); }
+  33% { text-shadow: 0 0 6px var(--holo-b), 0 0 12px var(--holo-b); }
+  66% { text-shadow: 0 0 6px var(--holo-c), 0 0 12px var(--holo-c); }
+  100% { text-shadow: 0 0 6px var(--holo-d), 0 0 12px var(--holo-d); }
+}
+@media (prefers-reduced-motion: reduce) { .lyric-track .cue.on { animation: none; text-shadow: 0 0 8px var(--holo-glow); } }
 /* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */
 .takes { display: flex; flex-direction: column; gap: 6px; }
 .takes, .take, .tree-branch > * { min-width: 0; }
@@ -1971,7 +1985,7 @@ details.sec:first-of-type { background-image: none; }
 @media (prefers-reduced-motion: reduce) { }
 /* Generate (phone), second pass: a pastel holographic gradient (lavender, periwinkle, mint, pale yellow, peach)
    melting into white at the bottom, dark text; the band drifts slowly. */
-:root { --grad-holo: linear-gradient(90deg, #dcc3f6 0%, #c7cdf8 22%, #c2e9f0 42%, #d3f1c8 60%, #f1edbf 78%, #f7d9bd 100%); --holo-glow: #c7cdf8; }
+:root { --grad-holo: linear-gradient(90deg, #dcc3f6 0%, #c7cdf8 22%, #c2e9f0 42%, #d3f1c8 60%, #f1edbf 78%, #f7d9bd 100%); --holo-glow: #c7cdf8; --holo-a: #dcc3f6; --holo-b: #c2e9f0; --holo-c: #d3f1c8; --holo-d: #f7d9bd; }
 @media (max-width: 640px) {
   .gen-fab .btn.primary { color: var(--on-accent); text-shadow: none;
     background: radial-gradient(120% 90% at 50% 125%, #fff 0%, rgba(255,255,255,.92) 38%, rgba(255,255,255,0) 72%), var(--grad-holo);

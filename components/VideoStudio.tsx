@@ -2718,13 +2718,18 @@ export default function VideoStudio({
     const sr = audioBuf.sampleRate;
     // Seconds per bar: exactly 3 px of screen (a bar every 3.0x px, once rounded, left a 4 px gap now and then: dark bands).
     const bin = (v.d / W) * step;
-    // Just before the playhead, the bars take the Generate button's gradient, fading in (what is playing).
+    // Around the playhead, the bars take the Generate button's gradient, fading out on both sides (what is playing).
     const hx = X(head), trail = 70;
     const holo = (getComputedStyle(document.documentElement).getPropertyValue("--grad-holo").match(/#[0-9a-f]{6}/gi) ?? []);
     let glow: CanvasGradient | null = null;
-    if (holo.length > 1 && hx > -4 && hx - trail < W) {
-      glow = g.createLinearGradient(hx - trail, 0, hx + 2, 0);
-      holo.forEach((c, i) => glow!.addColorStop(i / (holo.length - 1), c + (i === 0 ? "00" : i === 1 ? "80" : "ff")));
+    if (holo.length > 1 && hx + trail > 0 && hx - trail < W) {
+      // Centred on the playhead: clear far on the left, the gradient full around the playhead, clear again on the right.
+      glow = g.createLinearGradient(hx - trail, 0, hx + trail, 0);
+      const last = holo.length - 1;
+      holo.forEach((c, i) => {
+        const at = i / last, a = 1 - Math.abs(at - 0.5) * 2; // 0 at the ends, 1 in the middle
+        glow!.addColorStop(at, c + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, "0"));
+      });
     }
     for (let k = Math.floor(v.s / bin); k * bin < v.s + v.d; k++) {
       const t0 = k * bin, t1 = t0 + bin;
@@ -2739,8 +2744,9 @@ export default function VideoStudio({
       }
       const h = Math.max(1, Math.round(Math.min(1, val) * (H - 18)));
       const bx = Math.round(X(t0));
-      g.fillStyle = glow && bx >= hx - trail && bx <= hx + 1 ? glow : "#6f6e78";
+      g.fillStyle = "#6f6e78";
       g.fillRect(bx, Math.round((H - h) / 2), 2, h);
+      if (glow && bx >= hx - trail && bx <= hx + trail) { g.fillStyle = glow; g.fillRect(bx, Math.round((H - h) / 2), 2, h); }
     }
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
