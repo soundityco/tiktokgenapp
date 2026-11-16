@@ -2429,9 +2429,12 @@ export default function VideoStudio({
   };
 
   // ---- the waveform's view: the whole track, or a zoomed part of it (pinch, ctrl + wheel, the − / + buttons) ----
-  const [view, setView] = useState<{ s: number; d: number } | null>(null);
+  const [view, setViewState] = useState<{ s: number; d: number } | null>(null);
   const viewRef = useRef(view);
   viewRef.current = view;
+  // Every change of the view is seen at once by whoever reads it next (the playhead's follow reads it every frame: it
+  // used to put back the view of the frame before, undoing a zoom made while playing).
+  const setView = (v: { s: number; d: number } | null) => { viewRef.current = v; setViewState(v); };
   const viewOf = () => viewRef.current ?? { s: 0, d: audioBuf?.duration ?? 1 };
   // Kept on this device, per release: the zoom and where it looks, the last one set, the same on every video of the
   // release and after a refresh (on another version of the audio too, kept within its length).
@@ -3945,6 +3948,7 @@ export default function VideoStudio({
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
             <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
             {shots.map((x, i) => {
+              if (x.to <= tw.s || x.from >= tw.s + tw.d) return null; // not in view
               const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
               // Its cut (the one that starts it, in the segment): its cross takes it away, the shot joins the one on its left.
               const own = x.cut >= 0 && Math.abs(sortedCuts[x.cut].at - x.from) < 1e-3 ? sortedCuts[x.cut] : null;
@@ -4857,7 +4861,7 @@ export default function VideoStudio({
                 {hooks.length > 0 && (
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
-                    {hooks.map((h, i) => (
+                    {hooks.map((h, i) => settings.crop.start + Math.min(segLen, h.to ?? segLen) > tw.s && settings.crop.start + h.from < tw.s + tw.d && (
                       <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
                         data-text={h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                         style={{
@@ -4889,7 +4893,8 @@ export default function VideoStudio({
                 )}
                 <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
                   <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
-                  {cues.map((c, i) => (
+                  {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
+                  {cues.map((c, i) => c.end > tw.s && c.start < tw.s + tw.d && (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
                       data-text={c.text.replace(/\n/g, " ")}
                       style={{
