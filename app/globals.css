@@ -474,6 +474,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .cam-cut.at-right::after { left: auto; right: 1px; }
 /* An end: the block's own edge shows it, no white line (only the ↔ cursor). */
 .cam-cut.end::after { display: none; }
+.lyric-track .track-seg { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 5%, transparent); pointer-events: none; }
 .lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 .hook-track .cue { border-left-color: var(--blue); }
 .hook-track .cue.on { border-left-color: var(--blue); }

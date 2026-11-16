@@ -2709,23 +2709,27 @@ export default function VideoStudio({
     g.globalAlpha = 1;
     // One bar per 3 px of screen, snapped to whole pixels: crisp at any width. Zoomed in, read from the samples
     // themselves (the overview's 600 points would only give blocks).
+    // Each bar is a fixed slice of the track (a grid in seconds, not in the view): when the view slides (while playing,
+    // zoomed) the bars move along with the sound instead of being cut again at every step, which made it shimmer.
     g.fillStyle = "#6f6e78";
     const step = 3, n = Math.max(1, Math.floor(W / step));
     const fine = !!view && v.d / dur < 0.5;
     const ch = fine ? audioBuf.getChannelData(0) : null;
     const sr = audioBuf.sampleRate;
-    for (let i = 0; i < n; i++) {
+    const bin = v.d / n; // seconds per bar
+    for (let k = Math.floor(v.s / bin); k * bin < v.s + v.d; k++) {
+      const t0 = k * bin, t1 = t0 + bin;
       let val = 0;
       if (ch) {
-        const a = Math.floor((v.s + (i / n) * v.d) * sr), b = Math.min(ch.length, Math.max(a + 1, Math.floor((v.s + ((i + 1) / n) * v.d) * sr)));
-        for (let k = a; k < b; k += 4) { const x = Math.abs(ch[k]); if (x > val) val = x; }
+        const a = Math.max(0, Math.floor(t0 * sr)), b = Math.min(ch.length, Math.max(a + 1, Math.floor(t1 * sr)));
+        for (let q = a - (a % 4); q < b; q += 4) { const x = Math.abs(ch[q] ?? 0); if (x > val) val = x; }
         val /= peakMax;
       } else {
-        const a = Math.floor(((v.s + (i / n) * v.d) / dur) * peaks.length), b = Math.max(a + 1, Math.floor(((v.s + ((i + 1) / n) * v.d) / dur) * peaks.length));
-        for (let k = a; k < b && k < peaks.length; k++) val = Math.max(val, peaks[k]);
+        const a = Math.floor((t0 / dur) * peaks.length), b = Math.max(a + 1, Math.floor((t1 / dur) * peaks.length));
+        for (let q = Math.max(0, a); q < b && q < peaks.length; q++) val = Math.max(val, peaks[q]);
       }
       const h = Math.max(1, Math.round(Math.min(1, val) * (H - 18)));
-      g.fillRect(i * step, Math.round((H - h) / 2), 2, h);
+      g.fillRect(Math.round(X(t0)), Math.round((H - h) / 2), 2, h);
     }
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
@@ -3591,14 +3595,11 @@ export default function VideoStudio({
   /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
   const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
-  // The tracks under the waveform (lyrics, hooks, shots) show what it shows: zoomed in, the part of the segment in view,
-  // so their lines, edges and cuts can be worked on in detail.
-  const tw = (() => {
-    const s0 = settings.crop.start;
-    if (!view) return { s: s0, d: segLen };
-    const a = Math.max(s0, view.s), b = Math.min(s0 + segLen, view.s + view.d);
-    return b - a > 0.3 ? { s: a, d: b - a } : { s: s0, d: segLen };
-  })();
+  // The tracks under the waveform (lyrics, hooks, shots) show what it shows, at the same scale: zoomed in, their lines,
+  // edges and cuts can be worked on in detail.
+  // Exactly the waveform's view (zoomed or the whole track), at its scale: what is above is above, the segment marked.
+  // (on a phone, not zoomed: the segment, a whole song on a phone's width would leave a few pixels for each line)
+  const tw = view ?? (audioBuf && !phone ? { s: 0, d: audioBuf.duration } : { s: settings.crop.start, d: segLen });
   const twRef = useRef(tw);
   twRef.current = tw;
   /** A time of the track as a position on the tracks (%), and a span as a width. */
@@ -3900,6 +3901,7 @@ export default function VideoStudio({
       <div className="cams">
         {used > 0 && (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
+            <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
             {shots.map((x, i) => {
               const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
               // Its cut (the one that starts it, in the segment): its cross takes it away, the shot joins the one on its left.
@@ -4810,6 +4812,7 @@ export default function VideoStudio({
                 </div>
                 {hooks.length > 0 && (
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
+                    <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
                     {hooks.map((h, i) => (
                       <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
                         style={{ left: tl(Math.max(tw.s, settings.crop.start + clamp(h.from, 0, segLen))), width: twd(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)) }}
@@ -4836,6 +4839,7 @@ export default function VideoStudio({
                   </div>
                 )}
                 <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
+                  <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
                   {cues.map((c, i) => (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
                       style={{
