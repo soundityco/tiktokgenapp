@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignSong, buildCues, cleanHeard, dropLoops, moveCueStart, retimeCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { alignSong, buildCues, cleanHeard, dropLoops, moveCueEnd, moveCueStart, retimeCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -118,5 +118,20 @@ describe("lines not heard between two heard ones", () => {
     const at = (w: string) => r.words.find((x) => x.w === w)!.s;
     expect(at("pourquoi")).toBeLessThan(12.5); // right after "tout gâché", not 30 s later
     expect(at("peur")).toBeGreaterThan(39.5); // its line waits for its heard word
+  });
+});
+
+describe("moveCueEnd (a caption's end dragged)", () => {
+  it("stays longer or leaves sooner; reaching the next line makes it come later", () => {
+    const words = [
+      { w: "un", s: 1, e: 1.5, line: 0 }, { w: "deux", s: 1.5, e: 2, line: 0 },
+      { w: "trois", s: 5, e: 5.5, line: 1 }, { w: "quatre", s: 5.5, e: 6, line: 1 },
+    ];
+    const cues = buildCues(words, "phrase");
+    expect(buildCues(moveCueEnd(words, cues, 0, 3.5)!, "phrase")[0].end).toBeCloseTo(3.5);
+    expect(buildCues(moveCueEnd(words, cues, 0, 1.6)!, "phrase")[0].end).toBeCloseTo(1.6);
+    const past = buildCues(moveCueEnd(words, cues, 0, 5.3)!, "phrase");
+    expect(past[0].end).toBeCloseTo(5.3);
+    expect(past[1].start).toBeGreaterThanOrEqual(5.3);
   });
 });

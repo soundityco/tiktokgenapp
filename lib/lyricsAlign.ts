@@ -597,6 +597,13 @@ export function moveCueStart(all: LyricWord[], cues: Cue[], i: number, at: numbe
   return out;
 }
 
+/** A caption's end dragged on the timeline to `at`: as its + / − (`retimeCue` "end"): a later end reaching the next
+ *  line makes it come later. Null: nothing moved. */
+export function moveCueEnd(all: LyricWord[], cues: Cue[], i: number, at: number): LyricWord[] | null {
+  const c = cues[i];
+  return c ? retimeCue(all, cues, i, "end", at - c.end) : null;
+}
+
 /**
  * The ± buttons of a word-by-word caption, kept in that mode's own timing (ws / we / wu): the phrases (s / e / until)
  * stay where they are. `start` changes when the word appears (earlier: the word before leaves then), `end` when it

@@ -471,6 +471,7 @@ export const FR: Record<string, string> = {
   "Sign out": "Se déconnecter",
   "Size": "Taille",
   "Threshold": "Seuil",
+  "Drag to change when it leaves": "Glisser pour changer quand il disparaît",
   "Listen to the whole song again and place the lyrics from scratch (the lines retimed by hand too).": "Réécouter toute la chanson et recaler les paroles depuis le début (les lignes retouchées à la main aussi).",
   "Drag to move when it starts (Alt: only this one, a gap allowed)": "Glisser pour déplacer son début (Alt : seulement celle-ci, un vide possible)",
   "Very precise (needs a graphics card)": "Très précis (carte graphique nécessaire)",

@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -4002,6 +4002,22 @@ export default function VideoStudio({
     setHead(at);
     onProject((p) => ({ ...p, lyricWords: out }));
   });
+  /** A line's end dragged (one followed by a gap, or the last: a glued end is the next line's start handle). */
+  const moveLineEnd = (i: number) => edgeDrag((at) => {
+    const out = moveCueEnd(project.lyricWords ?? [], cues, i, at);
+    if (!out) return;
+    setHead(round2(Math.max(settings.crop.start, at - 0.3)));
+    onProject((p) => ({ ...p, lyricWords: out }));
+  });
+  /** A hook's end dragged: later past the next hook's start, that one starts later (it keeps its end). */
+  const moveHookEnd = (id: string) => edgeDrag((at) => {
+    const h = hooks.find((x) => x.id === id);
+    if (!h) return;
+    const next = hooks.filter((x) => x.id !== id && x.from > h.from).sort((a, b) => a.from - b.from)[0];
+    const to = round2(clamp(at - settings.crop.start, h.from + 0.2, next ? (next.to ?? segLen) - 0.2 : segLen));
+    setHead(round2(settings.crop.start + Math.max(h.from, to - 0.3)));
+    setHooks(hooks.map((x) => (x.id === id ? { ...x, to } : next && x.id === next.id && to > next.from ? { ...x, from: to } : x)));
+  });
   const moveHook = (id: string) => edgeDrag((at, free) => {
     const h = hooks.find((x) => x.id === id);
     if (!h) return;
@@ -4718,6 +4734,15 @@ export default function VideoStudio({
                       <span key={"e" + h.id} className={"cam-cut cue-edge" + (h.from <= 0.01 ? " at-left" : "")} style={{ left: `${(Math.max(0, h.from) / segLen) * 100}%` }}
                         title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveHook(h.id)} />
                     ))}
+                    {/* Its end: a hook followed by a gap, or the last one (glued to the next: that one's start handle). */}
+                    {hooks.map((h) => {
+                      const to = h.to ?? segLen;
+                      const glued = hooks.some((x) => x.id !== h.id && Math.abs(x.from - to) < 0.05);
+                      return !glued && to > 0 && (
+                        <span key={"x" + h.id} className={"cam-cut cue-edge" + (to >= segLen - 0.01 ? " at-right" : "")} style={{ left: `${(Math.min(segLen, to) / segLen) * 100}%` }}
+                          title={t("Drag to change when it leaves")} {...moveHookEnd(h.id)} />
+                      );
+                    })}
                     <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
                   </div>
                 )}
@@ -4737,6 +4762,11 @@ export default function VideoStudio({
                   {mode !== "word" && cues.map((c, i) => c.start < end && c.end > settings.crop.start && (
                     <span key={"e" + i} className={"cam-cut cue-edge" + (c.start <= settings.crop.start + 0.01 ? " at-left" : "")} style={{ left: `${((Math.max(c.start, settings.crop.start) - settings.crop.start) / segLen) * 100}%` }}
                       title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveLine(i)} />
+                  ))}
+                  {/* A line's end: followed by a gap, or the last (glued to the next: that one's start handle). */}
+                  {mode !== "word" && cues.map((c, i) => c.end > settings.crop.start && c.end < end + 0.01 && !(cues[i + 1] && cues[i + 1].start - c.end < 0.05) && (
+                    <span key={"x" + i} className={"cam-cut cue-edge" + (c.end >= end - 0.01 ? " at-right" : "")} style={{ left: `${((Math.min(c.end, end) - settings.crop.start) / segLen) * 100}%` }}
+                      title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
