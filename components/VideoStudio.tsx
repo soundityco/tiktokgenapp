@@ -4739,7 +4739,7 @@ export default function VideoStudio({
                       const to = h.to ?? segLen;
                       const glued = hooks.some((x) => x.id !== h.id && Math.abs(x.from - to) < 0.05);
                       return !glued && to > 0 && (
-                        <span key={"x" + h.id} className={"cam-cut cue-edge" + (to >= segLen - 0.01 ? " at-right" : "")} style={{ left: `${(Math.min(segLen, to) / segLen) * 100}%` }}
+                        <span key={"x" + h.id} className={"cam-cut cue-edge end" + (to >= segLen - 0.01 ? " at-right" : "")} style={{ left: `${(Math.min(segLen, to) / segLen) * 100}%` }}
                           title={t("Drag to change when it leaves")} {...moveHookEnd(h.id)} />
                       );
                     })}
@@ -4765,7 +4765,7 @@ export default function VideoStudio({
                   ))}
                   {/* A line's end: followed by a gap, or the last (glued to the next: that one's start handle). */}
                   {mode !== "word" && cues.map((c, i) => c.end > settings.crop.start && c.end < end + 0.01 && !(cues[i + 1] && cues[i + 1].start - c.end < 0.05) && (
-                    <span key={"x" + i} className={"cam-cut cue-edge" + (c.end >= end - 0.01 ? " at-right" : "")} style={{ left: `${((Math.min(c.end, end) - settings.crop.start) / segLen) * 100}%` }}
+                    <span key={"x" + i} className={"cam-cut cue-edge end" + (c.end >= end - 0.01 ? " at-right" : "")} style={{ left: `${((Math.min(c.end, end) - settings.crop.start) / segLen) * 100}%` }}
                       title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
