@@ -766,12 +766,37 @@ export default function VideoStudio({
     return el.readyState >= 2 && el.videoWidth && !el.seeking ? { src: el, w: el.videoWidth, h: el.videoHeight } : undefined;
   };
   /** While playing: every camera plays with the sound, so a cut shows the next one at once (no black frame). */
+  /**
+   * While playing, the cameras 2 to 4 follow the sound. Only the one on screen and the one of the next cut (started
+   * `PREROLL` before it, placed and already playing at the cut) are decoded: every camera at once (4K, 10 bits) was too
+   * much, a camera fell behind, jumped back in place, and its first pictures after a cut stayed frozen meanwhile.
+   * Before its recording starts a camera waits, paused, on its first picture (it used to jump back to it every 0.4 s).
+   */
+  const PREROLL = 1.5;
   const syncAngles = (heard: number) => {
+    const cfg = settingsRef.current;
+    const live = new Set<string>();
+    const add = (cam: number) => { const id = cam > 0 ? cfg.angles?.[cam - 1] : undefined; if (id) live.add(id); };
+    add(camAt(cfg.cuts, heard));
+    for (const c of cfg.cuts ?? []) if (c.at > heard && c.at <= heard + PREROLL) add(c.cam);
     for (const a of anglesRef.current.values()) {
-      const target = Math.max(0, heard - a.offset), diff = target - a.el.currentTime;
-      if (a.el.paused) { if (Math.abs(diff) > 0.05) a.el.currentTime = target; void a.el.play().catch(() => {}); }
-      else if (Math.abs(diff) > 0.4) { a.el.currentTime = target; a.el.playbackRate = 1; }
-      else a.el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
+      const el = a.el, target = heard - a.offset;
+      const inFile = target > -PREROLL && (!Number.isFinite(el.duration) || target < el.duration);
+      if (!live.has(a.id) || !inFile) {
+        if (!el.paused) { el.pause(); el.playbackRate = 1; }
+        // (soon recording: waiting on its first picture)
+        if (inFile && target < 0 && live.has(a.id) && el.currentTime > 0.05 && !el.seeking) el.currentTime = 0;
+        continue;
+      }
+      if (target < 0) { if (!el.paused) el.pause(); if (el.currentTime > 0.05 && !el.seeking) el.currentTime = 0; continue; }
+      const diff = target - el.currentTime;
+      if (el.paused) {
+        // A little ahead: the time the seek takes, the sound goes on (it is caught up by the speed below).
+        if (Math.abs(diff) > 0.05) el.currentTime = target + (diff > 0 || diff < -0.3 ? 0.12 : 0);
+        void el.play().catch(() => {});
+      } else if (Math.abs(diff) > 0.4) {
+        if (!el.seeking) { console.debug(`[multicam] camera ${a.id} ${Math.round(diff * 1000)} ms off: placed again`); el.currentTime = target + 0.12; el.playbackRate = 1; }
+      } else el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
     }
   };
 
