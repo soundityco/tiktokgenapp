@@ -170,6 +170,8 @@ export interface LyricWord {
   until?: number;
   /** Placed by forced alignment (exact to ~0.2 s): the placing does not retouch these times (no tightening of line starts). */
   exact?: boolean;
+  /** How clearly the alignment heard this word's line: the mean probability of its letters, 0..1. */
+  conf?: number;
   /** The alignment hardly heard this line (its letters' mean probability is low): the relay by phrases may retime it. */
   weak?: boolean;
   /** The alignment is doubtful on this line (too fast, hardly heard, words that strayed): to check. Cleared once retimed by hand. */

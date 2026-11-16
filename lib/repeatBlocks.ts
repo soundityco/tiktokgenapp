@@ -1,0 +1,207 @@
+import type { LyricWord } from "./types";
+import { norm } from "./lyricsAlign";
+
+/**
+ * A chorus copied and pasted: the same lines sung the same way several times in a row ("Tout mais pas ça / Non ×4 /
+ * Tout mais pas ça" four times). When the alignment hardly hears it (effects), it cannot tell its copies apart and
+ * places them unevenly. The audio itself repeats with a fixed period: measured on the sound (its spectrum, not the
+ * voice), it places every copy, phased on the bits of them the alignment did hear clearly.
+ */
+
+/** A run of the same lines repeated: lines `from` .. `from + unit * times - 1`. */
+export interface Repeat { from: number; unit: number; times: number }
+
+/** The longest run of a group of lines repeated word for word at least 3 times in a row. */
+export function findRepeat(lines: string[], minTimes = 3): Repeat | null {
+  const key = lines.map((l) => norm(l));
+  let best: Repeat | null = null;
+  for (let unit = 1; unit <= 12; unit++) {
+    for (let from = 0; from + unit * minTimes <= key.length; from++) {
+      let times = 1;
+      while (from + (times + 1) * unit <= key.length && key.slice(from + times * unit, from + (times + 1) * unit).every((x, i) => x && x === key[from + i])) times++;
+      if (times >= minTimes && (!best || unit * times > best.unit * best.times)) best = { from, unit, times };
+    }
+  }
+  // A unit made of a smaller one repeated (unit 2 of "Non, Non") is that smaller one: kept as found (longest coverage).
+  return best;
+}
+
+// ---------- the sound's repetition period ----------
+
+function fft(re: Float64Array, im: Float64Array) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const ar = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci, ai = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k + len / 2] = re[i + k] - ar; im[i + k + len / 2] = im[i + k] - ai;
+        re[i + k] += ar; im[i + k] += ai;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+}
+
+/** Log-mel spectrum (40 bands, 60 Hz – 7 kHz) of 16 kHz mono samples, every 20 ms, each band centred and scaled. */
+export function melFrames(x: Float32Array, rate = 16000): Float32Array[] {
+  const n = 1024, hop = Math.round(rate * 0.02), bands = 40;
+  const mel = (f: number) => 2595 * Math.log10(1 + f / 700), imel = (m: number) => 700 * (10 ** (m / 2595) - 1);
+  const pts = Array.from({ length: bands + 2 }, (_, i) => Math.floor(((n + 1) * imel(mel(60) + ((mel(7000) - mel(60)) * i) / (bands + 1))) / rate));
+  const win = Float64Array.from({ length: n }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)));
+  const out: Float32Array[] = [];
+  const re = new Float64Array(n), im = new Float64Array(n);
+  for (let at = 0; at + n <= x.length; at += hop) {
+    for (let i = 0; i < n; i++) { re[i] = x[at + i] * win[i]; im[i] = 0; }
+    fft(re, im);
+    const f = new Float32Array(bands);
+    for (let b = 0; b < bands; b++) {
+      const l = pts[b], c = pts[b + 1], r = pts[b + 2];
+      let e = 0;
+      for (let k = l; k < r; k++) { const p = re[k] * re[k] + im[k] * im[k]; e += p * (k < c ? (k - l) / Math.max(1, c - l) : (r - k) / Math.max(1, r - c)); }
+      f[b] = Math.log(e + 1e-8);
+    }
+    out.push(f);
+  }
+  for (let b = 0; b < bands; b++) {
+    let m = 0; for (const f of out) m += f[b]; m /= out.length || 1;
+    let v = 0; for (const f of out) v += (f[b] - m) ** 2; const sd = Math.sqrt(v / (out.length || 1)) + 1e-6;
+    for (const f of out) f[b] = (f[b] - m) / sd;
+  }
+  return out;
+}
+
+/**
+ * The period (seconds) the sound repeats with, between `min` and `max`, and how alike it is (mean cosine of the frames
+ * one period apart, 0..1). Null when nothing repeats clearly.
+ */
+export function repeatPeriod(frames: Float32Array[], min: number, max: number, frame = 0.02): { period: number; score: number } | null {
+  let best = { period: 0, score: -1 }, second = -1;
+  const scores: [number, number][] = [];
+  for (let L = Math.round(min / frame); L <= Math.round(max / frame) && L < frames.length - 25; L++) {
+    let sum = 0, n = 0;
+    for (let i = 0; i + L < frames.length; i++) {
+      const a = frames[i], b = frames[i + L];
+      let d = 0, na = 0, nb = 0;
+      for (let k = 0; k < a.length; k++) { d += a[k] * b[k]; na += a[k] * a[k]; nb += b[k] * b[k]; }
+      sum += d / (Math.sqrt(na * nb) + 1e-9); n++;
+    }
+    scores.push([L * frame, sum / n]);
+  }
+  for (const [p, s] of scores) if (s > best.score) best = { period: p, score: s };
+  // The best that is not next to it (a different period): the peak must stand out.
+  for (const [p, s] of scores) if (Math.abs(p - best.period) > 0.15 && s > second) second = s;
+  // Measured: WANNA TRY's chorus 0.60 (clear), Fontaines D.C.'s repeated line 0.41 (placing it so cost a line): 0.5.
+  return best.score >= 0.5 && best.score - second >= 0.1 ? best : null;
+}
+
+// ---------- placing the copies ----------
+
+const GAP = 3; // letters' worth of time between two lines
+
+/**
+ * Every copy of the repeated block placed one period after the other: inside a copy, its lines share the period by
+ * their letters; the copies are phased on the lines the alignment heard clearly (`conf`), else on the first copy's
+ * start. `lineOf`: the words' indexes of each line. Only the repeat's lines move; null when it does not fit in order.
+ */
+export function placeRepeat(words: LyricWord[], lineOf: number[][], rep: Repeat, period: number, heardConf = 0.15, fit?: (placed: LyricWord[], lines: number[]) => number): LyricWord[] | null {
+  const unitLetters = Array.from({ length: rep.unit }, (_, j) => lineOf[rep.from + j].reduce((n, i) => n + Math.max(1, norm(words[i].w).length), 0) + GAP);
+  const total = unitLetters.reduce((a, b) => a + b, 0);
+  const off = unitLetters.map((_, j) => (period * unitLetters.slice(0, j).reduce((a, b) => a + b, 0)) / total);
+  const first = rep.from, last = rep.from + rep.unit * rep.times - 1;
+  const start = (k: number) => words[lineOf[k][0]].s;
+  // The phase: the lines heard clearly vote for where a copy starts (modulo the period), weighted by how well heard.
+  let sx = 0, sy = 0;
+  for (let k = first; k <= last; k++) {
+    const c = words[lineOf[k][0]].conf ?? 0;
+    if (c < heardConf) continue;
+    const ph = (((start(k) - off[(k - first) % rep.unit]) % period) + period) % period;
+    sx += c * Math.cos((2 * Math.PI * ph) / period); sy += c * Math.sin((2 * Math.PI * ph) / period);
+  }
+  const guess = start(first);
+  let s0 = guess;
+  if (sx || sy) {
+    const ph = (((Math.atan2(sy, sx) / (2 * Math.PI)) * period) % period + period) % period;
+    // The copy start with that phase nearest the first copy's own start.
+    s0 = ph + Math.round((guess - ph) / period) * period;
+  }
+  const before = first > 0 ? words[lineOf[first - 1][0]].s : -Infinity;
+  const after = last + 1 < lineOf.length ? start(last + 1) : Infinity;
+  const lines = Array.from({ length: last - first + 1 }, (_, i) => first + i);
+  // `fit`: how well the copies placed from a start agree with what the alignment heard (the letters expected at each
+  // moment against the ones heard there): every start over one period tried, the best kept.
+  if (fit) {
+    let bestScore = -Infinity, bestStart = s0;
+    for (let d = -period / 2; d < period / 2; d += 0.02) {
+      const at = s0 + d;
+      if (at <= before + 0.3 || at + period * rep.times > after + 0.5) continue;
+      const sc = fit(layout(at), lines);
+      if (sc > bestScore) { bestScore = sc; bestStart = at; }
+    }
+    s0 = bestStart;
+  }
+  if (s0 <= before + 0.3 || s0 + period * rep.times > after + 0.5) return null;
+  return layout(s0);
+
+  function layout(s0: number): LyricWord[] {
+  const out = words.slice();
+  for (let k = first; k <= last; k++) {
+    const r = k - first, j = r % rep.unit, copy = Math.floor(r / rep.unit);
+    const ls = s0 + copy * period + off[j];
+    const le = s0 + copy * period + (j + 1 < rep.unit ? off[j + 1] : period) - 0.04;
+    const idx = lineOf[k], n = idx.reduce((m, i) => m + Math.max(1, norm(words[i].w).length), 0);
+    let u = 0;
+    idx.forEach((i, q) => {
+      const len = Math.max(1, norm(words[i].w).length);
+      const span = le - ls;
+      out[i] = { ...words[i], s: ls + span * 0.75 * (u / n), e: q === idx.length - 1 ? le : ls + span * 0.75 * ((u + len) / n), doubt: undefined };
+      u += len;
+    });
+  }
+  return out;
+  }
+}
+
+/**
+ * The copies heard together: the model's frames of every copy averaged, one period apart, from each possible start
+ * (20 ms steps over one period); the block's letters aligned on that average (what one copy says faintly, four say
+ * clearly); the start whose alignment fits best kept. Gives the copies' start and where each word of a copy is sung.
+ * `toks`/`owner`: the block's letters (model ids) and the word (index in the block) each belongs to.
+ */
+export function foldedFit(
+  emis: Float32Array, T: number, V: number, from: number, to: number, period: number, times: number,
+  toks: number[], owner: number[], align: (e: Float32Array, T: number, V: number, toks: number[]) => Int32Array | null,
+  frame = 0.02,
+): { start: number; wordStart: number[] } | null {
+  const P = Math.round(period / frame);
+  if (!toks.length || P < toks.length + 2) return null;
+  let best: { score: number; start: number; starts: Int32Array } | null = null;
+  const folded = new Float32Array(P * V);
+  for (let f0 = Math.round(from / frame); f0 <= Math.round(to / frame); f0++) {
+    if (f0 < 0 || f0 + (times - 1) * P + P > T) continue;
+    for (let t = 0; t < P; t++) {
+      for (let v = 0; v < V; v++) {
+        let p = 0;
+        for (let k = 0; k < times; k++) p += Math.exp(emis[(f0 + k * P + t) * V + v]);
+        folded[t * V + v] = Math.log(p / times + 1e-9);
+      }
+    }
+    const st = align(folded, P, V, toks);
+    if (!st) continue;
+    let score = 0;
+    for (let k = 0; k < toks.length; k++) score += folded[st[k] * V + toks[k]];
+    if (!best || score > best.score) best = { score, start: f0 * frame, starts: st };
+  }
+  if (!best) return null;
+  const nWords = owner[owner.length - 1] + 1;
+  const wordStart = new Array<number>(nWords).fill(NaN);
+  for (let k = 0; k < toks.length; k++) if (isNaN(wordStart[owner[k]])) wordStart[owner[k]] = best.starts[k] * frame;
+  return { start: best.start, wordStart };
+}

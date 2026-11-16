@@ -155,7 +155,8 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
   }
   return words.map((x) => {
     const l = x.line ?? -1;
-    return bad.has(l) || weak.has(l) ? { ...x, ...(bad.has(l) ? { doubt: true } : null), ...(weak.has(l) ? { weak: true } : null) } : x;
+    const c = sum.get(l);
+    return { ...x, conf: c ? +(c[0] / c[1]).toFixed(3) : 0, ...(bad.has(l) ? { doubt: true } : null), ...(weak.has(l) ? { weak: true } : null) };
   });
 }
 
@@ -310,4 +311,24 @@ function wordsOf(starts: Int32Array, N: number, owner: number[], written: { w: s
     out[i] = { ...out[i], e: Math.max(out[i].s + 0.1, Math.min(out[i].s + HOLD, nextStart - 0.04)) };
   }
   return out;
+}
+
+/**
+ * How well words placed at their times agree with what the model heard: for each word its letters (as the alignment
+ * reads them, French as it sounds), spread over its first part, the best probability of that letter within ±40 ms.
+ */
+export function heardScore(emis: Float32Array, T: number, V: number, words: LyricWord[], french: boolean): number {
+  let score = 0;
+  for (const w of words) {
+    const n = faNorm(w.w), letters = [...(french ? frenchSound(n) : n)].map((c) => FA_VOCAB[c]).filter((x) => x !== undefined);
+    if (!letters.length) continue;
+    const span = Math.max(0.05, Math.min(w.e, w.s + 0.6) - w.s);
+    letters.forEach((tok, k) => {
+      const t = Math.round((w.s + (span * k) / letters.length) / FA_FRAME);
+      let best = 0;
+      for (let d = -2; d <= 2; d++) { const f = t + d; if (f >= 0 && f < T) best = Math.max(best, Math.exp(emis[f * V + tok])); }
+      score += best;
+    });
+  }
+  return score;
 }

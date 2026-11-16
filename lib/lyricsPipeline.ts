@@ -1,6 +1,7 @@
 import type { LyricWord } from "./types";
-import { alignDevice, alignEmissions } from "./alignAI";
-import { alignWordsForced } from "./forcedAlign";
+import { type Emissions, alignDevice, alignEmissions } from "./alignAI";
+import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench } from "./forcedAlign";
+import { findRepeat, foldedFit, melFrames, repeatPeriod } from "./repeatBlocks";
 import { alignSong, cleanHeard, norm, similarity, splitWords, withoutLost, wordsFromSegments } from "./lyricsAlign";
 import { mergeHeard, noSpeech, relayWeakLines } from "./lyricsRelay";
 import { type AsrModel, type AsrStep, prepareAudio, transcribe } from "./transcribe";
@@ -37,9 +38,10 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   let shown = 0;
   const overall = (p: number) => { if (p > shown) { shown = p; h.onOverall?.(Math.min(1, p)); } };
   let forced: LyricWord[] | null = null;
+  let em: Emissions;
   try {
     let step: AsrStep = "library";
-    const em = await alignEmissions(buf, {
+    em = await alignEmissions(buf, {
       onStep: (x) => { step = x; h.onStep?.(x); if (x === "listen") overall(0.3); },
       onProgress: (p) => { if (step === "listen") { h.onDone?.(p); overall(0.3 + 0.25 * p); } else { h.onPct?.(p); overall(0.3 * p); } },
       signal: h.signal,
@@ -57,9 +59,12 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
     return null;
   }
   h.onStep?.("library"); h.onPct?.(0); h.onDone?.(0);
+  const french = looksFrench(splitWords(written).map((x) => faNorm(x.w)));
+  /** The rules that need no speech model: after a cut in the production, lines piled up, a chorus copied and pasted. */
+  const finish = async (w: LyricWord[]) => applyRepeat(buf, em, spreadPacked(afterBreaks(w, silencesOf(buf))), french);
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
   // there, are heard again by the speech model, and its times are used for those lines (lib/lyricsRelay).
-  if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); overall(1); return spreadPacked(afterBreaks(forced, silencesOf(buf))); }
+  if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); overall(1); return finish(forced); }
   overall(0.55);
   const weak = forced.filter((x) => x.weak);
   const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
@@ -114,7 +119,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
     if (packedLines(relayed) > packedLines(before)) {
       console.info(`[align] relay heard too little to place the passage (${packedLines(relayed)} lines piled up against ${packedLines(before)}): the alignment kept`,
         heard.map((p) => `${p.s.toFixed(2)} ${p.w}`).join(" "));
-      return spreadPacked(afterBreaks(forced, silencesOf(buf)));
+      return finish(forced);
     }
     forced = relayed;
     const moved = forced.filter((x, i) => Math.abs(x.s - before[i].s) > 0.01).length;
@@ -125,7 +130,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   }
   h.onStep?.("library"); h.onPct?.(0); h.onDone?.(0);
   overall(1);
-  return spreadPacked(afterBreaks(forced, silencesOf(buf)));
+  return finish(forced);
 }
 
 /** Stretches of (almost) digital silence in the track, a cut in the production: [start, end] in seconds. */
@@ -261,5 +266,53 @@ export function spreadPacked(words: LyricWord[]): LyricWord[] {
     console.info(`[align] ${group.length} lines piled up spread over ${a.toFixed(2)}–${next.toFixed(2)} s`);
     k = j;
   }
+  return out;
+}
+
+/**
+ * A chorus copied and pasted that the alignment hardly heard (lib/repeatBlocks): the same lines repeated three times or
+ * more, the sound repeating with a clear period; its copies heard together (the model's frames averaged one period
+ * apart), its words placed on that average, every copy then placed the same way one period after the other.
+ */
+export async function applyRepeat(buf: AudioBuffer, em: Emissions, words: LyricWord[], french: boolean): Promise<LyricWord[]> {
+  const lineOf: number[][] = [];
+  words.forEach((w, i) => { const l = lineOf[lineOf.length - 1]; if (l && words[l[0]].line === w.line) l.push(i); else lineOf.push([i]); });
+  const rep = findRepeat(lineOf.map((l) => l.map((i) => words[i].w).join(" ")));
+  if (!rep) return words;
+  const first = rep.from, last = rep.from + rep.unit * rep.times - 1;
+  const lines = lineOf.slice(first, last + 1);
+  // Heard well: the alignment places it better than this.
+  const conf = lines.reduce((a, l) => a + (words[l[0]].conf ?? 0), 0) / lines.length;
+  if (conf >= 0.15) return words;
+  const s0 = words[lineOf[first][0]].s;
+  const end = last + 1 < lineOf.length ? words[lineOf[last + 1][0]].s : buf.duration;
+  const E = (end - s0) / rep.times;
+  if (E < 1) return words;
+  const frames = melFrames(await prepareAudio(buf, Math.max(0, s0 - 1), end));
+  const per = repeatPeriod(frames, E * 0.6, E * 1.5);
+  if (!per) { console.info("[align] repeated lines, but no clear repeat in the sound: left as they are"); return words; }
+  const P = per.period;
+  const unit = lineOf.slice(first, first + rep.unit).flat();
+  const toks: number[] = [], owner: number[] = [];
+  unit.forEach((i, wi) => { const n = faNorm(words[i].w); for (const c of french ? frenchSound(n) : n) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
+  const fit = foldedFit(em.frames, em.T, em.V, s0 - 1.5, s0 + P, P, rep.times, toks, owner, (f, n, v, tk) => ctcStarts(f, n, v, tk));
+  if (!fit) return words;
+  const out = words.slice();
+  const times: number[] = [];
+  for (let k = 0; k < rep.times; k++) {
+    unit.forEach((_, wi) => {
+      const rel = isNaN(fit.wordStart[wi]) ? (wi > 0 ? times[times.length - 1] - (fit.start + k * P) + 0.15 : 0) : fit.wordStart[wi];
+      times.push(fit.start + k * P + rel);
+    });
+  }
+  const before = first > 0 ? words[lineOf[first - 1][0]].s : -Infinity;
+  if (times[0] <= before + 0.2 || times[times.length - 1] >= end + 0.5) { console.info("[align] repeated lines: the copies do not fit in order, left as they are"); return words; }
+  const idx = lines.flat();
+  idx.forEach((i, q) => {
+    const sNow = times[q], next = q + 1 < times.length ? times[q + 1] : Math.min(end, sNow + 1.2);
+    const lineEnd = q + 1 >= idx.length || words[idx[q + 1]].line !== words[i].line;
+    out[i] = { ...words[i], s: sNow, e: lineEnd ? Math.max(sNow + 0.1, Math.min(next - 0.04, sNow + 1.2)) : Math.max(sNow + 0.05, next - 0.02), doubt: undefined };
+  });
+  console.info(`[align] ${rep.times} copies of ${rep.unit} lines placed one period apart (${P.toFixed(2)} s, the sound alike at ${(per.score * 100).toFixed(0)} %), from ${times[0].toFixed(2)} s`);
   return out;
 }
