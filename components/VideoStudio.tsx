@@ -2453,8 +2453,8 @@ export default function VideoStudio({
     try { if (view) localStorage.setItem(viewKey, JSON.stringify({ ...view, dur: audioBuf.duration })); else localStorage.removeItem(viewKey); } catch { /* private mode */ }
   }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
   /**
-   * While playing, zoomed in, the track scrolls under the playhead, kept at a third of the view (what is coming in
-   * sight, as Logic or Premiere): from the moment play is pressed. Paused, the view stays where it is (to work on it);
+   * While playing, zoomed in, the track scrolls under the playhead once it has reached a third of the view (what is
+   * coming stays in sight, as Logic or Premiere). Paused, the view stays where it is (to work on it);
    * a view slid by hand while playing is left alone for a moment. Near the track's ends the playhead moves instead.
    */
   const userPanAt = useRef(0);
@@ -2462,6 +2462,10 @@ export default function VideoStudio({
   const followHead = (t: number) => {
     const v = viewRef.current, dur = audioBuf?.duration ?? 0;
     if (!v || !dur || dragWave.current || performance.now() - userPanAt.current < 1500) return;
+    // The playhead moves on its own until it reaches a third of the view, then the track scrolls under it (no jump to
+    // that third when play starts left of it); out of view (started off screen, a jump by hand), the view goes to it.
+    const out = t < v.s || t > v.s + v.d;
+    if (!out && t <= v.s + v.d * FOLLOW_AT) return;
     const s = clamp(t - v.d * FOLLOW_AT, 0, Math.max(0, dur - v.d));
     if (Math.abs(s - v.s) > v.d * 0.002) setView({ s, d: v.d });
   };
