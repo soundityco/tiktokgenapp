@@ -3,7 +3,7 @@ import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia } from "@/lib/idb";
-import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, movePictureTo, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, webPicId } from "@/lib/drive";
+import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, movePictureTo, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, trashDriveFolder, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
@@ -1411,6 +1411,21 @@ export default function Studio({ userName }: { userName: string }) {
       gone.videos?.forEach((v) => { keys.add(`audio:${v.id}`); keys.add(`video:${v.id}`); });
       gone.audios?.forEach((a) => keys.add(`audio:${a.id}`));
       keys.forEach((k) => void delMedia(k));
+      // Its files on the Drive go to the bin too (audio, camera files, copies, photos of its own lists), unless
+      // something left uses them; then its folder, when no other release has the same name.
+      const mine = new Set<string>();
+      const addId = (x?: string) => { if (x && !x.startsWith("local:")) mine.add(x); };
+      addId(gone.audioDriveId);
+      gone.audios?.forEach((a) => addId(a.audioDriveId));
+      gone.videos?.forEach((v) => { addId(v.drive?.originalId); addId(v.drive?.copy?.id); });
+      wsRef.current?.picPools.filter((p) => p.scope === "project" && p.projectId === gone.id).forEach((p) => p.pics.forEach((x) => addId(x.id)));
+      const rest = wsRef.current ? { ...wsRef.current, projects: wsRef.current.projects.filter((x) => x.id !== gone.id), picPools: wsRef.current.picPools.filter((p) => !(p.scope === "project" && p.projectId === gone.id)) } : null;
+      const used = JSON.stringify(rest);
+      const lastOfName = !rest?.projects.some((x) => x.name === gone.name);
+      void (async () => {
+        for (const id of mine) if (!used.includes(`"${id}"`)) await trashDriveFile(id);
+        if (lastOfName && gone.name) await trashDriveFolder(["Releases", gone.name]);
+      })().catch(() => {});
     }
     upd((w) => {
       const id = w.currentProjectId;

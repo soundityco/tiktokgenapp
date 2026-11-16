@@ -543,6 +543,7 @@ export default function VideoStudio({
   useEffect(() => {
     setPaste(project.songLyrics ?? "");
     setConfirmRemove(false);
+    setPinCam(null);
     setWrittenSrc(project.lyricsLinked || project.songLyrics?.trim() || !project.lyrics.length ? "song" : "all");
   }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const pasted = useMemo(() => {
@@ -1162,7 +1163,8 @@ export default function VideoStudio({
       .catch((e) => { console.warn("[drive] audio upload failed", e); audioUp.current.delete(key); });
   };
   useEffect(() => {
-    if (audioBlob && !project.audioDriveId) uploadAudio(audioBlob, audioId, project.audioName);
+    // The blob must be this version's file (right after a switch it is still the previous version's: same size = same file).
+    if (audioBlob && !project.audioDriveId && (!project.audioSize || project.audioSize === audioBlob.size)) uploadAudio(audioBlob, audioId, project.audioName);
   }, [audioBlob, project.audioDriveId, driveWrite, project.id, audioId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The camera file from Drive, on a device that does not have it. */

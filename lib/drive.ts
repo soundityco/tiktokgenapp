@@ -264,6 +264,20 @@ export async function renameDriveFolder(path: string[], newName: string): Promis
   } catch { /* keeps its old name: found again by its id */ }
 }
 
+/** A folder of the tree, with all it holds, to the Drive's bin (a release deleted). Only when this device knows it; never throws. */
+export async function trashDriveFolder(path: string[]): Promise<void> {
+  if (isDemo()) return;
+  const key = path.map(folderName).join("/");
+  const tree = readTree();
+  const id = tree[key];
+  if (!id) return;
+  await trashDriveFile(id);
+  const next: Record<string, string> = {};
+  for (const [k, v] of Object.entries(tree)) if (k !== key && !k.startsWith(key + "/")) next[k] = v;
+  writeTree(next);
+  checked.clear();
+}
+
 /**
  * The files the app put loose in the Rollout folder before the tree existed go to their folder: `place` says
  * where each one belongs (null: left where it is). Once per device; never throws.
