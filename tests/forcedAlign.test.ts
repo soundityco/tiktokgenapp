@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm } from "@/lib/forcedAlign";
+import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench } from "@/lib/forcedAlign";
 
 const V = 31;
 /** Frames where the blank is likely, except the letters of `hits` ([frame, letter]). */
@@ -88,5 +88,17 @@ describe("silent letters", () => {
     const e = emis(200, [[10, "a"], [12, "b"], [100, "k"]]);
     const words = alignWordsForced(e, 200, V, [{ w: "ab", line: 0 }, { w: "qtk", line: 1 }])!;
     expect(words[1].s).toBeGreaterThan(1.8);
+  });
+});
+
+describe("French as it sounds", () => {
+  it("nasal en heard an, silent endings dropped, rien kept", () => {
+    expect(frenchSound("comprends")).toBe("compran");
+    expect(frenchSound("pas")).toBe("pa");
+    expect(frenchSound("qu'est")).toBe("qu'e");
+    expect(frenchSound("draps")).toBe("dra");
+    expect(frenchSound("rien")).toBe("rien");
+    expect(looksFrench(["je", "comprends", "pas"])).toBe(true);
+    expect(looksFrench(["i", "wish", "that", "i", "could", "lie"])).toBe(false);
   });
 });

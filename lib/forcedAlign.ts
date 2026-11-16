@@ -27,7 +27,29 @@ export function faNorm(w: string): string {
  * m'arrive" and its hook on the voice (0.7 s and 2.8 s early without it), sombr 53 → 61 % of lines within 0.5 s, the
  * other songs unchanged; more starts to hurt (Temper City 85 → 75 % at 0.15).
  */
-export const FA_TUNE = { lineBlank: 0.05 };
+export const FA_TUNE = { lineBlank: 0.05, unheard: 0.03, lead: 0.04, far: 0.4, french: true };
+
+/** Lyrics in French (the letters of French spelling are far from its sounds): checked on frequent words and accents. */
+export function looksFrench(words: string[]): boolean {
+  const common = new Set(["je", "tu", "il", "elle", "on", "nous", "vous", "que", "qui", "pas", "les", "des", "est", "dans", "pour", "mais", "avec", "moi", "toi", "une", "et", "de", "la", "le", "ce", "ne", "plus", "tout", "comme", "sur"]);
+  let hits = 0;
+  for (const w of words) if (common.has(w) || /[éèêàùçâîôœ]/.test(w)) hits++;
+  return words.length > 0 && hits / words.length > 0.15;
+}
+
+/**
+ * A French word as it sounds, in the model's letters (it writes what it hears: "comprends" is heard "compran"): the
+ * nasal "en"/"em" heard "an"/"am", the silent endings (s, t, d, x, z, p; "est") dropped. Only used to place the words;
+ * the lyrics shown keep their spelling.
+ */
+export function frenchSound(w: string): string {
+  let x = w;
+  if (x === "est" || x.endsWith("'est")) x = x.slice(0, -2); // est → e, qu'est → qu'e
+  if (x.length > 2) x = x.replace(/([aeiouy]|n|r|e)[stdxzp]+$/, "$1"); // pas → pa, draps → dra, comprends → compren
+  if (x.length > 2 && /ent$/.test(w) && !/(ment|vent|dent|lent|cent)$/.test(w)) x = x.replace(/en$/, "e"); // ils chantent → chante
+  x = x.replace(/(^|[^i])e([nm])(?=[^aeiouyn m]|$)/g, "$1a$2"); // comprends → compran, enlacée → anlacée (not "rien")
+  return x || w;
+}
 
 /** Largest trellis (frames × letters) the alignment takes on: a few minutes of song. */
 const MAX_CELLS = 450_000_000;
@@ -85,8 +107,10 @@ const FPS = 1 / FA_FRAME;
 export function alignWordsForced(emis: Float32Array, T: number, V: number, written: { w: string; line: number }[]): LyricWord[] | null {
   const toks: number[] = [];
   const owner: number[] = [];
+  const french = FA_TUNE.french && looksFrench(written.map((x) => faNorm(x.w)));
   written.forEach((x, wi) => {
-    for (const c of faNorm(x.w)) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } }
+    const n = faNorm(x.w);
+    for (const c of french ? frenchSound(n) : n) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } }
   });
   // State j (j letters done) is inside a line when letter j and letter j+1 belong to the same line.
   const inLine = new Uint8Array(toks.length + 1);
@@ -105,6 +129,8 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
     acc = bounds;
     starts = again;
   }
+  // French only: swallowed syllables (elisions) are a French thing; in English a soft start ("I wish") is a true start.
+  if (french) starts = startOnHeard(starts, toks, owner, written, emis, V);
   const words = wordsOf(starts, toks.length, owner, written);
   const bad = doubtfulLines(starts, toks, owner, written, emis, V, strayed);
   return bad.size ? words.map((x) => (bad.has(x.line ?? -1) ? { ...x, doubt: true } : x)) : words;
@@ -145,6 +171,30 @@ function doubtfulLines(starts: Int32Array, toks: number[], owner: number[], writ
     if (st.letters >= 3 && st.rate > MAX_RATE) bad.add(line);
   }
   return bad;
+}
+
+/**
+ * A line starts where its letters begin to be heard: the letters at its start the model did not hear at all (under
+ * FA_TUNE.unheard: a syllable swallowed, "Qu'est-ce qui" sung "s'qui") have nothing to hold on to, and the path leaves
+ * them anywhere after the line before, often on its last held note. When they were left far from the first letter
+ * heard after them, they come right before it. A soft start that is still heard a little stays where it is.
+ */
+function startOnHeard(starts: Int32Array, toks: number[], owner: number[], written: { w: string; line: number }[], emis: Float32Array, V: number): Int32Array {
+  const out = Int32Array.from(starts);
+  const unheard = Math.log(FA_TUNE.unheard);
+  const step = Math.max(1, Math.round(FA_TUNE.lead / FA_FRAME));
+  for (let a = 0; a < toks.length;) {
+    let b = a;
+    while (b < toks.length && written[owner[b]].line === written[owner[a]].line) b++;
+    let k = a;
+    while (k < b && emis[starts[k] * V + toks[k]] < unheard) k++;
+    if (k > a && k < b && (starts[k] - starts[a]) * FA_FRAME > FA_TUNE.far) {
+      const floor = a > 0 ? out[a - 1] + 1 : 0;
+      for (let j = a; j < k; j++) out[j] = Math.max(floor + (j - a), out[j], starts[k] - (k - j) * step);
+    }
+    a = b;
+  }
+  return out;
 }
 
 /** First and last frame of each word (from its letters), -1 for a word with no letter. */

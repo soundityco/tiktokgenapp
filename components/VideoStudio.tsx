@@ -25,7 +25,7 @@ import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import { alignEmissions, stopAlign } from "@/lib/alignAI";
+import { alignDevice, alignEmissions, stopAlign } from "@/lib/alignAI";
 import { alignWordsForced } from "@/lib/forcedAlign";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -3007,6 +3007,13 @@ export default function VideoStudio({
           });
           forced = alignWordsForced(em.frames, em.T, em.V, splitWords(writtenAll));
           if (!forced) console.warn("[align] the lyrics do not fit this audio: the speech model instead");
+          else {
+            // What was placed, line by line (to compare with the song by ear): start, end, text.
+            const lines = new Map<number, LyricWord[]>();
+            for (const w of forced) { const k = w.line ?? -1; (lines.get(k) ?? lines.set(k, []).get(k)!).push(w); }
+            console.debug(`[align] ${alignDevice === "webgpu" ? "graphics card" : "processor"}, ${em.T} frames, ${forced.length} words placed:\n` +
+              [...lines.values()].map((ws) => `${ws[0].s.toFixed(2)} → ${ws[ws.length - 1].e.toFixed(2)}  ${ws.map((w) => w.w).join(" ")}${ws.some((w) => w.doubt) ? "  (to check)" : ""}`).join("\n"));
+          }
         } catch (e) {
           if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
           console.warn("[align] precise alignment not available, the speech model instead", e);
