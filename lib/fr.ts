@@ -485,8 +485,6 @@ export const FR: Record<string, string> = {
   "{n} lines to check (yellow dot)": "{n} lignes à vérifier (point jaune)",
   "To check: the model was unsure where this line is sung": "À vérifier : le modèle n'est pas sûr de l'endroit où cette ligne est chantée",
   "To check": "À vérifier",
-  "Here": "Ici",
-  "Start this line at the playhead: play, stop on the attack, click": "Cale le début de cette ligne sur la tête de lecture : lance, arrête-toi sur l'attaque, clique",
   "Few words recognised: listening again with another model…": "Peu de mots reconnus : nouvelle écoute avec un autre modèle…",
   "Few words recognised: listening again with the precise model…": "Peu de mots reconnus : nouvelle écoute avec le modèle précis…",
   "Your lyrics were placed roughly on the singing (few words recognised in this mix): check them, retouch a line with − / +, or try the Precise model.": "Tes paroles ont été posées à peu près sur le chant (peu de mots reconnus dans ce mix) : vérifie-les, retouche une ligne avec − / +, ou essaie le modèle Précis.",

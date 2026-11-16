@@ -22,6 +22,13 @@ export function faNorm(w: string): string {
     .replace(/[^a-z']/g, "");
 }
 
+/**
+ * Cost of a blank frame inside a line (log-probability per 20 ms frame). Measured: 0.05 puts WANNA TRY's "Qu'est-ce qui
+ * m'arrive" and its hook on the voice (0.7 s and 2.8 s early without it), sombr 53 → 61 % of lines within 0.5 s, the
+ * other songs unchanged; more starts to hurt (Temper City 85 → 75 % at 0.15).
+ */
+export const FA_TUNE = { lineBlank: 0.05 };
+
 /** Largest trellis (frames × letters) the alignment takes on: a few minutes of song. */
 const MAX_CELLS = 450_000_000;
 
@@ -29,7 +36,7 @@ const MAX_CELLS = 450_000_000;
  * The best path of the letters `toks` (ids, in order) through the frames: the frame each letter starts on, or null
  * when it cannot be done (more letters than frames, a trellis too big). `emis` = log-probabilities, T × V.
  */
-export function ctcStarts(emis: Float32Array, T: number, V: number, toks: number[], bounds?: { lo: Int32Array; hi: Int32Array }): Int32Array | null {
+export function ctcStarts(emis: Float32Array, T: number, V: number, toks: number[], bounds?: { lo: Int32Array; hi: Int32Array }, inLine?: Uint8Array): Int32Array | null {
   const N = toks.length;
   if (!N || T < N + 1 || (T * (N + 1)) > MAX_CELLS) return null;
   const W = N + 1;
@@ -42,7 +49,10 @@ export function ctcStarts(emis: Float32Array, T: number, V: number, toks: number
     const blank = emis[row];
     cur[0] = prev[0] + blank;
     for (let j = 1; j <= N; j++) {
-      const stay = prev[j] + blank;
+      // Inside a line the letters hug each other: a blank costs a little there (not between two lines), so the letters the
+      // model does not hear (silent ones: the "s t" of "qu'est") stay with the rest of their line instead of sliding back
+      // to the end of the line before.
+      const stay = prev[j] + blank - (inLine && inLine[j] ? FA_TUNE.lineBlank : 0);
       // `bounds`: the frames a letter may be sung on (a word kept near the rest of its line).
       const ok = !bounds || ((t - 1) >= bounds.lo[j - 1] && (t - 1) <= bounds.hi[j - 1]);
       const adv = ok ? prev[j - 1] + emis[row + toks[j - 1]] : -1e9;
@@ -78,7 +88,10 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
   written.forEach((x, wi) => {
     for (const c of faNorm(x.w)) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } }
   });
-  let starts = ctcStarts(emis, T, V, toks);
+  // State j (j letters done) is inside a line when letter j and letter j+1 belong to the same line.
+  const inLine = new Uint8Array(toks.length + 1);
+  for (let j = 1; j < toks.length; j++) inLine[j] = written[owner[j - 1]].line === written[owner[j]].line ? 1 : 0;
+  let starts = ctcStarts(emis, T, V, toks, undefined, inLine);
   if (!starts) return null;
   const strayed = new Set<number>();
   let acc: { lo: Int32Array; hi: Int32Array } | undefined;
@@ -87,7 +100,7 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
     if (!bounds) break;
     // The windows already set stay (a line put right must not go back when another is corrected).
     if (acc) for (let k = 0; k < toks.length; k++) { bounds.lo[k] = Math.max(bounds.lo[k], acc.lo[k]); bounds.hi[k] = Math.min(bounds.hi[k], acc.hi[k]); }
-    const again = ctcStarts(emis, T, V, toks, bounds);
+    const again = ctcStarts(emis, T, V, toks, bounds, inLine);
     if (!again) break;
     acc = bounds;
     starts = again;

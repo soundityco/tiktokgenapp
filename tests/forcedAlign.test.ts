@@ -82,3 +82,12 @@ describe("line ends and exact words", () => {
     expect(words[1].e - words[1].s).toBeCloseTo(1.0, 1);
   });
 });
+
+describe("silent letters", () => {
+  it("letters the model does not hear stay with the rest of their line, not at the end of the line before", () => {
+    // Line 0 "ab" at the start; line 1 "qtk": "q" and "t" are never heard, "k" is sung at 2 s.
+    const e = emis(200, [[10, "a"], [12, "b"], [100, "k"]]);
+    const words = alignWordsForced(e, 200, V, [{ w: "ab", line: 0 }, { w: "qtk", line: 1 }])!;
+    expect(words[1].s).toBeGreaterThan(1.8);
+  });
+});

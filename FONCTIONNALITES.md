@@ -54,7 +54,6 @@ dans ton Google Drive.
 
 ## Paroles
 
-- **Caler une ligne sur la lecture** : un bouton « Ici » sur chaque ligne de paroles place son début là où est la tête de lecture (le modèle entend parfois des sons doux avant l'attaque). — En test
 - **Déplacer une coupure entre deux lignes de paroles** : « Joindre à la suivante » dans l'éditeur d'une ligne (texte et timing gardés), puis « Couper ici » où il faut. — En test
 - **Glisser le début ou la fin d'une ligne de paroles ou d'un hook** sur sa piste, comme un cut multicam (la fin là où il y a un vide après) : sans vide (la ligne d'avant reste jusqu'à elle), Alt pour n'en bouger qu'une (un vide possible) ; le + d'une ligne collée à la suivante la fait enfin commencer plus tard. — En test
 - **Modèle « Très précis »** (Whisper large-v3-turbo, environ 560 Mo téléchargés une fois, carte graphique) par défaut quand l'ordinateur en a une : il entend le chant sur une prod chargée ; chaque phrase s'affiche à l'attaque de la voix, jamais pendant le vide qui la précède. — En test
