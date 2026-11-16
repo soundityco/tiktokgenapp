@@ -2718,18 +2718,15 @@ export default function VideoStudio({
     const sr = audioBuf.sampleRate;
     // Seconds per bar: exactly 3 px of screen (a bar every 3.0x px, once rounded, left a 4 px gap now and then: dark bands).
     const bin = (v.d / W) * step;
-    // Around the playhead, the bars take the Generate button's gradient, fading out on both sides (what is playing).
+    // Around the playhead the bars light up in white, fading back to grey on both sides (what is playing).
     const hx = X(head), trail = 70;
-    const holo = (getComputedStyle(document.documentElement).getPropertyValue("--grad-holo").match(/#[0-9a-f]{6}/gi) ?? []);
     let glow: CanvasGradient | null = null;
-    if (holo.length > 1 && hx + trail > 0 && hx - trail < W) {
-      // Centred on the playhead: clear far on the left, the gradient full around the playhead, clear again on the right.
+    if (hx + trail > 0 && hx - trail < W) {
+      // Centred on the playhead: the bars' grey far on each side, white around the playhead.
       glow = g.createLinearGradient(hx - trail, 0, hx + trail, 0);
-      const last = holo.length - 1;
-      holo.forEach((c, i) => {
-        const at = i / last, a = 1 - Math.abs(at - 0.5) * 2; // 0 at the ends, 1 in the middle
-        glow!.addColorStop(at, c + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, "0"));
-      });
+      glow.addColorStop(0, "rgba(255,255,255,0)");
+      glow.addColorStop(0.5, head0);
+      glow.addColorStop(1, "rgba(255,255,255,0)");
     }
     for (let k = Math.floor(v.s / bin); k * bin < v.s + v.d; k++) {
       const t0 = k * bin, t1 = t0 + bin;
@@ -2765,10 +2762,7 @@ export default function VideoStudio({
     g.fillRect(x0 - 3, H / 2 - 10, 5, 20);
     g.fillRect(x1 - 2, H / 2 - 10, 5, 20);
     g.fillStyle = head0;
-    // the playhead, with a soft glow of the gradient
-    if (holo.length) { g.shadowColor = holo[Math.floor(holo.length / 2)]; g.shadowBlur = 10; }
     g.fillRect(X(head) - 1, 0, 2, H);
-    g.shadowBlur = 0; g.shadowColor = "transparent";
     if (videoBlob && videoDur > 0) {
       const v0 = clamp(X(settings.offset), 0, W);
       if (clamp(X(settings.offset + videoDur), 0, W) - v0 > 56) {
@@ -3943,6 +3937,7 @@ export default function VideoStudio({
                 </div>
               );
             })}
+            {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); return x && inTw(x.from) ? <span className={"cue-bar-glow cam-glow cam-" + x.cam} style={{ left: pct(x.from) }} /> : null; })()}
             {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && inTw(c.at) && (
               <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
@@ -4855,6 +4850,7 @@ export default function VideoStudio({
                           title={t("Drag to change when it leaves")} {...moveHookEnd(h.id)} />
                       );
                     })}
+                    {(() => { const h = hookAt(settings, head); const at = h ? settings.crop.start + Math.max(0, h.from) : NaN; return h && inTw(at) ? <span className="cue-bar-glow" style={{ left: tl(at) }} /> : null; })()}
                     <span className="lyric-head" style={{ left: tl(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
                 )}
@@ -4882,6 +4878,7 @@ export default function VideoStudio({
                       title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  {current && inTw(Math.max(current.start, settings.crop.start)) && <span className="cue-bar-glow" style={{ left: tl(Math.max(current.start, settings.crop.start)) }} />}
                   <span className="lyric-head" style={{ left: tl(clamp(head, tw.s, tw.s + tw.d)) }} />
                 </div>
                 {camsEl()}

@@ -418,24 +418,29 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
-/* The clip playing (a line, a hook, a shot): its text and the bar on its left shimmer with the Generate button's colours;
-   a shot's bar glows in its camera's colour. */
-.lyric-track .cue.on { animation: cue-shimmer 2.4s ease-in-out infinite alternate; z-index: 1; }
-.lyric-track .cue.on:not(.cam-shot) { border-left-color: var(--accent-hi); }
-.lyric-track .cue.cam-shot.on { animation-name: cue-shimmer-text; box-shadow: -3px 0 10px -3px var(--cam); }
+/* The clip playing (a line, a hook, a shot): its text shimmers with the Generate button's colours, and the bar on its
+   left (drawn apart, .cue-bar-glow, so the glow is on it only, never behind the clip) shines too; a shot's bar in its
+   camera's colour. */
+.lyric-track .cue.on { animation: cue-shimmer 2.4s ease-in-out infinite alternate; }
 @keyframes cue-shimmer {
-  0% { text-shadow: 0 0 6px var(--holo-a), 0 0 12px var(--holo-a); box-shadow: -3px 0 10px -3px var(--holo-a); }
-  33% { text-shadow: 0 0 6px var(--holo-b), 0 0 12px var(--holo-b); box-shadow: -3px 0 10px -3px var(--holo-b); }
-  66% { text-shadow: 0 0 6px var(--holo-c), 0 0 12px var(--holo-c); box-shadow: -3px 0 10px -3px var(--holo-c); }
-  100% { text-shadow: 0 0 6px var(--holo-d), 0 0 12px var(--holo-d); box-shadow: -3px 0 10px -3px var(--holo-d); }
-}
-@keyframes cue-shimmer-text {
   0% { text-shadow: 0 0 6px var(--holo-a), 0 0 12px var(--holo-a); }
   33% { text-shadow: 0 0 6px var(--holo-b), 0 0 12px var(--holo-b); }
   66% { text-shadow: 0 0 6px var(--holo-c), 0 0 12px var(--holo-c); }
   100% { text-shadow: 0 0 6px var(--holo-d), 0 0 12px var(--holo-d); }
 }
-@media (prefers-reduced-motion: reduce) { .lyric-track .cue.on { animation: none; text-shadow: 0 0 8px var(--holo-glow); } }
+.cue-bar-glow { position: absolute; top: 4px; bottom: 4px; width: 2px; background: var(--accent-hi); pointer-events: none; z-index: 2;
+  animation: bar-shimmer 2.4s ease-in-out infinite alternate; }
+.cue-bar-glow.cam-glow { background: var(--cam); animation: none; box-shadow: 0 0 6px 1px var(--cam), 0 0 12px 1px var(--cam); }
+@keyframes bar-shimmer {
+  0% { box-shadow: 0 0 6px 1px var(--holo-a), 0 0 12px 1px var(--holo-a); }
+  33% { box-shadow: 0 0 6px 1px var(--holo-b), 0 0 12px 1px var(--holo-b); }
+  66% { box-shadow: 0 0 6px 1px var(--holo-c), 0 0 12px 1px var(--holo-c); }
+  100% { box-shadow: 0 0 6px 1px var(--holo-d), 0 0 12px 1px var(--holo-d); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lyric-track .cue.on { animation: none; text-shadow: 0 0 8px var(--holo-glow); }
+  .cue-bar-glow { animation: none; box-shadow: 0 0 8px 1px var(--holo-glow); }
+}
 /* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */
 .takes { display: flex; flex-direction: column; gap: 6px; }
 .takes, .take, .tree-branch > * { min-width: 0; }
