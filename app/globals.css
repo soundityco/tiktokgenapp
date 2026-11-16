@@ -2541,6 +2541,23 @@ html.pv-full, html.pv-full body { overflow: hidden; }
   html.pv-idle .pv-full-layer, html.pv-idle .pv-full-layer * { cursor: none; }
   html.pv-idle .pv-close { opacity: 0; transition: opacity .3s ease; }
 }
+/* Computer, full screen: the right column floats beside the picture ("Settings", top right), the picture and the
+   player make room for it; closed with the full screen. (Under 1280 px the column is not beside: no button.) */
+.pv-side-btn { display: none; }
+@media (min-width: 1280px) {
+  .pv-side-btn { display: inline-flex; align-items: center; gap: 6px; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 60px; z-index: 82;
+    height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: color-mix(in srgb, var(--panel) 80%, transparent);
+    color: var(--text); font: inherit; font-size: 12px; cursor: pointer; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: opacity .3s ease, background .15s; }
+  .pv-side-btn:hover, .pv-side-btn.on { background: var(--raised); }
+  html.pv-idle .pv-side-btn:not(:hover):not(.on) { opacity: 0; }
+  html.pv-side .pv-full-layer { padding-right: 336px; transition: padding .3s cubic-bezier(.2,.8,.2,1); }
+  html.pv-full.pv-side .video-col-r { position: fixed; top: 56px; right: 12px; bottom: 12px; width: 300px; z-index: 86;
+    border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: 0 24px 60px rgba(0,0,0,.55); animation: pv-side-in .25s ease-out; }
+  html.pv-full.pv-side .board-player, html.pv-full.pv-side.pv-pinned .board-player { left: calc(50% - 162px); top: auto; bottom: 24px; translate: -50% 0; width: min(640px, calc(100vw - 372px)); }
+  /* (a window opened from the column, a LUT to remove…: over the full screen) */
+  html.pv-side .ov { z-index: 95; }
+}
+@keyframes pv-side-in { from { opacity: 0; } to { opacity: 1; } }
 /* Computer: the slide's zones button only when the pointer is over the slide (the selected one too). */
 @media (hover: hover) and (min-width: 1001px) {
   .card.sel:not(:hover) .zones-open:not(:focus-visible) { opacity: 0; }

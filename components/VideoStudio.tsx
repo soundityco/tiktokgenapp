@@ -2360,6 +2360,16 @@ export default function VideoStudio({
     return () => { window.removeEventListener("mousemove", wake); document.documentElement.removeEventListener("mouseleave", away); clearTimeout(timer); };
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.documentElement.classList.toggle("pv-idle", full && idle); return () => document.documentElement.classList.remove("pv-idle"); }, [full, idle]);
+  // Computer, full screen: the right column (colour, framing, lyrics…) can float over it, beside the picture, to adjust
+  // while watching it big; it goes back to its place when the full screen closes.
+  const [fullSide, setFullSide] = useState(false);
+  useEffect(() => { if (!full) setFullSide(false); }, [full]);
+  useEffect(() => {
+    document.documentElement.classList.toggle("pv-side", fullSide);
+    // Opened: on the colour, what is adjusted most while watching.
+    if (fullSide) rightColRef.current?.querySelector("#video-color")?.scrollIntoView({ block: "start" });
+    return () => document.documentElement.classList.remove("pv-side");
+  }, [fullSide]);
   /** A tap on the full-screen picture plays or pauses (the player stays, under the picture, on a phone too). */
   const fullTap = () => { if (playing) pause(); else void play(); };
   /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and under the phone's
@@ -2386,7 +2396,7 @@ export default function VideoStudio({
   /** Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */
   const zoomEl = (where = "") => (
     <div className={"wave-zoom " + where} role="group" aria-label={t("Zoom of the waveform")}
-      title={t("Zoomed in, to move along the track (even inside the segment): two fingers, Alt + drag, or Shift + the mouse wheel.")}>
+      title={t("Zoom: ⌘ + wheel, or hold the wheel down and drag up or down (sideways to move along the track). Zoomed in, to move along the track: two fingers, Alt + drag, or Shift + the wheel.")}>
       <button className="btn icon sm" aria-label={t("Zoom out")} disabled={!view} onClick={() => { const v = viewOf(); zoomTo(v.d * 2, v.s + v.d / 2); }}><Icon name="minus" size={12} /></button>
       <button className="btn icon sm" aria-label={t("Zoom in")} onClick={() => { const v = viewOf(), c = settingsRef.current.crop; const mid = view ? v.s + v.d / 2 : c.start + c.duration / 2; zoomTo(v.d / 2, mid); }}><Icon name="plus" size={12} /></button>
       <button className="btn sm wave-fit" onClick={fitView} title={t("Show the segment large, or the whole track")}><span className="lbl-long">{view ? t("Whole track") : t("Fit segment")}</span><span className="lbl-short">{view ? t("Track") : t("Segment")}</span></button>
@@ -2547,14 +2557,13 @@ export default function VideoStudio({
     const f = wavePos(e);
     const cfg = settingsRef.current;
     const px = e.clientX;
-    // Zoomed, Alt + drag or a drag with the wheel button: the view slides, wherever it starts (the segment too).
-    // (sliding the view, pinching or pressing the wheel never stops what is playing)
-    if (viewRef.current && (e.altKey || e.button === 1)) {
+    // Zoomed, Alt + drag: the view slides, wherever it starts (the segment too). (The wheel button: `wheelDrag`.)
+    // (sliding the view or pinching never stops what is playing)
+    if (viewRef.current && e.altKey) {
       e.preventDefault();
       dragWave.current = { mode: "pan", x: f, px, vs: v.s, vd: v.d, start: cfg.crop.start, duration: cfg.crop.duration };
       return;
     }
-    if (e.button === 1) { e.preventDefault(); dragWave.current = null; return; }
     stop();
     const xOf = (t: number) => rect.left + ((t - v.s) / v.d) * rect.width;
     const near = (t: number, r = 6) => Math.abs(e.clientX - xOf(t)) <= r;
@@ -2685,6 +2694,33 @@ export default function VideoStudio({
     if (d?.mode === "pinch" && pointers.current.size) return; // one finger still down: the pinch ends with it
     dragWave.current = null;
     if (d?.mode === "press") setHead(headAt(wavePos(e))); // a click inside the segment: the playhead goes there
+  };
+  /**
+   * The wheel button held down anywhere on the timeline (waveform and tracks), as in Ableton: drag down to zoom in,
+   * up to zoom out, sideways to move along the track; the moment grabbed stays under the pointer. Playback goes on.
+   */
+  const wheelDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 1 || !audioBuf) return;
+    e.preventDefault();
+    e.stopPropagation(); // not a click on the waveform or a track
+    const dur = audioBuf.duration;
+    const el = (e.target as HTMLElement).closest<HTMLElement>(".wave, .lyric-track") ?? waveRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const v0 = viewOf();
+    const at = v0.s + clamp((e.clientX - r.left) / r.width, 0, 1) * v0.d;
+    const y0 = e.clientY;
+    const move = (m: PointerEvent) => {
+      userPanAt.current = performance.now();
+      const d = clamp(v0.d * Math.exp((m.clientY - y0) * -0.008), Math.min(2, dur), dur);
+      if (d >= dur - 1e-3) { setView(null); return; }
+      const k = (m.clientX - r.left) / r.width;
+      setView({ s: clamp(at - k * d, 0, dur - d), d });
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   };
   // Trackpad: pinch (ctrl + wheel) zooms around the pointer, a sideways swipe (or Shift + the wheel) slides the view.
   // A plain vertical wheel scrolls the page, as anywhere else.
@@ -4840,7 +4876,10 @@ export default function VideoStudio({
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} {...shownPress(() => toggleFull(true))}><Icon name="expand" size={18} /></button>}
             {/* The full screen (the same as the carousel's): the preview's picture as it is drawn, over the app. */}
             {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onLeave={() => setFullLeaving(true)} onTap={fullTap} player label={clipName(clip)}
-              bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("F or Esc to close")}</span></>} />}
+              bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("F or Esc to close")}</span></>}>
+              {!phone && <button className={"pv-side-btn" + (fullSide ? " on" : "")} aria-pressed={fullSide} onClick={() => setFullSide((x) => !x)}
+                title={fullSide ? t("Hide the settings") : t("Settings beside the picture (colour, framing…)")}><Icon name="sliders" size={16} />{t("Settings")}</button>}
+            </FullView>}
           </div>
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (
@@ -4890,7 +4929,7 @@ export default function VideoStudio({
         </div>
 
         <div className={"video-side" + (studioLoading ? " is-loading" : "")}>
-          <div className="timeline">
+          <div className="timeline" onPointerDownCapture={wheelDrag} onMouseDownCapture={(e) => { if (e.button === 1) e.preventDefault(); /* no autoscroll */ }}>
             {!audioBuf ? (
               audioBlob ? (
                 <div className="studio-loading" aria-busy="true">
