@@ -2541,20 +2541,12 @@ html.pv-full, html.pv-full body { overflow: hidden; }
   html.pv-idle .pv-full-layer, html.pv-idle .pv-full-layer * { cursor: none; }
   html.pv-idle .pv-close { opacity: 0; transition: opacity .3s ease; }
 }
-/* Computer, full screen: "Settings" (top right) narrows the full screen to leave the right column visible and usable,
-   where it is (colour, framing…); closed with the full screen. (Under 1280 px the column is not beside: no button.) */
-.pv-side-btn { display: none; }
-@media (min-width: 1280px) {
-  .pv-side-btn { display: inline-flex; align-items: center; gap: 6px; position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 60px; z-index: 82;
-    height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: color-mix(in srgb, var(--panel) 80%, transparent);
-    color: var(--text); font: inherit; font-size: 12px; cursor: pointer; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: opacity .3s ease, background .15s; }
-  .pv-side-btn:hover, .pv-side-btn.on { background: var(--raised); }
-  html.pv-idle .pv-side-btn:not(:hover):not(.on) { opacity: 0; }
-  html.pv-settings .pv-full-layer { right: var(--fs-right, 288px); }
-  html.pv-settings .pv-side-btn { right: 12px; }
-  html.pv-full.pv-settings .board-player, html.pv-full.pv-settings.pv-pinned .board-player { left: calc((100vw - var(--fs-right, 288px)) / 2); top: auto; bottom: 24px; translate: -50% 0;
-    width: min(640px, calc(100vw - var(--fs-right, 288px) - 48px)); }
-}
+/* Computer, the columns beside the board: the full screen covers the middle board only (VideoStudio measures it), the
+   header and both columns stay seen and usable; the picture and the player in its centre. */
+html.pv-board .pv-full-layer { left: var(--fs-l); top: var(--fs-t); width: var(--fs-w); height: var(--fs-h); right: auto; bottom: auto; }
+html.pv-board .pv-full-cv { max-height: calc(var(--fs-h) - 32px - 42px); }
+html.pv-board .has-player .pv-full-cv { max-height: calc(var(--fs-h) - 176px); }
+html.pv-full.pv-board:not(.pv-pinned) .board-player { left: calc(var(--fs-l) + var(--fs-w) / 2); width: min(640px, calc(var(--fs-w) - 48px)); }
 /* Computer: the slide's zones button only when the pointer is over the slide (the selected one too). */
 @media (hover: hover) and (min-width: 1001px) {
   .card.sel:not(:hover) .zones-open:not(:focus-visible) { opacity: 0; }

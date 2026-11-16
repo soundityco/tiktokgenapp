@@ -2274,7 +2274,8 @@ export default function VideoStudio({
   // puts it back). The dock's player stays over it, faint while playing; a tap on the picture hides or shows it. ----
   const [full, setFull] = useState(false);
   fullRef.current = full;
-  const toggleFull = (on: boolean) => { setFullLeaving(false); setFull(on); };
+  // (the board measured before it opens: the picture glides into the right place)
+  const toggleFull = (on: boolean) => { if (on) fitBoard(true); setFullLeaving(false); setFull(on); };
   /** The full screen is gliding back (it closes once there): the dock opens again meanwhile. */
   const [fullLeaving, setFullLeaving] = useState(false);
   const slimDock = full && !fullLeaving;
@@ -2360,22 +2361,28 @@ export default function VideoStudio({
     return () => { window.removeEventListener("mousemove", wake); document.documentElement.removeEventListener("mouseleave", away); clearTimeout(timer); };
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.documentElement.classList.toggle("pv-idle", full && idle); return () => document.documentElement.classList.remove("pv-idle"); }, [full, idle]);
-  // Computer, full screen: "Settings" narrows it to leave the right column (colour, framing, lyrics…) visible and usable
-  // where it is, to adjust while watching the picture big; the full screen takes the whole screen again when closed.
-  const [fullSide, setFullSide] = useState(false);
-  useEffect(() => { if (!full) setFullSide(false); }, [full]);
+  // Computer, the columns beside the board: the full screen covers the middle board only (its blur and the picture in
+  // its centre), the header and both columns stay seen and usable (the colour adjusted while watching it big).
+  const centerRef = useRef<HTMLElement>(null);
+  const fitBoard = (on: boolean) => {
+    const root = document.documentElement, c = centerRef.current?.getBoundingClientRect();
+    const beside = on && !!c && c.width > 0 && c.width < window.innerWidth - 100;
+    if (beside) {
+      const top = Math.max(0, c.top), bottom = Math.min(window.innerHeight, c.bottom);
+      root.style.setProperty("--fs-l", `${c.left}px`);
+      root.style.setProperty("--fs-t", `${top}px`);
+      root.style.setProperty("--fs-w", `${c.width}px`);
+      root.style.setProperty("--fs-h", `${bottom - top}px`);
+    }
+    root.classList.toggle("pv-board", beside);
+  };
   useEffect(() => {
-    const root = document.documentElement;
-    // The full screen leaves the column's width free on the right (measured: the column stays where it is, usable).
-    const fit = () => {
-      const col = rightColRef.current?.getBoundingClientRect();
-      if (fullSide && col?.width) root.style.setProperty("--fs-right", `${Math.max(0, window.innerWidth - col.left)}px`);
-      root.classList.toggle("pv-settings", fullSide && !!col?.width);
-    };
-    fit();
-    if (fullSide) window.addEventListener("resize", fit);
-    return () => { window.removeEventListener("resize", fit); root.classList.remove("pv-settings"); };
-  }, [fullSide]);
+    if (!full) { fitBoard(false); return; }
+    const r = () => fitBoard(true);
+    window.addEventListener("resize", r);
+    return () => window.removeEventListener("resize", r);
+  }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => document.documentElement.classList.remove("pv-board"), []);
   /** A tap on the full-screen picture plays or pauses (the player stays, under the picture, on a phone too). */
   const fullTap = () => { if (playing) pause(); else void play(); };
   /** What the video shows (lyrics, hook): the same two toggles in the computer's "Shown" row and under the phone's
@@ -4744,7 +4751,7 @@ export default function VideoStudio({
           <div className="lib-phone">{libraryPhone}</div>
         </aside>
         {/* Middle: the board, like the carousel's: the clip controls, the preview and the timeline. */}
-        <main className="col center video-center">
+        <main className="col center video-center" ref={centerRef}>
       <div className="video-head studio-head">
         <div className="row nowrap video-title">{releaseTitle}</div>
         <div className="row nowrap video-tools">
@@ -4887,10 +4894,7 @@ export default function VideoStudio({
             {videoBlob && !full && <button className="pv-expand" aria-label={t("Full screen")} title={t("Full screen")} {...shownPress(() => toggleFull(true))}><Icon name="expand" size={18} /></button>}
             {/* The full screen (the same as the carousel's): the preview's picture as it is drawn, over the app. */}
             {full && <FullView source={() => canvasRef.current} onClose={() => toggleFull(false)} onLeave={() => setFullLeaving(true)} onTap={fullTap} player label={clipName(clip)}
-              bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("F or Esc to close")}</span></>}>
-              {!phone && <button className={"pv-side-btn" + (fullSide ? " on" : "")} aria-pressed={fullSide} onClick={() => setFullSide((x) => !x)}
-                title={fullSide ? t("Hide the settings") : t("Settings beside the picture (colour, framing…)")}><Icon name="sliders" size={16} />{t("Settings")}</button>}
-            </FullView>}
+              bar={<><span className="mono xs truncate">{clipName(clip)}</span><span className="muted xs grow preview-hint">{t("F or Esc to close")}</span></>} />}
           </div>
           {/* Phone: the TikTok zones on / off, the carousel's own button, at the same place (under the picture, right). */}
           {videoBlob && (
