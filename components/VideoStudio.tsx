@@ -1972,6 +1972,7 @@ export default function VideoStudio({
       // The playhead and the lyrics follow what is heard (the sound sent, minus the output's delay).
       const heard = Math.max(cfgStart, now - lat);
       setHead(heard);
+      followHead(heard);
       if (el) {
         // What is heard right now, in the camera file's time.
         const target = Math.max(0, heard - settingsRef.current.offset);
@@ -2447,6 +2448,18 @@ export default function VideoStudio({
     if (!audioBuf) return;
     try { if (view) localStorage.setItem(viewKey, JSON.stringify({ ...view, dur: audioBuf.duration })); else localStorage.removeItem(viewKey); } catch { /* private mode */ }
   }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
+  /**
+   * While playing, zoomed in: when the playhead leaves the view (or starts outside it), the view jumps to keep it in
+   * sight, at the same zoom, the playhead near its left edge (as Ableton's follow, page by page). While it is in view
+   * nothing moves; a view slid by hand is left alone for a moment.
+   */
+  const userPanAt = useRef(0);
+  const followHead = (t: number) => {
+    const v = viewRef.current, dur = audioBuf?.duration ?? 0;
+    if (!v || !dur || dragWave.current || performance.now() - userPanAt.current < 1500) return;
+    if (t >= v.s && t <= v.s + v.d * 0.97) return;
+    setView({ s: clamp(t - v.d * 0.08, 0, Math.max(0, dur - v.d)), d: v.d });
+  };
   /** Zoom to `d` seconds shown, `around` (seconds) staying where it is on screen. */
   const zoomTo = (d: number, around: number) => {
     const dur = audioBuf?.duration ?? 0;
@@ -2583,7 +2596,7 @@ export default function VideoStudio({
       d.mode = "move"; // it is a drag: the segment moves
     }
     const delta = (f - d.x) * d.vd;
-    if (d.mode === "pan") { setView({ s: clamp(d.vs - delta, 0, dur - d.vd), d: d.vd }); return; }
+    if (d.mode === "pan") { userPanAt.current = performance.now(); setView({ s: clamp(d.vs - delta, 0, dur - d.vd), d: d.vd }); return; }
     const bounds = boundsOf(settingsRef.current);
     // The preview follows the edge being dragged: the picture shown is the one under that edge.
     if (d.mode === "offset") {
@@ -2626,6 +2639,7 @@ export default function VideoStudio({
       } else if (viewRef.current && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))) {
         // A sideways swipe, or Shift + the mouse wheel: the view slides along the track.
         e.preventDefault();
+        userPanAt.current = performance.now();
         const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
         setView({ s: clamp(v.s + (dx / r.width) * v.d, 0, audioBuf.duration - v.d), d: v.d });
       }
