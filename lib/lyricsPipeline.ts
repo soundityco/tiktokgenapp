@@ -20,6 +20,8 @@ export interface PlaceHooks {
   onDone?: (p: number) => void;
   /** The relay starts (passages hard to hear are listened to again). */
   onRelay?: () => void;
+  /** One progress for the whole placing, 0..1 (the models' loading, the alignment, the relay), never going back. */
+  onOverall?: (p: number) => void;
   signal?: AbortSignal;
 }
 
@@ -31,12 +33,15 @@ export interface PlaceHooks {
  */
 export async function placeByAlignment(buf: AudioBuffer, written: string, h: PlaceHooks): Promise<LyricWord[] | null> {
   const aborted = (e: unknown) => h.signal?.aborted || (e instanceof Error && e.message === "aborted");
+  // One bar: the alignment model's loading 0–30 %, the alignment 30–55 %, the relay (when there is one) 55–100 %.
+  let shown = 0;
+  const overall = (p: number) => { if (p > shown) { shown = p; h.onOverall?.(Math.min(1, p)); } };
   let forced: LyricWord[] | null = null;
   try {
     let step: AsrStep = "library";
     const em = await alignEmissions(buf, {
-      onStep: (x) => { step = x; h.onStep?.(x); },
-      onProgress: (p) => (step === "listen" ? h.onDone?.(p) : h.onPct?.(p)), // the bar: the download, then the placing
+      onStep: (x) => { step = x; h.onStep?.(x); if (x === "listen") overall(0.3); },
+      onProgress: (p) => { if (step === "listen") { h.onDone?.(p); overall(0.3 + 0.25 * p); } else { h.onPct?.(p); overall(0.3 * p); } },
       signal: h.signal,
     });
     forced = alignWordsForced(em.frames, em.T, em.V, splitWords(written));
@@ -54,7 +59,8 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   h.onStep?.("library"); h.onPct?.(0); h.onDone?.(0);
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
   // there, are heard again by the speech model, and its times are used for those lines (lib/lyricsRelay).
-  if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); return spreadPacked(afterBreaks(forced, silencesOf(buf))); }
+  if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); overall(1); return spreadPacked(afterBreaks(forced, silencesOf(buf))); }
+  overall(0.55);
   const weak = forced.filter((x) => x.weak);
   const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
   try {
@@ -74,7 +80,9 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
       // singing, or without it: the context can also make the model loop on it), the most complete one kept: the
       // speech model does not answer the same twice over music, the first useful one can miss half the chorus.
       let got: LyricWord[] = [], best = 0;
-      for (const [shift, withContext] of [[0, true], [-3, true], [0, false], [3, true]] as const) {
+      const tries = [[0, true], [-3, true]] as const;
+      for (let ti = 0; ti < tries.length; ti++) {
+        const [shift, withContext] = tries[ti];
         const s = clamp(a + shift, 0, Math.max(0, buf.duration - 4)), e = Math.min(buf.duration, s + LYRICS_WIN);
         const pcm = await prepareAudio(buf, s, e);
         const before = withContext ? contextBefore(forced, s) : "";
@@ -91,6 +99,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
         const score = usefulFor(heardHere, wanted) ? hitsOf(heardHere, wanted) : 0;
         console.info(`[align] relay: ${s.toFixed(1)}–${e.toFixed(1)} s ${withContext ? "with" : "without"} context: ${score} words of the lines heard`, heardHere.slice(0, 16).map((p) => p.w).join(" "));
         if (score > best) { best = score; got = heardHere; }
+        overall(0.55 + 0.45 * ((n + (ti + 1) / tries.length) / starts.length));
         if (best >= wantedCount * 0.6) break; // most of it heard: enough
       }
       // The overlap between two windows belongs to the one that hears it whole (its middle).
@@ -115,6 +124,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
     console.warn("[align] relay not available (the speech model could not run), the alignment kept as it is", e);
   }
   h.onStep?.("library"); h.onPct?.(0); h.onDone?.(0);
+  overall(1);
   return spreadPacked(afterBreaks(forced, silencesOf(buf)));
 }
 

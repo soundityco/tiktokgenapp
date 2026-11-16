@@ -3000,8 +3000,11 @@ export default function VideoStudio({
       const writtenAll = src === "song" || src === "all" ? writtenOf(src, proj) : "";
       if (writtenAll.trim()) {
         try {
+          // One progress for it all ("Placing the lyrics… n %"): the models' loading (from the browser's cache after the
+          // first time), the alignment, the relay; not one bar per model, each looking like the one before failed.
+          setGenStep("listen");
           forced = await placeByAlignment(buf, writtenAll, {
-            model, language, onStep: setGenStep, onPct: setGenPct, onDone: setGenDone,
+            model, language, onOverall: setGenDone,
             onRelay: () => setGenInfo(t("Some passages are hard to hear: listening to them again…")), signal: ac.signal,
           });
         } catch (e) {
