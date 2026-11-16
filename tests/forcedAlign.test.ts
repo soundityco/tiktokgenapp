@@ -48,3 +48,13 @@ describe("alignWordsForced", () => {
     expect(words.map((x) => Math.round(x.s * 50))).toEqual([10, 50, 90, 130]);
   });
 });
+
+describe("a word that strayed from its line", () => {
+  it("is brought back next to the rest of the line", () => {
+    // "a" sounds at 0.2 s (sung material that is not in the text) and again at 8 s, right before "b".
+    const e = emis(600, [[10, "a"], [400, "a"], [410, "b"], [420, "o"]]);
+    const words = alignWordsForced(e, 600, V, [{ w: "A", line: 0 }, { w: "Bo", line: 0 }])!;
+    expect(words[0].s).toBeCloseTo(8, 0);
+    expect(words[1].s).toBeCloseTo(8.2, 0);
+  });
+});
