@@ -3,7 +3,13 @@
 // frames (lib/forcedAlign.ts). Nothing is sent anywhere: only the model file is downloaded once, then kept by the browser.
 // Model: Meta MMS-300M forced aligner, ONNX fp16 by tatsu020 (CC-BY-NC-4.0, non-commercial use).
 const ORT = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
-const MODEL = { url: "https://huggingface.co/tatsu020/mms-300m-fa-onnx/resolve/main/mms_300m_fa_fp16.onnx", size: 631499926 };
+// Two copies of the same model. On the graphics card the fp16 one gives wrong values on some songs (measured: the
+// lines come out far from where they are sung), so it runs there in fp32 (1.26 GB, fast). On the processor the fp16
+// one is right (and half the size), only slower. Both from Hugging Face, the fp32 one by the transformers.js community.
+const MODELS = {
+  gpu: { url: "https://huggingface.co/onnx-community/mms-300m-1130-forced-aligner-ONNX/resolve/main/onnx/model.onnx", size: 1262500000, cache: "rollout-align-fp32" },
+  cpu: { url: "https://huggingface.co/tatsu020/mms-300m-fa-onnx/resolve/main/mms_300m_fa_fp16.onnx", size: 631499926, cache: "rollout-align" },
+};
 const RATE = 16000, STRIDE = 320, CHUNK = 30 * RATE, CTX = 2 * RATE;
 
 const post = (msg, transfer) => self.postMessage(msg, transfer || []);
@@ -19,28 +25,29 @@ async function ortLib() {
   return ortMod;
 }
 
-/** The model file: from the browser's cache, else downloaded once (progress in 0..1). */
-async function modelBytes() {
-  const cache = await caches.open("rollout-align");
-  const hit = await cache.match(MODEL.url);
+/** A model file: from the browser's cache, else downloaded once (progress in 0..1), written to the cache as it comes. */
+async function modelBytes(m) {
+  const cache = await caches.open(m.cache);
+  const hit = await cache.match(m.url);
   if (hit) return new Uint8Array(await hit.arrayBuffer());
   post({ type: "status", step: "model" });
-  const r = await fetch(MODEL.url);
+  const r = await fetch(m.url);
   if (!r.ok || !r.body) throw new Error("model download " + r.status);
-  const total = Number(r.headers.get("content-length")) || MODEL.size;
-  const reader = r.body.getReader();
-  const parts = [];
+  const total = Number(r.headers.get("content-length")) || m.size;
+  const [toCache, toUse] = r.body.tee();
+  const kept = cache.put(m.url, new Response(toCache, { headers: { "content-length": String(total) } })).catch(() => {});
+  const out = new Uint8Array(total);
+  const reader = toUse.getReader();
   let got = 0, shown = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    parts.push(value); got += value.length;
+    out.set(value, got); got += value.length;
     const pct = Math.floor((got / total) * 100);
     if (pct > shown) { shown = pct; post({ type: "progress", pct: pct / 100 }); }
   }
-  const blob = new Blob(parts);
-  await cache.put(MODEL.url, new Response(blob)).catch(() => {});
-  return new Uint8Array(await blob.arrayBuffer());
+  await kept;
+  return got === total ? out : out.subarray(0, got);
 }
 
 let session = null;
@@ -48,6 +55,15 @@ let provider = "";
 async function open(bytes, ort, which) {
   provider = which;
   session = await ort.InferenceSession.create(bytes, { executionProviders: [which] });
+}
+/** The model ready: fp32 on the graphics card when there is one, else (or when it cannot start) fp16 on the processor. */
+async function start(ort) {
+  if (await gpu()) {
+    try { await open(await modelBytes(MODELS.gpu), ort, "webgpu"); return; }
+    catch (err) { console.warn("[align] graphics card model not usable, the processor instead", err); session = null; }
+  }
+  post({ type: "status", step: "model" });
+  await open(await modelBytes(MODELS.cpu), ort, "wasm");
 }
 
 /** Log-probabilities of one excerpt: frames × V. */
@@ -65,35 +81,13 @@ async function chunk(ort, x) {
   return { data: lg.data, T: lg.dims[1], V: lg.dims[2] };
 }
 
-self.onmessage = async (e) => {
-  const { type, audio } = e.data || {};
-  if (type !== "run") return;
-  try {
-    post({ type: "status", step: "library" });
-    const ort = await ortLib();
-    if (!session) {
-      const bytes = await modelBytes();
-      post({ type: "status", step: "start" });
-      if (await gpu()) await open(bytes, ort, "webgpu").catch(() => open(bytes, ort, "wasm"));
-      else await open(bytes, ort, "wasm");
-      self.__bytes = provider === "webgpu" ? bytes : null; // kept only for a fallback to the processor
-    }
-    post({ type: "device", device: provider });
-    post({ type: "status", step: "listen" });
+/** The whole track listened to: log-probabilities, T frames × V letters. */
+async function listen(ort, audio) {
     const frames = Math.ceil(audio.length / STRIDE);
     let V = 0, all = null;
     for (let s = 0; s < audio.length; s += CHUNK) {
       const a = Math.max(0, s - CTX), z = Math.min(audio.length, s + CHUNK + CTX);
-      let r;
-      try { r = await chunk(ort, audio.subarray(a, z)); }
-      catch (err) {
-        // The graphics card could not run it: the processor, once.
-        if (provider !== "webgpu") throw err;
-        console.warn("[align] graphics card failed, the processor instead", err);
-        await open(self.__bytes, ort, "wasm");
-        post({ type: "device", device: provider });
-        r = await chunk(ort, audio.subarray(a, z));
-      }
+      const r = await chunk(ort, audio.subarray(a, z));
       if (!all) {
         V = r.V;
         all = new Float32Array((frames + 2) * V).fill(-12);
@@ -113,9 +107,33 @@ self.onmessage = async (e) => {
       }
       post({ type: "progress", pct: Math.min(1, (s + CHUNK) / audio.length) });
     }
-    // The last frames may be unfilled (rounding): the blank there.
     const T = Math.min(frames, Math.floor(all.length / V));
-    post({ type: "done", frames: all.subarray(0, T * V).slice(), T, V }, []);
+  return { frames: all.subarray(0, T * V).slice(), T, V };
+}
+
+self.onmessage = async (e) => {
+  const { type, audio } = e.data || {};
+  if (type !== "run") return;
+  try {
+    post({ type: "status", step: "library" });
+    const ort = await ortLib();
+    if (!session) { await start(ort); post({ type: "status", step: "start" }); }
+    post({ type: "device", device: provider });
+    post({ type: "status", step: "listen" });
+    let r;
+    try { r = await listen(ort, audio); }
+    catch (err) {
+      // The graphics card could not run it: the processor model, once.
+      if (provider !== "webgpu") throw err;
+      console.warn("[align] graphics card failed, the processor instead", err);
+      session = null;
+      post({ type: "status", step: "model" });
+      await open(await modelBytes(MODELS.cpu), ort, "wasm");
+      post({ type: "device", device: provider });
+      post({ type: "status", step: "listen" });
+      r = await listen(ort, audio);
+    }
+    post({ type: "done", frames: r.frames, T: r.T, V: r.V });
   } catch (err) {
     post({ type: "error", message: String((err && err.message) || err) });
   }
