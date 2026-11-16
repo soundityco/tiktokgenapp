@@ -54,7 +54,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   h.onStep?.("library"); h.onPct?.(0); h.onDone?.(0);
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
   // there, are heard again by the speech model, and its times are used for those lines (lib/lyricsRelay).
-  if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); return afterBreaks(forced, silencesOf(buf)); }
+  if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); return spreadPacked(afterBreaks(forced, silencesOf(buf))); }
   const weak = forced.filter((x) => x.weak);
   const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
   try {
@@ -105,7 +105,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
     if (packedLines(relayed) > packedLines(before)) {
       console.info(`[align] relay heard too little to place the passage (${packedLines(relayed)} lines piled up against ${packedLines(before)}): the alignment kept`,
         heard.map((p) => `${p.s.toFixed(2)} ${p.w}`).join(" "));
-      return afterBreaks(forced, silencesOf(buf));
+      return spreadPacked(afterBreaks(forced, silencesOf(buf)));
     }
     forced = relayed;
     const moved = forced.filter((x, i) => Math.abs(x.s - before[i].s) > 0.01).length;
@@ -115,7 +115,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
     console.warn("[align] relay not available (the speech model could not run), the alignment kept as it is", e);
   }
   h.onStep?.("library"); h.onPct?.(0); h.onDone?.(0);
-  return afterBreaks(forced, silencesOf(buf));
+  return spreadPacked(afterBreaks(forced, silencesOf(buf)));
 }
 
 /** Stretches of (almost) digital silence in the track, a cut in the production: [start, end] in seconds. */
@@ -206,4 +206,50 @@ export function packedLines(words: LyricWord[]): number {
 /** The written lyrics on words placed by the alignment, as the video studio shows them (lines, words, times). */
 export function placeExact(written: string, heard: LyricWord[]): LyricWord[] {
   return alignSong(written, heard)?.words ?? [];
+}
+
+/**
+ * Lines the alignment hardly heard, piled up one right after the other (starts less than PILE apart), with free time
+ * after them (FREE or more before the next line): they were not sung there, they share that time. The line just before
+ * them, when it is part of the pile (starting less than a second before), shares it too (its start kept: it was heard).
+ * By their letters. WANNA TRY: "Don't you wanna try / Wanna try / Wanna try" at 59.8, 60.5, 60.9 then nothing until the
+ * chorus at 65: 59.8, 62.4, 63.6 (the acapella: 59.75, 62.25, 63.4).
+ */
+const PILE = 0.6, FREE = 1.5;
+export function spreadPacked(words: LyricWord[]): LyricWord[] {
+  const out = words.slice();
+  const lines: number[][] = [];
+  words.forEach((w, i) => { const l = lines[lines.length - 1]; if (l && words[l[0]].line === w.line) l.push(i); else lines.push([i]); });
+  const start = (k: number) => out[lines[k][0]].s;
+  const weak = (k: number) => lines[k].some((i) => words[i].weak);
+  for (let k = 0; k < lines.length; k++) {
+    if (!weak(k)) continue;
+    let j = k;
+    while (j + 1 < lines.length && weak(j + 1) && start(j + 1) - start(j) < PILE) j++;
+    const next = j + 1 < lines.length ? start(j + 1) : Infinity;
+    const pile = j > k || (k > 0 && start(k) - start(k - 1) < PILE);
+    if (!pile || next === Infinity || next - start(j) < FREE) { k = j; continue; }
+    const from = k > 0 && start(k) - start(k - 1) < 1 ? k - 1 : k;
+    const group = lines.slice(from, j + 1);
+    const letters = group.map((l) => l.reduce((n, i) => n + Math.max(1, norm(words[i].w).length), 0));
+    const total = letters.reduce((a, b) => a + b, 0);
+    const a = start(from), b = next - 0.1;
+    let at = a;
+    group.forEach((l, q) => {
+      const span = ((b - a) * letters[q]) / total;
+      const n = l.reduce((m, i) => m + Math.max(1, norm(words[i].w).length), 0);
+      let u = 0;
+      l.forEach((i) => {
+        const len = Math.max(1, norm(words[i].w).length);
+        // its words in the first part of its share (sung, then held), the last one held to the end of it
+        const ws = at + span * 0.7 * (u / n), we = at + span * 0.7 * ((u + len) / n);
+        out[i] = { ...out[i], s: ws, e: i === l[l.length - 1] ? at + span - 0.04 : we };
+        u += len;
+      });
+      at += span;
+    });
+    console.info(`[align] ${group.length} lines piled up spread over ${a.toFixed(2)}–${next.toFixed(2)} s`);
+    k = j;
+  }
+  return out;
 }
