@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -2960,8 +2960,20 @@ export default function VideoStudio({
         const [a, b] = wins[i];
         const samples = await prepareAudio(buf, a, b);
         // A word timed outside the excerpt heard is made up (the model's "Sous-titrage…" after the end): left out.
-        const hear = async (x: number, y: number, pcm: Float32Array) => respreadLost(cleanHeard(await transcribe(pcm, { model: m, language, base: x, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }), writtenOf(src, proj)), x, y)
-          .filter((w) => w.s >= x - 0.5 && w.s <= y + 0.5);
+        const hear = async (x: number, y: number, pcm: Float32Array) => {
+          const listen1 = (mode: "word" | "segment") => transcribe(pcm, { model: m, language, base: x, mode, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal });
+          let raw = await listen1("word");
+          // The times of the words collapsed (a repeated chorus: all on one instant, or past the end): the same excerpt
+          // heard again with the model's phrase times, which stay right, the words spread inside each phrase.
+          // Or the excerpt gave hardly any word (the words are lost with their times): the phrases are tried too.
+          const lost = lostCount(raw, x, y);
+          if (lost >= 3 || (y - x > 12 && raw.length < (y - x) / 4)) {
+            const segs = await listen1("segment");
+            if (segs.length && lostCount(segs, x, y) < 3 && (lost >= 3 || segs.length > raw.length)) { console.info(`[lyrics] ${x}–${y} s: word times lost, phrase times used`); raw = segs; }
+          }
+          return respreadLost(cleanHeard(raw, writtenOf(src, proj)), x, y)
+            .filter((w) => w.s >= x - 0.5 && w.s <= y + 0.5);
+        };
         let words = await hear(a, b, samples);
         // The model can lose a whole excerpt on music (four made-up words for 28 s of a chorus): fewer than a word every
         // 4 s, it is heard again in two halves, the better kept (a passage with no words, an instrumental, stays empty).

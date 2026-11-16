@@ -289,9 +289,21 @@ export function alignSong(text: string, heard: LyricWord[]): AlignResult | null 
     k = run;
   }
   const end = out[out.length - 1].e;
-  for (let q = last + 1; q < n; q++) {
-    const s0 = end + (q - last - 1) * AVG;
-    out.push({ w: lyr[q].w, s: s0, e: s0 + AVG * 0.9, line: lyr[q].line });
+  // After the last recognised word: back to back at an average pace, unless the voice was heard going on after it
+  // (words heard that match nothing, a chorus misheard): they then share that time, by length.
+  const heardEnd = hrd[m - 1].e;
+  const rest = lyr.slice(last + 1);
+  const room = heardEnd - end;
+  if (rest.length && room > AVG * rest.length) {
+    const weights = rest.map((x) => norm(x.w).length + 1);
+    const total = weights.reduce((a, b) => a + b, 0);
+    let at = end;
+    rest.forEach((x, q) => { const d = (room * weights[q]) / total; out.push({ w: x.w, s: at, e: at + d * 0.9, line: x.line }); at += d; });
+  } else {
+    for (let q = last + 1; q < n; q++) {
+      const s0 = end + (q - last - 1) * AVG;
+      out.push({ w: lyr[q].w, s: s0, e: s0 + AVG * 0.9, line: lyr[q].line });
+    }
   }
   return { words: out, coverage: idx.length / n };
 }
@@ -326,6 +338,34 @@ export function dropLoops(words: LyricWord[], written?: string): LyricWord[] {
     if (!cut) { out.push(words[i]); i++; }
   }
   return out;
+}
+
+/** Phrases timed by the model (start, end, text) as words: each phrase's words share its time, by syllables. */
+export function wordsFromSegments(segs: LyricWord[]): LyricWord[] {
+  const out: LyricWord[] = [];
+  for (const g of segs) {
+    const parts = g.w.split(/\s+/).filter((x) => norm(x));
+    if (!parts.length) continue;
+    const weight = parts.map((x) => syllables(x) + 0.5);
+    const total = weight.reduce((a, b) => a + b, 0);
+    const span = Math.max(0.1, g.e - g.s);
+    let at = g.s;
+    parts.forEach((x, k) => { const d = (span * weight[k]) / total; out.push({ w: x, s: at, e: at + d }); at += d; });
+  }
+  return out;
+}
+
+/** How many words have a time the model's alignment lost (see respreadLost). */
+export function lostCount(words: LyricWord[], from: number, to: number): number {
+  const ws = [...words].sort((a, b) => a.s - b.s);
+  const bad = ws.map((x) => x.s > to + 0.5 || x.s < from - 0.5);
+  for (let i = 0; i < ws.length;) {
+    let j = i + 1;
+    while (j < ws.length && ws[j].s - ws[j - 1].s < 0.08) j++;
+    if (j - i >= 3) for (let k = i; k < j; k++) bad[k] = true;
+    i = j;
+  }
+  return bad.filter(Boolean).length;
 }
 
 /**

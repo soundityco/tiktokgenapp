@@ -34,7 +34,7 @@ async function load(pipeline, model, onProgress) {
 const post = (msg) => self.postMessage(msg);
 
 self.onmessage = async (e) => {
-  const { type, audio, model, language } = e.data || {};
+  const { type, audio, model, language, mode } = e.data || {};
   if (type !== "run") return;
   try {
     post({ type: "status", step: "library" });
@@ -55,7 +55,10 @@ self.onmessage = async (e) => {
     }
     post({ type: "device", device });
     post({ type: "status", step: "listen" });
-    const opts = { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5, task: "transcribe" };
+    // "segment": the times of the decoder itself, one per phrase. The per-word times (alignment heads) sometimes collapse
+    // on repeated sung phrases (all words on one instant); the phrase times stay right.
+    const seg = mode === "segment";
+    const opts = { return_timestamps: seg ? true : "word", chunk_length_s: 30, stride_length_s: 5, task: "transcribe" };
     if (language && language !== "auto") opts.language = language;
     let out;
     try { out = await pipe(audio, opts); }
@@ -71,7 +74,7 @@ self.onmessage = async (e) => {
     const words = (out.chunks || [])
       .map((c) => ({ w: String(c.text || "").trim(), s: c.timestamp?.[0], e: c.timestamp?.[1] }))
       .filter((c) => c.w && typeof c.s === "number");
-    post({ type: "done", words });
+    post({ type: "done", words, seg });
   } catch (err) {
     post({ type: "error", message: String((err && err.message) || err) });
   }

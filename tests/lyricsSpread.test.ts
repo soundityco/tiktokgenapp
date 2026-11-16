@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignSong, buildCues, cleanHeard, dropLoops, joinCue, moveCueEnd, moveCueStart, respreadLost, retimeCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { alignSong, buildCues, cleanHeard, dropLoops, joinCue, moveCueEnd, moveCueStart, respreadLost, wordsFromSegments, lostCount, retimeCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -170,5 +170,31 @@ describe("dropLoops with the written lyrics", () => {
   it("a chorus sung that many times for real is kept, a longer loop is still cut", () => {
     expect(dropLoops(w("non non non non fin"), "non\nnon\nnon\nnon\nfin").map((x) => x.w).join(" ")).toBe("non non non non fin");
     expect(dropLoops(w("non non non non non non non non fin"), "non\nnon\nnon\nnon\nfin").map((x) => x.w).length).toBe(5);
+  });
+});
+
+describe("wordsFromSegments / lostCount (the model's phrase times)", () => {
+  it("the words of a phrase share its time, in order", () => {
+    const out = wordsFromSegments([{ w: "tout mais pas ça", s: 10, e: 12 }, { w: "non", s: 12, e: 12.5 }]);
+    expect(out.map((x) => x.w)).toEqual(["tout", "mais", "pas", "ça", "non"]);
+    expect(out[0].s).toBe(10);
+    expect(out[3].e).toBeLessThanOrEqual(12.0001);
+    expect(out[4].s).toBeCloseTo(12);
+  });
+  it("counts the words whose time collapsed", () => {
+    const lost = Array.from({ length: 5 }, (_, i) => ({ w: "x", s: 28, e: 28.2 + i * 0 }));
+    expect(lostCount(lost, 0, 14)).toBe(5);
+    expect(lostCount([{ w: "a", s: 1, e: 1.5 }, { w: "b", s: 2, e: 2.5 }], 0, 14)).toBe(0);
+  });
+});
+
+describe("alignSong tail", () => {
+  it("lines after the last recognised word share the time the voice was heard going on", () => {
+    const heard = ["un", "deux", "trois", "quatre", "cinq"].map((w, i) => ({ w, s: 10 + i, e: 10.8 + i }))
+      .concat([{ w: "zzz", s: 20, e: 24 }]);
+    const r = alignSong("un deux trois quatre cinq\nsix sept huit neuf", heard)!;
+    const last = r.words[r.words.length - 1];
+    expect(last.s).toBeGreaterThan(20);
+    expect(last.e).toBeLessThanOrEqual(24.01);
   });
 });

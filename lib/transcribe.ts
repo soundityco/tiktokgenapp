@@ -1,4 +1,5 @@
 import type { LyricWord } from "./types";
+import { wordsFromSegments } from "./lyricsAlign";
 
 export type AsrModel = "tiny" | "base" | "small" | "turbo";
 export const ASR_MODELS: Record<AsrModel, string> = {
@@ -51,7 +52,7 @@ export function stopTranscribe() {
  */
 export function transcribe(
   samples: Float32Array,
-  opts: { model: AsrModel; language: string; base: number; onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal }
+  opts: { model: AsrModel; language: string; base: number; mode?: "word" | "segment"; onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal }
 ): Promise<LyricWord[]> {
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) { reject(new Error("aborted")); return; }
@@ -65,9 +66,10 @@ export function transcribe(
       else if (m.type === "progress") opts.onProgress?.(m.pct);
       else if (m.type === "done") {
         cleanup();
-        resolve((m.words as { w: string; s: number; e?: number }[]).map((x) => ({
+        const got = (m.words as { w: string; s: number; e?: number }[]).map((x) => ({
           w: x.w, s: x.s + opts.base, e: (typeof x.e === "number" ? x.e : x.s + 0.3) + opts.base,
-        })));
+        }));
+        resolve(m.seg ? wordsFromSegments(got) : got);
       } else if (m.type === "error") { cleanup(); stopTranscribe(); reject(new Error(m.message)); } // fresh worker next time: a failed import is not retried
     };
     const onErr = (e: ErrorEvent) => { cleanup(); stopTranscribe(); reject(new Error(e.message || "worker")); };
@@ -75,6 +77,6 @@ export function transcribe(
     w.addEventListener("message", onMsg);
     w.addEventListener("error", onErr);
     opts.signal?.addEventListener("abort", onAbort, { once: true });
-    w.postMessage({ type: "run", audio: samples, model: ASR_MODELS[opts.model], language: opts.language });
+    w.postMessage({ type: "run", audio: samples, model: ASR_MODELS[opts.model], language: opts.language, mode: opts.mode });
   });
 }
