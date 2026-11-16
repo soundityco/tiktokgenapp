@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignSong, buildCues, cleanHeard, dropLoops, joinCue, moveCueEnd, moveCueStart, retimeCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { alignSong, buildCues, cleanHeard, dropLoops, joinCue, moveCueEnd, moveCueStart, respreadLost, retimeCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -146,5 +146,29 @@ describe("joinCue then splitCue: moving a cut", () => {
     expect(cues.length).toBe(1);
     const cut = splitCue(joined, cues[0], 7);
     expect(buildCues(cut, "phrase").map((c) => c.words.map((x) => x.w).join(" "))).toEqual(["Ouais tu m'as fait croire en nous", "t'as tout gâché"]);
+  });
+});
+
+describe("respreadLost (word times the model's alignment lost)", () => {
+  const at = (w: string, s: number) => ({ w, s, e: s + 0.3 });
+  it("words piled on one instant after the end are spread over the free time, in order", () => {
+    const heard = [at("a", 10), at("b", 11), ...Array.from({ length: 8 }, () => at("non", 90))];
+    const out = respreadLost(heard, 0, 30);
+    expect(out).toHaveLength(10);
+    expect(out[2].s).toBeGreaterThanOrEqual(11.3 - 1e-6);
+    expect(out[9].e).toBeLessThanOrEqual(30);
+    expect(out.every((x, i) => i === 0 || x.s >= out[i - 1].s)).toBe(true);
+  });
+  it("well-timed words are left alone", () => {
+    const heard = [at("a", 1), at("b", 2), at("c", 3)];
+    expect(respreadLost(heard, 0, 10)).toEqual(heard);
+  });
+});
+
+describe("dropLoops with the written lyrics", () => {
+  const w = (text: string) => text.split(" ").map((x, i) => ({ w: x, s: i, e: i + 0.5 }));
+  it("a chorus sung that many times for real is kept, a longer loop is still cut", () => {
+    expect(dropLoops(w("non non non non fin"), "non\nnon\nnon\nnon\nfin").map((x) => x.w).join(" ")).toBe("non non non non fin");
+    expect(dropLoops(w("non non non non non non non non fin"), "non\nnon\nnon\nnon\nfin").map((x) => x.w).length).toBe(5);
   });
 });

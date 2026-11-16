@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -412,11 +412,11 @@ export default function VideoStudio({
   exportPrefsRef.current = exportPrefs;
   const lutLibraryRef = useRef(lutLibrary);
   lutLibraryRef.current = lutLibrary;
-  const versionClip = useMemo(() => { const l = clipsOf(release); return l.find((c) => c.id === release.videoId) ?? l[0]; }, [release]);
+  const versionClip = useMemo(() => { const l = clipsOf(release); return l.find((c) => c.id === release.videoId && !c.takeOnly) ?? l.find((c) => !c.takeOnly) ?? l[0]; }, [release]);
   const audioId = audioIdOf(release, versionClip);
   const project = useMemo(() => projectFor(release, audioId), [release, audioId]);
   const onProject = useCallback((fn: (p: Project) => Project) => onRelease((p) => {
-    const l = clipsOf(p), c = l.find((x) => x.id === p.videoId) ?? l[0];
+    const l = clipsOf(p), c = l.find((x) => x.id === p.videoId && !x.takeOnly) ?? l.find((x) => !x.takeOnly) ?? l[0];
     return writeFor(p, audioIdOf(p, c), fn);
   }), [onRelease]);
   const clips = useMemo(() => clipsOf(project), [project.videos, project.video, project.id]);
@@ -1112,7 +1112,7 @@ export default function VideoStudio({
       lutSent.current.add(l.id);
       void (async () => {
         const b = await getMedia(`lut:${l.id}`).catch(() => undefined);
-        if (!b) return; // imported on another device: it sends it from there
+        if (!b) { lutSent.current.delete(l.id); return; } // imported on another device: it sends it from there (looked at again when the library changes)
         try {
           const driveId = await uploadToDrive(b, `${l.name}.cube`, () => {}, new AbortController().signal, "application/octet-stream", { tktgen: "lut" }, DRIVE_PATHS.luts);
           onLutLibrary((cur) => cur.map((x) => (x.id === l.id ? { ...x, driveId } : x)), true);
@@ -2960,8 +2960,8 @@ export default function VideoStudio({
         const [a, b] = wins[i];
         const samples = await prepareAudio(buf, a, b);
         // A word timed outside the excerpt heard is made up (the model's "Sous-titrage…" after the end): left out.
-        const hear = async (x: number, y: number, pcm: Float32Array) => cleanHeard((await transcribe(pcm, { model: m, language, base: x, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
-          .filter((w) => w.s >= x - 0.5 && w.s <= y + 0.5));
+        const hear = async (x: number, y: number, pcm: Float32Array) => respreadLost(cleanHeard(await transcribe(pcm, { model: m, language, base: x, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }), writtenOf(src, proj)), x, y)
+          .filter((w) => w.s >= x - 0.5 && w.s <= y + 0.5);
         let words = await hear(a, b, samples);
         // The model can lose a whole excerpt on music (four made-up words for 28 s of a chorus): fewer than a word every
         // 4 s, it is heard again in two halves, the better kept (a passage with no words, an instrumental, stays empty).
@@ -3325,12 +3325,19 @@ export default function VideoStudio({
     if (!audioBlob) { next("failed"); return; }
     const lutReady = !settings.grade?.lut || !!look || !!lookErr;
     if (!audioBuf || !videoUrl || !videoDur || !playerReady || !lutReady) return; // still opening
+    // Its other cameras are read in the background: waited for (15 s at most: a camera with no file never comes).
+    if ((settings.angles ?? []).some((a) => clips.some((c) => c.id === a) && !anglesRef.current.has(a))) {
+      batchAngleSince.current ||= Date.now();
+      if (Date.now() - batchAngleSince.current < 15000) { setTimeout(() => setAngleRev((r) => r + 1), 1000); return; }
+    }
+    batchAngleSince.current = 0;
     batchBusy.current = true;
     void exportVideo(true).then((r) => {
       batchBusy.current = false;
       if (r !== "cancelled") next(r);
     });
-  }, [batch, clip.id, loadedClip, videoBlob, audioBlob, audioBuf, videoUrl, videoDur, playerReady, look, lookErr]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [batch, clip.id, loadedClip, videoBlob, audioBlob, audioBuf, videoUrl, videoDur, playerReady, look, lookErr, angleRev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const batchAngleSince = useRef(0);
   // Another release opened during the batch: it stops (its videos are not this release's).
   const batchProject = useRef(project.id);
   useEffect(() => {
@@ -3539,6 +3546,7 @@ export default function VideoStudio({
   /** A take read (what it is, the grade it gets) and synced on the official audio, in the background. */
   const prepareTake = async (id: string, file: Blob, grade0: VideoGrade | undefined, fresh: boolean) => {
     const official = audioBuf;
+    const cfg = settingsRef.current; // the passage of the audio it is placed on: read now, with `official` (a project opened meanwhile has others)
     setTakeJobs((j) => ({ ...j, [id]: { p: 0 } }));
     try {
       const info = await probeVideo(file);
@@ -3547,7 +3555,6 @@ export default function VideoStudio({
       const sound = await readSound(file, info.duration ?? 60, (p) => setTakeJobs((j) => ({ ...j, [id]: { p: p * 0.9 } })), new AbortController().signal);
       if (!sound) throw new Error(t("Its sound could not be read."));
       await new Promise((r) => setTimeout(r, 30));
-      const cfg = settingsRef.current;
       const r = syncAudio(sound.samples, sound.rate, monoOf(official), official.sampleRate, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
       if (!r.anchors || r.score < 0.4) throw new Error(t("No match found in the official audio."));
       patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: false });
@@ -3663,7 +3670,8 @@ export default function VideoStudio({
       });
       return { ...c, angles: next.length ? next : undefined, cuts: next.length ? c.cuts?.map((x) => ({ ...x, cam: x.cam ? to.get(x.cam) ?? 0 : 0 })) : undefined };
     }) }));
-    for (const id of winner.keys()) void delMedia(`video:${id}`).catch(() => {});
+    // Not a file another video reads (a duplicate points at it through `media`).
+    for (const id of winner.keys()) if (!all.some((c) => c.media === id || c.media === `${id}`)) void delMedia(`video:${id}`).catch(() => {});
     onSaveNow();
   }, [clips]); // eslint-disable-line react-hooks/exhaustive-deps
   const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);

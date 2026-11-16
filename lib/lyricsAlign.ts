@@ -302,18 +302,65 @@ export function alignSong(text: string, heard: LyricWord[]): AlignResult | null 
  * words that are not sung and spoil the placing. A phrase of 1 to 10 words said more than twice in a row keeps its first
  * two times.
  */
-export function dropLoops(words: LyricWord[]): LyricWord[] {
+export function dropLoops(words: LyricWord[], written?: string): LyricWord[] {
   const out: LyricWord[] = [];
   const key = (x: LyricWord) => norm(x.w);
+  // A phrase the written lyrics repeat (a chorus: "non" x4, "tout mais pas ça" x4) is sung that many times for real.
+  const known = written ? splitWords(written).map((x) => norm(x.w)) : null;
+  const sung = (ph: LyricWord[]) => {
+    if (!known) return 0;
+    const k = ph.map(key);
+    let n = 0;
+    for (let a = 0; a + k.length <= known.length;) { if (k.every((x, j) => known[a + j] === x)) { n++; a += k.length; } else a++; }
+    return n;
+  };
   for (let i = 0; i < words.length;) {
     let cut = 0;
     for (let p = 1; p <= 10 && !cut; p++) {
       let reps = 1;
       while (i + (reps + 1) * p <= words.length && words.slice(i + reps * p, i + (reps + 1) * p).every((x, k) => key(x) === key(words[i + k]))) reps++;
-      if (reps > 2) cut = p * reps;
-      if (cut) { out.push(...words.slice(i, i + 2 * p)); i += cut; }
+      const keep = Math.max(2, sung(words.slice(i, i + p)));
+      if (reps > keep) cut = p * reps;
+      if (cut) { out.push(...words.slice(i, i + keep * p)); i += cut; }
     }
     if (!cut) { out.push(words[i]); i++; }
+  }
+  return out;
+}
+
+/**
+ * The speech model's word alignment sometimes gives up on a passage over music: a run of words all on one instant
+ * (the end of its 30 s excerpt), or after the end of what it heard. The words are right, the times are not: they are
+ * spread over the free time between the well-timed words around them (by syllables), not thrown away.
+ */
+export function respreadLost(words: LyricWord[], from: number, to: number): LyricWord[] {
+  const ws = [...words].sort((a, b) => a.s - b.s);
+  const bad = ws.map((x) => x.s > to + 0.5 || x.s < from - 0.5);
+  // Three words or more less than 80 ms apart one after the other: nobody sings that.
+  for (let i = 0; i < ws.length;) {
+    let j = i + 1;
+    while (j < ws.length && ws[j].s - ws[j - 1].s < 0.08) j++;
+    if (j - i >= 3) for (let k = i; k < j; k++) bad[k] = true;
+    i = j;
+  }
+  const out: LyricWord[] = [];
+  for (let i = 0; i < ws.length;) {
+    if (!bad[i]) { out.push(ws[i]); i++; continue; }
+    let j = i;
+    while (j < ws.length && bad[j]) j++;
+    const run = ws.slice(i, j);
+    const lo = Math.max(from, out.length ? out[out.length - 1].e : from);
+    const hi = Math.min(to, j < ws.length ? ws[j].s : to);
+    if (run.length < 3 || hi - lo < 0.25 * run.length) { i = j; continue; } // no room: left out
+    const weight = run.map((x) => syllables(x.w) + 0.5);
+    const total = weight.reduce((a, b) => a + b, 0);
+    let at = lo;
+    run.forEach((x, k) => {
+      const d = ((hi - lo) * weight[k]) / total;
+      out.push({ ...x, s: at, e: at + d * 0.9 });
+      at += d;
+    });
+    i = j;
   }
   return out;
 }
@@ -356,11 +403,11 @@ export function dropMadeUp(words: LyricWord[]): LyricWord[] {
   return drop.size ? words.filter((_, i) => !drop.has(i)) : words;
 }
 
-export function cleanHeard(words: LyricWord[]): LyricWord[] {
+export function cleanHeard(words: LyricWord[], written?: string): LyricWord[] {
   const sorted = dropLoops(dropMadeUp(joinPieces([...words].sort((a, b) => a.s - b.s)))
     .map((x) => ({ ...x, w: x.w.trim() }))
     .filter((x) => norm(x.w) && Number.isFinite(x.s))
-    .sort((a, b) => a.s - b.s));
+    .sort((a, b) => a.s - b.s), written);
   return sorted.map((x, i) => {
     const nextStart = sorted[i + 1]?.s ?? Infinity;
     const e = Number.isFinite(x.e) && x.e > x.s ? x.e : x.s + 0.3;
