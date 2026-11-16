@@ -2844,8 +2844,7 @@ export default function VideoStudio({
   };
   const paintWaveRef = useRef(paintWave);
   paintWaveRef.current = paintWave;
-  // (a change of the playhead or the view is painted by paintTimeline's layout effect: not twice)
-  useEffect(() => { paintWaveRef.current(viewRef.current, headRef.current); }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, audioBuf, videoBlob, videoDur, waveBox, peakMax]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { paintWaveRef.current(viewRef.current, headRef.current); }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, view, audioBuf, videoBlob, videoDur, waveBox, peakMax]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- lyrics timing ----
 
@@ -3698,31 +3697,44 @@ export default function VideoStudio({
    * how far the live view has gone from the one they were laid out for, the playhead lines and the glow on the text
    * playing moved. Every frame while playing; after each render too (the tracks laid out again for a new view).
    */
-  const paintTimeline = (at: number) => {
-    paintWaveRef.current(viewRef.current, at);
+  /** The timeline's moving parts, found once per layout (not searched for at every frame). */
+  const timelineEls = useRef<{ contents: HTMLElement[]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
+  const findTimelineEls = () => {
+    const root = waveRef.current?.closest(".timeline");
+    const all = (sel: string, r: ParentNode | null | undefined = root) => (r ? [...r.querySelectorAll<HTMLElement>(sel)] : []);
+    timelineEls.current = {
+      contents: all(".lyric-track .track-content"), heads: all(".lyric-track .lyric-head"),
+      bars: all(".lyric-track .cue-bar-glow[data-a]"), playing: all(".lyric-track .cue.on[data-a]"),
+      dock: all(".dp-track .dp-played", document), dockHeads: all(".dp-track .dp-head", document),
+    };
+  };
+  const paintTimeline = (at: number) => { paintWaveRef.current(viewRef.current, at); paintTracks(at); };
+  const paintTracks = (at: number) => {
+    const els = timelineEls.current;
+    if (!els) return;
     // The phone dock's player (the segment's progress), moved the same way.
     const crop = settingsRef.current.crop, f = `${clamp((at - crop.start) / Math.max(0.1, crop.duration), 0, 1) * 100}%`;
-    document.querySelectorAll<HTMLElement>(".dp-track .dp-played").forEach((el) => { el.style.width = f; });
-    document.querySelectorAll<HTMLElement>(".dp-track .dp-head").forEach((el) => { el.style.left = f; });
-    const root = waveRef.current?.closest(".timeline");
-    if (!root) return;
+    els.dock.forEach((el) => { el.style.width = f; });
+    els.dockHeads.forEach((el) => { el.style.left = f; });
     const laid = twRef.current, live = viewRef.current ?? laid, W = trackWRef.current, dpr = waveBox.dpr || 1;
     const px = (x: number) => Math.round(x * dpr) / dpr;
+    const xOf = (t: number) => px(((t - laid.s) / laid.d) * W);
     const dx = px(((laid.s - live.s) / laid.d) * W);
-    root.querySelectorAll<HTMLElement>(".lyric-track .track-content").forEach((el) => { el.style.transform = `translate3d(${dx}px,0,0)`; });
-    const hx = px(((clamp(at, live.s, live.s + live.d) - laid.s) / laid.d) * W);
-    root.querySelectorAll<HTMLElement>(".lyric-track .lyric-head").forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
-    // The playing clip's bar: at its start, or on the left edge of what is on screen while its start has gone past it.
-    root.querySelectorAll<HTMLElement>(".lyric-track .cue-bar-glow[data-a]").forEach((el) => {
-      el.style.transform = `translate3d(${px(((Math.max(Number(el.dataset.a), live.s) - laid.s) / laid.d) * W)}px,0,0)`;
-    });
-    root.querySelectorAll<HTMLElement>(".lyric-track .cue.on[data-a]").forEach((el) => {
-      const s = Number(el.dataset.a), e = Number(el.dataset.b);
-      el.style.setProperty("--hx", `${e > s ? clamp((at - s) / (e - s), 0, 1) * 100 : 0}%`);
+    els.contents.forEach((el) => { el.style.transform = `translate3d(${dx}px,0,0)`; });
+    const hx = xOf(clamp(at, live.s, live.s + live.d));
+    els.heads.forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
+    // The playing clip and its bar stick to the left edge of what is on screen once their start has gone past it, whole,
+    // until the next one (coming from the right, over it) takes its place; its text glows under the playhead.
+    els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
+    els.playing.forEach((el) => {
+      const a = Number(el.dataset.a), b = Number(el.dataset.b), from = Math.max(a, live.s);
+      el.style.transform = `translate3d(${xOf(from)}px,0,0)`;
+      el.style.setProperty("--hx", `${b > a ? clamp((at - from) / (b - a), 0, 1) * 100 : 0}%`);
     });
   };
   // (the tracks laid out again: their slide put back to what is on screen, before it is seen)
-  useLayoutEffect(() => { paintTimeline(headRef.current); }, [tw.s, tw.d, trackW, head, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  // After every layout (the elements may have changed, and their positions were set back by it): the tracks put back.
+  useLayoutEffect(() => { findTimelineEls(); paintTracks(headRef.current); });
   /** A time of the track as a position on the tracks (%), and a span as a width. */
   const tl = (t: number) => `${((t - tw.s) / tw.d) * 100}%`;
   /**
@@ -4050,7 +4062,7 @@ export default function VideoStudio({
               const own = x.cut >= 0 && Math.abs(sortedCuts[x.cut].at - x.from) < 1e-3 ? sortedCuts[x.cut] : null;
               const go = () => { stop(); setPinCam(null); setHead(round2(x.from + 0.01)); };
               return (
-                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from}
+                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from} data-a={x.from} data-b={x.to}
                   style={{ ...place(x.from), width: wFull(x.from, x.to) }}
                   title={`${x.cam + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
                   onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
