@@ -2910,17 +2910,10 @@ export default function VideoStudio({
       onProject((p) => ({ ...p, songLyrics: text }));
     }
     if (!hasLyrics || !audioBuf) return;
-    // Placed on the words already heard in this audio; when they do not fit these lyrics (heard on another file, an
-    // older analysis…), the audio is listened to again rather than failing each time.
-    if (next.heardWords?.length) {
-      const cfg = settingsRef.current;
-      const r = writtenOf(writtenSrc, next).trim() ? placeWords(next.heardWords, writtenSrc, next, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5) : null;
-      if (!r || r.words.length) { resyncLyrics(writtenSrc, next); return; }
-      console.info("[lyrics] the words heard before do not fit these lyrics: listening to the audio again");
-      onProject((p) => ({ ...p, heardWords: undefined }));
-      next = { ...next, heardWords: undefined };
-    }
-    await generateLyrics(audioBuf, next, writtenSrc);
+    // Asked by hand: always from scratch, nothing kept from an earlier placing (the words heard or aligned before, the
+    // lines retimed by hand). Editing the text still re-places it at once on what was heard (resyncLyrics).
+    onProject((p) => ({ ...p, heardWords: undefined }));
+    await generateLyrics(audioBuf, { ...next, heardWords: undefined }, writtenSrc, true);
   };
 
 
@@ -3076,7 +3069,8 @@ export default function VideoStudio({
   const clearLyrics = () => {
     const cfg = settingsRef.current;
     const a = cfg.crop.start, b = cfg.crop.start + cfg.crop.duration;
-    onProject((p) => ({ ...p, lyricWords: (p.lyricWords ?? []).filter((x) => x.e <= a || x.s >= b) }));
+    // The words heard / aligned before go too: the next "Sync the lyrics" listens again, nothing from the old placing.
+    onProject((p) => ({ ...p, heardWords: undefined, lyricWords: (p.lyricWords ?? []).filter((x) => x.e <= a || x.s >= b) }));
     setGenInfo(null);
     onSaveNow();
   };
