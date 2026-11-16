@@ -1949,6 +1949,9 @@ export default function VideoStudio({
     playStartRef.current = from;
     const cfgStart = cfg.crop.start;
     const from0 = from;
+    // The view keeps the playhead where it is when play is pressed (between a third and 3/4): no jump back to a third.
+    const v0 = viewRef.current;
+    followAt.current = v0 && v0.d > 0 && from >= v0.s && from <= v0.s + v0.d ? clamp((from - v0.s) / v0.d, FOLLOW_AT, 0.75) : FOLLOW_AT;
     // The sound is heard this much after it is played (the phone's output, Bluetooth headphones…): the picture shows
     // what is heard, not what was just sent.
     const ac = ctx as AudioContext & { outputLatency?: number };
@@ -2485,14 +2488,17 @@ export default function VideoStudio({
    */
   const userPanAt = useRef(0);
   const FOLLOW_AT = 1 / 3;
+  /** Where on the view (fraction from the left) the playhead is held while the track scrolls, for this playback: a third,
+   * or where it was when play was pressed if further right (up to 3/4): the view never jumps to bring it to a third. */
+  const followAt = useRef(FOLLOW_AT);
   const followHead = (t: number) => {
     const v = viewRef.current, dur = audioBuf?.duration ?? 0;
     if (!v || !dur || dragWave.current || performance.now() - userPanAt.current < 1500) return;
     // The playhead moves on its own until it reaches a third of the view, then the track scrolls under it (no jump to
     // that third when play starts left of it); out of view (started off screen, a jump by hand), the view goes to it.
     const out = t < v.s || t > v.s + v.d;
-    if (!out && t <= v.s + v.d * FOLLOW_AT) return;
-    const s = clamp(t - v.d * FOLLOW_AT, 0, Math.max(0, dur - v.d));
+    if (!out && t <= v.s + v.d * followAt.current) return;
+    const s = clamp(t - v.d * (out ? FOLLOW_AT : followAt.current), 0, Math.max(0, dur - v.d));
     if (Math.abs(s - v.s) < 1e-4) return;
     viewRef.current = { s, d: v.d };
     if (performance.now() - viewCommittedAt.current > 250) commitView();
