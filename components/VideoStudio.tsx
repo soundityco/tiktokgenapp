@@ -3638,6 +3638,11 @@ export default function VideoStudio({
   const tl = (t: number) => `${((t - tw.s) / tw.d) * 100}%`;
   const twd = (a: number, b: number) => `${(Math.max(0, Math.min(b, tw.s + tw.d) - Math.max(a, tw.s)) / tw.d) * 100}%`;
   const inTw = (t: number) => t >= tw.s - 0.01 && t <= tw.s + tw.d + 0.01;
+  /**
+   * Where the playing clip's bar goes: at its start, or, when its start has left the view on the left (zoomed, scrolling)
+   * while it still plays, on the view's left edge, where the clip itself is drawn from. Null when none of it is in view.
+   */
+  const barAt = (a: number, b: number) => (b > tw.s && a < tw.s + tw.d ? tl(Math.max(a, tw.s)) : null);
   /** Where the playhead is across a clip shown from `a` to `b` (its visible part), as a % of its width: its text glows there. */
   const hxIn = (a: number, b: number) => {
     const s = Math.max(a, tw.s), e = Math.min(b, tw.s + tw.d);
@@ -3960,7 +3965,7 @@ export default function VideoStudio({
                 </div>
               );
             })}
-            {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); return x && inTw(x.from) ? <span className={"cue-bar-glow cam-glow cam-" + x.cam} style={{ left: pct(x.from) }} /> : null; })()}
+            {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); const at = x ? barAt(x.from, x.to) : null; return at !== null ? <span className={"cue-bar-glow cam-glow cam-" + x!.cam} style={{ left: at }} /> : null; })()}
             {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && inTw(c.at) && (
               <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
@@ -4877,7 +4882,7 @@ export default function VideoStudio({
                           title={t("Drag to change when it leaves")} {...moveHookEnd(h.id)} />
                       );
                     })}
-                    {(() => { const h = hookAt(settings, head); const at = h ? settings.crop.start + Math.max(0, h.from) : NaN; return h && inTw(at) ? <span className="cue-bar-glow" style={{ left: tl(at) }} /> : null; })()}
+                    {(() => { const h = hookAt(settings, head); const at = h ? barAt(settings.crop.start + Math.max(0, h.from), settings.crop.start + Math.min(segLen, h.to ?? segLen)) : null; return at !== null ? <span className="cue-bar-glow" style={{ left: at }} /> : null; })()}
                     <span className="lyric-head" style={{ left: tl(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
                 )}
@@ -4907,7 +4912,7 @@ export default function VideoStudio({
                       title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
-                  {current && inTw(Math.max(current.start, settings.crop.start)) && <span className="cue-bar-glow" style={{ left: tl(Math.max(current.start, settings.crop.start)) }} />}
+                  {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" style={{ left: barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))! }} />}
                   <span className="lyric-head" style={{ left: tl(clamp(head, tw.s, tw.s + tw.d)) }} />
                 </div>
                 {camsEl()}
