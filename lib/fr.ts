@@ -480,6 +480,7 @@ export const FR: Record<string, string> = {
   "Very precise (about 560 MB, downloaded once)": "Très précis (environ 560 Mo, téléchargé une fois)",
   "Listen to the audio again": "Réécouter l'audio",
   "Listen to the whole song again and place the lyrics from scratch (your retouches are kept).": "Réécouter toute la chanson et recaler les paroles depuis le début (tes retouches sont gardées).",
+  "Your lyrics are placed on the audio, word by word ({n} words)": "Tes paroles sont calées sur l'audio, mot par mot ({n} mots)",
   "Few words recognised: listening again with another model…": "Peu de mots reconnus : nouvelle écoute avec un autre modèle…",
   "Few words recognised: listening again with the precise model…": "Peu de mots reconnus : nouvelle écoute avec le modèle précis…",
   "Your lyrics were placed roughly on the singing (few words recognised in this mix): check them, retouch a line with − / +, or try the Precise model.": "Tes paroles ont été posées à peu près sur le chant (peu de mots reconnus dans ce mix) : vérifie-les, retouche une ligne avec − / +, ou essaie le modèle Précis.",

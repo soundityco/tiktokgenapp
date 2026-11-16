@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, splitWords, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -25,6 +25,8 @@ import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
+import { alignEmissions, stopAlign } from "@/lib/alignAI";
+import { alignWordsForced } from "@/lib/forcedAlign";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -1466,7 +1468,7 @@ export default function VideoStudio({
     return () => window.removeEventListener("beforeunload", warn);
   }, [copyJob]);
 
-  useEffect(() => () => { stop(); syncRef.current?.abort(); genRef.current?.abort(); stopTranscribe(); ctxRef.current?.close().catch(() => {}); }, [stop]);
+  useEffect(() => () => { stop(); syncRef.current?.abort(); genRef.current?.abort(); stopTranscribe(); stopAlign(); ctxRef.current?.close().catch(() => {}); }, [stop]);
   // Hidden behind the carousel: the sound stops; a sync or a lyrics placement in progress goes on and ends by itself.
   useEffect(() => { if (!active) stop(); }, [active, stop]);
 
@@ -2995,10 +2997,30 @@ export default function VideoStudio({
       return out;
     };
     try {
-      let heard = await listen(model);
+      // The lyrics are written: placed on the audio by forced alignment (nothing to recognise, the written words are
+      // only placed), the most exact there is. The speech model is the way out when it cannot run here.
+      let forced: LyricWord[] | null = null;
+      const writtenAll = src === "song" || src === "all" ? writtenOf(src, proj) : "";
+      if (writtenAll.trim()) {
+        try {
+          let step: AsrStep = "library";
+          const em = await alignEmissions(buf, {
+            onStep: (x) => { step = x; setGenStep(x); },
+            onProgress: (p) => (step === "listen" ? setGenDone(p) : setGenPct(p)), // the bar: the download, then the placing
+            signal: ac.signal,
+          });
+          forced = alignWordsForced(em.frames, em.T, em.V, splitWords(writtenAll));
+          if (!forced) console.warn("[align] the lyrics do not fit this audio: the speech model instead");
+        } catch (e) {
+          if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
+          console.warn("[align] precise alignment not available, the speech model instead", e);
+        }
+        setGenStep("library"); setGenPct(0); setGenDone(0);
+      }
+      let heard = forced ?? await listen(model);
       // Too few words recognised for the lyrics: listened to again, once, by the other model; the better listening of the
       // two is kept (the one the lyrics hold on, else the one that heard more words), never simply the last one.
-      if (writtenOf(src, proj).trim() && (!heard.length || placeWords(heard, src, proj, segFrom, segTo).approx)) {
+      if (!forced && writtenOf(src, proj).trim() && (!heard.length || placeWords(heard, src, proj, segFrom, segTo).approx)) {
         const other: AsrModel = model === "turbo" ? "small" : hasGpu() ? "turbo" : model === "small" ? "base" : "small";
         console.info(`[lyrics] few words recognised: listening again with the ${other} model`);
         setGenInfo(t("Few words recognised: listening again with another model…"));
@@ -3017,8 +3039,9 @@ export default function VideoStudio({
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
         onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? words : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
-        setGenInfo(info);
-        outcome = { title: t("Lyrics ready"), body: info };
+        const said = forced ? t("Your lyrics are placed on the audio, word by word ({n} words)", { n: words.length }) : info;
+        setGenInfo(said);
+        outcome = { title: t("Lyrics ready"), body: said };
         onSaveNow();
       }
     } catch (e) {
