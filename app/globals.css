@@ -418,35 +418,22 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
-/* The clip playing (a line, a hook, a shot): its text shimmers with the Generate button's colours, and the bar on its
-   left (drawn apart, .cue-bar-glow, so the glow is on it only, never behind the clip) shines too; a shot's bar in its
-   camera's colour. */
-/* Lines and hooks: the glow only where the playhead is on the text (a copy of the text carrying the glow, masked to
-   ±40 px around the playhead, --hx); a shot (a number and a name, laid out apart) glows on its whole text. */
-.lyric-track .cue.cam-shot.on { animation: cue-shimmer 2.4s ease-in-out infinite alternate; }
+/* The clip playing glows in its own colour (--clip): a line of the lyrics in white, a hook in the hooks' blue, a shot
+   in its camera's colour. Its text only where the playhead is on it (a copy of the text carrying the glow, masked to
+   ±40 px around the playhead, --hx), and the bar on its left (drawn apart, .cue-bar-glow, never behind the clip). */
+.lyric-track { --clip: var(--accent-hi); }
+.hook-track { --clip: var(--blue); }
+.cue-bar-glow.cam-glow { --clip: var(--cam); }
+.lyric-track .cue.cam-shot.on { --clip: var(--cam); text-shadow: 0 0 6px var(--clip), 0 0 12px color-mix(in srgb, var(--clip) 60%, transparent); }
 .lyric-track .cue.on:not(.cam-shot)::after { content: attr(data-text); position: absolute; inset: 0; padding: 0 6px; display: flex; align-items: center;
-  white-space: nowrap; overflow: hidden; color: transparent; pointer-events: none; animation: cue-shimmer 2.4s ease-in-out infinite alternate;
+  white-space: nowrap; overflow: hidden; color: transparent; pointer-events: none;
+  text-shadow: 0 0 6px var(--clip), 0 0 12px color-mix(in srgb, var(--clip) 60%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent calc(var(--hx, 50%) - 40px), black var(--hx, 50%), transparent calc(var(--hx, 50%) + 40px));
   mask-image: linear-gradient(90deg, transparent calc(var(--hx, 50%) - 40px), black var(--hx, 50%), transparent calc(var(--hx, 50%) + 40px)); }
-@keyframes cue-shimmer {
-  0% { text-shadow: 0 0 6px var(--holo-a), 0 0 12px var(--holo-a); }
-  33% { text-shadow: 0 0 6px var(--holo-b), 0 0 12px var(--holo-b); }
-  66% { text-shadow: 0 0 6px var(--holo-c), 0 0 12px var(--holo-c); }
-  100% { text-shadow: 0 0 6px var(--holo-d), 0 0 12px var(--holo-d); }
-}
-.cue-bar-glow { position: absolute; top: 4px; bottom: 4px; width: 2px; background: var(--accent-hi); pointer-events: none; z-index: 2;
-  animation: bar-shimmer 2.4s ease-in-out infinite alternate; }
-.cue-bar-glow.cam-glow { background: var(--cam); animation: none; box-shadow: 0 0 6px 1px var(--cam), 0 0 12px 1px var(--cam); }
-@keyframes bar-shimmer {
-  0% { box-shadow: 0 0 6px 1px var(--holo-a), 0 0 12px 1px var(--holo-a); }
-  33% { box-shadow: 0 0 6px 1px var(--holo-b), 0 0 12px 1px var(--holo-b); }
-  66% { box-shadow: 0 0 6px 1px var(--holo-c), 0 0 12px 1px var(--holo-c); }
-  100% { box-shadow: 0 0 6px 1px var(--holo-d), 0 0 12px 1px var(--holo-d); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lyric-track .cue.on, .lyric-track .cue.on::after { animation: none; text-shadow: 0 0 8px var(--holo-glow); }
-  .cue-bar-glow { animation: none; box-shadow: 0 0 8px 1px var(--holo-glow); }
-}
+.cue-bar-glow { position: absolute; top: 4px; bottom: 4px; width: 2px; background: var(--clip); pointer-events: none; z-index: 2;
+  box-shadow: 0 0 6px 1px var(--clip), 0 0 12px 1px color-mix(in srgb, var(--clip) 60%, transparent); animation: bar-breathe 2.4s ease-in-out infinite alternate; }
+@keyframes bar-breathe { from { opacity: 1; } to { opacity: .65; } }
+@media (prefers-reduced-motion: reduce) { .cue-bar-glow { animation: none; } }
 /* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */
 .takes { display: flex; flex-direction: column; gap: 6px; }
 .takes, .take, .tree-branch > * { min-width: 0; }
@@ -1996,7 +1983,7 @@ details.sec:first-of-type { background-image: none; }
 @media (prefers-reduced-motion: reduce) { }
 /* Generate (phone), second pass: a pastel holographic gradient (lavender, periwinkle, mint, pale yellow, peach)
    melting into white at the bottom, dark text; the band drifts slowly. */
-:root { --grad-holo: linear-gradient(90deg, #dcc3f6 0%, #c7cdf8 22%, #c2e9f0 42%, #d3f1c8 60%, #f1edbf 78%, #f7d9bd 100%); --holo-glow: #c7cdf8; --holo-a: #dcc3f6; --holo-b: #c2e9f0; --holo-c: #d3f1c8; --holo-d: #f7d9bd; }
+:root { --grad-holo: linear-gradient(90deg, #dcc3f6 0%, #c7cdf8 22%, #c2e9f0 42%, #d3f1c8 60%, #f1edbf 78%, #f7d9bd 100%); }
 @media (max-width: 640px) {
   .gen-fab .btn.primary { color: var(--on-accent); text-shadow: none;
     background: radial-gradient(120% 90% at 50% 125%, #fff 0%, rgba(255,255,255,.92) 38%, rgba(255,255,255,0) 72%), var(--grad-holo);
