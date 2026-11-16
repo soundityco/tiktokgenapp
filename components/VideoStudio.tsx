@@ -2679,6 +2679,16 @@ export default function VideoStudio({
     for (let i = 0; i < ch.length; i += 2) { const x = Math.abs(ch[i]); if (x > m) m = x; }
     return m;
   }, [audioBuf]);
+  // The tracks' inner width (px), for placing their clips by transform (see `place`).
+  const [trackW, setTrackW] = useState(0);
+  const trackRo = useRef<ResizeObserver | null>(null);
+  const trackRef = useCallback((el: HTMLDivElement | null) => {
+    trackRo.current?.disconnect();
+    if (!el) return;
+    setTrackW(el.clientWidth);
+    trackRo.current = new ResizeObserver(() => setTrackW(el.clientWidth));
+    trackRo.current.observe(el);
+  }, []);
   // The waveform is drawn at the size it is shown, in screen pixels (Retina included): never stretched, always sharp.
   const [waveBox, setWaveBox] = useState({ w: 0, dpr: 1 });
   useEffect(() => {
@@ -2761,7 +2771,7 @@ export default function VideoStudio({
         for (let q = Math.max(0, a); q < b && q < peaks.length; q++) val = Math.max(val, peaks[q]);
       }
       const h = Math.max(1, Math.round(Math.min(1, val) * (H - 18)));
-      const bx = Math.round(X(t0));
+      const bx = X(t0); // exact (sub-pixel): rounded, the bars jumped a pixel now and then as the view slid
       g.fillStyle = "#6f6e78";
       g.fillRect(bx, Math.round((H - h) / 2), 2, h);
       if (glow && bx >= hx - trail && bx <= hx + trail) { g.fillStyle = glow; g.fillRect(bx, Math.round((H - h) / 2), 2, h); }
@@ -3639,13 +3649,18 @@ export default function VideoStudio({
   twRef.current = tw;
   /** A time of the track as a position on the tracks (%), and a span as a width. */
   const tl = (t: number) => `${((t - tw.s) / tw.d) * 100}%`;
+  /**
+   * Where something sits on the tracks, moved by the graphics card (transform, to the sub-pixel) rather than laid out
+   * again (left): while the view slides under the playhead, the clips and their text glide instead of shaking.
+   */
+  const place = (t: number): React.CSSProperties => ({ left: 0, transform: `translate3d(${(((t - tw.s) / tw.d) * trackW).toFixed(2)}px,0,0)` });
   const twd = (a: number, b: number) => `${(Math.max(0, Math.min(b, tw.s + tw.d) - Math.max(a, tw.s)) / tw.d) * 100}%`;
   const inTw = (t: number) => t >= tw.s - 0.01 && t <= tw.s + tw.d + 0.01;
   /**
    * Where the playing clip's bar goes: at its start, or, when its start has left the view on the left (zoomed, scrolling)
    * while it still plays, on the view's left edge, where the clip itself is drawn from. Null when none of it is in view.
    */
-  const barAt = (a: number, b: number) => (b > tw.s && a < tw.s + tw.d ? tl(Math.max(a, tw.s)) : null);
+  const barAt = (a: number, b: number) => (b > tw.s && a < tw.s + tw.d ? Math.max(a, tw.s) : null);
   /** Where the playhead is across a clip shown from `a` to `b` (its visible part), as a % of its width: its text glows there. */
   const hxIn = (a: number, b: number) => {
     const s = Math.max(a, tw.s), e = Math.min(b, tw.s + tw.d);
@@ -3941,12 +3956,12 @@ export default function VideoStudio({
     /** Camera `cam` (0-3) from a button: as its key (playing: cut to it now; paused: the shot under the playhead). */
     const pickCam = chooseCam;
     const camNow = camAt(settings.cuts, head);
-    const pct = (x: number) => tl(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
+    const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
     return (
       <div className="cams">
         {used > 0 && (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
-            <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
+            <span className="track-seg" style={{ ...place(settings.crop.start), width: twd(settings.crop.start, end) }} />
             {shots.map((x, i) => {
               if (x.to <= tw.s || x.from >= tw.s + tw.d) return null; // not in view
               const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
@@ -3955,7 +3970,7 @@ export default function VideoStudio({
               const go = () => { stop(); setPinCam(null); setHead(round2(x.from + 0.01)); };
               return (
                 <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from}
-                  style={{ left: pct(x.from), width: twd(x.from, x.to) }}
+                  style={{ ...pos(x.from), width: twd(x.from, x.to) }}
                   title={`${x.cam + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
                   onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
                   <b>{x.cam + 1}</b> {a ? a.videoName?.replace(/\.[^.]+$/, "") ?? clipName(a) : ""}
@@ -3969,9 +3984,9 @@ export default function VideoStudio({
                 </div>
               );
             })}
-            {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); const at = x ? barAt(x.from, x.to) : null; return at !== null ? <span className={"cue-bar-glow cam-glow cam-" + x!.cam} style={{ left: at }} /> : null; })()}
+            {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); const at = x ? barAt(x.from, x.to) : null; return at !== null ? <span className={"cue-bar-glow cam-glow cam-" + x!.cam} style={place(at)} /> : null; })()}
             {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && inTw(c.at) && (
-              <span key={"k" + i} className="cam-cut" style={{ left: pct(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
+              <span key={"k" + i} className="cam-cut" style={{ ...pos(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
                 onPointerDown={(e) => {
                   if (e.button === 1) return;
@@ -3998,7 +4013,7 @@ export default function VideoStudio({
                 }}
                 onPointerUp={() => { cutDrag.current = null; }} onPointerCancel={() => { cutDrag.current = null; }} />
             ))}
-            <span className="lyric-head" style={{ left: pct(head) }} />
+            <span className="lyric-head" style={{ ...pos(head) }} />
           </div>
         )}
         <div className="row cams-row">
@@ -4860,12 +4875,12 @@ export default function VideoStudio({
                 </div>
                 {hooks.length > 0 && (
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
-                    <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
+                    <span className="track-seg" style={{ ...place(settings.crop.start), width: twd(settings.crop.start, end) }} />
                     {hooks.map((h, i) => settings.crop.start + Math.min(segLen, h.to ?? segLen) > tw.s && settings.crop.start + h.from < tw.s + tw.d && (
                       <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
                         data-text={h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                         style={{
-                          left: tl(Math.max(tw.s, settings.crop.start + clamp(h.from, 0, segLen))), width: twd(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)),
+                          ...place(Math.max(tw.s, settings.crop.start + clamp(h.from, 0, segLen))), width: twd(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)),
                           ...(hookAt(settings, head)?.id === h.id ? { ["--hx" as string]: hxIn(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)) } : null),
                         }}
                         title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
@@ -4875,7 +4890,7 @@ export default function VideoStudio({
                     ))}
                     {/* A hook starting at the segment's start (or before) has its handle on the left edge. */}
                     {hooks.map((h) => h.from < segLen && (h.to ?? segLen) > 0 && inTw(settings.crop.start + Math.max(0, h.from)) && (
-                      <span key={"e" + h.id} className={"cam-cut cue-edge" + (settings.crop.start + h.from <= tw.s + 0.01 ? " at-left" : "")} style={{ left: tl(settings.crop.start + Math.max(0, h.from)) }}
+                      <span key={"e" + h.id} className={"cam-cut cue-edge" + (settings.crop.start + h.from <= tw.s + 0.01 ? " at-left" : "")} style={{ ...place(settings.crop.start + Math.max(0, h.from)) }}
                         title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveHook(h.id)} />
                     ))}
                     {/* Its end: a hook followed by a gap, or the last one (glued to the next: that one's start handle). */}
@@ -4883,22 +4898,22 @@ export default function VideoStudio({
                       const to = h.to ?? segLen;
                       const glued = hooks.some((x) => x.id !== h.id && Math.abs(x.from - to) < 0.05);
                       return !glued && to > 0 && inTw(settings.crop.start + Math.min(segLen, to)) && (
-                        <span key={"x" + h.id} className={"cam-cut cue-edge end" + (settings.crop.start + to >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ left: tl(settings.crop.start + Math.min(segLen, to)) }}
+                        <span key={"x" + h.id} className={"cam-cut cue-edge end" + (settings.crop.start + to >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(settings.crop.start + Math.min(segLen, to)) }}
                           title={t("Drag to change when it leaves")} {...moveHookEnd(h.id)} />
                       );
                     })}
-                    {(() => { const h = hookAt(settings, head); const at = h ? barAt(settings.crop.start + Math.max(0, h.from), settings.crop.start + Math.min(segLen, h.to ?? segLen)) : null; return at !== null ? <span className="cue-bar-glow" style={{ left: at }} /> : null; })()}
-                    <span className="lyric-head" style={{ left: tl(clamp(head, tw.s, tw.s + tw.d)) }} />
+                    {(() => { const h = hookAt(settings, head); const at = h ? barAt(settings.crop.start + Math.max(0, h.from), settings.crop.start + Math.min(segLen, h.to ?? segLen)) : null; return at !== null ? <span className="cue-bar-glow" style={place(at)} /> : null; })()}
+                    <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
                 )}
-                <div className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
-                  <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
+                <div ref={trackRef} className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
+                  <span className="track-seg" style={{ ...place(settings.crop.start), width: twd(settings.crop.start, end) }} />
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => c.end > tw.s && c.start < tw.s + tw.d && (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
                       data-text={c.text.replace(/\n/g, " ")}
                       style={{
-                        left: tl(Math.max(tw.s, clamp(c.start, settings.crop.start, end))),
+                        ...place(Math.max(tw.s, clamp(c.start, settings.crop.start, end))),
                         width: twd(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)),
                         ...(c === current ? { ["--hx" as string]: hxIn(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)) } : null),
                       }}
@@ -4909,17 +4924,17 @@ export default function VideoStudio({
                   ))}
                   {/* A line starting at the segment's start (or before it, still on screen) has its handle on the left edge. */}
                   {mode !== "word" && cues.map((c, i) => c.start < end && c.end > settings.crop.start && inTw(Math.max(c.start, settings.crop.start)) && (
-                    <span key={"e" + i} className={"cam-cut cue-edge" + (Math.max(c.start, settings.crop.start) <= tw.s + 0.01 ? " at-left" : "")} style={{ left: tl(Math.max(c.start, settings.crop.start)) }}
+                    <span key={"e" + i} className={"cam-cut cue-edge" + (Math.max(c.start, settings.crop.start) <= tw.s + 0.01 ? " at-left" : "")} style={{ ...place(Math.max(c.start, settings.crop.start)) }}
                       title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveLine(i)} />
                   ))}
                   {/* A line's end: followed by a gap, or the last (glued to the next: that one's start handle). */}
                   {mode !== "word" && cues.map((c, i) => c.end > settings.crop.start && c.end < end + 0.01 && inTw(Math.min(c.end, end)) && !(cues[i + 1] && cues[i + 1].start - c.end < 0.05) && (
-                    <span key={"x" + i} className={"cam-cut cue-edge end" + (Math.min(c.end, end) >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ left: tl(Math.min(c.end, end)) }}
+                    <span key={"x" + i} className={"cam-cut cue-edge end" + (Math.min(c.end, end) >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(Math.min(c.end, end)) }}
                       title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
-                  {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" style={{ left: barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))! }} />}
-                  <span className="lyric-head" style={{ left: tl(clamp(head, tw.s, tw.s + tw.d)) }} />
+                  {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" style={place(barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))!)} />}
+                  <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                 </div>
                 {camsEl()}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
