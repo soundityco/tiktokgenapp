@@ -172,6 +172,8 @@ export interface LyricWord {
   manual?: boolean;
   /** Starts a caption cut by hand (its own `line`): the cut stays when the lyrics are placed again. */
   split?: boolean;
+  /** Joined by hand to the caption before it ("Join with the next"): no automatic cut there (a pause, a comma, length). */
+  glue?: boolean;
   /** Word-by-word captions only: the timing retouched by hand there (start, end, leaves the screen). The phrases
    *  keep s / e / until: a word retouched alone never moves its phrase. */
   ws?: number;

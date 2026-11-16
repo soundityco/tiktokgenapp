@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignSong, buildCues, cleanHeard, dropLoops, moveCueEnd, moveCueStart, retimeCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { alignSong, buildCues, cleanHeard, dropLoops, joinCue, moveCueEnd, moveCueStart, retimeCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -133,5 +133,18 @@ describe("moveCueEnd (a caption's end dragged)", () => {
     const past = buildCues(moveCueEnd(words, cues, 0, 5.3)!, "phrase");
     expect(past[0].end).toBeCloseTo(5.3);
     expect(past[1].start).toBeGreaterThanOrEqual(5.3);
+  });
+});
+
+describe("joinCue then splitCue: moving a cut", () => {
+  it("\"tu m'as fait croire / en nous t'as tout gâché\" becomes \"tu m'as fait croire en nous / t'as tout gâché\"", () => {
+    const words = "Ouais tu m'as fait croire en nous t'as tout gâché".split(" ").map((w, k) => ({ w, s: 1 + k * 0.4 + (k >= 5 ? 0.8 : 0), e: 1.3 + k * 0.4 + (k >= 5 ? 0.8 : 0), line: 0 }));
+    let cues = buildCues(words, "phrase");
+    expect(cues.map((c) => c.words.map((x) => x.w).join(" "))).toEqual(["Ouais tu m'as fait croire", "en nous t'as tout gâché"]);
+    const joined = joinCue(words, cues[0], cues[1]);
+    cues = buildCues(joined, "phrase");
+    expect(cues.length).toBe(1);
+    const cut = splitCue(joined, cues[0], 7);
+    expect(buildCues(cut, "phrase").map((c) => c.words.map((x) => x.w).join(" "))).toEqual(["Ouais tu m'as fait croire en nous", "t'as tout gâché"]);
   });
 });

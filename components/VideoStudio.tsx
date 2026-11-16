@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -4955,6 +4955,17 @@ export default function VideoStudio({
                             {mode === "phrase" && c.words.length > 1 && (
                               <button className="btn sm" title={t("Cut the line in two where the cursor is: the rest becomes a line of its own")}
                                 onMouseDown={(e) => e.preventDefault()} onClick={() => saveCue(cueInput.current?.selectionStart ?? undefined)}>{t("Cut here")}</button>
+                            )}
+                            {/* The next line joined to this one (to move a cut: join, then "Cut here" where it should be). */}
+                            {mode === "phrase" && cues[i + 1] && (
+                              <button className="btn sm" title={t("Join the next line to this one, its timing kept: then cut it where you want")}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  const next = cues[i + 1];
+                                  onProject((p) => ({ ...p, lyricWords: joinCue(p.lyricWords ?? [], c, next) }));
+                                  setEditCue({ i, text: `${editCue.text} ${next.text.replace(/\n/g, " ")}`.trim() });
+                                  onSaveNow();
+                                }}>{t("Join with the next")}</button>
                             )}
                             <button className="btn sm primary" onMouseDown={(e) => e.preventDefault()} onClick={() => saveCue()}>{t("OK")}</button>
                           </span>

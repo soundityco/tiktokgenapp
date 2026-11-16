@@ -399,10 +399,12 @@ function phrasesOf(ws: LyricWord[], lineChars: number): LyricWord[][] {
   for (let i = 1; i < ws.length; i++) {
     const prev = ws[i - 1], cur = ws[i];
     const lineChange = prev.line !== undefined && cur.line !== undefined && prev.line !== cur.line;
-    if (cur.s - prev.e >= 0.6 || lineChange || /[.!?…]$/.test(prev.w)) hard.push([cur]);
+    // A word joined by hand to the caption before it is never cut from it by a pause or a stop (a line change still cuts).
+    if (lineChange || (!cur.glue && (cur.s - prev.e >= 0.6 || /[.!?…]$/.test(prev.w)))) hard.push([cur]);
     else hard[hard.length - 1].push(cur);
   }
-  return hard.flatMap((g) => splitLong(g, lineChars * 2, 5));
+  // Joined by hand: kept whole (the artist then cuts it where they want, "Cut here").
+  return hard.flatMap((g) => (g.some((x) => x.glue) ? [g] : splitLong(g, lineChars * 2, 5)));
 }
 
 /**
@@ -729,6 +731,17 @@ export function rewriteCue(all: LyricWord[], cue: Cue, text: string): LyricWord[
 }
 
 /** A caption cut in two before its word `k`: the second part becomes a caption of its own (a line of its own). */
+/**
+ * A caption joined with the next one: its words take this one's line and are glued (no automatic cut between them),
+ * its timing kept; the end set by hand on this one dropped (they now follow on). To move a cut: join, then "Cut here".
+ */
+export function joinCue(all: LyricWord[], cue: Cue, next: Cue): LyricWord[] {
+  const line = cue.words[0].line;
+  const nextWords = new Set(next.words), last = cue.words[cue.words.length - 1];
+  return all.map((x) => (nextWords.has(x) ? { ...x, line, glue: true, split: undefined, manual: true }
+    : x === last ? { ...x, until: undefined, manual: true } : x));
+}
+
 export function splitCue(all: LyricWord[], cue: Cue, k: number): LyricWord[] {
   if (k <= 0 || k >= cue.words.length) return all;
   const second = new Set(cue.words.slice(k));
