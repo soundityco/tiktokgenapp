@@ -2,9 +2,10 @@
 @import "@fontsource/instrument-serif/400.css";
 @import "@fontsource/instrument-serif/400-italic.css";
 @import "@fontsource-variable/jetbrains-mono/wght.css";
+@import "@fontsource/space-grotesk/latin-400.css"; /* "by Aurare", after the wordmark */
 
 /* =====================================================================
-   Rollout design language
+   RAW design language
    - Sans (TikTok Sans) for the interface, serif italic (Instrument Serif) for headlines,
      mono (JetBrains Mono) for labels and numbers.
    - Hairlines instead of boxes; black and white only: white for actions, red kept for danger.
@@ -1090,6 +1091,11 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
   .mobile-tabs .menu { right: 0; left: auto; top: auto; bottom: calc(100% + 14px); max-height: 70dvh; overflow-y: auto; }
 }
 .brand-full { display: inline-flex; align-items: center; gap: 10px; }
+/* The wordmark: RAW, then "by Aurare" raised at its top right (as an exponent), Space Grotesk; the letters alone on a phone. */
+.wordmark { display: inline-flex; align-items: flex-start; gap: calc(var(--wm-h) * .22); flex: none; line-height: 1; }
+.wm-by { font-family: "Space Grotesk", var(--sans); font-weight: 400; font-size: max(8px, calc(var(--wm-h) * .48)); line-height: 1; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--muted); vertical-align: baseline; position: static; margin-top: -1px; white-space: nowrap; }
+@media (max-width: 640px) { .wm-by { display: none; } }
 
 /* The head of both studios. On a computer the slots are not there (display: contents). On a phone every control
    joins one grid and the head reads:
@@ -1361,7 +1367,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
   .top .brand-full { display: inline-flex; }
   .top .brand-full .version { display: none; }
   .top .brand-icon { display: none; }
-  .top .brand svg { height: 17px; width: auto; }
+  .top .brand svg { height: 15px; width: auto; }
 }
 
 /* Phone: in the deck, the cards are only their picture (and the room for the bar); the selected slide's text and
@@ -1474,7 +1480,7 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 .media-meta > .copy-status { flex: none; max-width: 100%; }
 /* The copy ready on the Drive (not the one in use): the same pill, outlined, with its ✓. */
 .pill-copy.ready { gap: 4px; color: var(--video); background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--video) 70%, transparent); }
-/* Storage: one bar like a phone's (Rollout's kinds in their colours, the rest of the Drive in grey, the free space). */
+/* Storage: one bar like a phone's (RAW's kinds in their colours, the rest of the Drive in grey, the free space). */
 .storage-head { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; }
 .storage-big { font-family: var(--serif); font-size: 34px; line-height: 1; }
 .storage-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--raised); border: 1px solid var(--line-2); }
@@ -2595,7 +2601,7 @@ html.pv-full.pv-board:not(.pv-pinned) .board-player { left: calc(var(--fs-l) + v
   /* Nothing left in the information line (no take copy to report): it takes no room. */
   .video-stage > .stage-meta:not(:has(.meta-row:not(.meta-format))) { display: none; }
 }
-/* Storage: Rollout's size big, the Drive's free space on the right. */
+/* Storage: RAW's size big, the Drive's free space on the right. */
 .storage-head .storage-free { margin-left: auto; font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }
 
 /* The icons over a slide (photo settings, zones), like the video's: the icon alone, a soft shadow, room for a finger.

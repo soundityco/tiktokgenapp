@@ -7,7 +7,7 @@ export function stamp(timeSep = "-", d = new Date()): string {
 }
 
 /** A file or folder name without the characters a system refuses (/ \ : * ? " < > |). */
-export const safeName = (s: string, fallback = "Rollout") => s.replace(/[\\/:*?"<>|]+/g, "-").trim() || fallback;
+export const safeName = (s: string, fallback = "RAW") => s.replace(/[\\/:*?"<>|]+/g, "-").trim() || fallback;
 
 /** Downloads a file made in the page. */
 export function saveBlob(blob: Blob, name: string) {

@@ -22,8 +22,8 @@ export function kindOf(f: Pick<AppFile, "name" | "mimeType" | "appProperties">):
 const fmt = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(b >= 1e10 ? 0 : 1)} Go` : b >= 1e6 ? `${Math.round(b / 1e6)} Mo` : `${Math.max(1, Math.round(b / 1e3))} Ko`);
 
 /**
- * "Storage": the Drive at a glance, like a phone's storage page. One bar (Rollout's part, the rest of the Drive,
- * the free space), then what Rollout keeps there by kind; the video copies no video uses any more can go.
+ * "Storage": the Drive at a glance, like a phone's storage page. One bar (RAW's part, the rest of the Drive,
+ * the free space), then what RAW keeps there by kind; the video copies no video uses any more can go.
  */
 export default function StorageDialog({ usedCopies, onClose }: {
   /** The Drive copies the workspace still points to (the others are left over). */
@@ -72,24 +72,24 @@ export default function StorageDialog({ usedCopies, onClose }: {
         <div className="stack"><div className="storage-bar shine-box" /><p className="muted xs shine">{t("Reading your Drive…")}</p></div>
       ) : (
         <>
-          {/* What matters: what Rollout takes on the Drive; on the right, what is still free on it. */}
+          {/* What matters: what RAW takes on the Drive; on the right, what is still free on it. */}
           <div className="storage-head">
             <span className="storage-big">{fmt(rollout)}</span>
-            <span className="muted grow">{t("used by Rollout on your Drive")}</span>
+            <span className="muted grow">{t("used by RAW on your Drive")}</span>
             <span className="storage-free">{limit ? t("{free} free of {total}", { free: fmt(Math.max(0, limit - quota.used)), total: fmt(limit) }) : t("No limit")}</span>
           </div>
-          {/* Rollout's kinds first (in their colours), then the rest of the Drive, then the free space. */}
+          {/* RAW's kinds first (in their colours), then the rest of the Drive, then the free space. */}
           <div className="storage-bar" role="img" aria-label={t("{used} of {total} used", { used: fmt(quota.used), total: limit ? fmt(limit) : "∞" })}>
             {KINDS.map(({ k, color }) => { const c = by.get(k); return c && c.size ? <i key={k} style={{ width: pct(c.size), background: color }} /> : null; })}
             <i className="rest" style={{ width: pct(Math.max(0, quota.used - rollout)) }} />
           </div>
           <div className="storage-legend xs">
-            <span><b className="dot" style={{ background: "linear-gradient(90deg, var(--video), var(--music))" }} />Rollout · {fmt(rollout)}</span>
+            <span><b className="dot" style={{ background: "linear-gradient(90deg, var(--video), var(--music))" }} />RAW · {fmt(rollout)}</span>
             <span><b className="dot rest" />{t("Rest of your Drive")} · {fmt(Math.max(0, quota.used - rollout))}</span>
             {limit && <span><b className="dot free" />{t("Free")} · {fmt(Math.max(0, limit - quota.used))}</span>}
           </div>
           <div className="storage-list">
-            <span className="label">{t("In the Rollout folder")}</span>
+            <span className="label">{t("In the RAW by aurare folder")}</span>
             {KINDS.filter(({ k }) => by.get(k)?.n).map(({ k, label, color }) => {
               const c = by.get(k)!;
               return (

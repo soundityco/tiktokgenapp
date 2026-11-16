@@ -272,13 +272,13 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
 }
 
 export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: PicPool) => PicPool) => void;
-  /** Photos dropped or picked: sent to the list's Drive folder (Rollout / Photos / <list>) and added. */
+  /** Photos dropped or picked: sent to the list's Drive folder (RAW by aurare / Photos / <list>) and added. */
   onUpload: (files: File[]) => void;
   /** Photos being sent (done / total), while it lasts. */
   uploading?: { done: number; total: number } | null;
   /** The list was renamed or its scope changed (its Drive folder follows). */
   onMoved?: (from: { name: string; scope: string; projectId?: string }, to: { name: string; scope: string; projectId?: string }) => void;
-  /** Where its photos are kept in the Drive ("Rollout / Photos / …"), null when only on this device. */
+  /** Where its photos are kept in the Drive ("RAW by aurare / Photos / …"), null when only on this device. */
   savedIn?: string | null;
   /** That folder in the Drive, as a link. */
   savedHref?: string | null;
@@ -332,7 +332,7 @@ export function PicPoolEditor(p: Common & { pool: PicPool; onChange: (fn: (t: Pi
           <span>
             {t("Saved in your own Drive:")}{" "}
             {p.savedHref ? <a className="drive-link" href={p.savedHref} target="_blank" rel="noreferrer">{p.savedIn}<Icon name="share" size={11} /></a> : <span className="mono">{p.savedIn}</span>}
-            {". "}{t("Rollout keeps none of your photos.")}
+            {". "}{t("RAW keeps none of your photos.")}
           </span>
         ) : t("Kept on this device only (no Google Drive access).")}
       </p>

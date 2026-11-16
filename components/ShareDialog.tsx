@@ -24,7 +24,7 @@ export function useHandheld(): boolean {
  */
 export default function ShareDialog({ title, caption, kind, build, onClose, place, bare }: {
   title: string;
-  /** Its folder in the Drive when it goes that way: Rollout / Exports / <release> / <what · date>. */
+  /** Its folder in the Drive when it goes that way: RAW by aurare / Exports / <release> / <what · date>. */
   place?: { release: string; what: string };
   caption?: string;
   kind: "video" | "images";
@@ -129,7 +129,7 @@ export default function ShareDialog({ title, caption, kind, build, onClose, plac
                 {state.relay.pct < 1
                   ? <><p className="muted xs shine">{t("Getting the files ready… {n}% · you can scan now: the phone takes them as they come.", { n: Math.round(state.relay.pct * 100) })}</p><div className="bar export-bar shine-bar"><div style={{ width: `${state.relay.pct * 100}%` }} /></div></>
                   : <p className="muted xs"><Icon name="check" size={12} /> {t("Files ready, waiting for the phone.")}</p>}
-                <p className="muted xs">{t("The files stay a few minutes on Rollout's side, deleted as soon as the phone has them. The link works 10 minutes, for one phone.")} {mb && `· ${files.current.length} ${t("files")} · ${mb}`}</p>
+                <p className="muted xs">{t("The files stay a few minutes on RAW's side, deleted as soon as the phone has them. The link works 10 minutes, for one phone.")} {mb && `· ${files.current.length} ${t("files")} · ${mb}`}</p>
               </>
             ) : (
               <>

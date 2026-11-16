@@ -247,7 +247,7 @@ export default function Studio({ userName }: { userName: string }) {
     return () => { clearTimeout(t); ro?.disconnect(); window.removeEventListener("resize", measure); };
   }, [mobileTab, studio, !!ws]);
   /**
-   * Twins in the Rollout tree (two devices, an older version of the app…), looked for once a day on this device:
+   * Twins in the app tree (two devices, an older version of the app…), looked for once a day on this device:
    * folders of the same name merged, files with the same bytes in one folder kept once (the workspace then points
    * to the one kept, the others go to the Drive's bin, where they can be taken back for 30 days).
    */
@@ -376,11 +376,11 @@ export default function Studio({ userName }: { userName: string }) {
     });
     return () => { off = true; window.removeEventListener("rollout:video-file", file); };
   }, [!!ws]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Google connected: the Rollout tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
+  // Google connected: the app tree's fixed folders exist (Photos, Releases, Utils / LUTS, Fonts), once a visit.
   useEffect(() => {
     if (!ws || isDemo()) return;
     void ensureDriveTree().then(() => {
-      // What the app had put loose in Rollout before the tree: each file to its place (once per device).
+      // What the app had put loose in RAW before the tree: each file to its place (once per device).
       const cur = wsRef.current;
       if (!cur) return;
       const photoList = new Map<string, string>();
@@ -945,8 +945,8 @@ export default function Studio({ userName }: { userName: string }) {
     setDropBusy(true);
     try {
       // In the Drive (the slide shows it on every device), else on this device only.
-      // The same picture already in the Drive: that file; else a new one in the Rollout folder (or this device only).
-      // Its folder: Rollout / Photos / <the list it goes to> (Photos itself when it goes to no list).
+      // The same picture already in the Drive: that file; else a new one in the RAW by aurare folder (or this device only).
+      // Its folder: RAW by aurare / Photos / <the list it goes to> (Photos itself when it goes to no list).
       const target = c.list === "new" ? { name: c.newName || "Pinterest", scope: "shared" } : c.list ? wsRef.current?.picPools.find((p) => p.id === c.list) : undefined;
       const id = c.reuse ?? (driveWrite ? await sendPictureToDrive(blob, `photo - ${name}`, target ? listPath(target) : undefined) : `local:${uid()}`);
       await keepPicture(id, blob);
@@ -1191,7 +1191,7 @@ export default function Studio({ userName }: { userName: string }) {
       if (forPost) setEditor({ k: "text", id }); // straight to writing its captions
     }
     else {
-      // Its folder in the Drive right away (Rollout / Photos / <name>, or in its release), and its window open to
+      // Its folder in the Drive right away (RAW by aurare / Photos / <name>, or in its release), and its window open to
       // drop the photos in.
       if (driveWrite) void driveFolder(listPath({ name, scope, projectId })).catch(() => {});
       const id = uid();
@@ -1199,13 +1199,13 @@ export default function Studio({ userName }: { userName: string }) {
       setEditor({ k: "photos", id });
     }
   };
-  /** Where a photo list's photos are in the Drive: Rollout / Photos / <list>, or inside its release when it is
+  /** Where a photo list's photos are in the Drive: RAW by aurare / Photos / <list>, or inside its release when it is
    *  kept to one release (Releases / <release> / Photos / <list>). */
   const listPath = (pool: { name: string; scope: string; projectId?: string }) => {
     const rel = pool.scope === "project" ? wsRef.current?.projects.find((p) => p.id === pool.projectId)?.name : undefined;
     return rel ? DRIVE_PATHS.releasePhotos(rel || "Release", pool.name) : DRIVE_PATHS.photoList(pool.name);
   };
-  // Photos added to a list from this device: each one sent to the list's folder in the Drive (Rollout / Photos /
+  // Photos added to a list from this device: each one sent to the list's folder in the Drive (RAW by aurare / Photos /
   // <list>), kept on this device too, and added to the list as it arrives. Without Drive access: this device only.
   const [picUpload, setPicUpload] = useState<{ pool: string; done: number; total: number } | null>(null);
   // The open photo list's own folder in the Drive, as a link (the user sees where their photos are).
@@ -1386,7 +1386,7 @@ export default function Studio({ userName }: { userName: string }) {
   // ---- projects ----
   const sharedPool = <T extends { name: string; scope: string }>(pools: T[], name: string) => pools.find((p) => p.scope === "shared" && p.name === name);
   const createProject = (name: string) => {
-    // Its folder in the Drive right away: Rollout / Releases / <name> / Audios, Videos.
+    // Its folder in the Drive right away: RAW by aurare / Releases / <name> / Audios, Videos.
     if (driveWrite) { void driveFolder(DRIVE_PATHS.audios(name || "Release")).then(() => driveFolder(DRIVE_PATHS.videos(name || "Release"))).catch(() => {}); }
     upd((w) => {
       const tp = [1, 2, 3].map((n) => sharedPool(w.textPools, `Slide ${n} text`)).filter(Boolean) as TextPool[];
@@ -1537,11 +1537,11 @@ export default function Studio({ userName }: { userName: string }) {
   }
 
   // ---- backup / restore ----
-  const backup = () => saveBlob(new Blob([JSON.stringify(ws)], { type: "application/json" }), `Rollout backup ${stamp()}.json`);
+  const backup = () => saveBlob(new Blob([JSON.stringify(ws)], { type: "application/json" }), `RAW backup ${stamp()}.json`);
   const restore = async (file: File) => {
     try {
       const data = JSON.parse(await file.text());
-      if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a Rollout backup"));
+      if (data?.v !== 1 || !Array.isArray(data.projects) || !data.projects.length) throw new Error(t("This is not a RAW backup"));
       setOverlay({ k: "confirm", title: t("Restore a backup"), label: t("Replace everything"), message: t("This replaces all your current projects and lists with the backup. This can't be undone."), run: () => { apply(linkAllLyrics(refreshAllLyrics(migrateLyrics(normalizeWorkspace(data as Workspace), (n) => t("Part {n}", { n }), t("Chorus"))))); say(t("Backup restored")); } });
     } catch (e: any) { say(e?.message ?? t("Could not read this file")); }
   };
@@ -1848,7 +1848,7 @@ export default function Studio({ userName }: { userName: string }) {
         </ContextMenu>
       )}
       <header className="top">
-        <div className="brand"><span className="brand-full"><Wordmark height={18} /> <small className="version">{VERSION}</small></span><span className="brand-icon"><Logo size={26} /></span></div>
+        <div className="brand"><span className="brand-full"><Wordmark height={15} /> <small className="version">{VERSION}</small></span><span className="brand-icon"><Logo size={26} /></span></div>
         <div className="studio-switch" data-studio={studio} role="group" aria-label={t("Studio")} ref={switchRef}>
           {/* The white pill under the chosen studio: it slides from one to the other. */}
           <span className="studio-thumb" aria-hidden style={thumb ?? { opacity: 0 }} />
@@ -2161,7 +2161,7 @@ export default function Studio({ userName }: { userName: string }) {
           <ol className="install-steps">
             <li><Icon name="share" size={16} /><span>{t("Tap Share at the bottom of Safari.")}</span></li>
             <li><Icon name="plus" size={16} /><span>{t("Choose “Add to Home Screen”.")}</span></li>
-            <li><Icon name="check" size={16} /><span>{t("Open Rollout from its icon: full screen, like an app.")}</span></li>
+            <li><Icon name="check" size={16} /><span>{t("Open RAW from its icon: full screen, like an app.")}</span></li>
           </ol>
           <div className="modal-foot"><button className="btn primary" onClick={closeIosHelp}>{t("Got it")}</button></div>
         </Modal>

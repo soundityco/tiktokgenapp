@@ -1129,7 +1129,7 @@ export default function VideoStudio({
       return null;
     } finally { setDriveJob(null); } // even when gone: never a fetch shown forever
   };
-  const driveName = (what: string) => safeName(`${project.name || "Rollout"} - ${clip.name} - ${what}.mp4`);
+  const driveName = (what: string) => safeName(`${project.name || "RAW"} - ${clip.name} - ${what}.mp4`);
   // ---- the account's LUTs: listed on every device, each file on the Drive (Utils / LUTS) as soon as it is imported ----
   /** The LUTs to choose from: the account's, and the ones of this device it does not list yet. */
   const lutChoices = useMemo(() => {
@@ -1192,7 +1192,7 @@ export default function VideoStudio({
     if (!driveWrite || audioUp.current.has(key)) return;
     audioUp.current.add(key);
     const rel = releaseRef.current;
-    const name = safeName(`${rel.name || "Rollout"} - ${t("official audio")} - ${fileName ?? "audio"}`);
+    const name = safeName(`${rel.name || "RAW"} - ${t("official audio")} - ${fileName ?? "audio"}`);
     void uploadToDrive(blob, name, () => {}, new AbortController().signal, blob.type || "application/octet-stream", { tktgen: "audio", project: rel.id }, DRIVE_PATHS.audios(rel.name || "Release"))
       .then((id) => {
         // Still the same file of the same version: remember where it is.
@@ -1257,7 +1257,7 @@ export default function VideoStudio({
     setCopyJob({ step: "make", p: 0, ...job });
     try {
       const plan = copyPlanFor(take ? take.c.source : cur.source);
-      const name = take ? safeName(`${project.name || "Rollout"} - ${clipName(take.c)} - ${t("copy")}.mp4`) : driveName(t("copy"));
+      const name = take ? safeName(`${project.name || "RAW"} - ${clipName(take.c)} - ${t("copy")}.mp4`) : driveName(t("copy"));
       // The device's video chip first (seconds), ffmpeg when it cannot (minutes).
       const t0 = performance.now();
       // The progress redraws the studio: once per percent, not once per picture (that made the playback stutter).
@@ -3335,7 +3335,7 @@ export default function VideoStudio({
     setErr(null); setNote(null); setExporting(true); setExpMode(null); setExp({ p: 0, step: "audio" });
     const [W, H] = OUT_SIZE(cfg.format);
     // The date and time at the end: two exports of the same video never take each other's name.
-    const name = safeName(`${project.name || "Rollout"} ${clip.name}${suffix ? ` ${suffix}` : ""} ${stamp()}`);
+    const name = safeName(`${project.name || "RAW"} ${clip.name}${suffix ? ` ${suffix}` : ""} ${stamp()}`);
     let source: { frameAt: (t: number) => Promise<Picture | null>; close: () => void; codec: string } | null = null;
     let stopPlayer = () => {};
     /** The multicam cameras' readers, closed at the end. */

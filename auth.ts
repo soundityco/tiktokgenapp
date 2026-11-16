@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 
-// drive.file only: the app may create files in the user's Drive (the Rollout folder) and use those only. Never the
+// drive.file only: the app may create files in the user's Drive (the RAW by aurare folder) and use those only. Never the
 // whole Drive (drive.readonly is a "restricted" permission: Google asks for a paid security audit to grant it).
 const SCOPE = "openid email profile https://www.googleapis.com/auth/drive.file";
 

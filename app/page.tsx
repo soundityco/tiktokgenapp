@@ -10,7 +10,7 @@ import VideoDemo from "@/components/landing/VideoDemo";
 import { detectLang, translate } from "@/lib/translate";
 
 /**
- * The home page, signed out: what Rollout is for and what it does, with the real carousel engine to try at once and
+ * The home page, signed out: what RAW is for and what it does, with the real carousel engine to try at once and
  * the video studio's burnt lyrics running; Google sign-in (signed in: straight to the studio). The app's own look:
  * the serif headlines, mono labels, each studio in its colour, hairlines. Light: two small demos, drawn in the browser,
  * running only on screen.
@@ -30,7 +30,7 @@ export default async function Home() {
   return (
     <main className="lp">
       <header className="lp-nav">
-        <Link href="/" className="row" style={{ gap: 12, textDecoration: "none" }} aria-label="Rollout"><Logo size={28} /><Wordmark height={20} /></Link>
+        <Link href="/" className="row" style={{ gap: 12, textDecoration: "none" }} aria-label="RAW by aurare"><Logo size={28} /><Wordmark height={18} /></Link>
         <span className="grow" />
         <form action={google}><button className="btn sm">{t("Sign in")}</button></form>
       </header>
@@ -40,7 +40,7 @@ export default async function Home() {
         <div className="lp-hero-txt">
           <span className="label">{t("For artists who release music")}</span>
           <h1 className="display lp-title">{t("Make your next")} <em>{t("post")}</em>.</h1>
-          <p className="lp-lead">{t("Rollout turns your photos, hooks and lyrics into TikTok carousels, and syncs your filmed takes to your track with the lyrics on screen. In your browser, free.")}</p>
+          <p className="lp-lead">{t("RAW by aurare turns your photos, hooks and lyrics into TikTok carousels, and syncs your filmed takes to your track with the lyrics on screen. In your browser, free.")}</p>
           <div className="lp-ctas">
             {signInButton("btn primary lp-cta", t("Continue with Google"))}
             <a className="btn lp-cta" href="#carousel">{t("See what it does")}</a>
@@ -98,11 +98,11 @@ export default async function Home() {
         <div className="lp-feature-txt">
           <span className="lp-kicker"><span className="lp-dot" />{t("Your files")}</span>
           <h2 className="display">{t("Nothing leaves")} <em>{t("your hands.")}</em></h2>
-          <p className="lp-lead">{t("Rollout only sees the files it makes in a Rollout folder of your Google Drive. The AI (lyrics, themes, photos) runs on your device; your videos never go through our servers.")}</p>
+          <p className="lp-lead">{t("RAW only sees the files it makes in a “RAW by aurare” folder of your Google Drive. The AI (lyrics, themes, photos) runs on your device; your videos never go through our servers.")}</p>
         </div>
         <div className="lp-feature-art lp-art-files" aria-hidden>
           <div className="lp-tree mono">
-            <span><Icon name="folder" size={13} />Rollout</span>
+            <span><Icon name="folder" size={13} />RAW by aurare</span>
             <span className="in"><Icon name="folder" size={13} />Releases / {t("My next single")}</span>
             <span className="in2 a">song.wav</span>
             <span className="in2 v">take_01.mp4</span>

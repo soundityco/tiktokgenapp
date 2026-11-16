@@ -1,6 +1,6 @@
-# Rollout : ce que fait l'app
+# RAW by aurare : ce que fait l'app
 
-La liste de tout ce que Rollout propose, du point de vue de l'artiste, et où chaque chose en est. Ça sert à trois choses :
+La liste de tout ce que RAW propose, du point de vue de l'artiste, et où chaque chose en est. Ça sert à trois choses :
 savoir où on en est, écrire la home et les textes de présentation, et ne rien oublier quand on fait évoluer l'app.
 
 **À tenir à jour** : chaque fonctionnalité ajoutée, changée ou retirée change aussi ce fichier (une ligne, dans sa
@@ -13,7 +13,7 @@ rubrique, avec son état). Les détails techniques sont dans `CLAUDE.md`.
 
 ## En deux phrases (pour la home)
 
-Rollout prépare tes posts TikTok de sortie : des carrousels tirés de tes photos, hooks et paroles en un clic, et des
+RAW prépare tes posts TikTok de sortie : des carrousels tirés de tes photos, hooks et paroles en un clic, et des
 vidéos où ta prise filmée est calée sur ton son, paroles à l'écran. Tout tourne dans ton navigateur, tes fichiers restent
 dans ton Google Drive.
 
@@ -113,7 +113,7 @@ dans ton Google Drive.
 ## Fichiers, Drive et vie privée
 
 - **Connexion Google**, accès Drive limité aux fichiers créés par l'app (`drive.file`). — En ligne
-- **Un dossier Rollout rangé** dans le Drive : Photos / <liste>, Releases / <release> / Audios, Videos, Utils / LUTS, Fonts ; doublons fusionnés automatiquement. — En ligne
+- **Un dossier RAW rangé** dans le Drive : Photos / <liste>, Releases / <release> / Audios, Videos, Utils / LUTS, Fonts ; doublons fusionnés automatiquement. — En ligne
 - **Tes vidéos ne passent jamais par nos serveurs** : elles restent sur l'appareil et dans ton Drive. — En ligne
 - **Plusieurs appareils** : les données se mettent à jour d'un appareil à l'autre, les modifications faites en même temps sont fusionnées. — En ligne
 

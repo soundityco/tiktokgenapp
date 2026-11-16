@@ -287,7 +287,7 @@ export async function closeOpenLinks() {
 
 /** Plan B, on the computer: the files on the user's Drive, readable by link while the share lasts, the links handed to the phone. */
 export async function shareThroughDrive(code: string, files: { name: string; blob: Blob }[], onProgress: (p: number) => void, signal: AbortSignal,
-  /** Where it goes in the Drive: Rollout / Exports / <release> / <what · date> (Rollout itself without it). */
+  /** Where it goes in the Drive: RAW by aurare / Exports / <release> / <what · date> (RAW itself without it). */
   place?: { release: string; what: string }) {
   const { getToken, uploadToDrive, DRIVE_PATHS } = await import("./drive");
   const when = stamp("h");

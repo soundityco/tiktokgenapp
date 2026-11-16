@@ -58,15 +58,24 @@ export async function canWriteDrive(): Promise<boolean> {
 }
 
 const FOLDER_KEY = "tktgen-drive-folder";
+/** The app's folder at the root of the user's Drive, and the names it had before (renamed to this one when found). */
+export const APP_FOLDER = "RAW by aurare";
+const OLD_FOLDERS = ["Rollout", "TkTgen"];
 
 let folderAsk: Promise<string> | null = null;
 /**
- * The "Rollout" folder at the root of the user's Drive, made the first time. One lookup at a time: several
+ * The app's folder (APP_FOLDER) at the root of the user's Drive, made the first time. One lookup at a time: several
  * uploads starting together (fonts, audio, LUT on a first visit) would otherwise each make their own folder.
  */
 function appFolder(): Promise<string> {
   folderAsk ??= findOrMakeFolder().finally(() => { folderAsk = null; });
   return folderAsk;
+}
+/** The app's folder takes its current name (it keeps its old one if that fails: still found by its id). */
+async function renameAppFolder(id: string) {
+  await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
+    method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: APP_FOLDER }),
+  }).catch(() => {});
 }
 async function findOrMakeFolder(): Promise<string> {
   try {
@@ -75,12 +84,8 @@ async function findOrMakeFolder(): Promise<string> {
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${known}?fields=id,trashed,name`, { headers: { Authorization: `Bearer ${await getToken()}` } });
       const f = res.ok ? await res.json() : null;
       if (f && !f.trashed) {
-        // The folder of the TkTgen days: it takes the app's new name.
-        if (f.name === "TkTgen") {
-          await fetch(`https://www.googleapis.com/drive/v3/files/${known}`, {
-            method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Rollout" }),
-          }).catch(() => { /* keeps its old name: still found by its id */ });
-        }
+        // The folder of the Rollout or TkTgen days: it takes the app's new name.
+        if (OLD_FOLDERS.includes(f.name)) await renameAppFolder(known);
         return known;
       }
     }
@@ -90,21 +95,18 @@ async function findOrMakeFolder(): Promise<string> {
     const found = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1" })}`)).json();
     return found.files?.[0]?.id as string | undefined;
   };
-  let id = await folder("Rollout");
-  if (!id) {
-    // Made when the app was called TkTgen: renamed, so its photos, fonts, LUTs and videos stay found.
-    id = await folder("TkTgen");
-    if (id) {
-      await fetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
-        method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Rollout" }),
-      }).catch(() => { /* keeps its old name: still found by its id */ });
-    }
+  let id = await folder(APP_FOLDER);
+  // Made when the app was called Rollout or TkTgen: renamed, so its photos, fonts, LUTs and videos stay found.
+  for (const old of OLD_FOLDERS) {
+    if (id) break;
+    id = await folder(old);
+    if (id) await renameAppFolder(id);
   }
   if (!id) {
     const res = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
       method: "POST",
       headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Rollout", mimeType: "application/vnd.google-apps.folder" }),
+      body: JSON.stringify({ name: APP_FOLDER, mimeType: "application/vnd.google-apps.folder" }),
     });
     if (res.status === 401) signalAuth();
     if (!res.ok) throw new Error(`Google Drive error ${res.status}`);
@@ -114,10 +116,10 @@ async function findOrMakeFolder(): Promise<string> {
   return id;
 }
 
-// ---- The Rollout tree: everything the app puts in the Drive has its place ----
-//   Rollout / Photos / <photo list>
-//   Rollout / Releases / <release> / Audios, Videos
-//   Rollout / Utils / LUTS, Fonts
+// ---- The app tree: everything the app puts in the Drive has its place ----
+//   RAW by aurare / Photos / <photo list>
+//   RAW by aurare / Releases / <release> / Audios, Videos
+//   RAW by aurare / Utils / LUTS, Fonts
 export const DRIVE_PATHS = {
   photos: ["Photos"],
   photoList: (list: string) => ["Photos", list],
@@ -201,7 +203,7 @@ async function mergeFolders(keep: string, twins: string[]): Promise<boolean> {
   return all;
 }
 
-/** A folder of the Rollout tree (e.g. ["Releases", "Merci", "Audios"]), made on the way when missing. */
+/** A folder of the app tree (e.g. ["Releases", "Merci", "Audios"]), made on the way when missing. */
 export function driveFolder(path: string[]): Promise<string> {
   const names = path.map(folderName);
   const key = names.join("/");
@@ -279,7 +281,7 @@ export async function trashDriveFolder(path: string[]): Promise<void> {
 }
 
 /**
- * The files the app put loose in the Rollout folder before the tree existed go to their folder: `place` says
+ * The files the app put loose in the RAW by aurare folder before the tree existed go to their folder: `place` says
  * where each one belongs (null: left where it is). Once per device; never throws.
  */
 export async function tidyDriveRoot(place: (f: AppFile) => string[] | null): Promise<number> {
@@ -360,13 +362,13 @@ export async function moveToDriveFolder(id: string, path: string[], from: string
 }
 
 /**
- * Upload a file to the Rollout folder of the user's Drive, in pieces (resumable upload): big camera files
+ * Upload a file to the RAW by aurare folder of the user's Drive, in pieces (resumable upload): big camera files
  * go through, a network hiccup retries the piece. Returns the Drive file id.
  */
 export async function uploadToDrive(blob: Blob, name: string, onProgress: (p: number) => void, signal: AbortSignal, mime?: string,
   /** Private labels of the app on the file (what it is), to find it again from another browser. */
   appProperties?: Record<string, string>,
-  /** Its folder in the Rollout tree (DRIVE_PATHS); the Rollout folder itself without one. */
+  /** Its folder in the app tree (DRIVE_PATHS); the RAW by aurare folder itself without one. */
   folderPath?: string[]): Promise<string> {
   if (isDemo()) throw new Error("Demo mode: nothing is saved to your Drive.");
   const folder = folderPath ? await driveFolder(folderPath) : await appFolder();
@@ -422,7 +424,7 @@ export async function trashDriveFile(id: string): Promise<void> {
 }
 
 /**
- * Twins in the Rollout tree: folders of the same name side by side are merged (at every level), and files with the
+ * Twins in the app tree: folders of the same name side by side are merged (at every level), and files with the
  * same bytes in the same folder are found. For each group of files, the one to keep (one the workspace uses, else
  * the oldest) and the others, to point to the kept one then put in the bin (by the caller).
  */
@@ -506,7 +508,7 @@ async function sendFile(blob: Blob, name: string, onProgress: (p: number) => voi
   throw new Error("upload incomplete");
 }
 
-/** Files the app put in the Rollout folder with this label (see uploadToDrive), with their labels. */
+/** Files the app put in the RAW by aurare folder with this label (see uploadToDrive), with their labels. */
 /** The Drive's space: used and limit (no limit: an unlimited plan), in bytes. */
 export async function driveQuota(): Promise<{ used: number; limit: number | null }> {
   const r = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", { headers: { Authorization: `Bearer ${await getToken()}` } });
@@ -516,9 +518,9 @@ export async function driveQuota(): Promise<{ used: number; limit: number | null
 }
 
 export interface AppFile { id: string; name: string; mimeType: string; size: number; appProperties?: Record<string, string> }
-/** Every file in the app's Drive folder (what Rollout put there), with its size. */
+/** Every file in the app's Drive folder (what RAW put there), with its size. */
 export async function listAppFolder(): Promise<AppFile[]> {
-  // The whole tree: Rollout and every folder under it (Photos / …, Releases / … / Audios, Videos, Utils / …).
+  // The whole tree: RAW and every folder under it (Photos / …, Releases / … / Audios, Videos, Utils / …).
   const out: AppFile[] = [];
   const folders = [await appFolder()];
   for (let i = 0; i < folders.length && i < 400; i++) {
@@ -548,7 +550,7 @@ export async function deleteDriveFile(id: string): Promise<void> {
 }
 
 export async function listAppFiles(kind: string): Promise<{ id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[]> {
-  // Anywhere in the Rollout tree (the labels are the app's own: only its files have them).
+  // Anywhere in the app tree (the labels are the app's own: only its files have them).
   const q = `appProperties has { key='tktgen' and value='${kind}' } and trashed = false`;
   const out: { id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[] = [];
   let pageToken = "";
@@ -562,7 +564,7 @@ export async function listAppFiles(kind: string): Promise<{ id: string; name: st
   return out;
 }
 
-/** A file the app put in the Rollout folder, by its name (newest first). */
+/** A file the app put in the RAW by aurare folder, by its name (newest first). */
 export async function findInAppFolder(name: string): Promise<string | null> {
   const q = `name = '${quote(name)}' and trashed = false and ('${await appFolder()}' in parents or '${await driveFolder(DRIVE_PATHS.luts)}' in parents)`;
   const data = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", orderBy: "modifiedTime desc", pageSize: "1" })}`)).json();
@@ -679,7 +681,7 @@ const SUMS_KEY = "tktgen-drive-md5";
 const readSums = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(SUMS_KEY) ?? "{}"); } catch { return {}; } };
 
 /**
- * A Drive photo with exactly these bytes: in the Rollout folder, or among `ids` (the photos of the lists).
+ * A Drive photo with exactly these bytes: in the RAW by aurare folder, or among `ids` (the photos of the lists).
  * The checksums of the list photos are asked once, then kept on this device. Null when none matches.
  */
 export async function findSamePicture(blob: Blob, ids: string[]): Promise<string | null> {
@@ -707,7 +709,7 @@ export async function findSamePicture(blob: Blob, ids: string[]): Promise<string
   return found;
 }
 
-/** Put a picture in the Rollout folder of the user's Drive; returns its Drive id (a photo of any list). */
+/** Put a picture in the RAW by aurare folder of the user's Drive; returns its Drive id (a photo of any list). */
 export async function sendPictureToDrive(blob: Blob, name: string, path?: string[]): Promise<string> {
   return uploadToDrive(blob, name, () => {}, new AbortController().signal, blob.type || "image/jpeg", { tktgen: "photo" }, path ?? DRIVE_PATHS.photos);
 }

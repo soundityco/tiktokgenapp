@@ -5,9 +5,9 @@ import InstallApp from "@/components/InstallApp";
 import PointerHabits from "@/components/PointerHabits";
 
 export const metadata: Metadata = {
-  title: "Rollout",
+  title: "RAW by aurare",
   description: "TikTok carousel generator for artists",
-  appleWebApp: { capable: true, title: "Rollout", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "RAW", statusBarStyle: "black-translucent" },
   icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
   // Google Search Console: proves the site is ours (needed by the Google sign-in branding verification).
   verification: { google: "BQ3-MxnDZrpy5NSr_JF-jjRk3JXlPjV9lFkdp7r82jU" },

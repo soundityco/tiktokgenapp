@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/LegalPage";
 
-export const metadata: Metadata = { title: "Terms of Service · Rollout" };
+export const metadata: Metadata = { title: "Terms of Service · RAW by aurare" };
 const contact = process.env.CONTACT_EMAIL;
 
 export default function Terms() {
   return (
     <LegalPage title="Terms of Service" updated="October 2026">
-      <p>By using Rollout you agree to these terms.</p>
+      <p>By using RAW by aurare you agree to these terms.</p>
 
       <h2>The service</h2>
-      <p>Rollout helps artists create TikTok photo carousels and lyric videos from their own pictures, audio and videos (kept in a Rollout folder of their own Google Drive), text they write or import, and optionally the hooks of their own TikTok posts. It is provided as is, without warranty, and may change or stop at any time.</p>
+      <p>RAW helps artists create TikTok photo carousels and lyric videos from their own pictures, audio and videos (kept in a “RAW by aurare” folder of their own Google Drive), text they write or import, and optionally the hooks of their own TikTok posts. It is provided as is, without warranty, and may change or stop at any time.</p>
 
       <h2>Your content</h2>
       <p>You keep all rights to your pictures, texts and lyrics. You confirm that you own, or have permission to use, everything you add, and that you respect the rules of TikTok and Google.</p>

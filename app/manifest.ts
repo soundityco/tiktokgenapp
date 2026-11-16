@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
 
-/** Installable app (Chrome, Edge: "Install Rollout"): its own window, its icon in the dock / taskbar. */
+/** Installable app (Chrome, Edge: "Install RAW by aurare"): its own window, its icon in the dock / taskbar. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/studio",
-    name: "Rollout",
-    short_name: "Rollout",
+    name: "RAW by aurare",
+    short_name: "RAW",
     description: "TikTok carousels and lyric videos for music artists",
     start_url: "/studio",
     scope: "/",

@@ -54,7 +54,7 @@ export default function SharePage() {
   return (
     <main className="share-page">
       <div className="share-card stack">
-        <Wordmark height={18} />
+        <Wordmark height={16} />
         {s.step === "expired" ? (
           <p className="notice warn">{t("This link has expired or was already used. Show a new QR code on the computer.")}</p>
         ) : s.step === "opening" ? (

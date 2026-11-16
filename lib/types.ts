@@ -527,9 +527,9 @@ export interface Workspace {
   textRolesV1?: boolean;
   /** A LUT's settings (what it expects, gives, highlights) moved from the library to each video, as each showed them. */
   lutPerVideoV1?: boolean;
-  /** The photo lists once filled from the user's own Drive folders were copied into Rollout / Photos (once). */
+  /** The photo lists once filled from the user's own Drive folders were copied into RAW by aurare / Photos (once). */
   drivePhotosV1?: boolean;
-  /** Every photo, audio and LUT taken from the user's own Drive was copied into Rollout, so the app can work with
+  /** Every photo, audio and LUT taken from the user's own Drive was copied into RAW, so the app can work with
    *  the `drive.file` permission alone (once). */
   driveFilesV1?: boolean;
   /** The edits made on each photo (by its id): a slide that gets the photo again gets them back. */

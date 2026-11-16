@@ -15,7 +15,7 @@ const standalone = () => typeof window !== "undefined"
 const ios = () => typeof navigator !== "undefined"
   && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
-/** Registers the service worker, so the browser offers to install Rollout as an app (its icon, its own window). */
+/** Registers the service worker, so the browser offers to install RAW as an app (its icon, its own window). */
 export default function InstallApp() {
   useEffect(() => {
     // The width a scrollbar takes here (0 with the Mac's floating scrollbars): the scrolling columns take it off
