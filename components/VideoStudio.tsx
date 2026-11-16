@@ -2712,11 +2712,20 @@ export default function VideoStudio({
     // Each bar is a fixed slice of the track (a grid in seconds, not in the view): when the view slides (while playing,
     // zoomed) the bars move along with the sound instead of being cut again at every step, which made it shimmer.
     g.fillStyle = "#6f6e78";
-    const step = 3, n = Math.max(1, Math.floor(W / step));
+    const step = 3;
     const fine = !!view && v.d / dur < 0.5;
     const ch = fine ? audioBuf.getChannelData(0) : null;
     const sr = audioBuf.sampleRate;
-    const bin = v.d / n; // seconds per bar
+    // Seconds per bar: exactly 3 px of screen (a bar every 3.0x px, once rounded, left a 4 px gap now and then: dark bands).
+    const bin = (v.d / W) * step;
+    // Just before the playhead, the bars take the Generate button's gradient, fading in (what is playing).
+    const hx = X(head), trail = 70;
+    const holo = (getComputedStyle(document.documentElement).getPropertyValue("--grad-holo").match(/#[0-9a-f]{6}/gi) ?? []);
+    let glow: CanvasGradient | null = null;
+    if (holo.length > 1 && hx > -4 && hx - trail < W) {
+      glow = g.createLinearGradient(hx - trail, 0, hx + 2, 0);
+      holo.forEach((c, i) => glow!.addColorStop(i / (holo.length - 1), c + (i === 0 ? "00" : i === 1 ? "80" : "ff")));
+    }
     for (let k = Math.floor(v.s / bin); k * bin < v.s + v.d; k++) {
       const t0 = k * bin, t1 = t0 + bin;
       let val = 0;
@@ -2729,7 +2738,9 @@ export default function VideoStudio({
         for (let q = Math.max(0, a); q < b && q < peaks.length; q++) val = Math.max(val, peaks[q]);
       }
       const h = Math.max(1, Math.round(Math.min(1, val) * (H - 18)));
-      g.fillRect(Math.round(X(t0)), Math.round((H - h) / 2), 2, h);
+      const bx = Math.round(X(t0));
+      g.fillStyle = glow && bx >= hx - trail && bx <= hx + 1 ? glow : "#6f6e78";
+      g.fillRect(bx, Math.round((H - h) / 2), 2, h);
     }
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
@@ -2748,7 +2759,10 @@ export default function VideoStudio({
     g.fillRect(x0 - 3, H / 2 - 10, 5, 20);
     g.fillRect(x1 - 2, H / 2 - 10, 5, 20);
     g.fillStyle = head0;
+    // the playhead, with a soft glow of the gradient
+    if (holo.length) { g.shadowColor = holo[Math.floor(holo.length / 2)]; g.shadowBlur = 10; }
     g.fillRect(X(head) - 1, 0, 2, H);
+    g.shadowBlur = 0; g.shadowColor = "transparent";
     if (videoBlob && videoDur > 0) {
       const v0 = clamp(X(settings.offset), 0, W);
       if (clamp(X(settings.offset + videoDur), 0, W) - v0 > 56) {
