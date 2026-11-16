@@ -168,6 +168,8 @@ export interface LyricWord {
   line?: number;
   /** Set by hand on the last word of a caption: when that caption leaves the screen (seconds in the audio). */
   until?: number;
+  /** Placed by forced alignment (exact to ~0.2 s): the placing does not retouch these times (no tightening of line starts). */
+  exact?: boolean;
   /** The alignment is doubtful on this line (too fast, hardly heard, words that strayed): to check. Cleared once retimed by hand. */
   doubt?: boolean;
   /** Retimed by hand: this timing wins over the automatic one, also when the lyrics are placed again. */

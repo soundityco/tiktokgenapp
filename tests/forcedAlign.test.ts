@@ -70,3 +70,15 @@ describe("lines to check", () => {
     expect(words.slice(1).some((x) => x.doubt)).toBe(true);
   });
 });
+
+describe("line ends and exact words", () => {
+  it("the last word of a line is held up to a second, never into the next line; words are marked exact", () => {
+    const e = emis(400, [[10, "a"], [14, "b"], [60, "c"], [64, "d"]]);
+    const words = alignWordsForced(e, 400, V, [{ w: "ab", line: 0 }, { w: "cd", line: 1 }])!;
+    expect(words.every((x) => x.exact)).toBe(true);
+    expect(words[0].e - words[0].s).toBeCloseTo(1.0, 1);
+    expect(words[0].e).toBeLessThanOrEqual(words[1].s);
+    // the last line of the song: held a second too
+    expect(words[1].e - words[1].s).toBeCloseTo(1.0, 1);
+  });
+});

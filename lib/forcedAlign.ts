@@ -191,6 +191,9 @@ function strayBounds(starts: Int32Array, N: number, owner: number[], written: { 
   return any ? { lo, hi } : null;
 }
 
+/** How long the last word of a line stays, at most: a held note, not the next line's time. */
+const HOLD = 1.0;
+
 function wordsOf(starts: Int32Array, N: number, owner: number[], written: { w: string; line: number }[]): LyricWord[] {
   const s = new Array<number>(written.length).fill(Infinity);
   const e = new Array<number>(written.length).fill(0);
@@ -205,13 +208,20 @@ function wordsOf(starts: Int32Array, N: number, owner: number[], written: { w: s
   let last = 0;
   written.forEach((x, wi) => {
     if (Number.isFinite(s[wi])) {
-      out.push({ w: x.w, s: s[wi], e: Math.max(e[wi], s[wi] + 0.05), line: x.line });
+      out.push({ w: x.w, s: s[wi], e: Math.max(e[wi], s[wi] + 0.05), line: x.line, exact: true });
       last = out[out.length - 1].e;
     } else {
       // No letter to place: right after the word before, short.
-      out.push({ w: x.w, s: last, e: last + 0.15, line: x.line });
+      out.push({ w: x.w, s: last, e: last + 0.15, line: x.line, exact: true });
       last += 0.15;
     }
   });
+  // The last word of a line is held (a note, a breath): it stays up to a second, never into the next line.
+  for (let i = 0; i < out.length; i++) {
+    if (i + 1 < out.length && out[i + 1].line === out[i].line) continue;
+    const nextStart = i + 1 < out.length ? out[i + 1].s : Infinity;
+    // (a final letter that landed late, on the next line's attack, does not stretch it: capped at HOLD)
+    out[i] = { ...out[i], e: Math.max(out[i].s + 0.1, Math.min(out[i].s + HOLD, nextStart - 0.04)) };
+  }
   return out;
 }

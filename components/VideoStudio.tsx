@@ -2793,8 +2793,11 @@ export default function VideoStudio({
     };
     if (src === "song" || src === "all") {
       const aligned = alignSong(written, heard);
+      // Words placed by forced alignment are exact: the tightening and snapping made for the speech model's looser
+      // times would only move them (a line pushed 1 s late).
+      const exact = heard.length > 0 && heard.every((x) => x.exact);
       return aligned
-        ? { words: snapLines(tightenLineStarts(aligned.words), onsetsRef.current), info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
+        ? { words: exact ? aligned.words : snapLines(tightenLineStarts(aligned.words), onsetsRef.current), info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
         : rough(heard);
     }
     const inSeg = heard.filter((x) => x.e > segFrom && x.s < segTo);
