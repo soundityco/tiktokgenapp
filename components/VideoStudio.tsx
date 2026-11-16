@@ -32,7 +32,7 @@ import { presetNamed, presetOf, StylePresets, TextQuickMenu, withPreset } from "
 import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
-import { mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
+import { linkLyrics, mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
 import { SourceButton, sourceSub, tagSummary, TagChips } from "./SourcePick";
 import { ConfirmDialog, ContextMenu, Hint, MatteSelect, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
@@ -2856,6 +2856,16 @@ export default function VideoStudio({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paste]);
 
+  // Lyrics written in the Library after the release was opened: linked at once (otherwise the sync button
+  // stayed greyed until a reload, `linkLyrics` only ran on loading). Only when nothing else is pasted here.
+  useEffect(() => {
+    if (project.lyricsLinked || !sungOf(project.lyrics).trim()) return;
+    const linked = linkLyrics(project);
+    if (!linked.lyricsLinked) return;
+    setWrittenSrc("song");
+    setPaste(songOf(project.lyrics));
+    onProject((p) => linkLyrics(p));
+  }, [project.lyrics, project.lyricsLinked]); // eslint-disable-line react-hooks/exhaustive-deps
   // Linked: the sections changed elsewhere (the carousel): the text here follows, unless it is being typed in.
   useEffect(() => {
     if (!lyricsLinked || document.activeElement === pasteRef.current) return;
