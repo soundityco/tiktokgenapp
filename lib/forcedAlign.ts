@@ -80,9 +80,10 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
   });
   let starts = ctcStarts(emis, T, V, toks);
   if (!starts) return null;
+  const strayed = new Set<number>();
   let acc: { lo: Int32Array; hi: Int32Array } | undefined;
   for (let pass = 0; pass < 3; pass++) {
-    const bounds = strayBounds(starts, toks.length, owner, written, T);
+    const bounds = strayBounds(starts, toks.length, owner, written, T, strayed);
     if (!bounds) break;
     // The windows already set stay (a line put right must not go back when another is corrected).
     if (acc) for (let k = 0; k < toks.length; k++) { bounds.lo[k] = Math.max(bounds.lo[k], acc.lo[k]); bounds.hi[k] = Math.min(bounds.hi[k], acc.hi[k]); }
@@ -91,7 +92,46 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
     acc = bounds;
     starts = again;
   }
-  return wordsOf(starts, toks.length, owner, written);
+  const words = wordsOf(starts, toks.length, owner, written);
+  const bad = doubtfulLines(starts, toks, owner, written, emis, V, strayed);
+  return bad.size ? words.map((x) => (bad.has(x.line ?? -1) ? { ...x, doubt: true } : x)) : words;
+}
+
+/**
+ * Per line: its letters, its pace (letters per second, up to the start of the next line: lines packed on top of each
+ * other are the sign of a passage the model did not hear) and the mean log-probability of its letters on the path.
+ */
+export function lineStats(starts: Int32Array, toks: number[], owner: number[], written: { w: string; line: number }[], emis: Float32Array, V: number) {
+  const acc = new Map<number, { letters: number; first: number; last: number; sum: number }>();
+  for (let k = 0; k < toks.length; k++) {
+    const line = written[owner[k]].line;
+    const st = acc.get(line) ?? { letters: 0, first: Infinity, last: 0, sum: 0 };
+    st.letters++;
+    st.first = Math.min(st.first, starts[k]);
+    st.last = Math.max(st.last, starts[k]);
+    st.sum += emis[starts[k] * V + toks[k]];
+    acc.set(line, st);
+  }
+  const lines = [...acc.keys()].sort((x, y) => x - y);
+  const out = new Map<number, { letters: number; rate: number; conf: number }>();
+  lines.forEach((line, i) => {
+    const st = acc.get(line)!;
+    const nextFirst = i + 1 < lines.length ? acc.get(lines[i + 1])!.first : st.last + 0.5 * FPS;
+    out.set(line, { letters: st.letters, rate: st.letters / Math.max(0.1, (nextFirst - st.first) * FA_FRAME), conf: st.sum / st.letters });
+  });
+  return out;
+}
+
+/** Fastest believable pace, in letters per second up to the next line (measured: 24 at most on good rap, packed lines 30 to 50). */
+const MAX_RATE = 26;
+
+/** The lines whose place is doubtful: packed on the next one (a passage the model did not hear), or words that had strayed. */
+function doubtfulLines(starts: Int32Array, toks: number[], owner: number[], written: { w: string; line: number }[], emis: Float32Array, V: number, strayed: Set<number>) {
+  const bad = new Set<number>(strayed);
+  for (const [line, st] of lineStats(starts, toks, owner, written, emis, V)) {
+    if (st.letters >= 3 && st.rate > MAX_RATE) bad.add(line);
+  }
+  return bad;
 }
 
 /** First and last frame of each word (from its letters), -1 for a word with no letter. */
@@ -106,7 +146,7 @@ function wordSpans(starts: Int32Array, owner: number[], n: number) {
 }
 
 /** Frame windows for the letters of the words that strayed from their line, null when no line has strayed. */
-function strayBounds(starts: Int32Array, N: number, owner: number[], written: { w: string; line: number }[], T: number) {
+function strayBounds(starts: Int32Array, N: number, owner: number[], written: { w: string; line: number }[], T: number, strayed: Set<number>) {
   const { first, last } = wordSpans(starts, owner, written.length);
   const lo = new Int32Array(N).fill(0), hi = new Int32Array(N).fill(T);
   let any = false;
@@ -125,6 +165,7 @@ function strayBounds(starts: Int32Array, N: number, owner: number[], written: { 
     }
     if (parts.length > 1) {
       any = true;
+      strayed.add(written[a].line);
       // The main part: the one with the most letters.
       const letters = (p: number[]) => p.reduce((n, w) => n + owner.filter((o) => o === w).length, 0);
       const main = parts.reduce((m, p) => (letters(p) > letters(m) ? p : m));

@@ -40,6 +40,7 @@ describe("alignWordsForced", () => {
     expect(words[2].s).toBeCloseTo(2.0);
     expect(words[2].line).toBe(1);
     expect(words.every((x) => x.e > x.s)).toBe(true);
+    expect(words.some((x) => x.doubt)).toBe(false);
   });
   it("the same word sung four times is placed four times", () => {
     const hits: [number, string][] = [];
@@ -56,5 +57,16 @@ describe("a word that strayed from its line", () => {
     const words = alignWordsForced(e, 600, V, [{ w: "A", line: 0 }, { w: "Bo", line: 0 }])!;
     expect(words[0].s).toBeCloseTo(8, 0);
     expect(words[1].s).toBeCloseTo(8.2, 0);
+    expect(words.every((x) => x.doubt)).toBe(true); // a line that had to be pulled back is one to check
+  });
+});
+
+describe("lines to check", () => {
+  it("lines packed on top of each other are marked, the others are not", () => {
+    // Line 0 sung normally, then four lines of "non" all within a few frames.
+    const written = [{ w: "abc", line: 0 }, ...[1, 2, 3, 4].map((l) => ({ w: "non", line: l }))];
+    const words = alignWordsForced(emis(300, [[10, "a"], [14, "b"], [18, "c"], [100, "n"], [101, "o"], [102, "n"], [103, "n"], [104, "o"], [105, "n"], [106, "n"], [107, "o"], [108, "n"], [109, "n"], [110, "o"], [111, "n"]]), 300, V, written)!;
+    expect(words[0].doubt).toBeUndefined();
+    expect(words.slice(1).some((x) => x.doubt)).toBe(true);
   });
 });

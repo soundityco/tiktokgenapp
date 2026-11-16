@@ -3035,11 +3035,17 @@ export default function VideoStudio({
         setErr(msg);
         outcome = { title: t("Lyrics not found"), body: msg };
       } else {
-        const { words, info } = placeWords(heard, src, proj, segFrom, segTo);
+        const placed = placeWords(heard, src, proj, segFrom, segTo);
+        const { info } = placed;
+        // The lines the alignment doubts (the words keep their `line`): marked to check.
+        const doubts = new Set((forced ?? []).filter((x) => x.doubt).map((x) => x.line));
+        const words = doubts.size ? placed.words.map((x) => (x.line !== undefined && doubts.has(x.line) ? { ...x, doubt: true } : x)) : placed.words;
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
         onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? words : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
-        const said = forced ? t("Your lyrics are placed on the audio, word by word ({n} words)", { n: words.length }) : info;
+        const said = forced
+          ? t("Your lyrics are placed on the audio, word by word ({n} words)", { n: words.length }) + (doubts.size ? " · " + (doubts.size === 1 ? t("1 line to check (yellow dot)") : t("{n} lines to check (yellow dot)", { n: doubts.size })) : "")
+          : info;
         setGenInfo(said);
         outcome = { title: t("Lyrics ready"), body: said };
         onSaveNow();
@@ -5032,6 +5038,9 @@ export default function VideoStudio({
                           <button className="cue-text truncate xs" onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
                             {c.text.replace(/\n/g, " ⏎ ")}
                           </button>
+                          {c.words.some((x) => x.doubt) && !c.words.some((x) => x.manual) && (
+                            <span className="cue-doubt" title={t("To check: the model was unsure where this line is sung")} aria-label={t("To check")} />
+                          )}
                           {/* Right after the line's text (not at the far end): close at hand. */}
                           <button className="btn icon sm quiet cue-pen" aria-label={t("Edit the line")} title={t("Edit the line: a missing word, or cut it in two")}
                             onClick={() => { stop(); setEditCue({ i, text: c.words.map((x) => x.w).join(" ") }); }}><Icon name="pencil" size={14} /></button>
