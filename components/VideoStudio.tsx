@@ -2598,6 +2598,18 @@ export default function VideoStudio({
       d.mode = "move"; // it is a drag: the segment moves
     }
     const delta = (f - d.x) * d.vd;
+    // The segment's edges stick to the camera video's start and end within 8 px, always on its inside: dropped "right on
+    // it" by eye, a few pixels past made the video "stop before the segment ends".
+    const pxSec = d.vd / Math.max(1, e.currentTarget.getBoundingClientRect().width);
+    const snapIn = (t: number, edge: "start" | "end") => {
+      if (!videoBlob || videoDur <= 0) return t;
+      // (the same length the notice checks: on the Drive copy, the take's own)
+      const cur = settingsRef.current;
+      const off = cur.offset, vEnd = off + (onCopy && cur.source?.duration ? cur.source.duration : videoDur);
+      if (edge === "end" && Math.abs(t - vEnd) <= 8 * pxSec) return Math.floor(vEnd * 100) / 100;
+      if (edge === "start" && Math.abs(t - off) <= 8 * pxSec) return Math.ceil(off * 100) / 100;
+      return t;
+    };
     if (d.mode === "pan") { userPanAt.current = performance.now(); setView({ s: clamp(d.vs - delta, 0, dur - d.vd), d: d.vd }); return; }
     const bounds = boundsOf(settingsRef.current);
     // The preview follows the edge being dragged: the picture shown is the one under that edge.
@@ -2607,15 +2619,21 @@ export default function VideoStudio({
     } else if (d.mode === "start") {
       // The left edge crops the start: the end stays where it is.
       const endT = d.start + d.duration;
-      const start = round2(clamp(d.start + delta, bounds[0], endT - 1));
+      const start = Math.max(round2(clamp(snapIn(d.start + delta, "start"), bounds[0], endT - 1)), bounds[0]);
       setV({ crop: { start, duration: round2(endT - start) } });
       setHead(start);
     } else if (d.mode === "end") {
-      const duration = clamp(d.duration + delta, 1, Math.max(1, bounds[1] - d.start));
-      setV({ crop: { start: d.start, duration: round2(duration) } });
+      const endT = snapIn(d.start + clamp(d.duration + delta, 1, Math.max(1, bounds[1] - d.start)), "end");
+      const duration = Math.floor((endT - d.start) * 100 + 1e-6) / 100; // never past the edge it sticks to
+      setV({ crop: { start: d.start, duration } });
       setHead(round2(Math.max(d.start, d.start + duration - 0.1)));
     } else {
-      const crop = fitCrop(d.start + delta, d.duration, bounds);
+      // Moved whole: an edge brought next to the video's start or end sticks to it.
+      let s = d.start + delta;
+      const sEnd = snapIn(s + d.duration, "end");
+      if (sEnd !== s + d.duration) s = sEnd - d.duration;
+      else s = snapIn(s, "start");
+      const crop = fitCrop(s, d.duration, bounds);
       setV({ crop });
       setHead(crop.start);
     }
