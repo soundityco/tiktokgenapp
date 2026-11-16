@@ -3620,6 +3620,11 @@ export default function VideoStudio({
   const tl = (t: number) => `${((t - tw.s) / tw.d) * 100}%`;
   const twd = (a: number, b: number) => `${(Math.max(0, Math.min(b, tw.s + tw.d) - Math.max(a, tw.s)) / tw.d) * 100}%`;
   const inTw = (t: number) => t >= tw.s - 0.01 && t <= tw.s + tw.d + 0.01;
+  /** Where the playhead is across a clip shown from `a` to `b` (its visible part), as a % of its width: its text glows there. */
+  const hxIn = (a: number, b: number) => {
+    const s = Math.max(a, tw.s), e = Math.min(b, tw.s + tw.d);
+    return `${e > s ? clamp((head - s) / (e - s), 0, 1) * 100 : 0}%`;
+  };
   // ---- takes: the release's camera / phone files (lib "Prises"), up to 4 per project (multicam) ----
   /** Takes of this release on the same audio as this project, other than its own (camera 1). */
   const camChoices = clips.filter((c) => c.id !== clip.id && audioIdOf(release, c) === audioId && c.videoName);
@@ -4830,7 +4835,11 @@ export default function VideoStudio({
                     <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
                     {hooks.map((h, i) => (
                       <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
-                        style={{ left: tl(Math.max(tw.s, settings.crop.start + clamp(h.from, 0, segLen))), width: twd(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)) }}
+                        data-text={h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
+                        style={{
+                          left: tl(Math.max(tw.s, settings.crop.start + clamp(h.from, 0, segLen))), width: twd(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)),
+                          ...(hookAt(settings, head)?.id === h.id ? { ["--hx" as string]: hxIn(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)) } : null),
+                        }}
                         title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
                         onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
                         {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
@@ -4858,9 +4867,11 @@ export default function VideoStudio({
                   <span className="track-seg" style={{ left: tl(settings.crop.start), width: twd(settings.crop.start, end) }} />
                   {cues.map((c, i) => (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
+                      data-text={c.text.replace(/\n/g, " ")}
                       style={{
                         left: tl(Math.max(tw.s, clamp(c.start, settings.crop.start, end))),
                         width: twd(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)),
+                        ...(c === current ? { ["--hx" as string]: hxIn(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)) } : null),
                       }}
                       data-at={Math.max(settings.crop.start, c.start)}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
