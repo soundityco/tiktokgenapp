@@ -2360,15 +2360,21 @@ export default function VideoStudio({
     return () => { window.removeEventListener("mousemove", wake); document.documentElement.removeEventListener("mouseleave", away); clearTimeout(timer); };
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.documentElement.classList.toggle("pv-idle", full && idle); return () => document.documentElement.classList.remove("pv-idle"); }, [full, idle]);
-  // Computer, full screen: the right column (colour, framing, lyrics…) can float over it, beside the picture, to adjust
-  // while watching it big; it goes back to its place when the full screen closes.
+  // Computer, full screen: "Settings" narrows it to leave the right column (colour, framing, lyrics…) visible and usable
+  // where it is, to adjust while watching the picture big; the full screen takes the whole screen again when closed.
   const [fullSide, setFullSide] = useState(false);
   useEffect(() => { if (!full) setFullSide(false); }, [full]);
   useEffect(() => {
-    document.documentElement.classList.toggle("pv-side", fullSide);
-    // Opened: on the colour, what is adjusted most while watching.
-    if (fullSide) rightColRef.current?.querySelector("#video-color")?.scrollIntoView({ block: "start" });
-    return () => document.documentElement.classList.remove("pv-side");
+    const root = document.documentElement;
+    // The full screen leaves the column's width free on the right (measured: the column stays where it is, usable).
+    const fit = () => {
+      const col = rightColRef.current?.getBoundingClientRect();
+      if (fullSide && col?.width) root.style.setProperty("--fs-right", `${Math.max(0, window.innerWidth - col.left)}px`);
+      root.classList.toggle("pv-settings", fullSide && !!col?.width);
+    };
+    fit();
+    if (fullSide) window.addEventListener("resize", fit);
+    return () => { window.removeEventListener("resize", fit); root.classList.remove("pv-settings"); };
   }, [fullSide]);
   /** A tap on the full-screen picture plays or pauses (the player stays, under the picture, on a phone too). */
   const fullTap = () => { if (playing) pause(); else void play(); };
