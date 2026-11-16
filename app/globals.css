@@ -417,7 +417,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue { position: absolute; top: 4px; bottom: 4px; min-width: 3px; padding: 0 6px; border: 0; border-left: 2px solid var(--line-2); border-radius: 2px;
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
-.lyric-track .cue.outside { opacity: .4; pointer-events: none; display: flex; align-items: center; }
+.lyric-track .cue.outside { pointer-events: none; display: flex; align-items: center; /* dimmed with solid colours, not see-through */
+  background: color-mix(in srgb, var(--raised) 45%, var(--bg)); color: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-left-color: color-mix(in srgb, var(--line-2) 45%, var(--bg)); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
 /* The clip playing glows in its own colour (--clip): a line of the lyrics in white, a hook in the hooks' blue, a shot
    in its camera's colour. Its text only where the playhead is on it (a copy of the text carrying the glow, masked to
@@ -474,7 +475,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .cam-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: 12px; }
 .cam-chip b, .cam-shot b { color: var(--cam); font-weight: 700; }
 .cams-row .cam-pick { width: auto; flex: 0 1 230px; min-width: 0; border-color: color-mix(in srgb, var(--cam) 35%, var(--line-2)); }
-.lyric-track .cue.cam-shot { border-left-color: var(--cam); background: color-mix(in srgb, var(--cam) 12%, transparent); }
+.lyric-track .cue.cam-shot { border-left-color: var(--cam); background: color-mix(in srgb, var(--cam) 12%, var(--bg)); } /* solid: the clips slide over each other */
 .lyric-track .cue.cam-shot { display: flex; align-items: center; gap: 4px; }
 .shot-x { display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); align-items: center; justify-content: center; padding: 2px; border: 0; background: none; color: var(--muted); cursor: pointer; z-index: 3; }
 .shot-x:hover { color: var(--text); }
@@ -503,7 +504,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .hook-item .nudge { display: inline-flex; align-items: center; gap: 2px; }
 .hook-item .nudge .btn { width: 24px; padding: 0; justify-content: center; }
 .hook-item .nudge .mono { min-width: 46px; text-align: center; }
-.lyric-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
+.lyric-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 3; } /* above the clips (1-2), always */
 /* Its line as tall as its text (no room under it): the block's bottom edge as far from it as its left edge. */
 details.fine > summary { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: var(--s1) 0 0; line-height: 1; }
 details.fine > summary:hover { color: var(--text); }
