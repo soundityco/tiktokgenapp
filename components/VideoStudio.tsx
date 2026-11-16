@@ -1970,7 +1970,8 @@ export default function VideoStudio({
       const now = from + (ctx.currentTime - originRef.current);
       if (now >= until) { setHead(playReturnRef.current ? from0 : until); stop(); return; }
       // The playhead and the lyrics follow what is heard (the sound sent, minus the output's delay).
-      const heard = Math.max(cfgStart, now - lat);
+      // (until the sound reaches the speakers the playhead waits where it was, never stepping back first)
+      const heard = Math.max(cfgStart, from0, now - lat);
       setHead(heard);
       followHead(heard);
       if (el) {
@@ -2449,16 +2450,17 @@ export default function VideoStudio({
     try { if (view) localStorage.setItem(viewKey, JSON.stringify({ ...view, dur: audioBuf.duration })); else localStorage.removeItem(viewKey); } catch { /* private mode */ }
   }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
   /**
-   * While playing, zoomed in: when the playhead leaves the view (or starts outside it), the view jumps to keep it in
-   * sight, at the same zoom, the playhead near its left edge (as Ableton's follow, page by page). While it is in view
-   * nothing moves; a view slid by hand is left alone for a moment.
+   * While playing, zoomed in, the track scrolls under the playhead, kept at a third of the view (what is coming in
+   * sight, as Logic or Premiere): from the moment play is pressed. Paused, the view stays where it is (to work on it);
+   * a view slid by hand while playing is left alone for a moment. Near the track's ends the playhead moves instead.
    */
   const userPanAt = useRef(0);
+  const FOLLOW_AT = 1 / 3;
   const followHead = (t: number) => {
     const v = viewRef.current, dur = audioBuf?.duration ?? 0;
     if (!v || !dur || dragWave.current || performance.now() - userPanAt.current < 1500) return;
-    if (t >= v.s && t <= v.s + v.d * 0.97) return;
-    setView({ s: clamp(t - v.d * 0.08, 0, Math.max(0, dur - v.d)), d: v.d });
+    const s = clamp(t - v.d * FOLLOW_AT, 0, Math.max(0, dur - v.d));
+    if (Math.abs(s - v.s) > v.d * 0.002) setView({ s, d: v.d });
   };
   /** Zoom to `d` seconds shown, `around` (seconds) staying where it is on screen. */
   const zoomTo = (d: number, around: number) => {
