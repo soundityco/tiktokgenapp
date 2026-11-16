@@ -4551,8 +4551,9 @@ export default function VideoStudio({
                 ? <p className="notice warn xs">{t("The Drive copy holds {from} to {to} of the take: past it, there are no pictures on this device. Make the passage longer on the device that has the camera file (its copy follows), or pick the camera file here.", { from: fmtTime(cp.from), to: fmtTime(cp.to) })}</p>
                 : null;
             })()}
-            {/* Past the take's end (the take itself, not its copy: on the copy, the take's own length). */}
-            {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + (onCopy && settings.source?.duration ? settings.source.duration : videoDur) + 0.02 && (
+            {/* Really past the take's end: more than 0.1 s (a few frames; the length read at import and the player's can
+                differ by a few hundredths, and a segment stuck to the video's end is not past it). On the copy, the take's own. */}
+            {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + (onCopy && settings.source?.duration ? settings.source.duration : Math.max(videoDur, settings.source?.duration ?? 0)) + 0.1 && (
               <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
             )}
             </div>
