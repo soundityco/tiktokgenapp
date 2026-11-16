@@ -589,6 +589,12 @@ export default function VideoStudio({
     () => buildCues(project.lyricWords ?? [], mode, { lineChars, from: settings.crop.start, to: settings.crop.start + settings.crop.duration, wordTiming: settings.wordTiming }),
     [project.lyricWords, mode, lineChars, settings.crop.start, settings.crop.duration, settings.wordTiming]
   );
+  // The whole song's lines, for the track (the lyrics are placed on the whole track): the ones outside the segment are
+  // shown there too, dimmed, so it is clear they were found (only the segment's are edited and go in the video).
+  const songCues = useMemo(
+    () => buildCues(project.lyricWords ?? [], mode, { lineChars, wordTiming: settings.wordTiming }),
+    [project.lyricWords, mode, lineChars, settings.wordTiming]
+  );
 
   /** Font under the pointer in a font list (lyrics or hook style): shown on the video until the pointer leaves. */
   const [fontPreview, setFontPreview] = useState<null | { which: "caption" | "hook"; patch: Partial<TextStyle> }>(null);
@@ -4912,6 +4918,11 @@ export default function VideoStudio({
                 )}
                 <div ref={trackRef} className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: twd(settings.crop.start, end) }} />
+                  {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
+                  {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && c.end > tw.s && c.start < tw.s + tw.d && (
+                    <span key={"o" + i} className="cue outside" title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
+                      style={{ ...place(Math.max(tw.s, c.start)), width: twd(c.start, c.end) }}>{c.text.replace(/\n/g, " ")}</span>
+                  ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => c.end > tw.s && c.start < tw.s + tw.d && (
                     <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
@@ -4936,7 +4947,7 @@ export default function VideoStudio({
                     <span key={"x" + i} className={"cam-cut cue-edge end" + (Math.min(c.end, end) >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(Math.min(c.end, end)) }}
                       title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
-                  {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" style={place(barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))!)} />}
                   <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                 </div>
