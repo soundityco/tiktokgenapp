@@ -385,6 +385,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-timing { display: grid; gap: var(--s1); max-height: 210px; overflow: auto; padding-right: 2px; }
 .cue-row { display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 1px 2px; border-radius: var(--r); }
 .cue-row.on { background: var(--raised); }
+.cue-row .cue-here { opacity: 0; flex: none; }
+.cue-row:hover .cue-here, .cue-row.on .cue-here { opacity: 1; }
+@media (hover: none) { .cue-row .cue-here { opacity: 1; } }
 .cue-doubt { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 .cue-row.on .cue-text { color: var(--text); }
 .cue-row .nudge { display: inline-flex; align-items: center; gap: 2px; flex: none; }

@@ -5047,6 +5047,11 @@ export default function VideoStudio({
                           {/* Right after the line's text (not at the far end): close at hand. */}
                           <button className="btn icon sm quiet cue-pen" aria-label={t("Edit the line")} title={t("Edit the line: a missing word, or cut it in two")}
                             onClick={() => { stop(); setEditCue({ i, text: c.words.map((x) => x.w).join(" ") }); }}><Icon name="pencil" size={14} /></button>
+                          {/* The line starts where the playhead is: play, stop on the attack, click (the model hears soft sounds before it). */}
+                          {mode === "phrase" && Math.abs(head - c.start) > 0.05 && (
+                            <button className="btn sm quiet cue-here" title={t("Start this line at the playhead: play, stop on the attack, click")}
+                              onClick={() => { const out = moveCueStart(project.lyricWords ?? [], cues, i, round2(head)); if (out) { onProject((p) => ({ ...p, lyricWords: out })); onSaveNow(); } }}>{t("Here")}</button>
+                          )}
                           <span className="grow" />
                         </>)}
                         <span className="nudge">
