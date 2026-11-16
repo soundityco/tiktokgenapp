@@ -27,6 +27,7 @@ import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkC
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import { alignDevice, alignEmissions, stopAlign } from "@/lib/alignAI";
 import { alignWordsForced } from "@/lib/forcedAlign";
+import { type Phrase, relayWeakLines } from "@/lib/lyricsRelay";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -3019,6 +3020,31 @@ export default function VideoStudio({
           console.warn("[align] precise alignment not available, the speech model instead", e);
         }
         setGenStep("library"); setGenPct(0); setGenDone(0);
+        // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
+        // there, are heard again by the speech model, and its phrases' times are used for those lines (lib/lyricsRelay).
+        if (forced?.some((x) => x.weak && x.doubt)) {
+          const weak = forced.filter((x) => x.weak);
+          const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
+          const near = wins.map((w, i) => ({ w, i })).filter(({ w }) => w[1] > lo && w[0] < hi);
+          try {
+            setGenInfo(t("Some passages are hard to hear: listening to them again…"));
+            const phrases: Phrase[] = [];
+            for (let n = 0; n < near.length; n++) {
+              const { w: [a, b], i } = near[n];
+              const got = await transcribe(await prepareAudio(buf, a, b), { model, language, base: a, mode: "segment", raw: true, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal });
+              // The overlap between two windows belongs to the one that hears it whole (its middle).
+              const from = i === 0 ? -Infinity : a + LYRICS_LAP / 2, to = i === wins.length - 1 ? Infinity : b - LYRICS_LAP / 2;
+              phrases.push(...got.filter((p) => { const m = (p.s + p.e) / 2; return m >= from && m < to; }));
+              setGenDone((n + 1) / near.length);
+            }
+            forced = relayWeakLines(forced, phrases, buf.duration);
+            console.debug(`[align] relay: ${phrases.length} phrases heard on ${lo.toFixed(1)}–${hi.toFixed(1)} s`, phrases);
+          } catch (e) {
+            if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
+            console.warn("[align] relay not available, the alignment kept as it is", e);
+          }
+          setGenStep("library"); setGenPct(0); setGenDone(0);
+        }
       }
       let heard = forced ?? await listen(model);
       // Too few words recognised for the lyrics: listened to again, once, by the other model; the better listening of the

@@ -52,7 +52,7 @@ export function stopTranscribe() {
  */
 export function transcribe(
   samples: Float32Array,
-  opts: { model: AsrModel; language: string; base: number; mode?: "word" | "segment"; onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal }
+  opts: { model: AsrModel; language: string; base: number; mode?: "word" | "segment"; raw?: boolean; onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal }
 ): Promise<LyricWord[]> {
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) { reject(new Error("aborted")); return; }
@@ -69,7 +69,7 @@ export function transcribe(
         const got = (m.words as { w: string; s: number; e?: number }[]).map((x) => ({
           w: x.w, s: x.s + opts.base, e: (typeof x.e === "number" ? x.e : x.s + 0.3) + opts.base,
         }));
-        resolve(m.seg ? wordsFromSegments(got) : got);
+        resolve(m.seg && !opts.raw ? wordsFromSegments(got) : got); // raw: the phrases themselves (text, start, end)
       } else if (m.type === "error") { cleanup(); stopTranscribe(); reject(new Error(m.message)); } // fresh worker next time: a failed import is not retried
     };
     const onErr = (e: ErrorEvent) => { cleanup(); stopTranscribe(); reject(new Error(e.message || "worker")); };
