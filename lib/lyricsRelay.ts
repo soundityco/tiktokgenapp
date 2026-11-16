@@ -12,8 +12,9 @@ export function noSpeech(text: string): boolean {
 
 /** First word longer than this (seconds, up to the next word): it took the gap before it; it then lasts FIRST_WORD. */
 const FIRST_LONG = 0.6, FIRST_WORD = 0.25;
-/** A line moves to its phrase only when they disagree by more than this (seconds). */
-const MOVE = 0.5;
+/** A line of the passage keeps its own time when the relay's agrees within this (seconds; 0: the relay's words, finer
+ * now that they are heard one by one, always win: keeping some lines and not others mixed the blocks of a chorus). */
+export const RELAY_TUNE = { move: 0 };
 
 /**
  * Words heard one by one (their own times) and words of phrases (spread inside each phrase): the first where there are
@@ -60,7 +61,7 @@ export function relayWeakLines(words: LyricWord[], heardWords: LyricWord[], dura
         let q = 0;
         const by = run.map((l) => l.idx.map(() => placed.words[q++]));
         // The alignment is finer than the phrases: a line not piled up keeps its own time when they agree within MOVE.
-        const keep = run.map((l, k) => !l.doubt && Math.abs(words[l.idx[0]].s - by[k][0].s) <= MOVE);
+        const keep = run.map((l, k) => RELAY_TUNE.move > 0 && !l.doubt && Math.abs(words[l.idx[0]].s - by[k][0].s) <= RELAY_TUNE.move);
         // ...and never against the order of the lines around it as they now are.
         run.forEach((l, k) => {
           if (!keep[k]) return;

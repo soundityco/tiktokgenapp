@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, withoutLost, wordsFromSegments, parseLyrics, repairOrder, respreadLost, splitWords, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -25,9 +25,8 @@ import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import { alignDevice, alignEmissions, stopAlign } from "@/lib/alignAI";
-import { alignWordsForced } from "@/lib/forcedAlign";
-import { mergeHeard, noSpeech, relayWeakLines } from "@/lib/lyricsRelay";
+import { stopAlign } from "@/lib/alignAI";
+import { LYRICS_LAP, LYRICS_WIN, placeByAlignment } from "@/lib/lyricsPipeline";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -48,9 +47,6 @@ const PRESETS = [10, 15, 20, 30];
 const MAX_CAPTURE = 600;
 /** Above this, the camera file's sound is not decoded by the browser from the whole file in memory (ffmpeg reads it). */
 const SYNC_DECODE_MAX = 400 * 1024 * 1024;
-/** The lyrics are heard in windows of this length (s), overlapping a little so no word is cut. */
-const LYRICS_WIN = 28;
-const LYRICS_LAP = 2;
 
 const DEFAULT_VIDEO: VideoSettings = defaultVideo();
 /** Look LUTs already read on this page (id → LUT). */
@@ -3004,71 +3000,15 @@ export default function VideoStudio({
       const writtenAll = src === "song" || src === "all" ? writtenOf(src, proj) : "";
       if (writtenAll.trim()) {
         try {
-          let step: AsrStep = "library";
-          const em = await alignEmissions(buf, {
-            onStep: (x) => { step = x; setGenStep(x); },
-            onProgress: (p) => (step === "listen" ? setGenDone(p) : setGenPct(p)), // the bar: the download, then the placing
-            signal: ac.signal,
+          forced = await placeByAlignment(buf, writtenAll, {
+            model, language, onStep: setGenStep, onPct: setGenPct, onDone: setGenDone,
+            onRelay: () => setGenInfo(t("Some passages are hard to hear: listening to them again…")), signal: ac.signal,
           });
-          forced = alignWordsForced(em.frames, em.T, em.V, splitWords(writtenAll));
-          if (!forced) console.warn("[align] the lyrics do not fit this audio: the speech model instead");
-          else {
-            // What was placed, line by line (to compare with the song by ear): start, end, text.
-            const lines = new Map<number, LyricWord[]>();
-            for (const w of forced) { const k = w.line ?? -1; (lines.get(k) ?? lines.set(k, []).get(k)!).push(w); }
-            console.debug(`[align] ${alignDevice === "webgpu" ? "graphics card" : "processor"}, ${em.T} frames, ${forced.length} words placed:\n` +
-              [...lines.values()].map((ws) => `${ws[0].s.toFixed(2)} → ${ws[ws.length - 1].e.toFixed(2)}  ${ws.map((w) => w.w).join(" ")}${ws.some((w) => w.doubt) ? "  (to check)" : ""}`).join("\n"));
-          }
         } catch (e) {
           if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
-          console.warn("[align] precise alignment not available, the speech model instead", e);
+          throw e;
         }
         setGenStep("library"); setGenPct(0); setGenDone(0);
-        // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
-        // there, are heard again by the speech model, and its phrases' times are used for those lines (lib/lyricsRelay).
-        if (forced && !forced.some((x) => x.weak && x.doubt)) console.info("[align] no passage hard to hear: no relay");
-        if (forced?.some((x) => x.weak && x.doubt)) {
-          const weak = forced.filter((x) => x.weak);
-          const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
-          try {
-            setGenInfo(t("Some passages are hard to hear: listening to them again…"));
-            const phrases: LyricWord[] = [];
-            // Windows laid on the passage itself. The speech model sometimes hears nothing in a whole window of music
-            // ("...", "Thank you", "Sous-titrage") and everything in the same one a few seconds later (WANNA TRY: nothing
-            // on 52–80 s, the hook and each chorus on 55–81 s): a window that gives nothing is heard again, moved.
-            const starts: number[] = [];
-            for (let a = Math.max(0, lo); a < hi; a += LYRICS_WIN - LYRICS_LAP) starts.push(a);
-            for (let n = 0; n < starts.length; n++) {
-              const a = starts[n], b = Math.min(buf.duration, a + LYRICS_WIN);
-              let got: LyricWord[] = [];
-              for (const shift of [0, 3, -3, 6, -6]) {
-                const s = clamp(a + shift, 0, Math.max(0, buf.duration - 4)), e = Math.min(buf.duration, s + LYRICS_WIN);
-                // The lines sung just before (the written ones, as placed): the model's context, so it hears the singing.
-                const before = forced!.filter((x) => x.e <= s + 0.2).slice(-24).map((x) => x.w).join(" ");
-                const pcm = await prepareAudio(buf, s, e);
-                const hear = (mode: "word" | "segment") => transcribe(pcm, { model, language, base: s, mode, raw: true, prompt: before, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal });
-                // Its words with their own times (the finest, when they hold), and its phrases' times where no word was
-                // given (the word listening can stop early in a chorus; the phrases go on to the end).
-                const byWord = (await hear("word")).filter((p) => !noSpeech(p.w));
-                const bySeg = wordsFromSegments((await hear("segment")).filter((p) => !noSpeech(p.w)));
-                got = mergeHeard(withoutLost(byWord, s, e), bySeg);
-                if (got.length) break;
-              }
-              // The overlap between two windows belongs to the one that hears it whole (its middle).
-              const from = n === 0 ? -Infinity : a + LYRICS_LAP / 2, to = n === starts.length - 1 ? Infinity : b - LYRICS_LAP / 2;
-              phrases.push(...got.filter((p) => { const m = (p.s + p.e) / 2; return m >= from && m < to; }));
-              setGenDone((n + 1) / starts.length);
-            }
-            const before = forced;
-            forced = relayWeakLines(forced, phrases, buf.duration);
-            const moved = forced.filter((x, i) => Math.abs(x.s - before[i].s) > 0.01).length;
-            console.info(`[align] relay on ${lo.toFixed(1)}–${hi.toFixed(1)} s: ${phrases.length} words heard, ${moved} words moved`, phrases.map((p) => `${p.s.toFixed(2)} ${p.w}`).join(" "));
-          } catch (e) {
-            if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
-            console.warn("[align] relay not available (the speech model could not run), the alignment kept as it is", e);
-          }
-          setGenStep("library"); setGenPct(0); setGenDone(0);
-        }
       }
       let heard = forced ?? await listen(model);
       // Too few words recognised for the lyrics: listened to again, once, by the other model; the better listening of the
