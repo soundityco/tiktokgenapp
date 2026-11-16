@@ -4,6 +4,12 @@ import { norm, similarity } from "./lyricsAlign";
 /** A phrase the speech model heard, with the decoder's own times (they stay right where its word times collapse). */
 export interface Phrase { w: string; s: number; e: number }
 
+/** What the speech model says when it hears no words in a window of music: not a phrase. */
+export function noSpeech(text: string): boolean {
+  const x = text.trim().toLowerCase();
+  return !norm(x) || /^[*([]?\s*(musique|music|applaudissements|rires)\s*[*)\]]?\.?$/.test(x) || /^(thank you|thanks for watching|merci d'avoir regardé|merci\.?)\W*$/.test(x) || /sous-?titr/.test(x);
+}
+
 const GAP = 3; // letters' worth of time between two lines
 /** A line moves to its phrase only when they disagree by more than this (seconds). */
 const MOVE = 1;

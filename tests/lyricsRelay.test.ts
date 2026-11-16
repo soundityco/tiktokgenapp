@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { relayWeakLines } from "@/lib/lyricsRelay";
+import { noSpeech, relayWeakLines } from "@/lib/lyricsRelay";
 import type { LyricWord } from "@/lib/types";
 
 const w = (text: string, s: number, line: number, extra: Partial<LyricWord> = {}): LyricWord => ({ w: text, s, e: s + 0.05, line, exact: true, ...extra });
@@ -30,5 +30,12 @@ describe("relayWeakLines", () => {
     const near = words.map((x) => (x.line === 1 ? { ...x, s: x.s + 8.5, doubt: undefined } : x.line ? { ...x, s: x.s + 9 } : x));
     const out = relayWeakLines(near, [{ w: "Bonjour toi", s: 12, e: 13 }], 20);
     expect(out[2].s).toBeCloseTo(11.5);
+  });
+});
+
+describe("noSpeech", () => {
+  it("what the model says over music without words is no phrase", () => {
+    for (const x of ["...", "Thank you.", "*musique*", "Musique", "Sous-titrage ST' 501", "Merci d'avoir regardé"]) expect(noSpeech(x)).toBe(true);
+    for (const x of ["Don't you wanna try", "Non, non", "merci pour tout"]) expect(noSpeech(x)).toBe(false);
   });
 });

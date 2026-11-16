@@ -27,7 +27,7 @@ import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkC
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import { alignDevice, alignEmissions, stopAlign } from "@/lib/alignAI";
 import { alignWordsForced } from "@/lib/forcedAlign";
-import { type Phrase, relayWeakLines } from "@/lib/lyricsRelay";
+import { type Phrase, noSpeech, relayWeakLines } from "@/lib/lyricsRelay";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -3030,17 +3030,27 @@ export default function VideoStudio({
         if (forced?.some((x) => x.weak && x.doubt)) {
           const weak = forced.filter((x) => x.weak);
           const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
-          const near = wins.map((w, i) => ({ w, i })).filter(({ w }) => w[1] > lo && w[0] < hi);
           try {
             setGenInfo(t("Some passages are hard to hear: listening to them again…"));
             const phrases: Phrase[] = [];
-            for (let n = 0; n < near.length; n++) {
-              const { w: [a, b], i } = near[n];
-              const got = await transcribe(await prepareAudio(buf, a, b), { model, language, base: a, mode: "segment", raw: true, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal });
+            // Windows laid on the passage itself. The speech model sometimes hears nothing in a whole window of music
+            // ("...", "Thank you", "Sous-titrage") and everything in the same one a few seconds later (WANNA TRY: nothing
+            // on 52–80 s, the hook and each chorus on 55–81 s): a window that gives nothing is heard again, moved.
+            const starts: number[] = [];
+            for (let a = Math.max(0, lo); a < hi; a += LYRICS_WIN - LYRICS_LAP) starts.push(a);
+            for (let n = 0; n < starts.length; n++) {
+              const a = starts[n], b = Math.min(buf.duration, a + LYRICS_WIN);
+              let got: Phrase[] = [];
+              for (const shift of [0, 3, -3, 6, -6]) {
+                const s = clamp(a + shift, 0, Math.max(0, buf.duration - 4)), e = Math.min(buf.duration, s + LYRICS_WIN);
+                got = (await transcribe(await prepareAudio(buf, s, e), { model, language, base: s, mode: "segment", raw: true, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
+                  .filter((p) => !noSpeech(p.w));
+                if (got.length) break;
+              }
               // The overlap between two windows belongs to the one that hears it whole (its middle).
-              const from = i === 0 ? -Infinity : a + LYRICS_LAP / 2, to = i === wins.length - 1 ? Infinity : b - LYRICS_LAP / 2;
+              const from = n === 0 ? -Infinity : a + LYRICS_LAP / 2, to = n === starts.length - 1 ? Infinity : b - LYRICS_LAP / 2;
               phrases.push(...got.filter((p) => { const m = (p.s + p.e) / 2; return m >= from && m < to; }));
-              setGenDone((n + 1) / near.length);
+              setGenDone((n + 1) / starts.length);
             }
             const before = forced;
             forced = relayWeakLines(forced, phrases, buf.duration);
