@@ -355,6 +355,19 @@ export function wordsFromSegments(segs: LyricWord[]): LyricWord[] {
   return out;
 }
 
+/** The words whose time the model's alignment kept (the ones piled on one instant, or out of the excerpt, taken away). */
+export function withoutLost(words: LyricWord[], from: number, to: number): LyricWord[] {
+  const ws = [...words].sort((a, b) => a.s - b.s);
+  const bad = ws.map((x) => x.s > to + 0.5 || x.s < from - 0.5);
+  for (let i = 0; i < ws.length;) {
+    let j = i + 1;
+    while (j < ws.length && ws[j].s - ws[j - 1].s < 0.08) j++;
+    if (j - i >= 3) for (let k = i; k < j; k++) bad[k] = true;
+    i = j;
+  }
+  return ws.filter((_, i) => !bad[i]);
+}
+
 /** How many words have a time the model's alignment lost (see respreadLost). */
 export function lostCount(words: LyricWord[], from: number, to: number): number {
   const ws = [...words].sort((a, b) => a.s - b.s);

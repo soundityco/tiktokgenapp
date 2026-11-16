@@ -85,13 +85,25 @@ self.onmessage = async (e) => {
       post({ type: "device", device });
       out = await pipe(audio, opts);
     }
-    const chunks = out.chunks || [];
-    // The prompt comes back at the start of the first phrase: taken away.
+    let chunks = out.chunks || [];
+    // The prompt comes back at the start: taken away (the start of the first phrase, or the first words).
     if (echo && chunks.length) {
-      const t0 = String(chunks[0].text || "");
-      const tail = echo.slice(-24);
-      const at = t0.lastIndexOf(tail);
-      if (at >= 0) chunks[0] = { ...chunks[0], text: t0.slice(at + tail.length) };
+      if (seg) {
+        const t0 = String(chunks[0].text || "");
+        const tail = echo.slice(-24);
+        const at = t0.lastIndexOf(tail);
+        if (at >= 0) chunks[0] = { ...chunks[0], text: t0.slice(at + tail.length) };
+      } else {
+        const letters = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+        const target = letters(echo);
+        let acc = "", cut = 0;
+        for (let i = 0; i < chunks.length; i++) {
+          acc += letters(chunks[i].text);
+          if (!target.startsWith(acc)) break;
+          if (acc.length >= target.length) { cut = i + 1; break; }
+        }
+        chunks = chunks.slice(cut);
+      }
     }
     const words = chunks
       .map((c) => ({ w: String(c.text || "").trim(), s: c.timestamp?.[0], e: c.timestamp?.[1] }))

@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, splitWords, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, withoutLost, wordsFromSegments, parseLyrics, repairOrder, respreadLost, splitWords, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -27,7 +27,7 @@ import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkC
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import { alignDevice, alignEmissions, stopAlign } from "@/lib/alignAI";
 import { alignWordsForced } from "@/lib/forcedAlign";
-import { type Phrase, noSpeech, relayWeakLines } from "@/lib/lyricsRelay";
+import { mergeHeard, noSpeech, relayWeakLines } from "@/lib/lyricsRelay";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
@@ -3032,7 +3032,7 @@ export default function VideoStudio({
           const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
           try {
             setGenInfo(t("Some passages are hard to hear: listening to them again…"));
-            const phrases: Phrase[] = [];
+            const phrases: LyricWord[] = [];
             // Windows laid on the passage itself. The speech model sometimes hears nothing in a whole window of music
             // ("...", "Thank you", "Sous-titrage") and everything in the same one a few seconds later (WANNA TRY: nothing
             // on 52–80 s, the hook and each chorus on 55–81 s): a window that gives nothing is heard again, moved.
@@ -3040,13 +3040,18 @@ export default function VideoStudio({
             for (let a = Math.max(0, lo); a < hi; a += LYRICS_WIN - LYRICS_LAP) starts.push(a);
             for (let n = 0; n < starts.length; n++) {
               const a = starts[n], b = Math.min(buf.duration, a + LYRICS_WIN);
-              let got: Phrase[] = [];
+              let got: LyricWord[] = [];
               for (const shift of [0, 3, -3, 6, -6]) {
                 const s = clamp(a + shift, 0, Math.max(0, buf.duration - 4)), e = Math.min(buf.duration, s + LYRICS_WIN);
                 // The lines sung just before (the written ones, as placed): the model's context, so it hears the singing.
                 const before = forced!.filter((x) => x.e <= s + 0.2).slice(-24).map((x) => x.w).join(" ");
-                got = (await transcribe(await prepareAudio(buf, s, e), { model, language, base: s, mode: "segment", raw: true, prompt: before, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
-                  .filter((p) => !noSpeech(p.w));
+                const pcm = await prepareAudio(buf, s, e);
+                const hear = (mode: "word" | "segment") => transcribe(pcm, { model, language, base: s, mode, raw: true, prompt: before, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal });
+                // Its words with their own times (the finest, when they hold), and its phrases' times where no word was
+                // given (the word listening can stop early in a chorus; the phrases go on to the end).
+                const byWord = (await hear("word")).filter((p) => !noSpeech(p.w));
+                const bySeg = wordsFromSegments((await hear("segment")).filter((p) => !noSpeech(p.w)));
+                got = mergeHeard(withoutLost(byWord, s, e), bySeg);
                 if (got.length) break;
               }
               // The overlap between two windows belongs to the one that hears it whole (its middle).
@@ -3057,7 +3062,7 @@ export default function VideoStudio({
             const before = forced;
             forced = relayWeakLines(forced, phrases, buf.duration);
             const moved = forced.filter((x, i) => Math.abs(x.s - before[i].s) > 0.01).length;
-            console.info(`[align] relay on ${lo.toFixed(1)}–${hi.toFixed(1)} s: ${phrases.length} phrases heard, ${moved} words moved`, phrases.map((p) => `${p.s.toFixed(1)}–${p.e.toFixed(1)} ${p.w}`));
+            console.info(`[align] relay on ${lo.toFixed(1)}–${hi.toFixed(1)} s: ${phrases.length} words heard, ${moved} words moved`, phrases.map((p) => `${p.s.toFixed(2)} ${p.w}`).join(" "));
           } catch (e) {
             if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return;
             console.warn("[align] relay not available (the speech model could not run), the alignment kept as it is", e);
