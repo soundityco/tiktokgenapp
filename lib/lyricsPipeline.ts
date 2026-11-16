@@ -66,7 +66,17 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   // there, are heard again by the speech model, and its times are used for those lines (lib/lyricsRelay).
   if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); overall(1); return finish(forced); }
   overall(0.55);
-  const weak = forced.filter((x) => x.weak);
+  // The passages to hear again: the runs of weak lines that hold a line piled up (doubt), not every weak line of the
+  // song (a weak line nothing piles on keeps its place: hearing all between them was minutes for nothing).
+  const runs: LyricWord[][] = [];
+  for (let i = 0, cur: LyricWord[] = []; i <= forced.length; i++) {
+    const x = forced[i];
+    if (x?.weak) { cur.push(x); continue; }
+    if (cur.some((w) => w.doubt)) runs.push(cur);
+    cur = [];
+  }
+  const weak = runs.flat();
+  if (!weak.length) { overall(1); return finish(forced); }
   const lo = Math.min(...weak.map((x) => x.s)) - 2, hi = Math.max(...weak.map((x) => x.e)) + 2;
   try {
     h.onRelay?.();
@@ -79,12 +89,13 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
     // on 52–80 s, the hook and each chorus on 55–81 s): a window that gives nothing is heard again, moved.
     const starts: number[] = [];
     for (let a = Math.max(0, lo); a < hi; a += LYRICS_WIN - LYRICS_LAP) starts.push(a);
+    let prevTo = -Infinity;
     for (let n = 0; n < starts.length; n++) {
       const a = starts[n], b = Math.min(buf.duration, a + LYRICS_WIN);
       // Several listenings (the window moved, with the lines sung just before as the model's context so it hears the
       // singing, or without it: the context can also make the model loop on it), the most complete one kept: the
       // speech model does not answer the same twice over music, the first useful one can miss half the chorus.
-      let got: LyricWord[] = [], best = 0;
+      let got: LyricWord[] = [], best = 0, heardTo = b;
       const tries = [[0, true], [-3, true]] as const;
       for (let ti = 0; ti < tries.length; ti++) {
         const [shift, withContext] = tries[ti];
@@ -103,12 +114,14 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
         const heardHere = mergeHeard(withoutLost(byWord, s, e), bySeg);
         const score = usefulFor(heardHere, wanted) ? hitsOf(heardHere, wanted) : 0;
         console.info(`[align] relay: ${s.toFixed(1)}–${e.toFixed(1)} s ${withContext ? "with" : "without"} context: ${score} words of the lines heard`, heardHere.slice(0, 16).map((p) => p.w).join(" "));
-        if (score > best) { best = score; got = heardHere; }
+        if (score > best) { best = score; got = heardHere; heardTo = e; }
         overall(0.55 + 0.45 * ((n + (ti + 1) / tries.length) / starts.length));
         if (best >= wantedCount * 0.6) break; // most of it heard: enough
       }
-      // The overlap between two windows belongs to the one that hears it whole (its middle).
-      const from = n === 0 ? -Infinity : a + LYRICS_LAP / 2, to = n === starts.length - 1 ? Infinity : b - LYRICS_LAP / 2;
+      // The overlap between two windows belongs to the one that hears it whole (its middle); a window heard moved
+      // earlier ends earlier, and the next one takes over from there (nothing between them left unheard).
+      const from = n === 0 ? -Infinity : prevTo, to = n === starts.length - 1 ? Infinity : Math.min(b - LYRICS_LAP / 2, heardTo - LYRICS_LAP / 2);
+      prevTo = to;
       heard.push(...got.filter((p) => { const m = (p.s + p.e) / 2; return m >= from && m < to; }));
       h.onDone?.((n + 1) / starts.length);
     }
@@ -281,6 +294,9 @@ export async function applyRepeat(buf: AudioBuffer, em: Emissions, words: LyricW
   if (!rep) return words;
   const first = rep.from, last = rep.from + rep.unit * rep.times - 1;
   const lines = lineOf.slice(first, last + 1);
+  // Every copy with the same words, one for one ("Non non" and "Non-non" read alike but differ in words): else left.
+  const perCopy = lineOf.slice(first, first + rep.unit).reduce((n, l) => n + l.length, 0);
+  for (let k = 1; k < rep.times; k++) if (lineOf.slice(first + k * rep.unit, first + (k + 1) * rep.unit).reduce((n, l) => n + l.length, 0) !== perCopy) return words;
   // Heard well: the alignment places it better than this.
   const conf = lines.reduce((a, l) => a + (words[l[0]].conf ?? 0), 0) / lines.length;
   if (conf >= 0.15) return words;

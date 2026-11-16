@@ -1222,18 +1222,20 @@ export default function Studio({ userName }: { userName: string }) {
   // The open photo list: the look of each photo it holds (once, kept with it), so the same photo twice is found.
   const [hashing, setHashing] = useState<string | null>(null);
   // Photos that could not be read here (missing from the Drive, offline): not fetched again at each change of the list.
-  const unreadable = useRef(new Set<string>());
+  // (a failure is remembered five minutes: offline for a moment, the photos are tried again later)
+  const unreadable = useRef(new Map<string, number>());
+  const isUnreadable = (id: string) => (unreadable.current.get(id) ?? 0) > Date.now() - 5 * 60 * 1000;
   useEffect(() => {
     const pool = openPics;
-    if (!pool || !pool.pics.some((x) => !x.hash && !unreadable.current.has(x.id))) return;
+    if (!pool || !pool.pics.some((x) => !x.hash && !isUnreadable(x.id))) return;
     let off = false;
     setHashing(pool.id);
     void (async () => {
       const found = new Map<string, string>();
       for (const pic of pool.pics) {
         if (off) return;
-        if (pic.hash || unreadable.current.has(pic.id)) continue;
-        try { found.set(pic.id, pictureHash(await loadDriveImage(pic.id))); } catch { unreadable.current.add(pic.id); /* not readable here: left out */ }
+        if (pic.hash || isUnreadable(pic.id)) continue;
+        try { found.set(pic.id, pictureHash(await loadDriveImage(pic.id))); } catch { unreadable.current.set(pic.id, Date.now()); /* not readable here: left out */ }
       }
       const cur = wsRef.current;
       if (off || !cur || !found.size) return;

@@ -36,12 +36,14 @@ async function modelBytes(m) {
   const total = Number(r.headers.get("content-length")) || m.size;
   const [toCache, toUse] = r.body.tee();
   const kept = cache.put(m.url, new Response(toCache, { headers: { "content-length": String(total) } })).catch(() => {});
-  const out = new Uint8Array(total);
+  let out = new Uint8Array(total);
   const reader = toUse.getReader();
   let got = 0, shown = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    // (a length the server did not give, or wrong: the buffer grows rather than the download failing)
+    if (got + value.length > out.length) { const bigger = new Uint8Array(Math.max(out.length * 1.25, got + value.length) | 0); bigger.set(out.subarray(0, got)); out = bigger; }
     out.set(value, got); got += value.length;
     const pct = Math.floor((got / total) * 100);
     if (pct > shown) { shown = pct; post({ type: "progress", pct: pct / 100 }); }

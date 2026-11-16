@@ -772,7 +772,13 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
   for (let i = 0, j = 0; i < n && j < m;) {
     if (ka[i] === kb[j]) {
       const o = a[i];
-      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true, ...(o.split ? { line: o.line, split: true } : {}) };
+      // A cut by hand keeps its place inside its line even when the lines were renumbered (a line added above): the
+      // word's new line plus the cut's fraction. A word joined to the line before stays joined (glue): it takes the line
+      // of the word before it, as joinCue gave it.
+      const cutLine = o.split && o.line !== undefined && b[j].line !== undefined ? b[j].line! + (o.line - Math.floor(o.line)) : o.line;
+      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true,
+        ...(o.split ? { line: cutLine, split: true } : {}),
+        ...(o.glue ? { glue: true, line: j > 0 ? out[j - 1].line : b[j].line } : {}) };
       // The word-by-word retouches stay too.
       if (o.ws !== undefined || o.we !== undefined || o.wu !== undefined) out[j] = { ...out[j], ws: o.ws, we: o.we, wu: o.wu };
       i++; j++;
@@ -853,7 +859,12 @@ export function splitCue(all: LyricWord[], cue: Cue, k: number): LyricWord[] {
   if (k <= 0 || k >= cue.words.length) return all;
   const second = new Set(cue.words.slice(k));
   const first = new Set(cue.words.slice(0, k));
-  const line = (cue.words[0].line ?? 0) + 0.5;
+  // Halfway between this part's line and the next line value there is (a written line, or a part cut before): cut
+  // again and again, each part keeps a line of its own, never the next written line's.
+  const own = cue.words[0].line ?? 0;
+  const above = all.map((x) => x.line ?? 0).filter((l) => l > own);
+  const next = above.length ? Math.min(...above, Math.floor(own) + 1) : Math.floor(own) + 1;
+  const line = (own + next) / 2;
   return all.map((x) => (second.has(x) ? { ...x, line, split: true, manual: true } : first.has(x) ? { ...x, manual: true } : x));
 }
 

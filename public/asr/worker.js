@@ -44,6 +44,8 @@ self.onmessage = async (e) => {
     env.allowLocalModels = false;
     if (!pipe || loadedModel !== model) {
       post({ type: "status", step: "model" });
+      // The model loaded before goes (its sessions hold hundreds of MB of the graphics card's memory).
+      if (pipe) { try { await pipe.dispose?.(); } catch { /* gone already */ } pipe = null; }
       const files = new Map();
       pipe = await load(pipeline, model, (p) => {
         if (p.status === "progress" && p.file) {
