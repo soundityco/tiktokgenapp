@@ -349,7 +349,7 @@ function GradePresets({ presets, current, onSave, onApply, onDelete }: {
         const on = !!current && lookKey(p.grade) === lookKey(current);
         return (
           <div className="row nowrap" key={p.id}>
-            <button className={"btn sm grow preset" + (on ? " on" : "")} onClick={() => onApply(p)} title={on ? t("This is the colour now") : t("Apply")} aria-pressed={on}>
+            <button className={"btn sm grow preset grade-preset" + (on ? " on" : "")} onClick={() => onApply(p)} title={on ? t("This is the colour now") : t("Apply")} aria-pressed={on}>
               {on && <Icon name="check" size={13} />}
               <span className="truncate">{p.name}</span>
               <span className="preset-kind" title={t("Made for {kind} footage", { kind: FOOTAGE_LABEL[gradeFootage(p.grade)] })}>{FOOTAGE_LABEL[gradeFootage(p.grade)]}</span>
