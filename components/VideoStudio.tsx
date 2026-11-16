@@ -940,7 +940,10 @@ export default function VideoStudio({
    * that one waits for the video to be painted on screen, which never happens for the hidden player.
    */
   const headRef = useRef(head);
-  headRef.current = head;
+  // The state follows the playback a few times a second; the playback writes the ref every frame: the ref only takes the
+  // state's value when the state itself changes (a click, a key), never an older one back.
+  const headSeen = useRef(head);
+  if (headSeen.current !== head) { headSeen.current = head; headRef.current = head; }
   const drawWhenShown = useCallback((el: HTMLVideoElement) => {
     drawAt(headRef.current);
     for (const ms of [80, 250, 600]) setTimeout(() => { if (el.paused && !sourceRef.current) drawAt(headRef.current); }, ms);
@@ -954,6 +957,8 @@ export default function VideoStudio({
   const stop = useCallback(() => {
     playToken.current++;
     cancelAnimationFrame(rafRef.current);
+    // What the timeline showed while playing (drawn every frame, the state a few times a second) becomes the state.
+    if (sourceRef.current) { setHead(headRef.current); commitView(); }
     const src = sourceRef.current, fade = fadeRef.current;
     sourceRef.current = null;
     fadeRef.current = null;
@@ -1976,12 +1981,16 @@ export default function VideoStudio({
     setPlaying(true);
     const tick = () => {
       const now = from + (ctx.currentTime - originRef.current);
-      if (now >= until) { setHead(playReturnRef.current ? from0 : until); stop(); return; }
+      if (now >= until) { stop(); setHead(playReturnRef.current ? from0 : until); return; }
       // The playhead and the lyrics follow what is heard (the sound sent, minus the output's delay).
       // (until the sound reaches the speakers the playhead waits where it was, never stepping back first)
       const heard = Math.max(cfgStart, from0, now - lat);
-      setHead(heard);
+      // The timeline every frame, straight (paintTimeline); the rest of the studio (time shown, the line playing, the
+      // list) through the state, a dozen times a second: a render of the whole studio every frame made it stutter.
+      headRef.current = heard;
       followHead(heard);
+      paintTimeline(heard);
+      if (performance.now() - lastHeadState > 80) { lastHeadState = performance.now(); setHead(heard); }
       if (el) {
         // What is heard right now, in the camera file's time.
         const target = Math.max(0, heard - settingsRef.current.offset);
@@ -2001,7 +2010,7 @@ export default function VideoStudio({
       }
       rafRef.current = requestAnimationFrame(tick);
     };
-    let lastLog = 0;
+    let lastLog = 0, lastHeadState = 0;
     rafRef.current = requestAnimationFrame(tick);
   };
 
@@ -2438,8 +2447,11 @@ export default function VideoStudio({
 
   // ---- the waveform's view: the whole track, or a zoomed part of it (pinch, ctrl + wheel, the − / + buttons) ----
   const [view, setViewState] = useState<{ s: number; d: number } | null>(null);
+  // The view as shown: changed at once by a zoom or a slide, and every frame by the playhead's follow while playing
+  // (the state then catches up a few times a second, commitView).
   const viewRef = useRef(view);
-  viewRef.current = view;
+  const viewCommittedAt = useRef(0);
+  const commitView = () => { viewCommittedAt.current = performance.now(); setViewState(viewRef.current); };
   // Every change of the view is seen at once by whoever reads it next (the playhead's follow reads it every frame: it
   // used to put back the view of the frame before, undoing a zoom made while playing).
   const setView = (v: { s: number; d: number } | null) => { viewRef.current = v; setViewState(v); };
@@ -2475,7 +2487,9 @@ export default function VideoStudio({
     const out = t < v.s || t > v.s + v.d;
     if (!out && t <= v.s + v.d * FOLLOW_AT) return;
     const s = clamp(t - v.d * FOLLOW_AT, 0, Math.max(0, dur - v.d));
-    if (Math.abs(s - v.s) > v.d * 0.002) setView({ s, d: v.d });
+    if (Math.abs(s - v.s) < 1e-4) return;
+    viewRef.current = { s, d: v.d };
+    if (performance.now() - viewCommittedAt.current > 250) commitView();
   };
   /** Zoom to `d` seconds shown, `around` (seconds) staying where it is on screen. */
   const zoomTo = (d: number, around: number) => {
@@ -2556,7 +2570,7 @@ export default function VideoStudio({
     const timeOf = (el: HTMLElement, x: number) => {
       const r = el.getBoundingClientRect();
       const cfg = settingsRef.current;
-      const w = twRef.current;
+      const w = viewRef.current ?? twRef.current; // what is on screen (live while playing)
       return round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration - 0.05)));
     };
     return {
@@ -2710,7 +2724,11 @@ export default function VideoStudio({
     ro.observe(c);
     return () => ro.disconnect();
   }, [audioBuf]);
-  useEffect(() => {
+  /**
+   * The waveform drawn for a view and a playhead. While playing it is called every frame by the playback itself
+   * (paintTimeline), not through a render of the whole studio: the timeline glides. Kept fresh in a ref.
+   */
+  const paintWave = (vw: { s: number; d: number } | null, at: number) => {
     const c = waveRef.current;
     if (!c || !peaks.length || !audioBuf || !waveBox.w) return;
     const W = waveBox.w, H = c.clientHeight || 90, dur = audioBuf.duration, dpr = waveBox.dpr;
@@ -2726,7 +2744,7 @@ export default function VideoStudio({
     const mus = css.getPropertyValue("--music").trim() || "#4fffb0";
     g.fillStyle = "#16161c";
     g.fillRect(0, 0, W, H);
-    const v = view ?? { s: 0, d: dur };
+    const v = vw ?? { s: 0, d: dur };
     const X = (t: number) => ((t - v.s) / v.d) * W;
     const x0 = X(settings.crop.start);
     const x1 = X(Math.min(dur, settings.crop.start + settings.crop.duration));
@@ -2756,7 +2774,7 @@ export default function VideoStudio({
     // zoomed) the bars move along with the sound instead of being cut again at every step, which made it shimmer.
     g.fillStyle = "#6f6e78";
     const step = 3;
-    const fine = !!view && v.d / dur < 0.5;
+    const fine = !!vw && v.d / dur < 0.5;
     const ch = fine ? audioBuf.getChannelData(0) : null;
     const sr = audioBuf.sampleRate;
     // Seconds per bar: exactly 3 px of screen (a bar every 3.0x px, once rounded, left a 4 px gap now and then: dark bands).
@@ -2764,7 +2782,7 @@ export default function VideoStudio({
     // Around the playhead the bars light up in white, fading back to grey on both sides (what is playing).
     // (on the screen's pixel grid: not zoomed, the playhead moves less than a pixel a frame, and drawn between pixels
     // it blurred and sharpened in turn, which read as stutter)
-    const hx = Math.round(X(head) * dpr) / dpr, trail = 70;
+    const hx = Math.round(X(at) * dpr) / dpr, trail = 70;
     let glow: CanvasGradient | null = null;
     if (hx + trail > 0 && hx - trail < W) {
       // Centred on the playhead: the bars' grey far on each side, white around the playhead.
@@ -2817,7 +2835,10 @@ export default function VideoStudio({
         g.fillText("VIDEO", Math.round(v0 + 6), 8);
       }
     }
-  }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur, waveBox, view, peakMax]);
+  };
+  const paintWaveRef = useRef(paintWave);
+  paintWaveRef.current = paintWave;
+  useEffect(() => { paintWaveRef.current(viewRef.current, headRef.current); }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, audioBuf, videoBlob, videoDur, waveBox, view, peakMax]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- lyrics timing ----
 
@@ -3661,6 +3682,34 @@ export default function VideoStudio({
   const tw = view ?? (audioBuf && !phone ? { s: 0, d: audioBuf.duration } : { s: settings.crop.start, d: segLen });
   const twRef = useRef(tw);
   twRef.current = tw;
+  const trackWRef = useRef(trackW);
+  trackWRef.current = trackW;
+  /**
+   * The timeline at playhead `at`, straight on the page (no render): the waveform redrawn, the tracks' content slid by
+   * how far the live view has gone from the one they were laid out for, the playhead lines and the glow on the text
+   * playing moved. Every frame while playing; after each render too (the tracks laid out again for a new view).
+   */
+  const paintTimeline = (at: number) => {
+    paintWaveRef.current(viewRef.current, at);
+    // The phone dock's player (the segment's progress), moved the same way.
+    const crop = settingsRef.current.crop, f = `${clamp((at - crop.start) / Math.max(0.1, crop.duration), 0, 1) * 100}%`;
+    document.querySelectorAll<HTMLElement>(".dp-track .dp-played").forEach((el) => { el.style.width = f; });
+    document.querySelectorAll<HTMLElement>(".dp-track .dp-head").forEach((el) => { el.style.left = f; });
+    const root = waveRef.current?.closest(".timeline");
+    if (!root) return;
+    const laid = twRef.current, live = viewRef.current ?? laid, W = trackWRef.current, dpr = waveBox.dpr || 1;
+    const px = (x: number) => Math.round(x * dpr) / dpr;
+    const dx = px(((laid.s - live.s) / laid.d) * W);
+    root.querySelectorAll<HTMLElement>(".lyric-track .track-content").forEach((el) => { el.style.transform = `translate3d(${dx}px,0,0)`; });
+    const hx = px(((clamp(at, live.s, live.s + live.d) - laid.s) / laid.d) * W);
+    root.querySelectorAll<HTMLElement>(".lyric-track .lyric-head").forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
+    root.querySelectorAll<HTMLElement>(".lyric-track .cue.on[data-a]").forEach((el) => {
+      const s = Math.max(Number(el.dataset.a), laid.s), e = Math.min(Number(el.dataset.b), laid.s + laid.d);
+      el.style.setProperty("--hx", `${e > s ? clamp((at - s) / (e - s), 0, 1) * 100 : 0}%`);
+    });
+  };
+  // (the tracks laid out again: their slide put back to what is on screen, before it is seen)
+  useLayoutEffect(() => { paintTimeline(headRef.current); }, [tw.s, tw.d, trackW, head, view]); // eslint-disable-line react-hooks/exhaustive-deps
   /** A time of the track as a position on the tracks (%), and a span as a width. */
   const tl = (t: number) => `${((t - tw.s) / tw.d) * 100}%`;
   /**
@@ -3979,6 +4028,7 @@ export default function VideoStudio({
       <div className="cams">
         {used > 0 && (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
+            <div className="track-content">
             <span className="track-seg" style={{ ...place(settings.crop.start), width: twd(settings.crop.start, end) }} />
             {shots.map((x, i) => {
               if (x.to <= tw.s || x.from >= tw.s + tw.d) return null; // not in view
@@ -4017,7 +4067,7 @@ export default function VideoStudio({
                   const d = cutDrag.current;
                   if (!d) return;
                   const cfg = settingsRef.current;
-                  const w = twRef.current;
+                  const w = viewRef.current ?? twRef.current;
                   let at = clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, cfg.crop.start, end);
                   // Drawn to the lyrics' lines and the hooks (their start or end) within 8 px, so a cut falls on the
                   // sound; ⌘ / Ctrl held: free.
@@ -4032,6 +4082,7 @@ export default function VideoStudio({
                 onPointerUp={() => { cutDrag.current = null; }} onPointerCancel={() => { cutDrag.current = null; }} />
             ))}
             <span className="lyric-head" style={{ ...pos(head) }} />
+            </div>
           </div>
         )}
         <div className="row cams-row">
@@ -4163,7 +4214,7 @@ export default function VideoStudio({
       const d = edgeRef.current;
       if (!d) return;
       const cfg = settingsRef.current;
-      const w = twRef.current;
+      const w = viewRef.current ?? twRef.current;
       move(round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration))), e.altKey);
     },
     onPointerUp: () => { if (edgeRef.current) { edgeRef.current = null; onSaveNow(); } },
@@ -4893,6 +4944,7 @@ export default function VideoStudio({
                 </div>
                 {hooks.length > 0 && (
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
+                    <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: twd(settings.crop.start, end) }} />
                     {hooks.map((h, i) => settings.crop.start + Math.min(segLen, h.to ?? segLen) > tw.s && settings.crop.start + h.from < tw.s + tw.d && (
                       <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
@@ -4901,6 +4953,7 @@ export default function VideoStudio({
                           ...place(Math.max(tw.s, settings.crop.start + clamp(h.from, 0, segLen))), width: twd(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)),
                           ...(hookAt(settings, head)?.id === h.id ? { ["--hx" as string]: hxIn(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)) } : null),
                         }}
+                        data-a={settings.crop.start + clamp(h.from, 0, segLen)} data-b={settings.crop.start + clamp(h.to ?? segLen, 0, segLen)}
                         title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
                         onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
                         {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
@@ -4922,9 +4975,11 @@ export default function VideoStudio({
                     })}
                     {(() => { const h = hookAt(settings, head); const at = h ? barAt(settings.crop.start + Math.max(0, h.from), settings.crop.start + Math.min(segLen, h.to ?? segLen)) : null; return at !== null ? <span className="cue-bar-glow" style={place(at)} /> : null; })()}
                     <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
+                    </div>
                   </div>
                 )}
                 <div ref={trackRef} className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
+                  <div className="track-content">
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: twd(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && c.end > tw.s && c.start < tw.s + tw.d && (
@@ -4940,6 +4995,7 @@ export default function VideoStudio({
                         width: twd(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)),
                         ...(c === current ? { ["--hx" as string]: hxIn(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)) } : null),
                       }}
+                      data-a={clamp(c.start, settings.crop.start, end)} data-b={clamp(c.end, settings.crop.start, end)}
                       data-at={Math.max(settings.crop.start, c.start)}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       {c.text.replace(/\n/g, " ")}
@@ -4958,6 +5014,7 @@ export default function VideoStudio({
                   {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" style={place(barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))!)} />}
                   <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
+                  </div>
                 </div>
                 {camsEl()}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
