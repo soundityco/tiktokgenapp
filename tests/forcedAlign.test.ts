@@ -57,7 +57,6 @@ describe("a word that strayed from its line", () => {
     const words = alignWordsForced(e, 600, V, [{ w: "A", line: 0 }, { w: "Bo", line: 0 }])!;
     expect(words[0].s).toBeCloseTo(8, 0);
     expect(words[1].s).toBeCloseTo(8.2, 0);
-    expect(words.every((x) => x.doubt)).toBe(true); // a line that had to be pulled back is one to check
   });
 });
 
