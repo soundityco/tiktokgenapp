@@ -66,14 +66,14 @@ const MIN_MISSED = 0.15;
  * When there is no room (the model ran the neighbours together), the previous word gives some of its time,
  * keeping 0.1 s itself: every written word is seen.
  */
-function placeMissed(out: LyricWord[], words: { w: string; line: number }[], nextS: number) {
+function placeMissed(out: LyricWord[], words: { w: string; line: number }[], nextS: number, nextLine?: number) {
   const prev = out[out.length - 1];
-  // A new line starting among them, over a long gap (an instrumental, a breath): the words of the line before stay
-  // with it, those of the new line come just before the next heard word, sung at a normal pace (the line shows when the
-  // voice attacks it, not at the start of the silence).
-  const cut = words.findIndex((x) => x.line !== prev.line);
+  // A new line starting among them, over a long gap (an instrumental, a breath): only the words of the next heard word's
+  // own line come just before it, sung at a normal pace (that line shows when the voice attacks it, not at the start of
+  // the silence); the others (the end of the line before, whole lines not heard) follow the line before, sung.
   const SUNG = 0.3;
-  if (cut >= 0 && nextS - prev.e > SUNG * words.length + 0.6) {
+  const cut = nextLine === undefined ? words.findIndex((x) => x.line !== prev.line) : words.findIndex((x) => x.line === nextLine);
+  if (cut >= 0 && words.some((x) => x.line !== prev.line) && nextS - prev.e > SUNG * words.length + 0.6) {
     const tail = words.slice(0, cut), head = words.slice(cut);
     let at = prev.e;
     for (const x of tail) { out.push({ w: x.w, s: at, e: at + SUNG * 0.9, line: x.line }); at += SUNG; }
@@ -151,7 +151,7 @@ export function alignLyrics(text: string, heard: LyricWord[], minCoverage = 0.35
     // A run of words the model did not hear: share the gap between the neighbours by word length.
     let run = k;
     while (run <= last && !pair.has(run)) run++;
-    placeMissed(out, lyr.slice(k, run), hrd[pair.get(run)!].s);
+    placeMissed(out, lyr.slice(k, run), hrd[pair.get(run)!].s, lyr[run].line);
     k = run;
   }
   return { words: out, coverage };
@@ -285,7 +285,7 @@ export function alignSong(text: string, heard: LyricWord[]): AlignResult | null 
     }
     let run = k;
     while (run <= last && !pair.has(run)) run++;
-    placeMissed(out, lyr.slice(k, run), hrd[pair.get(run)!].s);
+    placeMissed(out, lyr.slice(k, run), hrd[pair.get(run)!].s, lyr[run].line);
     k = run;
   }
   const end = out[out.length - 1].e;
@@ -743,4 +743,22 @@ export function spreadOnHeard(written: string, heard: LyricWord[]): LyricWord[] 
     const s = at(k), next = k + 1 < ws.length ? at(k + 1) : hs[hs.length - 1].e;
     return { w: x.w, s, e: Math.max(s + 0.08, Math.min(next, s + 1.2)), line: x.line };
   });
+}
+
+/**
+ * The first word of a lyrics line glued by the speech model to the pause before it ("Je" heard at 15.2 s, "ne veux ni
+ * tes mensonges" from 17.4 s: the line showed 2 s early): when a line's first word is more than 1.2 s before the next
+ * word of the same line, it comes just before that word (a line is sung in one go). Lines retimed by hand stay.
+ */
+export function tightenLineStarts(words: LyricWord[]): LyricWord[] {
+  const out = words.map((w) => ({ ...w }));
+  for (let i = 0; i + 1 < out.length; i++) {
+    const w = out[i], next = out[i + 1];
+    if ((i > 0 && out[i - 1].line === w.line) || next.line !== w.line || w.manual) continue;
+    if (next.s - w.s > 1.2) {
+      w.s = Math.round((next.s - 0.3) * 1000) / 1000;
+      w.e = Math.round((next.s - 0.02) * 1000) / 1000;
+    }
+  }
+  return out;
 }

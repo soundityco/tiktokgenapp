@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignSong, buildCues, cleanHeard, dropLoops, moveCueStart, retimeCue, spreadOnHeard } from "@/lib/lyricsAlign";
+import { alignSong, buildCues, cleanHeard, dropLoops, moveCueStart, retimeCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 
 describe("spreadOnHeard (last resort)", () => {
   it("spreads the written words over the heard singing, in order, lines kept", () => {
@@ -90,5 +90,33 @@ describe("retimeCue: + on a line glued to the next one", () => {
     const out = retimeCue(glued, cues, 0, "start", 0.1);
     expect(out).not.toBeNull();
     expect(buildCues(out!, "phrase")[0].start).toBeCloseTo(1.1);
+  });
+});
+
+describe("tightenLineStarts", () => {
+  it("a line's first word glued to the pause before comes back before its line", () => {
+    const out = tightenLineStarts([
+      { w: "ouais", s: 14.8, e: 15.1, line: 2 },
+      { w: "Je", s: 15.2, e: 15.4, line: 3 }, { w: "ne", s: 17.4, e: 17.6, line: 3 }, { w: "veux", s: 17.7, e: 17.9, line: 3 },
+    ]);
+    expect(out[1].s).toBeCloseTo(17.1);
+    expect(out[0].s).toBe(14.8); // the last word of the line before stays
+  });
+  it("a line sung in one go is left alone", () => {
+    const ws = [{ w: "tout", s: 1, e: 1.3, line: 0 }, { w: "va", s: 1.4, e: 1.7, line: 0 }];
+    expect(tightenLineStarts(ws)[0].s).toBe(1);
+  });
+});
+
+describe("lines not heard between two heard ones", () => {
+  it("follow the line before (sung), only the next heard word's own line waits for it", () => {
+    const heard = [
+      { w: "tout", s: 10, e: 10.3 }, { w: "gâché", s: 10.3, e: 10.8 },
+      { w: "mensonge", s: 40.5, e: 41 }, { w: "quand", s: 41.1, e: 41.3 }, { w: "tu", s: 41.3, e: 41.5 }, { w: "appelles", s: 41.5, e: 42 },
+    ];
+    const r = alignSong("t'as tout gâché\npourquoi ça fait si mal\nyaourt\nj'ai peur du mensonge quand tu appelles", heard)!;
+    const at = (w: string) => r.words.find((x) => x.w === w)!.s;
+    expect(at("pourquoi")).toBeLessThan(12.5); // right after "tout gâché", not 30 s later
+    expect(at("peur")).toBeGreaterThan(39.5); // its line waits for its heard word
   });
 });

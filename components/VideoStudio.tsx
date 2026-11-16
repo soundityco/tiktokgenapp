@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, parseLyrics, repairOrder, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -2790,7 +2790,7 @@ export default function VideoStudio({
     if (src === "song" || src === "all") {
       const aligned = alignSong(written, heard);
       return aligned
-        ? { words: snapLines(aligned.words, onsetsRef.current), info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
+        ? { words: snapLines(tightenLineStarts(aligned.words), onsetsRef.current), info: t("Your lyrics are synced on the whole song: {n} words, {p}% recognised in the audio", { n: aligned.words.length, p: Math.round(aligned.coverage * 100) }) }
         : rough(heard);
     }
     const inSeg = heard.filter((x) => x.e > segFrom && x.s < segTo);
@@ -2800,7 +2800,7 @@ export default function VideoStudio({
       return r.words.length ? { ...r, words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...r.words].sort((x, y) => x.s - y.s) } : r;
     }
     return {
-      words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...snapLines(aligned.words, onsetsRef.current)].sort((x, y) => x.s - y.s),
+      words: [...heard.filter((x) => x.e <= segFrom || x.s >= segTo), ...snapLines(tightenLineStarts(aligned.words), onsetsRef.current)].sort((x, y) => x.s - y.s),
       info: t("{n} words heard, the segment placed on your written lyrics", { n: heard.length }),
     };
   };
@@ -2947,8 +2947,18 @@ export default function VideoStudio({
         const [a, b] = wins[i];
         const samples = await prepareAudio(buf, a, b);
         // A word timed outside the excerpt heard is made up (the model's "Sous-titrage…" after the end): left out.
-        const words = cleanHeard((await transcribe(samples, { model: m, language, base: a, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
-          .filter((w) => w.s >= a - 0.5 && w.s <= b + 0.5));
+        const hear = async (x: number, y: number, pcm: Float32Array) => cleanHeard((await transcribe(pcm, { model: m, language, base: x, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
+          .filter((w) => w.s >= x - 0.5 && w.s <= y + 0.5));
+        let words = await hear(a, b, samples);
+        // The model can lose a whole excerpt on music (four made-up words for 28 s of a chorus): fewer than a word every
+        // 4 s, it is heard again in two halves, the better kept (a passage with no words, an instrumental, stays empty).
+        if (b - a > 12 && words.length < (b - a) / 4) {
+          const mid = (a + b) / 2;
+          const first = await hear(a, mid + 1, await prepareAudio(buf, a, mid + 1));
+          const second = await hear(mid - 1, b, await prepareAudio(buf, mid - 1, b));
+          const halves = [...first.filter((w) => (w.s + w.e) / 2 < mid), ...second.filter((w) => (w.s + w.e) / 2 >= mid)];
+          if (halves.length > words.length) { console.info(`[lyrics] ${a}–${b} s heard again in halves: ${words.length} → ${halves.length} words`); words = halves; }
+        }
         if (ac.signal.aborted) throw new Error("aborted");
         // The overlap between two windows belongs to the one that hears it whole (its middle).
         const lo = i === 0 ? -Infinity : a + LYRICS_LAP / 2;
@@ -4702,8 +4712,9 @@ export default function VideoStudio({
                         {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                       </button>
                     ))}
-                    {hooks.map((h) => h.from > 0.01 && h.from < segLen && (
-                      <span key={"e" + h.id} className="cam-cut cue-edge" style={{ left: `${(h.from / segLen) * 100}%` }}
+                    {/* A hook starting at the segment's start (or before) has its handle on the left edge. */}
+                    {hooks.map((h) => h.from < segLen && (h.to ?? segLen) > 0 && (
+                      <span key={"e" + h.id} className={"cam-cut cue-edge" + (h.from <= 0.01 ? " at-left" : "")} style={{ left: `${(Math.max(0, h.from) / segLen) * 100}%` }}
                         title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveHook(h.id)} />
                     ))}
                     <span className="lyric-head" style={{ left: `${(clamp(head - settings.crop.start, 0, segLen) / segLen) * 100}%` }} />
@@ -4721,8 +4732,9 @@ export default function VideoStudio({
                       {c.text.replace(/\n/g, " ")}
                     </button>
                   ))}
-                  {mode !== "word" && cues.map((c, i) => c.start > settings.crop.start + 0.01 && c.start < end && (
-                    <span key={"e" + i} className="cam-cut cue-edge" style={{ left: `${((c.start - settings.crop.start) / segLen) * 100}%` }}
+                  {/* A line starting at the segment's start (or before it, still on screen) has its handle on the left edge. */}
+                  {mode !== "word" && cues.map((c, i) => c.start < end && c.end > settings.crop.start && (
+                    <span key={"e" + i} className={"cam-cut cue-edge" + (c.start <= settings.crop.start + 0.01 ? " at-left" : "")} style={{ left: `${((Math.max(c.start, settings.crop.start) - settings.crop.start) / segLen) * 100}%` }}
                       title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveLine(i)} />
                   ))}
                   {!cues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}

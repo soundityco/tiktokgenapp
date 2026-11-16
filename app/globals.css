@@ -466,6 +466,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .cam-cut { position: absolute; top: 0; bottom: 0; width: 10px; margin-left: -5px; cursor: ew-resize; z-index: 2; touch-action: none; }
 .cam-cut::after { content: ""; position: absolute; left: 4px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: var(--text); opacity: 0.55; }
 .cam-cut:hover::after { opacity: 1; }
+/* On the track's left edge: inside it (half of it would be cut off). */
+.cam-cut.at-left { margin-left: 0; }
+.cam-cut.at-left::after { left: 1px; }
 .lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 .hook-track .cue { border-left-color: var(--blue); }
 .hook-track .cue.on { border-left-color: var(--blue); }
