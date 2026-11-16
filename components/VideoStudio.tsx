@@ -2831,6 +2831,10 @@ export default function VideoStudio({
     // (on the screen's pixel grid: not zoomed, the playhead moves less than a pixel a frame, and drawn between pixels
     // it blurred and sharpened in turn, which read as stutter)
     const hx = Math.round(X(at) * dpr) / dpr, trail = 70;
+    // The bars between the violet band (top, 15 px) and the green strip (bottom, 4 px) when there is a camera video,
+    // never under them; else centred on the whole height.
+    const band = videoBlob && videoDur > 0;
+    const top = band ? 17 : 9, room = H - top - (band ? 6 : 9);
     let glow: CanvasGradient | null = null;
     if (hx + trail > 0 && hx - trail < W) {
       // Centred on the playhead: the bars' grey far on each side, white around the playhead.
@@ -2850,11 +2854,12 @@ export default function VideoStudio({
         const a = Math.floor((t0 / dur) * peaks.length), b = Math.max(a + 1, Math.floor((t1 / dur) * peaks.length));
         for (let q = Math.max(0, a); q < b && q < peaks.length; q++) val = Math.max(val, peaks[q]);
       }
-      const h = Math.max(1, Math.round(Math.min(1, val) * (H - 18)));
+      const h = Math.max(1, Math.round(Math.min(1, val) * room));
       const bx = X(t0); // exact (sub-pixel): rounded, the bars jumped a pixel now and then as the view slid
       g.fillStyle = "#6f6e78";
-      g.fillRect(bx, Math.round((H - h) / 2), 2, h);
-      if (glow && bx >= hx - trail && bx <= hx + trail) { g.fillStyle = glow; g.fillRect(bx, Math.round((H - h) / 2), 2, h); }
+      const by = top + Math.round((room - h) / 2);
+      g.fillRect(bx, by, 2, h);
+      if (glow && bx >= hx - trail && bx <= hx + trail) { g.fillStyle = glow; g.fillRect(bx, by, 2, h); }
     }
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
