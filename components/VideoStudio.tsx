@@ -2760,7 +2760,9 @@ export default function VideoStudio({
     // Seconds per bar: exactly 3 px of screen (a bar every 3.0x px, once rounded, left a 4 px gap now and then: dark bands).
     const bin = (v.d / W) * step;
     // Around the playhead the bars light up in white, fading back to grey on both sides (what is playing).
-    const hx = X(head), trail = 70;
+    // (on the screen's pixel grid: not zoomed, the playhead moves less than a pixel a frame, and drawn between pixels
+    // it blurred and sharpened in turn, which read as stutter)
+    const hx = Math.round(X(head) * dpr) / dpr, trail = 70;
     let glow: CanvasGradient | null = null;
     if (hx + trail > 0 && hx - trail < W) {
       // Centred on the playhead: the bars' grey far on each side, white around the playhead.
@@ -2803,7 +2805,7 @@ export default function VideoStudio({
     g.fillRect(x0 - 3, H / 2 - 10, 5, 20);
     g.fillRect(x1 - 2, H / 2 - 10, 5, 20);
     g.fillStyle = head0;
-    g.fillRect(X(head) - 1, 0, 2, H);
+    g.fillRect(hx - 1, 0, 2, H);
     if (videoBlob && videoDur > 0) {
       const v0 = clamp(X(settings.offset), 0, W);
       if (clamp(X(settings.offset + videoDur), 0, W) - v0 > 56) {
@@ -3663,7 +3665,11 @@ export default function VideoStudio({
    * Where something sits on the tracks, moved by the graphics card (transform, to the sub-pixel) rather than laid out
    * again (left): while the view slides under the playhead, the clips and their text glide instead of shaking.
    */
-  const place = (t: number): React.CSSProperties => ({ left: 0, transform: `translate3d(${(((t - tw.s) / tw.d) * trackW).toFixed(2)}px,0,0)` });
+  const place = (t: number): React.CSSProperties => {
+    // On the screen's pixel grid (device pixels): crisp at rest and when moving slowly (not zoomed), still smooth zoomed.
+    const dpr = waveBox.dpr || 1;
+    return { left: 0, transform: `translate3d(${Math.round(((t - tw.s) / tw.d) * trackW * dpr) / dpr}px,0,0)` };
+  };
   const twd = (a: number, b: number) => `${(Math.max(0, Math.min(b, tw.s + tw.d) - Math.max(a, tw.s)) / tw.d) * 100}%`;
   const inTw = (t: number) => t >= tw.s - 0.01 && t <= tw.s + tw.d + 0.01;
   /**

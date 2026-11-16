@@ -495,17 +495,24 @@ export function syllables(w: string): number {
 
 /** The phrases (as phrase by phrase shows them) of time-sorted words. */
 function phrasesOf(ws: LyricWord[], lineChars: number): LyricWord[][] {
+  // Written lyrics: a caption is a line as the artist wrote it (that is how they want it seen and sung). It is cut only
+  // by a real break inside it (WRITTEN_BREAK s), or when really too long for the screen (then at a comma first, else at
+  // its longest pause). Words heard with no written line: at their pauses, stops and length, as before.
+  const written = ws.every((x) => x.line !== undefined);
   const hard: LyricWord[][] = [[ws[0]]];
   for (let i = 1; i < ws.length; i++) {
     const prev = ws[i - 1], cur = ws[i];
     const lineChange = prev.line !== undefined && cur.line !== undefined && prev.line !== cur.line;
     // A word joined by hand to the caption before it is never cut from it by a pause or a stop (a line change still cuts).
-    if (lineChange || (!cur.glue && (cur.s - prev.e >= 0.6 || /[.!?…]$/.test(prev.w)))) hard.push([cur]);
+    const cut = written ? cur.s - prev.e >= WRITTEN_BREAK : cur.s - prev.e >= 0.6 || /[.!?…]$/.test(prev.w);
+    if (lineChange || (!cur.glue && cut)) hard.push([cur]);
     else hard[hard.length - 1].push(cur);
   }
   // Joined by hand: kept whole (the artist then cuts it where they want, "Cut here").
-  return hard.flatMap((g) => (g.some((x) => x.glue) ? [g] : splitLong(g, lineChars * 2, 5)));
+  return hard.flatMap((g) => (g.some((x) => x.glue) ? [g] : written ? splitLong(g, lineChars * 3, 8) : splitLong(g, lineChars * 2, 5)));
 }
+/** A silence inside a written line long enough to show it in two parts (seconds). */
+const WRITTEN_BREAK = 2;
 
 /**
  * The words as word-by-word captions show them: their own retouch there if any (ws / we / wu), else the model's

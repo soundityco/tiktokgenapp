@@ -139,9 +139,13 @@ describe("moveCueEnd (a caption's end dragged)", () => {
 describe("joinCue then splitCue: moving a cut", () => {
   it("\"tu m'as fait croire / en nous t'as tout gâché\" becomes \"tu m'as fait croire en nous / t'as tout gâché\"", () => {
     const words = "Ouais tu m'as fait croire en nous t'as tout gâché".split(" ").map((w, k) => ({ w, s: 1 + k * 0.4 + (k >= 5 ? 0.8 : 0), e: 1.3 + k * 0.4 + (k >= 5 ? 0.8 : 0), line: 0 }));
+    // A written line stays whole (a 0.8 s pause inside it no longer cuts it); cut by hand where wanted.
     let cues = buildCues(words, "phrase");
+    expect(cues.length).toBe(1);
+    const first = splitCue(words, cues[0], 5);
+    cues = buildCues(first, "phrase");
     expect(cues.map((c) => c.words.map((x) => x.w).join(" "))).toEqual(["Ouais tu m'as fait croire", "en nous t'as tout gâché"]);
-    const joined = joinCue(words, cues[0], cues[1]);
+    const joined = joinCue(first, cues[0], cues[1]);
     cues = buildCues(joined, "phrase");
     expect(cues.length).toBe(1);
     const cut = splitCue(joined, cues[0], 7);
@@ -196,5 +200,23 @@ describe("alignSong tail", () => {
     const last = r.words[r.words.length - 1];
     expect(last.s).toBeGreaterThan(20);
     expect(last.e).toBeLessThanOrEqual(24.01);
+  });
+});
+
+describe("captions of written lyrics", () => {
+  const line = (text: string, line: number, at: number, gap = 0.35) => text.split(" ").map((w, k) => ({ w, s: at + k * gap, e: at + k * gap + 0.3, line }));
+  it("a written line is one caption, pauses and stops inside it, even long, held notes", () => {
+    const ws = [...line("Dis moi que c'était juste rêve. Je comprends pas", 0, 10, 0.9), ...line("Dans tes draps", 1, 20)];
+    expect(buildCues(ws, "phrase").map((c) => c.words.map((x) => x.w).join(" "))).toEqual(["Dis moi que c'était juste rêve. Je comprends pas", "Dans tes draps"]);
+  });
+  it("cut only when really too long, at a comma first", () => {
+    const ws = line("Deux ans que j'en ai pas fait, tu vois, j'ai rien perdu, j'ai toujours le flow en moi encore et encore", 0, 10);
+    const cues = buildCues(ws, "phrase");
+    expect(cues.length).toBe(2);
+    expect(cues[0].words[cues[0].words.length - 1].w.endsWith(",")).toBe(true);
+  });
+  it("a real break inside a line (2 s or more) shows it in two parts", () => {
+    const ws = [...line("Tout mais pas ça", 0, 10), ...line("non non", 0, 14)];
+    expect(buildCues(ws, "phrase").length).toBe(2);
   });
 });
