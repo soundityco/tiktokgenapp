@@ -4749,16 +4749,10 @@ export default function VideoStudio({
                           </button>
                         )}
                         <button disabled={!hasLyrics} onClick={() => { closeMenu(); void syncLyrics(); }}
-                          title={!hasLyrics ? t("Import the video or paste the lyrics first.") : placed ? t("Place the lyrics again on the audio. Your retouches are kept.") : undefined}>
+                          title={!hasLyrics ? t("Import the video or paste the lyrics first.") : placed ? t("Listen to the whole song again and place the lyrics from scratch (the lines retimed by hand too).") : undefined}>
+                          {/* One action, always from scratch (it was two, the second shown only once the first was done). */}
                           <Icon name="type" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}{hasLyrics && !placed && <span className="tab-dot" />}
                         </button>
-                        {/* A new listening of the whole song (the words heard before dropped): after a new mix, another model… */}
-                        {placed && audioBuf && (
-                          <button onClick={() => { closeMenu(); onProject((p) => ({ ...p, heardWords: undefined })); void generateLyrics(audioBuf, { ...project, heardWords: undefined }, writtenSrc, true); }}
-                            title={t("Listen to the whole song again and place the lyrics from scratch (the lines retimed by hand too).")}>
-                            <Icon name="refresh" size={14} />{t("Listen to the audio again")}
-                          </button>
-                        )}
                       </>)}
                     </Menu>
                   ) : (
