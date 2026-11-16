@@ -3043,7 +3043,9 @@ export default function VideoStudio({
               let got: Phrase[] = [];
               for (const shift of [0, 3, -3, 6, -6]) {
                 const s = clamp(a + shift, 0, Math.max(0, buf.duration - 4)), e = Math.min(buf.duration, s + LYRICS_WIN);
-                got = (await transcribe(await prepareAudio(buf, s, e), { model, language, base: s, mode: "segment", raw: true, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
+                // The lines sung just before (the written ones, as placed): the model's context, so it hears the singing.
+                const before = forced!.filter((x) => x.e <= s + 0.2).slice(-24).map((x) => x.w).join(" ");
+                got = (await transcribe(await prepareAudio(buf, s, e), { model, language, base: s, mode: "segment", raw: true, prompt: before, onStep: setGenStep, onProgress: setGenPct, signal: ac.signal }))
                   .filter((p) => !noSpeech(p.w));
                 if (got.length) break;
               }

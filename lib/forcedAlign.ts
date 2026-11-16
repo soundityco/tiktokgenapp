@@ -27,7 +27,7 @@ export function faNorm(w: string): string {
  * m'arrive" and its hook on the voice (0.7 s and 2.8 s early without it), sombr 53 → 61 % of lines within 0.5 s, the
  * other songs unchanged; more starts to hurt (Temper City 85 → 75 % at 0.15).
  */
-export const FA_TUNE = { lineBlank: 0.05, unheard: 0.03, lead: 0.04, far: 0.4, french: true, weakLine: 0.3, deafRun: 0.12 };
+export const FA_TUNE = { lineBlank: 0.05, unheard: 0.03, lead: 0.04, far: 0.4, french: true, weakLine: 0.3, deafRun: 0.12, clearLetter: 0.6 };
 
 /** Lyrics in French (the letters of French spelling are far from its sounds): checked on frequent words and accents. */
 export function looksFrench(words: string[]): boolean {
@@ -135,7 +135,12 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
   const bad = doubtfulLines(starts, toks, owner, written, emis, V, strayed);
   // Lines the model hardly heard (mean probability of their letters under FA_TUNE.weakLine): the relay may retime them.
   const sum = new Map<number, [number, number]>();
-  for (let k = 0; k < toks.length; k++) { const l = written[owner[k]].line; const c = sum.get(l) ?? [0, 0]; c[0] += Math.exp(emis[starts[k] * V + toks[k]]); c[1]++; sum.set(l, c); }
+  const clear = new Set<number>(); // a letter heard clearly (the "t" of "Don't" at the hook's start): the line holds its place
+  for (let k = 0; k < toks.length; k++) {
+    const l = written[owner[k]].line, p = Math.exp(emis[starts[k] * V + toks[k]]);
+    const c = sum.get(l) ?? [0, 0]; c[0] += p; c[1]++; sum.set(l, c);
+    if (p > FA_TUNE.clearLetter) clear.add(l);
+  }
   // Only whole passages hardly heard (the mean over all their letters under FA_TUNE.deafRun): fast rap is half heard
   // line after line and its alignment is still better than the speech model's phrases.
   const weak = new Set<number>();
@@ -145,7 +150,7 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
     if (!low(order[i])) { i++; continue; }
     let j = i, a = 0, n = 0;
     while (j < order.length && low(order[j])) { const [x, y] = sum.get(order[j])!; a += x; n += y; j++; }
-    if (a / n < FA_TUNE.deafRun) for (let k = i; k < j; k++) weak.add(order[k]);
+    if (a / n < FA_TUNE.deafRun) for (let k = i; k < j; k++) if (!clear.has(order[k])) weak.add(order[k]);
     i = j;
   }
   return words.map((x) => {

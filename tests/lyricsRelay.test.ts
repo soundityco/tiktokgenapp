@@ -5,31 +5,26 @@ import type { LyricWord } from "@/lib/types";
 const w = (text: string, s: number, line: number, extra: Partial<LyricWord> = {}): LyricWord => ({ w: text, s, e: s + 0.05, line, exact: true, ...extra });
 
 describe("relayWeakLines", () => {
+  // A line heard, then a passage the alignment hardly heard: its lines piled up right after it.
   const words: LyricWord[] = [
     w("je", 2, 0), w("chante", 2.4, 0),
-    // a passage the alignment hardly heard: its lines piled up right after the line before
-    w("bonjour", 3.0, 1, { weak: true, doubt: true }), w("toi", 3.05, 1, { weak: true, doubt: true }),
-    w("encore", 3.1, 2, { weak: true, doubt: true }),
-    w("salut", 3.15, 3, { weak: true, doubt: true }),
+    ...["tout", "mais", "pas", "ça"].map((x, i) => w(x, 3 + i * 0.01, 1, { weak: true, doubt: true })),
+    w("non", 3.05, 2, { weak: true, doubt: true }), w("non", 3.06, 3, { weak: true, doubt: true }),
+    ...["tout", "mais", "pas", "ça"].map((x, i) => w(x, 3.1 + i * 0.01, 4, { weak: true, doubt: true })),
   ];
-  it("lines found in the speech model's phrases take their time, the others share the time between, heard lines stay", () => {
-    const out = relayWeakLines(words, [{ w: "Bonjour toi", s: 12, e: 13 }, { w: "Salut", s: 15, e: 16 }], 20);
+  it("the passage's lines go on the speech model's phrases (one phrase can hold several lines), heard lines stay", () => {
+    const out = relayWeakLines(words, [{ w: "Tout mais pas ça, non, non, tout mais pas ça", s: 10, e: 14 }], 20);
     expect(out[0]).toEqual(words[0]);
-    expect(out[2].s).toBeCloseTo(12);
-    expect(out[5].s).toBeCloseTo(15);
-    expect(out[4].s).toBeGreaterThan(12);
-    expect(out[4].s).toBeLessThan(15);
-    expect(out[2].doubt).toBeUndefined(); // matched: no longer to check
-    expect(out[4].doubt).toBe(true); // placed between: still to check
+    expect(out[2].s).toBeCloseTo(10, 0);
+    expect(out[6].s).toBeGreaterThan(out[2].s);
+    expect(out[8].s).toBeGreaterThan(out[7].s);
+    expect(out[11].s).toBeLessThan(14.1);
+    expect(out[2].doubt).toBeUndefined(); // found in a phrase: no longer to check
+    // the line before lasts until the passage starts now
+    expect(out[1].e).toBeGreaterThan(2.5);
   });
   it("nothing heard by the speech model either: nothing moves", () => {
     expect(relayWeakLines(words, [], 20)).toEqual(words);
-  });
-  it("a line the alignment placed within a second of its phrase keeps its own (finer) time", () => {
-    // (line 1 not packed: a packed line always goes to its phrase)
-    const near = words.map((x) => (x.line === 1 ? { ...x, s: x.s + 8.5, doubt: undefined } : x.line ? { ...x, s: x.s + 9 } : x));
-    const out = relayWeakLines(near, [{ w: "Bonjour toi", s: 12, e: 13 }], 20);
-    expect(out[2].s).toBeCloseTo(11.5);
   });
 });
 

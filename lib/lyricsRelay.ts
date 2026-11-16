@@ -1,5 +1,5 @@
 import type { LyricWord } from "./types";
-import { norm, similarity } from "./lyricsAlign";
+import { alignSong, norm, wordsFromSegments } from "./lyricsAlign";
 
 /** A phrase the speech model heard, with the decoder's own times (they stay right where its word times collapse). */
 export interface Phrase { w: string; s: number; e: number }
@@ -10,23 +10,13 @@ export function noSpeech(text: string): boolean {
   return !norm(x) || /^[*([]?\s*(musique|music|applaudissements|rires)\s*[*)\]]?\.?$/.test(x) || /^(thank you|thanks for watching|merci d'avoir regardé|merci\.?)\W*$/.test(x) || /sous-?titr/.test(x);
 }
 
-const GAP = 3; // letters' worth of time between two lines
 /** A line moves to its phrase only when they disagree by more than this (seconds). */
 const MOVE = 1;
 
-/** Share of the line's words found in the phrase (a word close enough counts: "enlacée" / "enlacé"). */
-function matchScore(line: string[], phrase: string[]): number {
-  if (!line.length || !phrase.length) return 0;
-  let hit = 0;
-  for (const w of line) if (phrase.some((p) => p === w || similarity(w, p) >= 0.6)) hit++;
-  return hit / line.length;
-}
-
 /**
  * The relay: where the alignment hardly heard a run of lines (a hook or a chorus drowned in effects: words marked
- * `weak`, some of them packed, `doubt`), the speech model's phrases are used instead. A line whose words are found in a
- * phrase, in order, starts with it; the others share the time between those starts, by their letters. Lines the
- * alignment heard are never touched.
+ * `weak`, some of them packed, `doubt`), the speech model's phrases are used instead: the run's lines are placed on
+ * their words (alignSong), each line found there taking that time. Lines the alignment heard are never touched.
  */
 export function relayWeakLines(words: LyricWord[], phrases: Phrase[], duration: number): LyricWord[] {
   type L = { line: number; idx: number[]; weak: boolean; doubt: boolean };
@@ -38,7 +28,6 @@ export function relayWeakLines(words: LyricWord[], phrases: Phrase[], duration: 
   });
   const out = words.slice();
   const ps = phrases.filter((p) => norm(p.w)).sort((a, b) => a.s - b.s);
-  const letters = (l: L) => l.idx.reduce((n, i) => n + Math.max(1, norm(words[i].w).length), 0);
   for (let i = 0; i < lines.length;) {
     if (!lines[i].weak) { i++; continue; }
     let j = i;
@@ -47,67 +36,40 @@ export function relayWeakLines(words: LyricWord[], phrases: Phrase[], duration: 
     if (run.some((l) => l.doubt)) {
       const lo = i > 0 ? words[lines[i - 1].idx[lines[i - 1].idx.length - 1]].e : 0;
       const hi = j < lines.length ? words[lines[j].idx[0]].s : duration;
-      const cand = ps.filter((p) => p.s >= lo - 0.5 && p.s < hi);
-      // Lines matched to phrases, in order (a phrase serves one line).
-      const at = new Array<number | null>(run.length).fill(null), until = new Array<number | null>(run.length).fill(null);
-      let pi = 0;
-      run.forEach((l, k) => {
-        const lw = l.idx.map((x) => norm(words[x].w)).filter(Boolean);
-        for (let p = pi; p < Math.min(cand.length, pi + 4); p++) {
-          if (matchScore(lw, cand[p].w.split(/\s+/).map(norm).filter(Boolean)) >= 0.5) {
-            // The alignment is finer than the phrases: its time stays unless the phrase says it is off by more than MOVE.
-            // (a line packed on the others always goes to its phrase)
-            const mine = words[l.idx[0]].s;
-            at[k] = l.doubt || Math.abs(mine - cand[p].s) > MOVE ? Math.max(lo, cand[p].s) : mine;
-            until[k] = cand[p].e;
-            pi = p + 1;
-            break;
-          }
-        }
-      });
-      if (at.some((x) => x !== null)) {
-        // The others between those starts (or the run's bounds), by their letters.
-        const starts = at.slice();
-        for (let k = 0; k < run.length;) {
-          if (starts[k] !== null) { k++; continue; }
-          let m = k;
-          while (m < run.length && starts[m] === null) m++;
-          const a = k > 0 ? starts[k - 1]! : lo, b = m < run.length ? starts[m]! : hi;
-          // Lines the alignment placed in order between those times, none of them packed: they stay.
-          const group = run.slice(k, m);
-          const mine = group.map((l) => words[l.idx[0]].s);
-          if (!group.some((l) => l.doubt) && mine.every((x, q) => x > a && x < b && (q === 0 || x > mine[q - 1]))) {
-            for (let q = k; q < m; q++) starts[q] = mine[q - k];
-            k = m;
-            continue;
-          }
-          const prevUnits = k > 0 ? letters(run[k - 1]) + GAP : 0;
-          const units = prevUnits + run.slice(k, m).reduce((n, l) => n + letters(l) + GAP, 0);
-          let u = prevUnits;
-          for (let q = k; q < m; q++) { starts[q] = a + ((b - a) * u) / units; u += letters(run[q]) + GAP; }
-          k = m;
-        }
+      // (a phrase starting before the line before ends is that line's, not the passage's)
+      const cand = ps.filter((p) => p.s >= lo - 0.1 && p.s < hi);
+      // The passage's lines placed on the words of those phrases (a phrase can hold several lines: "Tout mais pas ça,
+      // non, non, non, non, tout mais pas ça" is six of them), as the speech model's words used to be placed.
+      const heard = wordsFromSegments(cand);
+      const text = run.map((l) => l.idx.map((x) => words[x].w).join(" ")).join("\n");
+      const placed = heard.length ? alignSong(text, heard) : null;
+      if (placed && placed.words.length === run.reduce((n, l) => n + l.idx.length, 0)) {
+        const heardAt = new Set(heard.map((h) => h.s));
+        let q = 0;
+        const by = run.map((l) => l.idx.map(() => placed.words[q++]));
+        // The alignment is finer than the phrases: a line not piled up keeps its own time when they agree within MOVE.
+        const keep = run.map((l, k) => !l.doubt && Math.abs(words[l.idx[0]].s - by[k][0].s) <= MOVE);
         run.forEach((l, k) => {
-          const s0 = starts[k]!;
-          if (Math.abs(s0 - words[l.idx[0]].s) < 1e-6) {
-            // Its own time: its words untouched, but it lasts as long as its phrase (the lines after it moved later).
-            const next = k + 1 < run.length ? starts[k + 1]! : hi;
-            const last = l.idx[l.idx.length - 1];
-            if (until[k] !== null) out[last] = { ...words[last], e: Math.max(words[last].e, Math.min(until[k]!, next - 0.04)) };
-            return;
-          }
-          const next = k + 1 < run.length ? starts[k + 1]! : hi;
-          // Up to the next line, a held end at most (a phrase the speech model cut short does not cut the line).
-          const end = Math.max(s0 + 0.2, Math.min(next - 0.04, Math.max(until[k] ?? 0, s0 + 0.5 + 0.12 * letters(l))));
-          const total = letters(l);
-          let u = 0;
-          for (const x of l.idx) {
-            const n = Math.max(1, norm(words[x].w).length);
-            const ws = s0 + ((end - s0) * u) / total;
-            u += n;
-            out[x] = { ...words[x], s: ws, e: s0 + ((end - s0) * u) / total, doubt: at[k] === null ? true : undefined };
-          }
+          if (keep[k]) return;
+          const found = by[k].some((x) => heardAt.has(x.s));
+          l.idx.forEach((x, m) => {
+            const r = by[k][m];
+            out[x] = { ...words[x], s: r.s, e: Math.max(r.s + 0.05, r.e), doubt: found ? undefined : true };
+          });
         });
+        // Each moved line lasts until the next one (a held end, as the alignment's lines).
+        run.forEach((l, k) => {
+          const lastI = l.idx[l.idx.length - 1];
+          const next = k + 1 < run.length ? out[run[k + 1].idx[0]].s : hi;
+          const end = Math.min(next - 0.04, out[lastI].s + 1.2);
+          if (!keep[k] && end > out[lastI].e) out[lastI] = { ...out[lastI], e: end };
+        });
+        // The line before the passage lasts until it starts now (it was cut by the lines piled up after it).
+        if (i > 0) {
+          const last = lines[i - 1].idx[lines[i - 1].idx.length - 1];
+          const first = out[run[0].idx[0]].s;
+          out[last] = { ...out[last], e: Math.max(out[last].e, Math.min(out[last].s + 1.2, first - 0.04)) };
+        }
       }
     }
     i = j;

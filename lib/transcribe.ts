@@ -52,7 +52,7 @@ export function stopTranscribe() {
  */
 export function transcribe(
   samples: Float32Array,
-  opts: { model: AsrModel; language: string; base: number; mode?: "word" | "segment"; raw?: boolean; onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal }
+  opts: { model: AsrModel; language: string; base: number; mode?: "word" | "segment"; raw?: boolean; prompt?: string; onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal }
 ): Promise<LyricWord[]> {
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) { reject(new Error("aborted")); return; }
@@ -77,6 +77,6 @@ export function transcribe(
     w.addEventListener("message", onMsg);
     w.addEventListener("error", onErr);
     opts.signal?.addEventListener("abort", onAbort, { once: true });
-    w.postMessage({ type: "run", audio: samples, model: ASR_MODELS[opts.model], language: opts.language, mode: opts.mode });
+    w.postMessage({ type: "run", audio: samples, model: ASR_MODELS[opts.model], language: opts.language, mode: opts.mode, prompt: opts.prompt });
   });
 }

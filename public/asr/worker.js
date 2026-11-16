@@ -32,9 +32,11 @@ async function load(pipeline, model, onProgress) {
 }
 
 const post = (msg) => self.postMessage(msg);
+/** Whisper's language tokens for the languages the app offers. */
+const LANG_CODES = { french: "fr", english: "en", spanish: "es", german: "de", italian: "it", portuguese: "pt", dutch: "nl", arabic: "ar", japanese: "ja", korean: "ko", chinese: "zh", russian: "ru", turkish: "tr", polish: "pl" };
 
 self.onmessage = async (e) => {
-  const { type, audio, model, language, mode } = e.data || {};
+  const { type, audio, model, language, mode, prompt } = e.data || {};
   if (type !== "run") return;
   try {
     post({ type: "status", step: "library" });
@@ -60,6 +62,18 @@ self.onmessage = async (e) => {
     const seg = mode === "segment";
     const opts = { return_timestamps: seg ? true : "word", chunk_length_s: 30, stride_length_s: 5, task: "transcribe" };
     if (language && language !== "auto") opts.language = language;
+    // `prompt`: what was sung just before this excerpt, given to the decoder first (Whisper's own way of keeping the
+    // context: <|startofprev|> text <|startoftranscript|> <|lang|> <|transcribe|>). Over music the model often decides
+    // there is no speech in a whole window ("...", "Sous-titrage"); with the lines before it, it hears the singing.
+    const code = LANG_CODES[language];
+    let echo = "";
+    if (prompt && code) {
+      const tk = pipe.tokenizer;
+      const id = (t) => tk.model.tokens_to_ids.get(t);
+      const ids = tk.encode(" " + String(prompt).replace(/\s+/g, " ").trim(), { add_special_tokens: false }).slice(-150);
+      const head = [id("<|startofprev|>"), ...ids, id("<|startoftranscript|>"), id(`<|${code}|>`), id("<|transcribe|>")];
+      if (head.every((x) => typeof x === "number")) { opts.decoder_input_ids = head; echo = tk.decode(ids, { skip_special_tokens: true }).trim(); }
+    }
     let out;
     try { out = await pipe(audio, opts); }
     catch (err) {
@@ -71,7 +85,15 @@ self.onmessage = async (e) => {
       post({ type: "device", device });
       out = await pipe(audio, opts);
     }
-    const words = (out.chunks || [])
+    const chunks = out.chunks || [];
+    // The prompt comes back at the start of the first phrase: taken away.
+    if (echo && chunks.length) {
+      const t0 = String(chunks[0].text || "");
+      const tail = echo.slice(-24);
+      const at = t0.lastIndexOf(tail);
+      if (at >= 0) chunks[0] = { ...chunks[0], text: t0.slice(at + tail.length) };
+    }
+    const words = chunks
       .map((c) => ({ w: String(c.text || "").trim(), s: c.timestamp?.[0], e: c.timestamp?.[1] }))
       .filter((c) => c.w && typeof c.s === "number");
     post({ type: "done", words, seg });
