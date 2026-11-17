@@ -2948,7 +2948,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* (the glow over a playing text: drawn where the text is, after its icon) */
 .lyric-track .cue.on:not(.cam-shot):not(.video-clip)::after { padding-left: 22px; }
 @media (min-width: 641px) {
-  .tl-stack { row-gap: 2px; padding: 6px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
+  /* (bottom: the last clip already sits 4 px inside its line, the same room as on the sides) */
+  .tl-stack { row-gap: 2px; padding: 6px 6px 2px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
   /* (the lines lose their own frame: the whole is one) */
   .tl-stack .wave { border: 0; }
   .tl-stack .lyric-track { border: 0; background: none; border-radius: 0; }
@@ -2956,7 +2957,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   .tl-stack > .video-block.dragging { outline: 1px dashed var(--muted); outline-offset: 3px; }
   .tl-stack .lyric-head { display: none; }
   .tl-stack .track-seg { display: none; } /* (the segment is on the waveform, right above) */
-  .tl-head { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 2px; margin-left: -1px; background: var(--text);
+  /* from the waveform's top to the last clip's bottom: never on the frame */
+  .tl-head { display: block; position: absolute; top: 6px; bottom: 6px; left: 0; width: 2px; margin-left: -1px; background: var(--text);
     pointer-events: none; z-index: 4; will-change: transform; }
 }
 

@@ -4714,7 +4714,7 @@ export default function VideoStudio({
     return cur.offset + clipSpan(cur, videoDurRef.current || Infinity)[0];
   };
   /** What letting go there would do, and the time its start lands on (the clip's left edge under the pointer). */
-  const landing = (d: { from: "base" | "over" | "cam"; grab: number }, x: number, zone: VZone | null) => {
+  const landing = (d: { from: "base" | "over" | "cam"; grab: number }, x: number, zone: VZone | null, y?: number) => {
     const block = document.querySelector<HTMLElement>(".video-block")?.getBoundingClientRect();
     const w = viewRef.current ?? twRef.current;
     const left = x - d.grab;
@@ -4726,9 +4726,12 @@ export default function VideoStudio({
       const out = d.from === "base" ? "above" : "below";
       if (zone === out) act = "swap";
       else if (zone === other) {
-        // On the other video's start: they change places; further along its line: both in the multicam, cut there.
+        // Past the middle of the other video's line (its lower half going down, its upper half going up), or on its
+        // start: they change places; else, further along its line: both in the multicam, cut there.
+        const row = block && y !== undefined ? document.querySelector<HTMLElement>(d.from === "base" ? ".video-block .over-track" : ".video-block .cam-track, .video-block .video-track:not(.over-track)")?.getBoundingClientRect() : null;
+        const past = !!row && y !== undefined && (d.from === "over" ? y > row.top + row.height / 2 : y < row.top + row.height / 2);
         const s = otherStart(d.from);
-        act = s === null ? null : at <= s + 0.3 ? "swap" : "multicam";
+        act = past ? "swap" : s === null ? null : at <= s + 0.3 ? "swap" : "multicam";
       }
     }
     return { at, act, cutX: block ? clamp(left - block.left, 0, block.width) : 0 };
@@ -4747,13 +4750,13 @@ export default function VideoStudio({
     const grab = clamp((x0 ?? e.clientX) - r.left, 0, r.width);
     const zone = zoneAt(e.clientY);
     setVdrag({ from, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" ? overNo(settingsRef.current) : cam,
-      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, zone, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, grab }, e.clientX, zone) });
+      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, zone, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, grab }, e.clientX, zone, e.clientY) });
   };
   const moveVdrag = (e: React.PointerEvent) => {
     const d = vdragRef.current;
     if (!d) return false;
     const zone = zoneAt(e.clientY);
-    setVdrag({ ...d, x: e.clientX, y: e.clientY, zone, ...landing(d, e.clientX, zone) });
+    setVdrag({ ...d, x: e.clientX, y: e.clientY, zone, ...landing(d, e.clientX, zone, e.clientY) });
     return true;
   };
   /**
