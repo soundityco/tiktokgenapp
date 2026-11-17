@@ -391,17 +391,17 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
    choice (all the lyrics / this word) and the caption it sets. */
 /* The video track (one camera): the camera file as a clip, dragged to slide it, its edges to trim it; locked to the
    audio: shown only. */
-.lyric-track .cue.video-clip { display: flex; align-items: center; gap: 6px; border-left-color: var(--video); cursor: grab; touch-action: none;
-  background: color-mix(in srgb, var(--video) 16%, var(--bg)); }
-.lyric-track .cue.video-clip.on { background: color-mix(in srgb, var(--video) 24%, var(--bg)); border-left-color: var(--video); }
+.lyric-track .cue.video-clip { --vc: var(--cam, var(--video)); display: flex; align-items: center; gap: 6px; border-left-color: var(--vc); cursor: grab; touch-action: none;
+  background: color-mix(in srgb, var(--vc) 16%, var(--bg)); }
+.lyric-track .cue.video-clip.on { background: color-mix(in srgb, var(--vc) 24%, var(--bg)); border-left-color: var(--vc); }
+/* The video set in the right column (and shown by the band of the waveform): outlined in its colour. */
+.lyric-track .cue.video-clip.sel { box-shadow: inset 0 0 0 1px var(--vc); }
 .lyric-track .cue.video-clip:active { cursor: grabbing; }
 .lyric-track .cue.video-clip.locked { cursor: pointer; }
 .lyric-track .cue.video-clip.locked svg { flex: none; opacity: .7; }
-.lyric-track .cue.video-clip.over-clip { background: color-mix(in srgb, var(--video) 30%, var(--bg)); }
-.lyric-track .cue.video-clip.over-clip > svg { flex: none; opacity: .8; }
 .video-clip .clip-edge { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 1; }
 .video-clip .clip-edge.in { left: -2px; } .video-clip .clip-edge.out { right: -2px; }
-.video-clip .clip-edge::after { content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px; border-radius: 1px; background: var(--video); opacity: .8; }
+.video-clip .clip-edge::after { content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px; border-radius: 1px; background: var(--vc); opacity: .8; }
 /* The video track's tools, at its right end (they stay put while the track slides): the clip's sound (a slider opens
    from the speaker, as in CapCut) and the whole video back. */
 .lyric-track .track-tools { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; display: flex; align-items: center; gap: 2px; padding: 0 3px 0 18px;
@@ -511,12 +511,14 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-block.drop-main .cam-track, .video-block.drop-main .video-track:not(.over-track) { background: color-mix(in srgb, var(--video) 14%, transparent); }
 .video-block .drop-ghost { position: absolute; top: 4px; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 8px; pointer-events: none; z-index: 5;
   font-size: 12px; color: var(--text); border-left: 2px solid var(--video); border-radius: 3px; background: color-mix(in srgb, var(--video) 40%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+/* A clip carried up or down: the row it would join lit, or a line where it would go (above / under). */
+.video-block.vz-over .over-track, .video-block.vz-base .cam-track, .video-block.vz-base .video-track:not(.over-track) { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.video-block .vz-line { height: 2px; margin: 0 6px; border-radius: 1px; background: var(--text); box-shadow: 0 0 8px color-mix(in srgb, var(--text) 50%, transparent); }
+.vdrag-ghost { position: fixed; z-index: 200; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 9px; pointer-events: none; font-size: 12px; color: var(--text);
+  border-left: 2px solid var(--cam); border-radius: 3px; background: color-mix(in srgb, var(--cam) 32%, var(--panel)); box-shadow: 0 10px 28px rgba(0,0,0,.5); opacity: .95; }
+.vdrag-ghost b { color: var(--cam); }
 .video-block .drop-main-hint { font-size: 11px; color: var(--muted); padding: 0 6px; }
 .take-row[draggable="true"], .take[draggable="true"] { cursor: grab; }
-/* The take over the video: the cameras' look, in the video's violet; "Over" in place of a camera number. */
-.take.over { --cam: var(--video); }
-.take-tag { flex: none; font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px;
-  color: var(--video); border: 1px solid color-mix(in srgb, var(--video) 50%, transparent); }
 .cams-row { flex-wrap: wrap; gap: 6px; }
 .cams-row .label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
 .cam-0 { --cam: var(--accent); } .cam-1 { --cam: var(--video); } .cam-2 { --cam: var(--music); } .cam-3 { --cam: var(--lyrics); }
@@ -1301,8 +1303,7 @@ button.media.warn .media-name { color: var(--warn); }
 /* Multicam: each take's card in its camera's colour (1 white, 2 violet, 3 green, 4 gold), as on the shots track. */
 .take[class*="cam-"] .media.m-film, .clip-card .media.m-film { --kind: var(--cam); }
 /* Its Drive pills ("Drive copy", "Backed up") in its camera's colour too. */
-.take[class*="cam-"] .media, .take.over .media, .clip-card .media { --video: var(--cam); --grad-video: var(--cam); }
-.take.over .media.m-film { --kind: var(--cam); }
+.take[class*="cam-"] .media, .clip-card .media { --video: var(--cam); --grad-video: var(--cam); }
 .media.m-lyrics, .media.m-music, .media.m-film { border-color: color-mix(in srgb, var(--kind) 42%, var(--line)); }
 .media.m-lyrics.empty, .media.m-music.empty, .media.m-film.empty { border-color: color-mix(in srgb, var(--kind) 34%, transparent); }
 .media.m-lyrics .media-ic, .media.m-music .media-ic, .media.m-film .media-ic { color: var(--kind); background: color-mix(in srgb, var(--kind) 10%, var(--bg)); }

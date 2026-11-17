@@ -355,7 +355,6 @@ export const FR: Record<string, string> = {
   "Video sound": "Son de la vidéo",
   "One video does not match the audio: it stays free, place it by hand.": "Une vidéo ne correspond pas au son : elle reste libre, place-la à la main.",
   "{n} videos do not match the audio: they stay free, place them by hand.": "{n} vidéos ne correspondent pas au son : elles restent libres, place-les à la main.",
-  "Over": "Par-dessus",
   "Up to {n} cameras.": "{n} caméras au plus.",
   "Drop here: over the video": "Dépose ici : par-dessus la vidéo",
   "Drop on the base line: multicam": "Dépose sur la ligne de base : multicam",
