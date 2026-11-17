@@ -2313,7 +2313,9 @@ export default function VideoStudio({
       } else {
         const takes = r.takes.map((k) => ({ offset: round2(k.offset), musicStart: round2(k.musicStart), musicEnd: round2(k.musicEnd) }));
         const kept = takes.length > 1 ? takes : undefined;
-        setV({ score: round2(r.score), anchors: r.anchors, takes: kept });
+        // Synced the first time: its own sound is the official audio heard by the camera, so it is turned off (up again
+        // by hand; a sync done again keeps that choice).
+        setV({ score: round2(r.score), anchors: r.anchors, takes: kept, ...(settingsRef.current.score === undefined ? { clipVolume: undefined } : null) });
         const used = takes.find((k) => Math.abs(k.offset - r.offset) < 0.02);
         if (used) applyTake(used, kept);
         else {
@@ -2357,11 +2359,12 @@ export default function VideoStudio({
     for (const id of [...(cur.angles ?? []).filter(Boolean), ...(ov ? [ov.clip] : [])]) {
       const c = clips.find((x) => x.id === id);
       if (!c) continue;
+      const first = c.score === undefined;
       const at = await resyncTake(c);
       (at === null ? free : synced).push(c.name);
       // The one over it follows its sync (else it keeps the place it was given).
       const o = overlayOf(settingsRef.current);
-      if (at !== null && o && o.clip === id) setV({ overlay: { ...o, offset: at } });
+      if (at !== null && o && o.clip === id) setV({ overlay: { ...o, offset: at, ...(first ? { volume: undefined } : null) } });
     }
     return { synced, free };
   };
@@ -4252,7 +4255,8 @@ export default function VideoStudio({
       const r = syncAudio(sound.samples, sound.rate, monoOf(official), official.sampleRate, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
       // No match: not a fault, it stays free (placed by hand on its track), quietly.
       if (!r.anchors || r.score < 0.4) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return null; }
-      patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: false });
+      patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: false,
+        ...(clips.find((c) => c.id === id)?.score === undefined ? { clipVolume: undefined } : null) });
       onSaveNow();
       setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; });
       return round2(r.offset);
@@ -4629,7 +4633,7 @@ export default function VideoStudio({
                 {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
               </div>
             )}
-            {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
+            {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow vc-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
@@ -4928,7 +4932,7 @@ export default function VideoStudio({
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
-            {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + overNo(settings)} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
+            {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow vc-glow cam-" + overNo(settings)} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
