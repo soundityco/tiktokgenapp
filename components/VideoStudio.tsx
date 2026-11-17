@@ -3404,6 +3404,24 @@ export default function VideoStudio({
     await syncLyrics();
   };
 
+  /**
+   * This audio is an excerpt of the song: the written lines it holds, read from a clearly longer version of the release
+   * that has its lyrics placed (where this one sits in it, its lines there). None: not an excerpt, or nothing to tell.
+   */
+  const excerptLines = async (): Promise<[number, number] | undefined> => {
+    if (!audioBuf) return undefined;
+    for (const v of audioVersionsOf(releaseRef.current)) {
+      if (v.id === audioId || !v.lyricWords?.length) continue;
+      const src = await bufferOf(v.id);
+      if (!src || src.buf.duration * 0.85 <= audioBuf.duration) continue;
+      await new Promise((r) => setTimeout(r, 30));
+      const m = mapBetween(src.buf, audioBuf);
+      if (sharedShare(m) < SAME_SONG) continue;
+      const ls = (remapWords(m, v.lyricWords) ?? []).map((w) => w.line).filter((l): l is number => l !== undefined);
+      if (ls.length) { console.info(`[lyrics] this audio is an excerpt of “${v.audioName}”: lines ${Math.min(...ls)}–${Math.max(...ls)}`); return [Math.min(...ls), Math.max(...ls)]; }
+    }
+    return undefined;
+  };
   /** The written lyrics on the official audio only. They do not depend on the video: changing it never moves them. */
   const syncLyrics = async () => {
     let next = project;
@@ -3413,6 +3431,15 @@ export default function VideoStudio({
       onProject((p) => ({ ...p, songLyrics: text }));
     }
     if (!hasLyrics || !audioBuf) return;
+    // An excerpt of the song (a version added before it was known, or never told): the lines it holds found now, by
+    // where it sits in a longer version that has its lyrics; kept with it.
+    let lines = next.lyricLines;
+    if (!lines) {
+      setGenInfo(t("Finding which part of the song this audio is…"));
+      lines = await excerptLines().catch(() => undefined);
+      setGenInfo(null);
+      if (lines) { const ln = lines; onProject((p) => ({ ...p, lyricLines: ln })); next = { ...next, lyricLines: ln }; }
+    }
     // Asked by hand: always from scratch, nothing kept from an earlier placing (the words heard or aligned before, the
     // lines retimed by hand). Editing the text still re-places it at once on what was heard (resyncLyrics).
     // (the words heard before stay saved until the new placing replaces them: cancelled or failed, nothing is lost)
