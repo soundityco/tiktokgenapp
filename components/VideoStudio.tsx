@@ -9,7 +9,7 @@ import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
-import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
+import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
 import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
@@ -1744,7 +1744,7 @@ export default function VideoStudio({
           if (!ids.includes(c.id) || fromId === to) return c;
           const m = maps.get(fromId);
           const audio = { audioId: to === mainAudioId(p) ? undefined : to, audioName: name };
-          if (!m || coverage(m) < SAME_SONG) {
+          if (!m || sharedShare(m) < SAME_SONG) {
             restarted++;
             return { ...c, ...audio, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false };
           }
@@ -1778,7 +1778,7 @@ export default function VideoStudio({
       try { buf = await decodeAudio(getCtx(), f); } catch { setErr(t("Could not read this audio file.")); return; }
       await new Promise((r) => setTimeout(r, 40));
       const m = audioBuf ? mapBetween(audioBuf, buf) : null;
-      const sameSong = !!m && coverage(m) >= SAME_SONG;
+      const sameSong = !!m && sharedShare(m) >= SAME_SONG;
       const words = { moved: 0, dropped: 0 };
       const cur = project;
       const version: AudioVersion = {

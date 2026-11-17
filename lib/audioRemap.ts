@@ -52,6 +52,18 @@ export function coverage(m: TrackMap): number {
   return Math.min(1, covered / m.oldDur);
 }
 
+/**
+ * How much of the shorter version the two share (0 to 1): an excerpt of the song (30 s cut from 1:20) shares all of
+ * itself with the full song, as the full song with a longer one. Tells the same song from another one.
+ */
+export function sharedShare(m: TrackMap): number {
+  const shorter = Math.min(m.oldDur, m.newDur);
+  if (!shorter) return 0;
+  let covered = 0;
+  m.pieces.forEach((_, i) => { const [lo, hi] = regionOf(m, i); covered += Math.max(0, hi - lo); });
+  return Math.min(1, covered / shorter);
+}
+
 /** The same timing all along, moved by this many seconds (0: the very same timing); null when parts changed. */
 export function uniformShift(m: TrackMap): number | null {
   if (m.pieces.length !== 1 || coverage(m) < 0.9) return null;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { coverage, mapSpan, mapTime, remapClip, remapWords, trackMap, uniformShift } from "../lib/audioRemap";
+import { coverage, mapSpan, mapTime, remapClip, remapWords, sharedShare, trackMap, uniformShift } from "../lib/audioRemap";
 import { alignTracks } from "../lib/syncAudio";
 import type { VideoSetup } from "../lib/types";
 import { song, SR } from "./songSim";
@@ -21,6 +21,16 @@ const master = (x: Float32Array) => {
 const mapOf = (next: Float32Array) => trackMap(alignTracks(demo, SR, next, SR), demo.length / SR, next.length / SR);
 
 describe("a new version of the audio", () => {
+  it("an excerpt of the song (25 s cut out of 70 s) is the same song: its words found in it", () => {
+    const m = mapOf(master(demo.subarray(at(30), at(55))));
+    expect(coverage(m)).toBeLessThan(0.4); // (as a share of the full song: too little to tell)
+    expect(sharedShare(m)).toBeGreaterThan(0.85);
+    const words = [{ w: "before", s: 10, e: 10.5 }, { w: "inside", s: 40, e: 40.5 }, { w: "after", s: 62, e: 62.5 }];
+    const out = remapWords(m, words) ?? [];
+    expect(out.map((x) => x.w)).toEqual(["inside"]);
+    expect(out[0].s).toBeCloseTo(10, 0);
+  });
+
   it("the very same timing (a master): nothing moves", () => {
     const m = mapOf(master(demo));
     expect(uniformShift(m)).toBe(0);

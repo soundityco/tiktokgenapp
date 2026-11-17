@@ -570,9 +570,11 @@ export function alignTracks(oldSamples: Float32Array, oldRate: number, newSample
   if (!steps.length) return [];
   // What a true match scores between these two versions (a remaster with new vocals scores lower all along): a
   // match counts by how much it beats three quarters of that, so a place that only looks like it (the same chords,
-  // the same drum loop elsewhere in the song) never wins over "matches nowhere".
+  // the same drum loop elsewhere in the song) never wins over "matches nowhere". Read on the best matches (the 90th
+  // percentile), not the middle one: in an excerpt of the song (30 s of 1:20) most of the earlier version is nowhere in
+  // it, the middle score was a look-alike's, and every part of the song was "found" in the excerpt (lyrics moved there).
   const tops = steps.filter((st) => st.cands.length).map((st) => st.cands[0].score).sort((x, y) => x - y);
-  const bar = tops.length ? 0.75 * tops[Math.floor(tops.length / 2)] : ALIGN_MIN;
+  const bar = tops.length ? 0.75 * tops[Math.min(tops.length - 1, Math.floor(tops.length * 0.9))] : ALIGN_MIN;
 
   // The path (Viterbi): each step on one of its candidates or on "none". Same shift as the step before: free; a
   // little drift (a tempo nudged): almost free; another shift (a cut, an addition): ALIGN_JUMP; "none" costs half a
