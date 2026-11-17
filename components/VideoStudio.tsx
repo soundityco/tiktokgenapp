@@ -4875,7 +4875,9 @@ export default function VideoStudio({
   const [dropRow, setDropRow] = useState<"over" | "main" | null>(null);
   /** Where the dragged take would land over the video: its start on the track (s), and in the block (px). */
   const [dropAt, setDropAt] = useState<{ t: number; x: number; w: number } | null>(null);
-  const takeDrag = (c: VideoSetup, cam: number | null) => cam === 0 ? {} : {
+  // Only a take not in the project yet ("Other takes of the release") is dragged from the library: one of the project's
+  // is already on the timeline (moved there, on its track), and its line is only clicked (shown, set, unfolded).
+  const takeDrag = (c: VideoSetup, _cam: number | null) => c.id === clip.id || (settings.angles ?? []).includes(c.id) || overlayOf(settings)?.clip === c.id ? {} : {
     draggable: true,
     onDragStart: (e: React.DragEvent) => { e.dataTransfer.setData("text/x-raw-take", c.id); e.dataTransfer.effectAllowed = "move"; setDragTake(c.id); },
     onDragEnd: () => { setDragTake(null); setDropRow(null); setDropAt(null); },
