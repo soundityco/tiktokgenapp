@@ -2217,10 +2217,13 @@ export default function VideoStudio({
     stop(); // a start that waited is dropped when another start or a stop came meanwhile
     const mine = ++playToken.current;
     const cfg = settingsRef.current;
-    const until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
-    let from = head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
+    let until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
+    // Unlocked, the playhead outside the segment: played from there to the song's end (else the segment, as always).
+    const outside = !cfg.linked && (head < cfg.crop.start || head >= until - 0.15) && head < audioBuf.duration - 0.2;
+    if (outside) until = audioBuf.duration;
+    let from = outside ? head : head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
     playStartRef.current = from;
-    const cfgStart = cfg.crop.start;
+    const cfgStart = outside ? 0 : cfg.crop.start;
     const from0 = from;
     // The view keeps the playhead where it is when play is pressed (between a third and 3/4): no jump back to a third.
     const v0 = viewRef.current;
@@ -2244,7 +2247,10 @@ export default function VideoStudio({
       // (A browser may keep play() pending: never wait more than a moment, the sound starts anyway.)
       await Promise.race([el.play().catch(() => undefined), new Promise((ok) => window.setTimeout(ok, 700))]);
       if (mine !== playToken.current) { el.pause(); return; }
-      if (!el.paused) from = Math.min(until - 0.05, Math.max(cfg.crop.start, el.currentTime + cfg.offset + lat));
+      // (only where the video is: the playhead before or after it, the player stays at its edge and the sound starts at
+      // the playhead, never brought back to where the video could be)
+      const inVideo = from - cfg.offset >= 0 && (!Number.isFinite(el.duration) || from - cfg.offset < el.duration - 0.05);
+      if (!el.paused && inVideo) from = Math.min(until - 0.05, Math.max(cfgStart, el.currentTime + cfg.offset + lat));
     }
     const src = ctx.createBufferSource();
     src.buffer = audioBuf;
@@ -2908,10 +2914,12 @@ export default function VideoStudio({
     const seg = { ...base, start: cfg.crop.start, duration: cfg.crop.duration };
     const end = cfg.crop.start + cfg.crop.duration;
     // The playhead first (a thin line inside the segment), then the edges (each one crops its side), then the segment.
-    if (near(head) && head > cfg.crop.start + 0.05 && head < end - 0.05) dragWave.current = { mode: "head", ...seg };
+    if (near(head) && (!cfg.linked || (head > cfg.crop.start + 0.05 && head < end - 0.05))) dragWave.current = { mode: "head", ...seg };
     else if (near(cfg.crop.start, 9) && (!near(end, 9) || Math.abs(e.clientX - xOf(cfg.crop.start)) <= Math.abs(e.clientX - xOf(end)))) dragWave.current = { mode: "start", ...seg };
     else if (near(end, 9)) dragWave.current = { mode: "end", ...seg };
     else if (t > cfg.crop.start && t < end) dragWave.current = { mode: "press", ...seg };
+    // Unlocked: outside the segment, the playhead goes there (and follows the drag).
+    else if (!cfg.linked) { setHead(headAt(f)); dragWave.current = { mode: "head", ...seg }; }
     else dragWave.current = { mode: viewRef.current ? "pan" : "none", ...seg };
   };  /**
    * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
@@ -2923,7 +2931,8 @@ export default function VideoStudio({
       const r = el.getBoundingClientRect();
       const cfg = settingsRef.current;
       const w = viewRef.current ?? twRef.current; // what is on screen (live while playing)
-      return round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration - 0.05)));
+      const [lo, hi] = cfg.linked ? [cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration - 0.05)] : headRange();
+      return round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, lo, hi));
     };
     return {
       onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
@@ -2952,8 +2961,16 @@ export default function VideoStudio({
   };
   /** Time under the pointer, kept inside the segment (where the playhead lives). */
   const headAt = (f: number) => {
-    const cfg = settingsRef.current, v = viewOf();
-    return round2(clamp(v.s + f * v.d, cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05));
+    const cfg = settingsRef.current, v = viewOf(), [lo, hi] = headRange();
+    return round2(clamp(v.s + f * v.d, lo, hi));
+  };
+  /**
+   * Where the playhead may go: the segment while the video is locked to the audio (the padlock); unlocked, anywhere in
+   * the song (to try things outside the synced video: the intro, another passage), played from there to the song's end.
+   */
+  const headRange = (): [number, number] => {
+    const cfg = settingsRef.current;
+    return cfg.linked ? [cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05] : [0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - 0.05)];
   };
   const waveMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, e.clientX);
