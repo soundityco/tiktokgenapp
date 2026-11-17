@@ -2974,3 +2974,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .lyric-track .cue.lifted { z-index: 10 !important; cursor: grabbing; box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 80%, transparent); }
 .lyric-track .cue.shifted { transition: translate .16s ease; }
 .video-clip .vc-no { color: var(--vc); font-weight: 600; }
+
+/* A video track hidden (its eye): its clips dimmed, the eye crossed out. */
+.lyric-track.is-hidden .cue { opacity: .4; }
+.lyric-track .track-tools .track-eye.off { color: var(--muted); }

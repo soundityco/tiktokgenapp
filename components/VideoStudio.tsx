@@ -102,7 +102,7 @@ const LYRICS_ALIGN_V = 3;
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
-const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "clipVolume", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
@@ -837,7 +837,7 @@ export default function VideoStudio({
   };
   /** The videos over it at official time `time`, from the bottom up (each outside its part: left out). */
   const overlayPictures = (time: number, still: boolean) =>
-    overlaysOf(settingsRef.current).map((o) => overlayPicture(o, time, still)).filter((x): x is { pic: Picture; a: Angle; o: VideoOverlay } => !!x);
+    overlaysOf(settingsRef.current).filter((o) => !o.hidden).map((o) => overlayPicture(o, time, still)).filter((x): x is { pic: Picture; a: Angle; o: VideoOverlay } => !!x);
   /** One over it: its player and picture at official time `time` (paused: placed there first); none outside its part. */
   const overlayPicture = (o: VideoOverlay, time: number, still: boolean): { pic: Picture; a: Angle; o: VideoOverlay } | null => {
     const a = anglesRef.current.get(o.clip);
@@ -982,8 +982,10 @@ export default function VideoStudio({
     const raw = !!preview?.raw;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
+    // The video under the others hidden (its eye): black there (the ones over it, the bars and the texts stay).
+    if (cfg.videoHidden) pic = null;
     // Preview, before the video is ready (a big camera file takes a while to open): its last picture.
-    if (preview && !pic && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
+    if (preview && !pic && !cfg.videoHidden && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
       pic = desqueeze(pic, angle ? angle.desqueeze : cfg.desqueeze);
@@ -1034,7 +1036,7 @@ export default function VideoStudio({
     // texts; the last one on top.
     const boxes: { id: string; box: TextBox }[] = [];
     for (const over of overs ?? []) {
-      if (!over.pic.w || !over.pic.h) continue;
+      if (!over.pic.w || !over.pic.h || over.o.hidden) continue;
       const o = over.o;
       let op: Picture | null = desqueeze(over.pic, over.a.desqueeze);
       const w = (W * clamp(o.w, 5, 400)) / 100, h = (w * op.h) / op.w;
@@ -3789,7 +3791,7 @@ export default function VideoStudio({
           return pic ? { pic, a: ovA as AngleLook, o: ov } : null;
         };
         };
-        const overs = overlaysOf(cfg).map(overOne);
+        const overs = overlaysOf(cfg).filter((o) => !o.hidden).map(overOne);
         const overAt = async (time: number) => {
           const out: { pic: Picture; a: AngleLook; o: VideoOverlay }[] = [];
           for (const f of overs) { const x = await f(time); if (x) out.push(x); }
@@ -4631,6 +4633,13 @@ export default function VideoStudio({
    * no picture). Locked (synced and linked): shown, not moved.
    */
   const clipDrag = useRef<{ mode: "move" | "in" | "out"; px: number; py: number; el: HTMLElement; left: number; width: number; s: number; d: number; offset: number; ci: number; co: number; moved?: boolean } | null>(null);
+  /** The eye at the end of a video track: hidden, the video is not drawn (preview and export), its sound stays. */
+  const eyeEl = (hidden: boolean, toggle: () => void) => (
+    <button className={"btn icon sm quiet track-eye" + (hidden ? " off" : "")} aria-pressed={hidden} aria-label={hidden ? t("Show the video") : t("Hide the video")}
+      title={hidden ? t("Show the video") : t("Hide the video (preview and export; its sound stays)")} onClick={() => { toggle(); requestAnimationFrame(() => drawAt(headRef.current)); }}>
+      <Icon name={hidden ? "eye-off" : "eye"} size={14} />
+    </button>
+  );
   const videoTrackEl = () => {
     if (!videoBlob || videoDur <= 0 || !audioBuf) return null;
     const len = onCopy && settings.source?.duration ? settings.source.duration : videoDur;
@@ -4690,10 +4699,11 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(null); setPinCam("main"); }
     };
     return (<>
-        <div className="lyric-track video-track" role="group" aria-label={t("Video")} {...scrub()}>
+        <div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
+            {eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}
             {trimmed && !locked && (
               <button className="btn icon sm quiet" aria-label={t("Whole video")} title={t("Whole video")} onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>
                 <Icon name="refresh" size={13} />
@@ -4768,7 +4778,9 @@ export default function VideoStudio({
       // (still where its sync put it: it stays locked to the audio as the base)
       theirs.offset = ov.offset; theirs.clipIn = ov.clipIn; theirs.clipOut = ov.clipOut; theirs.box = boxOf(ov);
       theirs.linked = x.score !== undefined && Math.abs(ov.offset - x.offset) < 0.01;
-      place = withOverlays(overlaysOf(cur).map((o) => (o.clip === x.id ? { ...o, ...boxOr(base.box), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut } : o)));
+      // (hidden or not, as each video was)
+      place = { ...withOverlays(overlaysOf(cur).map((o) => (o.clip === x.id ? { ...o, ...boxOr(base.box), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut, hidden: cur.videoHidden || undefined } : o))),
+        videoHidden: ov.hidden || undefined };
     }
     onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, ...theirs, ...place, ...more } : c.id === x.id ? { ...c, ...mine } : c)) }));
     onSaveNow();
@@ -5050,8 +5062,9 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(o.clip); }
     };
     return (<>
-        <div key={o.clip} className="lyric-track video-track over-track" data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
+        <div key={o.clip} className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
+            {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
             <Menu float trigger={(_, toggle) => (
               <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Settings")} title={t("Corners and sound of the video over it")} onClick={toggle}>
                 <Icon name={vol > 0 ? "volume" : "tune"} size={14} />
@@ -5104,7 +5117,7 @@ export default function VideoStudio({
     const camNow = camAt(settings.cuts, head);
     const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
     if (part === "track") return (<>
-          <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}
+          <div className={"lyric-track cam-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Shots")} {...scrub()}
             // (the track holds the pointer while it is down: the pull up is followed here)
             onPointerMoveCapture={(e) => {
               if (moveVdrag(e)) { e.stopPropagation(); return; }
@@ -5115,8 +5128,9 @@ export default function VideoStudio({
               startVdrag("cam", l.cam, l.el, e, l.x, l.y);
             }}
             onPointerUpCapture={(e) => { liftRef.current = null; if (vdragRef.current) { e.stopPropagation(); endVdrag(); } }}>
-            {/* At its end: each camera's own sound (heard on its shots). */}
+            {/* At its end: the eye (all its shots), each camera's own sound (heard on its shots). */}
             <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
+              {eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}
               {(() => {
                 const cams = [clip, ...angles.map((id) => clips.find((c) => c.id === id))];
                 const anyOn = cams.some((c) => (c?.id === clip.id ? settings.clipVolume : c?.clipVolume) ?? 0);

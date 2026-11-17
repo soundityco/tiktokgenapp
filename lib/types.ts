@@ -400,6 +400,9 @@ export interface VideoSettings {
   /** Videos over the first one (picture in picture), from the bottom up: other takes of the release, each on its own
    *  track of the timeline (numbered after the cameras, 2, 3, 4 from the base up), drawn in this order. */
   overlays?: VideoOverlay[];
+  /** The video under the others hidden (the eye of its track; with a multicam, all its shots): black there, at the
+   *  preview and in the export; its sound and the videos over it stay. */
+  videoHidden?: boolean;
   /** Volume of the camera file's own sound in the post, 0-1 (preview and export, mixed over the official audio, only
    *  in the part kept). None or 0: silent (the usual case: synced on the official audio). */
   clipVolume?: number;
@@ -477,6 +480,8 @@ export interface VideoOverlay {
   w: number;
   radius?: number;
   volume?: number;
+  /** Hidden (the eye of its track): not drawn, at the preview nor in the export; its sound and its place stay. */
+  hidden?: boolean;
 }
 
 /** One clip made for a release: its own official-audio segment, camera take and sync. */
