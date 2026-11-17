@@ -2574,7 +2574,7 @@ export default function VideoStudio({
 
   /** "press": down inside the segment, not moved yet: a click places the playhead, a drag moves the segment.
    *  "pan": down outside it, zoomed: a drag slides the view (a click does nothing: the segment never jumps). */
-  const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset" | "head" | "press" | "pan" | "none" | "pinch"; x: number; px: number; start: number; duration: number; vs: number; vd: number; dist?: number; mid?: number }>(null);
+  const dragWave = useRef<null | { mode: "start" | "end" | "move" | "offset" | "head" | "press" | "pan" | "none"; x: number; px: number; start: number; duration: number; vs: number; vd: number }>(null);
   const pointers = useRef(new Map<number, number>());
   const wavePos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -2586,12 +2586,7 @@ export default function VideoStudio({
     pointers.current.set(e.pointerId, e.clientX);
     const rect = e.currentTarget.getBoundingClientRect();
     const v = viewOf();
-    // Two fingers: pinch to zoom, around the middle of the fingers.
-    if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      dragWave.current = { mode: "pinch", x: 0, px: 0, start: 0, duration: 0, vs: v.s, vd: v.d, dist: Math.max(10, Math.abs(a - b)), mid: v.s + (((a + b) / 2 - rect.left) / rect.width) * v.d };
-      return;
-    }
+    // (two fingers: the timeline's pinch, `timelineTouch`)
     const f = wavePos(e);
     const cfg = settingsRef.current;
     const px = e.clientX;
@@ -2667,17 +2662,6 @@ export default function VideoStudio({
     const d = dragWave.current;
     if (!d || !audioBuf) return;
     const dur = audioBuf.duration;
-    if (d.mode === "pinch") {
-      if (pointers.current.size < 2) return;
-      const [a, b] = [...pointers.current.values()];
-      const span = clamp(d.vd * (d.dist! / Math.max(10, Math.abs(a - b))), Math.min(2, dur), dur);
-      if (span >= dur - 1e-3) { setView(null); return; }
-      // The moment under the fingers' middle stays under it: spread to zoom, slide both to move along the track.
-      const r = e.currentTarget.getBoundingClientRect();
-      const k = clamp(((a + b) / 2 - r.left) / r.width, 0, 1);
-      setView({ s: clamp(d.mid! - k * span, 0, dur - span), d: span });
-      return;
-    }
     const f = wavePos(e);
     if (d.mode === "none") return;
     if (d.mode === "head") { setHead(headAt(f)); return; }
@@ -2729,10 +2713,54 @@ export default function VideoStudio({
   const waveUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     pointers.current.delete(e.pointerId);
     const d = dragWave.current;
-    if (d?.mode === "pinch" && pointers.current.size) return; // one finger still down: the pinch ends with it
     dragWave.current = null;
     if (d?.mode === "press") setHead(headAt(wavePos(e))); // a click inside the segment: the playhead goes there
   };
+  /**
+   * Two fingers anywhere on the timeline (waveform, lyrics, hooks, cameras): pinch to zoom, slide both to move along
+   * the track, the moment under the fingers' middle staying under it. What the first finger started (a scrub, a drag)
+   * is dropped; once pinched, the fingers left do nothing until all are lifted. Playback goes on.
+   */
+  const touches = useRef(new Map<number, number>());
+  const pinch = useRef<{ dist: number; vd: number; mid: number; left: number; width: number; done?: boolean } | null>(null);
+  const timelineTouch = {
+    onPointerDownCapture: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.pointerType !== "touch" || !audioBuf) return;
+      touches.current.set(e.pointerId, e.clientX);
+      if (pinch.current) { e.stopPropagation(); return; }
+      if (touches.current.size < 2) return;
+      e.stopPropagation();
+      dragWave.current = null; scrubRef.current = null; cutDrag.current = null; edgeRef.current = null;
+      const el = (e.target as HTMLElement).closest<HTMLElement>(".wave, .lyric-track") ?? waveRef.current;
+      const r = el?.getBoundingClientRect();
+      if (!r?.width) return;
+      const [a, b] = [...touches.current.values()], v = viewOf();
+      pinch.current = { dist: Math.max(10, Math.abs(a - b)), vd: v.d, mid: v.s + clamp(((a + b) / 2 - r.left) / r.width, 0, 1) * v.d, left: r.left, width: r.width };
+    },
+    onPointerMoveCapture: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!touches.current.has(e.pointerId)) return;
+      touches.current.set(e.pointerId, e.clientX);
+      const p = pinch.current;
+      if (!p || !audioBuf) return;
+      e.stopPropagation();
+      if (p.done || touches.current.size < 2) return;
+      const dur = audioBuf.duration;
+      const [a, b] = [...touches.current.values()];
+      userPanAt.current = performance.now();
+      const span = clamp(p.vd * (p.dist / Math.max(10, Math.abs(a - b))), Math.min(2, dur), dur);
+      if (span >= dur - 1e-3) { setView(null); return; }
+      const k = clamp(((a + b) / 2 - p.left) / p.width, 0, 1);
+      setView({ s: clamp(p.mid - k * span, 0, dur - span), d: span });
+    },
+    onPointerUpCapture: (e: React.PointerEvent<HTMLDivElement>) => touchUp(e.pointerId),
+    onPointerCancelCapture: (e: React.PointerEvent<HTMLDivElement>) => touchUp(e.pointerId),
+  };
+  function touchUp(id: number) {
+    touches.current.delete(id);
+    if (!pinch.current) return;
+    pinch.current.done = true;
+    if (!touches.current.size) pinch.current = null;
+  }
   /**
    * The wheel button held down anywhere on the timeline (waveform and tracks), as in Ableton: drag down to zoom in,
    * up to zoom out, sideways to move along the track; the moment grabbed stays under the pointer. Playback goes on.
@@ -2760,13 +2788,17 @@ export default function VideoStudio({
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
   };
-  // Trackpad: pinch (ctrl + wheel) zooms around the pointer, a sideways swipe (or Shift + the wheel) slides the view.
-  // A plain vertical wheel scrolls the page, as anywhere else.
+  // Anywhere on the timeline (waveform, lyrics, hooks, cameras): a trackpad pinch (ctrl + wheel) or ⌘ + the wheel zooms
+  // around the pointer, a sideways swipe (or Shift + the wheel) slides the view. A plain vertical wheel scrolls the
+  // page, as anywhere else.
+  const timelineRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const c = waveRef.current;
+    const c = timelineRef.current;
     if (!c || !audioBuf) return;
     const h = (e: WheelEvent) => {
-      const r = c.getBoundingClientRect();
+      const el = (e.target as HTMLElement).closest<HTMLElement>(".wave, .lyric-track");
+      if (!el) return;
+      const r = el.getBoundingClientRect();
       const v = viewOf();
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -4969,7 +5001,8 @@ export default function VideoStudio({
         </div>
 
         <div className={"video-side" + (studioLoading ? " is-loading" : "")}>
-          <div className="timeline" onPointerDownCapture={wheelDrag} onMouseDownCapture={(e) => { if (e.button === 1) e.preventDefault(); /* no autoscroll */ }}>
+          <div className="timeline" ref={timelineRef} {...timelineTouch} onPointerDownCapture={(e) => { wheelDrag(e); if (!e.isPropagationStopped()) timelineTouch.onPointerDownCapture(e); }}
+            onMouseDownCapture={(e) => { if (e.button === 1) e.preventDefault(); /* no autoscroll */ }}>
             {!audioBuf ? (
               audioBlob ? (
                 <div className="studio-loading" aria-busy="true">
