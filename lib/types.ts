@@ -425,6 +425,9 @@ export interface VideoSettings {
   lineChars?: number;
   /** Own text style for the captions; falls back to the selected carousel slide's style. */
   captionStyle?: TextStyle;
+  /** Custom subtitles: a word (word by word) or a phrase (phrase by phrase) with its own look over captionStyle (only
+   *  what differs: font, effect, size, colours, place…), by caption key (lib/cueLooks cueKey). None: all alike. */
+  captionLooks?: Record<string, Partial<TextStyle>>;
   /** Progressive zoom over the segment: ×1 on the first frame, this factor on the last (e.g. 1.05). None: off. */
   push?: number;
   /** The progressive zoom moves inside the picture's frame (a mask: the frame, the bars and the texts around stay put)

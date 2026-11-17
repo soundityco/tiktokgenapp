@@ -5,6 +5,8 @@ import { useT } from "@/lib/i18n";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
+import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
+import type { Cue } from "@/lib/lyricsAlign";
 import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
@@ -94,7 +96,7 @@ const LYRICS_ALIGN_V = 3;
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "lineChars", "captionStyle", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
@@ -597,7 +599,7 @@ export default function VideoStudio({
   );
 
   /** Font under the pointer in a font list (lyrics or hook style): shown on the video until the pointer leaves. */
-  const [fontPreview, setFontPreview] = useState<null | { which: "caption" | "hook"; patch: Partial<TextStyle> }>(null);
+  const [fontPreview, setFontPreview] = useState<null | { which: "caption" | "hook" | "cue"; key?: string; patch: Partial<TextStyle> }>(null);
   const styleRef = useRef(captionStyle);
   styleRef.current = fontPreview?.which === "caption" ? { ...captionStyle, ...fontPreview.patch } : captionStyle;
   // The hooks look like the lyrics until they get their own style, but at the top of the picture.
@@ -609,9 +611,39 @@ export default function VideoStudio({
   const hookStyle: TextStyle = useMemo(() => settings.hookStyle ?? hookDefault, [settings.hookStyle, hookDefault]);
   const hookStyleRef = useRef(hookStyle);
   hookStyleRef.current = fontPreview?.which === "hook" ? { ...hookStyle, ...fontPreview.patch } : hookStyle;
-  const activeRef = useRef<(time: number) => string | null>(() => null);
-  activeRef.current = (time: number) => {
-    return cues.length ? activeCue(cues, time)?.text ?? null : null;
+  const activeRef = useRef<(time: number) => Cue | null>(() => null);
+  activeRef.current = (time: number) => (cues.length ? activeCue(cues, time) : null);
+
+  // ---- custom subtitles: a word (word by word) or a phrase with its own look over the lyrics' style (lib/cueLooks) ----
+  const wordKeyMap = useMemo(() => wordKeys(project.lyricWords ?? []), [project.lyricWords]);
+  const keyOf = (c: Cue | null | undefined) => (c ? cueKey(c, mode, wordKeyMap) : null);
+  const looks = settings.captionLooks ?? {};
+  /** What the lyrics panel sets: every caption ("all"), or only the one under the playhead ("one"). */
+  const [lookScope, setLookScope] = useState<"all" | "one">("all");
+  /** A caption's style as drawn: the lyrics' style, its own look over it (and a font tried in a list, on it alone). */
+  const cueStyleRef = useRef<(c: Cue) => TextStyle>(() => captionStyle);
+  cueStyleRef.current = (c: Cue) => {
+    const k = keyOf(c);
+    const st = cueStyle(styleRef.current, k ? looks[k] : undefined);
+    return fontPreview?.which === "cue" && fontPreview.key === k ? { ...st, ...fontPreview.patch } : st;
+  };
+  /** The lyrics' style as it is now (also inside a drag, between two renders). */
+  const masterStyle = () => settingsRef.current.captionStyle ?? slideStyle;
+  /** A caption's own look: what `next` changes from the lyrics' style. */
+  const setCueLook = (key: string, next: TextStyle) =>
+    setV({ captionLooks: { ...(settingsRef.current.captionLooks ?? {}), [key]: styleDiff(masterStyle(), next) } });
+  /** The caption takes the lyrics' style again (font, effects, size, place: everything). */
+  const relinkCue = (key: string) => {
+    const rest = { ...(settingsRef.current.captionLooks ?? {}) };
+    delete rest[key];
+    setV({ captionLooks: Object.keys(rest).length ? rest : undefined });
+  };
+  /** The caption under the playhead, and whether what is done on the preview goes to it alone: it has its own look,
+   *  or "this word / phrase" is chosen in the lyrics panel. */
+  const cueHere = () => {
+    const c = activeRef.current(headRef.current), key = keyOf(c);
+    if (!c || !key) return null;
+    return { cue: c, key, one: lookScope === "one" || !!settingsRef.current.captionLooks?.[key] };
   };
 
   const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
@@ -914,8 +946,8 @@ export default function VideoStudio({
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
     const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / exportSettings(cfg.source?.fps, exportPrefsRef.current).fps);
-    const text = cfg.captions ? activeRef.current(at) : null;
-    const caption = text ? drawStyledText(g, text, styleRef.current, W, H) : null;
+    const cue = cfg.captions ? activeRef.current(at) : null;
+    const caption = cue ? drawStyledText(g, cue.text, cueStyleRef.current(cue), W, H) : null;
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
     return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
   }, []);
@@ -3652,7 +3684,7 @@ export default function VideoStudio({
     const p = clampPic(picOf(f, settingsRef.current.matte), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
     return { ...f, ox: p.ox, oy: p.oy };
   };
-  const pdrag = useRef<null | { kind: "text" | "hook" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number }>(null);
+  const pdrag = useRef<null | { kind: "text" | "hook" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number; cue?: { key: string; st: TextStyle } }>(null);
   const toCv = (e: { clientX: number; clientY: number }) => {
     const c = canvasRef.current!;
     const r = c.getBoundingClientRect();
@@ -3672,8 +3704,11 @@ export default function VideoStudio({
     e.currentTarget.setPointerCapture(e.pointerId);
     const kind = textAt(c.x, c.y);
     const f = fitFrame(curFrame());
-    const st = kind === "hook" ? hookStyleRef.current : styleRef.current;
-    pdrag.current = { kind: kind ?? "pic", sx: e.clientX, sy: e.clientY, ox: kind ? st.x : f.ox, oy: kind ? st.y : f.oy, k: c.k };
+    // The lyrics: the caption shown alone when it has its own look (or "this word" is chosen), else all of them.
+    const here = kind === "text" ? cueHere() : null;
+    const one = here?.one ? { key: here.key, st: cueStyleRef.current(here.cue) } : undefined;
+    const st = kind === "hook" ? hookStyleRef.current : one ? one.st : styleRef.current;
+    pdrag.current = { kind: kind ?? "pic", sx: e.clientX, sy: e.clientY, ox: kind ? st.x : f.ox, oy: kind ? st.y : f.oy, k: c.k, cue: one };
   };
   const cvMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const d = pdrag.current, c = canvasRef.current;
@@ -3689,6 +3724,7 @@ export default function VideoStudio({
       if (sh) y = 50;
       if (sv !== snap.v || sh !== snap.h) setSnap({ v: sv, h: sh });
       if (d.kind === "hook") setV({ hookStyle: { ...hookStyleRef.current, x, y } });
+      else if (d.cue) setCueLook(d.cue.key, { ...d.cue.st, x, y });
       else setV({ captionStyle: { ...styleRef.current, x, y } });
     } else {
       // Its centre snaps to the middle lines, as a text does (the blue guides show).
@@ -3733,13 +3769,16 @@ export default function VideoStudio({
     const dir = e.deltaY < 0 ? 1 : -1;
     const kind = textAt(c.x, c.y);
     if (kind) {
-      const st = kind === "hook" ? hookStyleRef.current : styleRef.current;
+      const here = kind === "text" ? cueHere() : null;
+      const st = kind === "hook" ? hookStyleRef.current : here?.one ? cueStyleRef.current(here.cue) : styleRef.current;
       const next = { ...st, size: clamp(Math.round(st.size + dir * 3), 18, 200) };
-      setV(kind === "hook" ? { hookStyle: next } : { captionStyle: next });
+      if (kind === "hook") setV({ hookStyle: next });
+      else if (here?.one) setCueLook(here.key, next);
+      else setV({ captionStyle: next });
       return;
     }
     const f = fitFrame(curFrame());
-    const z = zoomPic(picOf(f), clamp(+(f.zoom + dir * 0.05).toFixed(2), 0.5, 4));
+    const z = zoomPic(picOf(f), clamp(+(f.zoom + dir * 0.05).toFixed(2), 0.15, 4));
     writeLook({ frame: fitFrame({ ...f, zoom: z.zoom, ox: z.ox, oy: z.oy }) });
   };
   useEffect(() => {
@@ -4470,6 +4509,12 @@ export default function VideoStudio({
     setHead(round2(settings.crop.start + (edge === "from" ? clamp(h.from + d, 0, to - 0.3) : Math.max(h.from, clamp(to + d, h.from + 0.3, segLen) - 0.3))));
   };
   const current = activeCue(cues, head);
+  // The lyrics panel: the lyrics' style, or the own look of the caption under the playhead ("this word / phrase").
+  const curKey = keyOf(current);
+  const curOwn = !!curKey && !!looks[curKey];
+  const panelOne = lookScope === "one" && !!curKey;
+  const panelStyle = panelOne ? cueStyle(captionStyle, looks[curKey!]) : captionStyle;
+  const setPanelStyle = (next: TextStyle) => (panelOne ? setCueLook(curKey!, next) : setV({ captionStyle: next }));
   // A word picked on the timeline (or the timeline let go) brings its line of the lyrics list to the middle of the
   // part of the list on screen (its bottom near the end), once the finger or the mouse is off, never while playing.
   const followList = useRef(false);
@@ -4917,11 +4962,24 @@ export default function VideoStudio({
               }} />
             {vctx?.text && (() => {
               const which = vctx.text === "hook" ? "hook" : "caption";
-              const st = which === "hook" ? hookStyle : captionStyle;
+              // The lyrics: the caption shown alone when it has its own look (or "this word" is chosen), else all.
+              const here = which === "caption" ? cueHere() : null;
+              const one = !!here?.one;
+              const st = which === "hook" ? hookStyle : one ? cueStyleRef.current(here!.cue) : captionStyle;
+              const own = !!here && !!looks[here.key];
               return (
                 <ContextMenu x={vctx.x} y={vctx.y} onClose={() => { setVctx(null); setFontPreview(null); }}>
-                  <TextQuickMenu style={st} fonts={fonts} onFonts={onFonts} onPreview={(patch) => setFontPreview(patch ? { which, patch } : null)}
-                    onChange={(patch) => setV(which === "hook" ? { hookStyle: { ...hookStyle, ...patch } } : { captionStyle: { ...captionStyle, ...patch } })} />
+                  <TextQuickMenu style={st} fonts={fonts} onFonts={onFonts}
+                    onPreview={(patch) => setFontPreview(patch ? (one ? { which: "cue", key: here!.key, patch } : { which, patch }) : null)}
+                    onChange={(patch) => {
+                      if (which === "hook") setV({ hookStyle: { ...hookStyle, ...patch } });
+                      else if (one) setCueLook(here!.key, { ...st, ...patch });
+                      else setV({ captionStyle: { ...captionStyle, ...patch } });
+                    }}>
+                    {here && (own
+                      ? <button onClick={() => { relinkCue(here.key); setVctx(null); }}><Icon name="refresh" size={14} />{t("Link to the lyrics style")}</button>
+                      : <button onClick={() => { setCueLook(here.key, cueStyleRef.current(here.cue)); setVctx(null); }}><Icon name="type" size={14} />{mode === "word" ? t("Own style for this word") : t("Own style for this phrase")}</button>)}
+                  </TextQuickMenu>
                 </ContextMenu>
               );
             })()}
@@ -5144,7 +5202,7 @@ export default function VideoStudio({
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
-                    <button key={i} className={"cue" + (c === current ? " on" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
+                    <button key={i} className={"cue" + (c === current ? " on" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
                       data-text={c.text.replace(/\n/g, " ")}
                       style={{
                         ...place(clamp(c.start, settings.crop.start, end)),
@@ -5622,7 +5680,7 @@ export default function VideoStudio({
             <span className="label">{t("Black bars")}</span>
             <MatteSelect className="input sm grow" value={settings.matte} onChange={(v) => setV({ matte: v })} />
           </div>
-          <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.5} max={4} step={0.05}
+          <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.15} max={4} step={0.05}
             onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
             onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
           {/* Progressive zoom: its factor on one line (like the lens), then, when on, what it zooms. */}
@@ -5693,10 +5751,29 @@ export default function VideoStudio({
                 <span className="grow" />
                 <button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button>
               </div>
+              {/* Custom subtitles: the style of every caption, or of the one under the playhead alone (word or phrase). */}
+              <div className="row look-scope">
+                <button className={"btn sm" + (lookScope === "all" ? " on" : "")} aria-pressed={lookScope === "all"} onClick={() => setLookScope("all")}>{t("All the lyrics")}</button>
+                <button className={"btn sm" + (lookScope === "one" ? " on" : "")} aria-pressed={lookScope === "one"} onClick={() => setLookScope("one")}>{mode === "word" ? t("This word") : t("This phrase")}</button>
+                <Hint text={t("This word / phrase: the settings below only change the one under the playhead (font, effect, size, colours, place); drag it on the video to move it alone. “Link to the lyrics style” gives it the lyrics' style back.")} />
+              </div>
+              {lookScope === "one" && (curKey ? (
+                <div className="row look-cue">
+                  <span className={"look-cue-text truncate" + (curOwn ? " own" : "")}>« {current!.text.replace(/\n/g, " ")} »</span>
+                  <span className="grow" />
+                  {curOwn
+                    ? <button className="btn sm quiet" onClick={() => relinkCue(curKey)}>{t("Link to the lyrics style")}</button>
+                    : <span className="muted xs">{t("Lyrics style")}</span>}
+                </div>
+              ) : <p className="muted xs">{mode === "word" ? t("Put the playhead on a word to give it its own style.") : t("Put the playhead on a phrase to give it its own style.")}</p>)}
+              {Object.keys(looks).length > 0 && lookScope === "all" && (
+                <p className="muted xs look-count">{t("{n} with their own style (marked on the lyrics track).", { n: Object.keys(looks).length })}{" "}
+                  <button className="btn sm quiet" onClick={() => setV({ captionLooks: undefined })}>{t("Link them all to the lyrics style")}</button></p>
+              )}
 
-              <Section id="lyrics-style-presets" title={<>{t("Style presets")}{presetOf(presets, captionStyle) && <span className="sec-sub"> · {presetOf(presets, captionStyle)!.name}</span>}</>} open={false}>
-                <StylePresets presets={presets} current={captionStyle} onSave={(name) => onSavePreset(name, captionStyle)}
-                  onApply={(p) => setV({ captionStyle: withPreset(captionStyle, p) })} onDelete={onDeletePreset} />
+              <Section id="lyrics-style-presets" title={<>{t("Style presets")}{presetOf(presets, panelStyle) && <span className="sec-sub"> · {presetOf(presets, panelStyle)!.name}</span>}</>} open={false}>
+                <StylePresets presets={presets} current={panelStyle} onSave={(name) => onSavePreset(name, panelStyle)}
+                  onApply={(p) => setPanelStyle(withPreset(panelStyle, p))} onDelete={onDeletePreset} />
               </Section>
               <Section id="lyrics-style-display" title={t("Display")}>
                 <div className="row">
@@ -5722,15 +5799,15 @@ export default function VideoStudio({
                   </div>
                 )}
               </Section>
-                <CaptionStyle
+                {(lookScope === "all" || curKey) && <CaptionStyle
                   sid="lyrics-style"
-                  style={captionStyle}
+                  style={panelStyle}
                   defaults={slideStyle}
                   fonts={fonts}
-                  onChange={(patch) => setV({ captionStyle: { ...captionStyle, ...patch } })}
-                  onPreview={(patch) => setFontPreview(patch ? { which: "caption", patch } : null)}
+                  onChange={(patch) => setPanelStyle({ ...panelStyle, ...patch })}
+                  onPreview={(patch) => setFontPreview(patch ? (panelOne ? { which: "cue", key: curKey!, patch } : { which: "caption", patch }) : null)}
                   onFonts={onFonts}
-                />
+                />}
                 <div className="reset-m"><button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button></div>
                         </div>
           )}
