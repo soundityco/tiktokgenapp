@@ -395,14 +395,25 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: color-mix(in srgb, var(--vc) 16%, var(--bg)); }
 .lyric-track .cue.video-clip.on { background: color-mix(in srgb, var(--vc) 24%, var(--bg)); border-left-color: var(--vc); }
 
-/* (its name: kept on the left edge of the view while the clip's start is past it, see paintTracks) */
-.video-clip .vc-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; will-change: transform; }
+/* Its left side stays on the left edge of the view while its start is past it (paintTracks): its start edge is not
+   there then, so not draggable. Its name glows around the playhead, as a text's (--hx in px, from the name's left). */
+.video-clip .vc-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.video-clip.stuck .clip-edge.in { display: none; }
+.video-clip .vc-name .truncate { position: relative; }
+.lyric-track .cue.video-clip.on .vc-name .truncate::after { content: attr(data-text); position: absolute; inset: 0; white-space: nowrap; overflow: hidden;
+  color: transparent; pointer-events: none; text-shadow: 0 0 6px var(--vc), 0 0 12px color-mix(in srgb, var(--vc) 60%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent calc(var(--hx, -100px) - 40px), black var(--hx, -100px), transparent calc(var(--hx, -100px) + 40px));
+  mask-image: linear-gradient(90deg, transparent calc(var(--hx, -100px) - 40px), black var(--hx, -100px), transparent calc(var(--hx, -100px) + 40px)); }
 .lyric-track .cue.video-clip:active { cursor: grabbing; }
 .lyric-track .cue.video-clip.locked { cursor: pointer; }
 .lyric-track .cue.video-clip.locked svg { flex: none; opacity: .7; }
 .video-clip .clip-edge { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 1; }
 .video-clip .clip-edge.in { left: -2px; } .video-clip .clip-edge.out { right: -2px; }
-.video-clip .clip-edge::after { content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px; border-radius: 1px; background: var(--vc); opacity: .8; }
+/* The edges are grabbed, not drawn: the clip's left side is the same rounded coloured border as a hook's or a lyric's
+   (a bar drawn over it made it thicker); the end's mark shows only on hover. */
+.video-clip .clip-edge::after { content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px; border-radius: 1px; background: var(--vc); opacity: 0; transition: opacity .15s; }
+.video-clip .clip-edge.in::after { content: none; }
+.video-clip:hover .clip-edge.out::after { opacity: .8; }
 /* The video track's tools, at its right end (they stay put while the track slides): the clip's sound (a slider opens
    from the speaker, as in CapCut) and the whole video back. */
 .lyric-track .track-tools { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; display: flex; align-items: center; gap: 2px; padding: 0 3px 0 18px;

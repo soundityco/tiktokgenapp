@@ -4144,14 +4144,14 @@ export default function VideoStudio({
    * playing moved. Every frame while playing; after each render too (the tracks laid out again for a new view).
    */
   /** The timeline's moving parts, found once per layout (not searched for at every frame). */
-  const timelineEls = useRef<{ contents: HTMLElement[]; clips: HTMLElement[][]; names: { el: HTMLElement; w: number }[]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
+  const timelineEls = useRef<{ contents: HTMLElement[]; clips: HTMLElement[][]; vclips: { el: HTMLElement; name: HTMLElement | null; at: number }[]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
   const findTimelineEls = () => {
     const root = waveRef.current?.closest(".timeline");
     const all = (sel: string, r: ParentNode | null | undefined = root) => (r ? [...r.querySelectorAll<HTMLElement>(sel)] : []);
     const contents = all(".lyric-track .track-content");
     timelineEls.current = {
       contents, clips: contents.map((c) => all(":scope > .cue[data-a]", c)),
-      names: all(".lyric-track .vc-name[data-a]").map((el) => ({ el, w: el.offsetWidth })), heads: all(".lyric-track .lyric-head"),
+      vclips: all(".lyric-track .video-clip[data-va]").map((el) => { const name = el.querySelector<HTMLElement>(".vc-name .truncate"); return { el, name, at: name?.offsetLeft ?? 0 }; }), heads: all(".lyric-track .lyric-head"),
       bars: all(".lyric-track .cue-bar-glow[data-a]"), playing: all(".lyric-track .cue.on[data-a]"),
       dock: all(".dp-track .dp-played", document), dockHeads: all(".dp-track .dp-head", document),
     };
@@ -4185,12 +4185,17 @@ export default function VideoStudio({
         el.style.zIndex = el === stuck ? "0" : "1"; // the stuck one under: the next slides in over it
       }
     });
-    // A video clip (long, never moved whole): its name stays on the left edge of what is on screen while its start has
-    // gone past it, up to its own end (the next clip of its line then shows its own).
-    const edge = xOf(live.s);
-    els.names.forEach(({ el, w }) => {
-      const a = xOf(Number(el.dataset.a)), b = xOf(Number(el.dataset.b));
-      el.style.transform = `translate3d(${clamp(edge - a, 0, Math.max(0, b - a - w - 14))}px,0,0)`;
+    // A video clip (long: never moved whole, it would show past its end): once its start has gone past the left edge of
+    // what is on screen, its left side (its coloured edge, its name) stays on that edge and it ends at its own end, until
+    // that end reaches the edge too. Its name glows where the playhead is on it, as a text's.
+    const hxPx = xOf(at);
+    els.vclips.forEach(({ el, name, at: nameAt }) => {
+      const a = Number(el.dataset.va), b = Number(el.dataset.vb), from = Math.min(Math.max(a, live.s), b);
+      const x0 = xOf(from);
+      el.style.transform = `translate3d(${x0}px,0,0)`;
+      el.style.width = `${Math.max(0, xOf(b) - x0)}px`;
+      el.classList.toggle("stuck", from > a);
+      if (name && el.classList.contains("on")) name.style.setProperty("--hx", `${hxPx - x0 - nameAt}px`);
     });
     // The playing clip's bar: at its start, or on the left edge once its start has gone past it; its text glows under the playhead.
     els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
@@ -4611,20 +4616,20 @@ export default function VideoStudio({
             </Menu>
           </div>
           <div className="track-content">
-            <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
             {onTrack(a, b) && (
               <div className={"cue video-clip cam-0" + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (!camTake ? " sel" : "")}
-                style={{ ...place(a), width: wFull(a, b) }}
+                style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
                 {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
-                <span className="vc-name" data-a={a} data-b={b}>
+                <span className="vc-name">
                   {locked && <Icon name="lock" size={11} />}
-                  <span className="truncate">{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
+                  <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
                 </span>
                 {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
               </div>
             )}
+            {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
@@ -4914,16 +4919,16 @@ export default function VideoStudio({
             </Menu>
           </div>
           <div className="track-content">
-            <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
             {onTrack(a0, b0) && (
-              <div className={"cue video-clip over-clip cam-" + overNo(settings) + (head >= a0 && head < b0 ? " on" : "") + (ovTake ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }}
+              <div className={"cue video-clip over-clip cam-" + overNo(settings) + (head >= a0 && head < b0 ? " on" : "") + (ovTake ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
-                <span className="vc-name" data-a={a0} data-b={b0}><span className="truncate">{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
+                <span className="vc-name"><span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
+            {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + overNo(settings)} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
@@ -4985,7 +4990,6 @@ export default function VideoStudio({
               })()}
             </div>
             <div className="track-content">
-            <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
             {shots.map((x, i) => {
               if (!onTrack(x.from, x.to)) return null; // far from view
               const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
