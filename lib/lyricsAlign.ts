@@ -706,6 +706,18 @@ export function moveCueStart(all: LyricWord[], cues: Cue[], i: number, at: numbe
   return out;
 }
 
+/**
+ * A line put between `start` and `end` (the tap mode: its start tapped while listening, its end the next line's tap): its
+ * words keep their rhythm inside it (each moved in proportion), marked retouched (kept at the next sync), no longer "to
+ * check". Phrase lines only (their words are the lyrics' own).
+ */
+export function placeLine(all: LyricWord[], cue: Cue, start: number, end: number): LyricWord[] {
+  const s0 = cue.start, d0 = Math.max(0.05, cue.end - s0), d1 = Math.max(0.1, end - start);
+  const at = (t: number) => r3(start + ((t - s0) / d0) * d1);
+  const moved = new Map<LyricWord, LyricWord>(cue.words.map((x) => [x, { ...x, s: at(x.s), e: Math.max(at(x.s) + 0.03, at(x.e)), manual: true, doubt: undefined }]));
+  return all.map((x) => moved.get(x) ?? x);
+}
+
 /** A caption's end dragged on the timeline to `at`: as its + / − (`retimeCue` "end"): a later end reaching the next
  *  line makes it come later. Null: nothing moved. */
 export function moveCueEnd(all: LyricWord[], cues: Cue[], i: number, at: number): LyricWord[] | null {

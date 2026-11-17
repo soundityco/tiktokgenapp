@@ -36,3 +36,22 @@ describe("a caption's own look", () => {
     expect(cueStyle(base, undefined)).toBe(base);
   });
 });
+
+describe("a line tapped (the tap mode)", () => {
+  it("is put between the two taps, its words keeping their rhythm, retouched and no longer to check", async () => {
+    const { placeLine } = await import("@/lib/lyricsAlign");
+    const ws: LyricWord[] = [
+      { w: "Wanna", s: 1, e: 1.4, line: 0, doubt: true }, { w: "try", s: 1.4, e: 2, line: 0, doubt: true },
+      { w: "oh", s: 5, e: 5.5, line: 1 },
+    ];
+    const cue = buildCues(ws, "phrase")[0];
+    const out = placeLine(ws, cue, 10, 12);
+    expect(out[0]).toMatchObject({ s: 10, manual: true, doubt: undefined });
+    // (the line as shown: from its first word to its end; each word moved in the same proportion into 10–12 s)
+    const k = 2 / (cue.end - cue.start);
+    expect(out[1].s).toBeCloseTo(10 + (1.4 - cue.start) * k, 3);
+    expect(out[1].e).toBeCloseTo(10 + (2 - cue.start) * k, 3);
+    expect(out[1].e).toBeLessThanOrEqual(12.001);
+    expect(out[2]).toBe(ws[2]);
+  });
+});

@@ -64,7 +64,10 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   h.onStep?.("library"); h.onPct?.(0); h.onDone?.(0);
   const french = looksFrench(splitWords(written).map((x) => faNorm(x.w)));
   /** The rules that need no speech model: after a cut in the production, lines piled up, a chorus copied and pasted. */
-  const finish = async (w: LyricWord[]) => applyRepeat(buf, em, spreadPacked(afterBreaks(w, silencesOf(buf))), french);
+  const finish = async (w: LyricWord[]) => {
+    const placed = spreadPacked(afterBreaks(w, silencesOf(buf)));
+    return markUnsure(placed, await applyRepeat(buf, em, placed, french));
+  };
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
   // there, are heard again by the speech model, and its times are used for those lines (lib/lyricsRelay).
   if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); overall(1); return finish(forced); }
@@ -369,6 +372,17 @@ function realignBetween(words: LyricWord[], lineOf: number[][], placed: { first:
     r.lines.forEach((i, k) => { const x = again[r.before.length + k]; out[i] = { ...out[i], s: x.s + f0 * FRAME, e: x.e + f0 * FRAME, conf: x.conf, doubt: x.doubt }; });
   }
   return out;
+}
+
+/**
+ * Lines to check (the yellow dot, `doubt`): those the alignment hardly heard (mean confidence of their letters under
+ * UNSURE), even when nothing piled up to tell it. Measured on six songs timed by hand (LRCLIB): 22 of the 25 lines placed
+ * more than 1.5 s off were under 0.1, against 15 % of those placed right. Only marked, never moved; a line placed by its
+ * chorus's repetition (`applyRepeat`, the copies heard together) is left unmarked: its place comes from the sound.
+ */
+const UNSURE = 0.1;
+function markUnsure(before: LyricWord[], after: LyricWord[]): LyricWord[] {
+  return after.map((w, i) => ((w.conf ?? 1) < UNSURE && !w.doubt && before[i] && Math.abs(before[i].s - w.s) < 0.01 ? { ...w, doubt: true } : w));
 }
 
 /** The copies of a repeated block placed one period apart, where the folded copies fit their letters best. */

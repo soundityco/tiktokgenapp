@@ -2983,3 +2983,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
    the post (only the segment's are). */
 .lyrics-track .cue.outside { pointer-events: auto; cursor: default; color: color-mix(in srgb, var(--text) 55%, var(--bg));
   background: color-mix(in srgb, var(--lyrics) 7%, var(--bg)); border-left-color: color-mix(in srgb, var(--lyrics) 45%, var(--bg)); }
+
+/* A synced video over another: its padlock on the clip (locked: it only changes rows; click: unlocked, or put back). */
+.video-clip .clip-lock { display: inline-grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; opacity: .75; cursor: pointer; }
+.video-clip .clip-lock:hover { opacity: 1; }

@@ -7,7 +7,7 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
-import { activeCue, alignLyrics, alignSong, buildCues, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, placeLine, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -605,6 +605,17 @@ export default function VideoStudio({
   );
   // The whole song's lines, for the track (the lyrics are placed on the whole track): the ones outside the segment are
   // shown there too, dimmed, so it is clear they were found (only the segment's are edited and go in the video).
+  // ---- tap mode (as Musixmatch): the song plays, a key pressed when each line starts puts it there ----
+  /** The whole song's lines as phrases (the tap mode works line by line, whatever the captions' mode). */
+  const tapCues = useMemo(
+    () => buildCues(project.lyricWords ?? [], "phrase", { lineChars, wordTiming: settings.wordTiming }),
+    [project.lyricWords, lineChars, settings.wordTiming]
+  );
+  /** While playing, as Musixmatch: ↓ = the next line starts now. The line the last ↓ started (set where playing started:
+   *  the line under the playhead then), so each ↓ takes the next one whatever the old timing says. */
+  const tapCursor = useRef(-1);
+  const lyricWordsRef = useRef(project.lyricWords);
+  lyricWordsRef.current = project.lyricWords;
   const songCues = useMemo(
     () => buildCues(project.lyricWords ?? [], mode, { lineChars, wordTiming: settings.wordTiming }),
     [project.lyricWords, mode, lineChars, settings.wordTiming]
@@ -2231,6 +2242,8 @@ export default function VideoStudio({
     if (outside) until = audioBuf.duration;
     let from = outside ? head : head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
     playStartRef.current = from;
+    // (↓ while playing: the line after the one under the playhead now comes first)
+    tapCursor.current = tapCues.reduce((k, c, i) => (c.start <= from + 0.05 ? i : k), -1);
     const cfgStart = outside ? 0 : cfg.crop.start;
     const from0 = from;
     // The view keeps the playhead where it is when play is pressed (between a third and 3/4): no jump back to a third.
@@ -2790,6 +2803,42 @@ export default function VideoStudio({
   };
 
   playRef.current = play;
+
+  /**
+   * While playing (as Musixmatch), the arrows set where lines start, right at the moment pressed (no delay taken off):
+   * ↓ = the next line starts now (the one playing ends just before); ↑ = the line playing starts now (↓ pressed too early:
+   * pressed again at its true start, the line before lasts until then). Its words keep their rhythm inside it
+   * (`placeLine`), retouched (kept at the next sync).
+   */
+  const lineStartsNow = (which: "next" | "this") => {
+    const at = round2(Math.max(0, headRef.current));
+    let words = lyricWordsRef.current ?? [];
+    const opts = { lineChars, wordTiming: settingsRef.current.wordTiming };
+    let cs = buildCues(words, "phrase", opts);
+    const i = which === "next" ? tapCursor.current + 1 : tapCursor.current, c = cs[i];
+    if (!c || i < 0) return;
+    const next = cs[i + 1];
+    // (its end: as long as it was, never past the next line unless that one starts sooner than now)
+    words = placeLine(words, c, at, at + Math.max(0.3, Math.min(c.end - c.start, next && next.start > at ? next.start - 0.04 - at : Infinity)));
+    if (i > 0) {
+      cs = buildCues(words, "phrase", opts);
+      const p = cs[i - 1];
+      if (p && p.start < at) words = placeLine(words, p, p.start, Math.max(p.start + 0.1, at - 0.04));
+    }
+    tapCursor.current = i;
+    lyricWordsRef.current = words;
+    onProject((x) => ({ ...x, lyricWords: words }));
+  };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (!sourceRef.current || !tapCues.length || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement)?.tagName ?? "") || (e.target as HTMLElement)?.isContentEditable) return;
+      if (e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); lineStartsNow("next"); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); lineStartsNow("this"); }
+    };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }); // (every render: the handlers read the current lines)
 
   const toggleLink = () => {
     const cur = settingsRef.current;
@@ -5154,6 +5203,15 @@ export default function VideoStudio({
     const take = clips.find((c) => c.id === o.clip);
     if (!take || !audioBuf) return null;
     const no = overNo(settings, o.clip), picked = ovTake?.id === o.clip;
+    // Synced on the official audio and still where its sync put it: locked as the video under it (it only moves up or
+    // down, to another row); its padlock unlocks it, and locks it back on its synced place.
+    const synced = take.score !== undefined;
+    const locked = synced && !!take.linked && Math.abs(o.offset - take.offset) < 0.01;
+    const toggleLock = () => {
+      stop();
+      if (locked) patchTake(take.id, { linked: false });
+      else if (synced) { patchTake(take.id, { linked: true }); patchOverlay(o.clip, { offset: take.offset }); }
+    };
     const len = a && Number.isFinite(a.el.duration) ? a.el.duration : take.source?.duration ?? 0;
     if (!len) return null;
     const [ci, co] = clipSpan(o, len);
@@ -5163,7 +5221,7 @@ export default function VideoStudio({
     const setO = (patch: Partial<VideoOverlay>) => patchOverlay(o.clip, patch);
     const inSeg = (t: number) => round2(clamp(t, settings.crop.start, end - 0.05));
     const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || (locked && mode !== "move")) return;
       e.stopPropagation(); stop();
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
@@ -5186,6 +5244,7 @@ export default function VideoStudio({
       d.moved = true;
       const dt = ((e.clientX - d.px) / Math.max(1, d.width)) * d.d, dur = audioBuf.duration;
       if (d.mode === "move") {
+        if (locked) return; // (locked to the audio: it only changes rows)
         let offset = round2(clamp(d.o.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
         const px = d.width / d.d, ma = magnet(e, offset + d.ci, px), mb = ma === null ? magnet(e, offset + d.co, px) : null;
         if (ma !== null) offset = round2(ma - d.ci); else if (mb !== null) offset = round2(mb - d.co);
@@ -5237,12 +5296,16 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a0, b0) && (
-              <div className={"cue video-clip over-clip cam-" + no + (head >= a0 && head < b0 ? " on" : "") + (picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
+              <div className={"cue video-clip over-clip cam-" + no + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
-                <span className="clip-edge in" onPointerDown={down("in")} />
-                <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{no + 1}</b><span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
-                <span className="clip-edge out" onPointerDown={down("out")} />
+                {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
+                <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{no + 1}</b>
+                  {synced && <button className="clip-lock" aria-label={locked ? t("Unlock: slide it freely") : t("Lock it back on its synced place")}
+                    title={locked ? t("Locked to the audio (synced): click to unlock and slide it freely.") : t("Click to put it back where its sync places it, locked.")}
+                    onPointerDown={(e) => e.stopPropagation()} onClick={toggleLock}><Icon name={locked ? "lock" : "unlock"} size={11} /></button>}
+                  <span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
+                {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
               </div>
             )}
             {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + no} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
