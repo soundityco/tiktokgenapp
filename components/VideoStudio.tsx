@@ -1351,7 +1351,8 @@ export default function VideoStudio({
     }
   };
   useEffect(() => {
-    if (!videoBlob || onCopy || !driveWrite || copyJob || settings.score === undefined || !videoDur) return;
+    // (also a video never synced, placed by hand on the video track: its copy holds the passage shown)
+    if (!videoBlob || onCopy || !driveWrite || copyJob || !videoDur) return;
     const segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
     if (segE <= 0 || segS >= videoDur) return;
     const cp = settings.drive?.copy;
@@ -4186,7 +4187,8 @@ export default function VideoStudio({
       const toggle = () => { stop(); foldTo(open ? null : c.id); if (cam !== null) setPinCam(cam === 0 ? "main" : c.id); };
       const sync = job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
         : missing ? <span className="xs warn-text">{t("File not on this device")}</span>
-        : job?.err || c.score === undefined ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
+        : job?.err ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
+        : c.score === undefined ? <span className="xs muted">{t("Not synced")}</span>
         : null;
       const menu = (close: () => void) => (<>
         {cam !== null && cam > 0 && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
@@ -4225,7 +4227,9 @@ export default function VideoStudio({
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
           {/* On the line, an icon (its words in the unfolded card): the name keeps the room. */}
           {job && !job.err ? sync
-            : missing || job?.err || c.score === undefined ? <span className="warn-text take-warn" title={missing ? t("File not on this device") : job?.err ?? t("Not synced")}><Icon name="alert" size={13} /></span>
+            : missing || job?.err ? <span className="warn-text take-warn" title={missing ? t("File not on this device") : job?.err}><Icon name="alert" size={13} /></span>
+            // Not synced is not a fault (a video placed by hand on the video track): said quietly.
+            : c.score === undefined ? <span className="muted xs take-free" title={t("Not synced")}>—</span>
             : <Icon name="check" size={12} />}
           {cam === null && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
           {<Menu float trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
