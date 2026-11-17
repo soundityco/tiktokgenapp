@@ -10,7 +10,7 @@
 import type { AudioVersion, Project, VideoSettings } from "./types";
 
 /** What belongs to each version: its file and the lyrics placed on it. */
-const KEYS = ["audioName", "audioSize", "audioDriveId", "lyricWords", "heardWords", "lyricsPlacedFrom", "lyricsAlignV"] as const;
+const KEYS = ["audioName", "audioSize", "audioDriveId", "lyricWords", "heardWords", "lyricsPlacedFrom", "lyricsAlignV", "lyricLines"] as const;
 type Own = Pick<Project, (typeof KEYS)[number]>;
 const own = (x: Partial<Own>): Own => Object.fromEntries(KEYS.map((k) => [k, x[k]])) as Own;
 

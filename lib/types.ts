@@ -243,6 +243,9 @@ export interface AudioVersion {
   heardWords?: LyricWord[];
   lyricsPlacedFrom?: string;
   lyricsAlignV?: number;
+  /** An excerpt of the song (a shorter version): the written lines it holds, first and last. Its lyrics are only ever
+   *  placed on those (else the whole text is crammed into it). */
+  lyricLines?: [number, number];
 }
 
 /** The user's own export settings, used when `custom` is on (kept when it is off, for the next time). */
@@ -543,6 +546,8 @@ export interface Project {
   lyricsPlacedFrom?: string;
   /** Version of the way the lyrics are placed on the audio they were last placed with (placed again once when it changes). */
   lyricsAlignV?: number;
+  /** The main audio is an excerpt of the song: the written lines it holds (see AudioVersion.lyricLines). */
+  lyricLines?: [number, number];
   /** The lyrics were brought to their one place (lib/lyricsSections migrateLyrics): done once, never again. */
   lyricsV2?: boolean;
   /** Every carousel of the release (the open one is in the fields above). */

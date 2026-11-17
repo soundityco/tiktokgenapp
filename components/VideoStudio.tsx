@@ -1787,6 +1787,12 @@ export default function VideoStudio({
         id, audioName: f.name, audioSize: f.size, audioDriveId: driveId,
         ...(sameSong && m ? { lyricWords: remapWords(m, cur.lyricWords, words), heardWords: remapWords(m, cur.heardWords), lyricsPlacedFrom: cur.lyricsPlacedFrom, lyricsAlignV: cur.lyricsAlignV } : null),
       };
+      // An excerpt of the song (clearly shorter): the written lines found in it are the only ones it will ever place.
+      if (sameSong && m && m.newDur < m.oldDur * 0.85) {
+        const ls = (version.lyricWords ?? []).map((w) => w.line).filter((l): l is number => l !== undefined);
+        const was = cur.lyricLines;
+        if (ls.length) version.lyricLines = [Math.max(was?.[0] ?? 0, Math.min(...ls)), Math.min(was?.[1] ?? Infinity, Math.max(...ls))];
+      }
       onRelease((p) => ({ ...p, audios: [...(p.audios ?? []), version] }));
       if (!driveId) uploadAudio(f, id, f.name);
       if (use === "keep") { onSaveNow(); onToast?.(t("“{name}” is in the library: pick it for a video when you need it.", { name: audioLabel(version) })); return; }
@@ -3252,6 +3258,11 @@ export default function VideoStudio({
    * only on the post's segment.
    */
   const placeWords = (heard: LyricWord[], src: string, p: Project, segFrom: number, segTo: number): { words: LyricWord[]; info: string; approx?: boolean } => {
+    // An excerpt of the song: only the lines it holds (the others would be piled at its start).
+    const r = placeAll(heard, src, p, segFrom, segTo), ln = p.lyricLines;
+    return ln ? { ...r, words: r.words.filter((w) => w.line === undefined || (w.line >= ln[0] && w.line <= ln[1])) } : r;
+  };
+  const placeAll = (heard: LyricWord[], src: string, p: Project, segFrom: number, segTo: number): { words: LyricWord[]; info: string; approx?: boolean } => {
     const written = writtenOf(src, p);
     if (!written.trim()) return { words: [], info: t("No lyrics: paste them to show them on the video.") };
     // Never words "as heard": the written ones always. Too few of them recognised in the audio (a sung, busy mix): they
@@ -3474,7 +3485,7 @@ export default function VideoStudio({
           // first time), the alignment, the relay; not one bar per model, each looking like the one before failed.
           setGenStep("listen");
           forced = await placeByAlignment(buf, writtenAll, {
-            model, language, onOverall: setGenDone,
+            model, language, onOverall: setGenDone, lines: proj.lyricLines,
             onRelay: () => setGenInfo(t("Some passages are hard to hear: listening to them again…")), signal: ac.signal,
           });
         } catch (e) {

@@ -24,6 +24,8 @@ export interface PlaceHooks {
   /** One progress for the whole placing, 0..1 (the models' loading, the alignment, the relay), never going back. */
   onOverall?: (p: number) => void;
   signal?: AbortSignal;
+  /** Only these written lines (first, last) are sung in this audio (an excerpt of the song): the others are not placed. */
+  lines?: [number, number];
 }
 
 /**
@@ -46,7 +48,8 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
       onProgress: (p) => { if (step === "listen") { h.onDone?.(p); overall(0.3 + 0.25 * p); } else { h.onPct?.(p); overall(0.3 * p); } },
       signal: h.signal,
     });
-    forced = alignWordsForced(em.frames, em.T, em.V, splitWords(written));
+    const ws = splitWords(written);
+    forced = alignWordsForced(em.frames, em.T, em.V, h.lines ? ws.filter((w) => w.line >= h.lines![0] && w.line <= h.lines![1]) : ws);
     if (!forced) { console.warn("[align] the lyrics do not fit this audio: the speech model instead"); return null; }
     // What was placed, line by line (to compare with the song by ear): start, end, text.
     const lines = new Map<number, LyricWord[]>();
