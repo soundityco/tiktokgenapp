@@ -1870,6 +1870,49 @@ export default function VideoStudio({
     }
   };
 
+  /**
+   * "Replace from this computer": another file for the open version of the audio (a new master, a longer export…), the
+   * same version kept. The same song: its lyrics and the videos on it move to where the same music is in the new file (as
+   * for a new version); another song: everything starts again, as a first import. The old file leaves the device and the
+   * Drive (to the bin, unless another release uses it).
+   */
+  const replaceAudio = async (f: File) => {
+    const old = audioBuf;
+    stop();
+    syncRef.current?.abort();
+    setErr(null); setNote(null);
+    setAudioBusy(t("Finding the music of each video in this version…"));
+    try {
+      let buf: AudioBuffer;
+      try { buf = await decodeAudio(getCtx(), f); } catch { setErr(t("Could not read this audio file.")); return; }
+      await new Promise((r) => setTimeout(r, 40));
+      const m = old ? mapBetween(old, buf) : null;
+      const sameSong = !!m && sharedShare(m) >= SAME_SONG;
+      const id = audioId, oldDrive = project.audioDriveId;
+      try { await putMedia(audioKey(id), f); } catch { /* private mode: in memory only */ }
+      const words = { moved: 0, dropped: 0 };
+      // The version's own fields (its file, its lyrics), moved or started again.
+      onProject((p) => ({ ...p, audioName: f.name, audioSize: f.size, audioDriveId: undefined, lyricLines: undefined,
+        ...(sameSong && m ? { lyricWords: remapWords(m, p.lyricWords, words), heardWords: remapWords(m, p.heardWords) } : { lyricWords: undefined, heardWords: undefined }) }));
+      // Every video on this version: moved with the music, or its sync to do again.
+      const videos: RemapReport["videos"] = [];
+      onRelease((p) => ({ ...p, videos: clipsOf(p).map((c) => {
+        if (audioIdOf(p, c) !== id) return c;
+        if (!sameSong || !m) return { ...c, audioName: f.name, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false };
+        const r = remapClip(c, m);
+        videos.push(r.report);
+        return { ...r.clip, audioName: f.name };
+      }) }));
+      setAudioBlob(f);
+      setAudioBuf(buf);
+      setPeaks(peaksOf(buf.getChannelData(0)));
+      uploadAudio(f, id, f.name);
+      if (oldDrive && !audioUsedElsewhere?.(oldDrive)) void trashDriveFile(oldDrive);
+      if (sameSong && m) setRemapReport({ shift: uniformShift(m), coverage: coverage(m), videos, words, notSame: false, to: f.name.replace(/\.[a-z0-9]{2,4}$/i, "") });
+      else onToast?.(t("Another song: its lyrics and the sync of its videos start again."));
+      onSaveNow();
+    } finally { setAudioBusy(null); }
+  };
   /** A version of the audio taken out of the library: its videos go back on the main audio first (moved with the
    *  music), its file leaves the device and the Drive (to the bin, unless another release uses it). */
   const removeAudioVersion = async (id: string) => {
@@ -5741,6 +5784,7 @@ export default function VideoStudio({
           <div className="stack media-list">
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
             <input id="audio-file" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
+            <input id="audio-replace" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void replaceAudio(f); e.target.value = ""; }} />
             <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
             <input id="video-original" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickOriginal(f); e.target.value = ""; }} />
             {/* The release holds the audio (shared by all its videos); this video holds its camera file and its framing. */}
@@ -5768,6 +5812,8 @@ export default function VideoStudio({
                 <div className="label cap">{t("Versions")}</div>
                 <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}><Icon name="plus" size={14} />{t("Add a version of the audio")}</button>
                 <button onClick={() => { close(); setRenamingAudio(audioId); }}><Icon name="pencil" size={14} />{t("Rename this version")}</button>
+                <button disabled={!!audioBusy} onClick={() => { close(); document.getElementById("audio-replace")?.click(); }}
+                  title={t("Another file for this version (a new master…): the lyrics and the videos follow the music in it.")}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
                 {versions.length > 1 && clips.length > 1 && used < clips.length && (
                   <button disabled={!!audioBusy} onClick={() => { close(); void switchAudio(clips.map((c) => c.id), audioId); }}><Icon name="film" size={14} />{t("Put every video on it")}</button>
                 )}

@@ -356,6 +356,8 @@ export const FR: Record<string, string> = {
   "{a} synced.": "{a} synchronisée.",
   "Finding which part of the song this audio is…": "Recherche de la partie du morceau que contient cet audio…",
   "This part of the song has no lyrics (none are sung there in the longer version): nothing to place.": "Cette partie du morceau n'a pas de paroles (aucune n'y est chantée dans la version longue) : rien à placer.",
+  "Another file for this version (a new master…): the lyrics and the videos follow the music in it.": "Un autre fichier pour cette version (un nouveau master…) : les paroles et les vidéos suivent la musique dedans.",
+  "Another song: its lyrics and the sync of its videos start again.": "Un autre morceau : ses paroles et la synchro de ses vidéos repartent de zéro.",
   "Show the video": "Afficher la vidéo",
   "Hide the video": "Masquer la vidéo",
   "Hide the video (preview and export; its sound stays)": "Masquer la vidéo (aperçu et export ; son son reste)",
