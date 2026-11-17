@@ -472,10 +472,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   text-shadow: 0 0 6px var(--clip), 0 0 12px color-mix(in srgb, var(--clip) 60%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent calc(var(--hx, 50%) - 40px), black var(--hx, 50%), transparent calc(var(--hx, 50%) + 40px));
   mask-image: linear-gradient(90deg, transparent calc(var(--hx, 50%) - 40px), black var(--hx, 50%), transparent calc(var(--hx, 50%) + 40px)); }
-.cue-bar-glow { position: absolute; top: 4px; bottom: 4px; width: 2px; background: var(--clip); pointer-events: none; z-index: 2;
+/* 3 px, rounded on the left: over the clip's 2 px border and one past it, the same on every line (the hook's look). */
+.cue-bar-glow { position: absolute; top: 4px; bottom: 4px; width: 3px; border-radius: 2px 0 0 2px; background: var(--clip); pointer-events: none; z-index: 2;
   box-shadow: 0 0 6px 1px var(--clip), 0 0 12px 1px color-mix(in srgb, var(--clip) 60%, transparent); animation: bar-breathe 2.4s ease-in-out infinite alternate; }
-/* A video clip's bar: rounded on the left as the clip's border under it (square, it hid the rounded corners). */
-.cue-bar-glow.vc-glow { border-radius: 2px 0 0 2px; }
 @keyframes bar-breathe { from { opacity: 1; } to { opacity: .65; } }
 @media (prefers-reduced-motion: reduce) { .cue-bar-glow { animation: none; } }
 /* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */

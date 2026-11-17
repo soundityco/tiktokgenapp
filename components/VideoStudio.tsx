@@ -4255,7 +4255,7 @@ export default function VideoStudio({
       const r = syncAudio(sound.samples, sound.rate, monoOf(official), official.sampleRate, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
       // No match: not a fault, it stays free (placed by hand on its track), quietly.
       if (!r.anchors || r.score < 0.4) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return null; }
-      patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: false,
+      patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: true,
         ...(clips.find((c) => c.id === id)?.score === undefined ? { clipVolume: undefined } : null) });
       onSaveNow();
       setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; });
@@ -4633,7 +4633,7 @@ export default function VideoStudio({
                 {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
               </div>
             )}
-            {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow vc-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
+            {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
@@ -4667,7 +4667,9 @@ export default function VideoStudio({
     if (ov && ov.clip === x.id) {
       // Its place over the video goes to the old base, and the base takes the place it had.
       // (each keeps its own size and place over a video: the base finds the one it had last time it was over one)
-      theirs.offset = ov.offset; theirs.clipIn = ov.clipIn; theirs.clipOut = ov.clipOut; theirs.linked = false; theirs.box = boxOf(ov);
+      // (still where its sync put it: it stays locked to the audio as the base)
+      theirs.offset = ov.offset; theirs.clipIn = ov.clipIn; theirs.clipOut = ov.clipOut; theirs.box = boxOf(ov);
+      theirs.linked = x.score !== undefined && Math.abs(ov.offset - x.offset) < 0.01;
       overlay = { ...ov, ...boxOr(base.box), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut };
     }
     onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, ...theirs, ...(overlay ? { overlay } : null), ...more } : c.id === x.id ? { ...c, ...mine } : c)) }));
@@ -4932,7 +4934,7 @@ export default function VideoStudio({
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
-            {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow vc-glow cam-" + overNo(settings)} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
+            {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + overNo(settings)} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
