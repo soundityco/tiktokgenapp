@@ -66,6 +66,9 @@ const P: Record<string, string> = {
   arrowLeft: "M20 12H4M10 6l-6 6 6 6",
   arrowRight: "M4 12h16M14 6l6 6-6 6",
   music: "M9 17.5V5.5l10-2v12M9 17.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM19 15.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z",
+  /** A clip's own sound: a speaker and its waves; with a cross when silent. */
+  volume: "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9.2a4 4 0 010 5.6M18.2 6.6a7.6 7.6 0 010 10.8",
+  "volume-off": "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5",
   film: "M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4",
   play: "M8 5.5l11 6.5-11 6.5z",
   pause: "M8.5 5v14M15.5 5v14",

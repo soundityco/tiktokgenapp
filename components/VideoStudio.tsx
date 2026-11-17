@@ -4279,6 +4279,7 @@ export default function VideoStudio({
     const a = settings.offset + ci, b = settings.offset + co;
     const locked = !!settings.linked;
     const trimmed = ci > 0.01 || co < len - 0.01;
+    const vol = clamp(settings.clipVolume ?? 0, 0, 1);
     const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
       if (e.button !== 0 || locked) return;
       e.stopPropagation(); stop();
@@ -4319,6 +4320,28 @@ export default function VideoStudio({
     return (
       <div className="cams">
         <div className="lyric-track video-track" role="group" aria-label={t("Video")} {...scrub()}>
+          {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
+              video back when it was trimmed. They stay put while the track slides. */}
+          <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
+            {trimmed && !locked && (
+              <button className="btn icon sm quiet" aria-label={t("Whole video")} title={t("Whole video")} onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>
+                <Icon name="refresh" size={13} />
+              </button>
+            )}
+            <Menu float trigger={(_, toggle) => (
+              <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Video sound")} title={vol > 0 ? `${t("Video sound")} · ${Math.round(vol * 100)} %` : `${t("Video sound")} · ${t("Muted")}`} onClick={toggle}>
+                <Icon name={vol > 0 ? "volume" : "volume-off"} size={14} />
+              </button>
+            )}>
+              {() => (
+                <div className="sound-pop" data-keep>
+                  <Range label={t("Video sound")} value={Math.round(vol * 100)} display={vol > 0 ? `${Math.round(vol * 100)} %` : t("Muted")}
+                    min={0} max={100} step={1} onChange={(n) => setV({ clipVolume: n > 0 ? n / 100 : undefined })} />
+                  <p className="muted xs">{t("The take's own sound, over the official audio, only in the part kept.")}</p>
+                </div>
+              )}
+            </Menu>
+          </div>
           <div className="track-content">
             <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
             {onTrack(a, b) && (
@@ -4333,13 +4356,6 @@ export default function VideoStudio({
               </div>
             )}
           </div>
-        </div>
-        <div className="row video-sound">
-          <Range label={t("Video sound")} value={Math.round(clamp(settings.clipVolume ?? 0, 0, 1) * 100)} display={(settings.clipVolume ?? 0) > 0 ? `${Math.round((settings.clipVolume ?? 0) * 100)} %` : t("Muted")}
-            min={0} max={100} step={1} onChange={(n) => setV({ clipVolume: n > 0 ? n / 100 : undefined })} />
-          {trimmed && !locked && (
-            <button className="btn sm quiet video-untrim" onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>{t("Whole video")}</button>
-          )}
         </div>
       </div>
     );

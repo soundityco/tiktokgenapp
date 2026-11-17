@@ -353,6 +353,7 @@ export const FR: Record<string, string> = {
   "Drag to slide the video along the track, its edges to trim it.": "Glisse pour déplacer la vidéo sur la piste, ses bords pour la rogner.",
   "Whole video": "Vidéo entière",
   "Video sound": "Son de la vidéo",
+  "The take's own sound, over the official audio, only in the part kept.": "Le son de la prise, par-dessus le son officiel, seulement sur le passage gardé.",
   "Muted": "Coupé",
   "All the lyrics": "Toutes les paroles",
   "This word": "Ce mot",

@@ -400,9 +400,13 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-clip .clip-edge { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 1; }
 .video-clip .clip-edge.in { left: -2px; } .video-clip .clip-edge.out { right: -2px; }
 .video-clip .clip-edge::after { content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px; border-radius: 1px; background: var(--video); opacity: .8; }
-.video-sound { gap: 8px; align-items: flex-end; flex-wrap: nowrap; }
-.video-sound > :first-child { flex: 1; min-width: 0; }
-.video-untrim { flex: none; }
+/* The video track's tools, at its right end (they stay put while the track slides): the clip's sound (a slider opens
+   from the speaker, as in CapCut) and the whole video back. */
+.lyric-track .track-tools { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; display: flex; align-items: center; gap: 2px; padding: 0 3px 0 18px;
+  background: linear-gradient(90deg, transparent, var(--bg) 16px); }
+.lyric-track .track-tools .btn.icon { width: 26px; height: 26px; }
+.lyric-track .track-tools .btn.on { color: var(--video); border-color: transparent; background: none; box-shadow: none; }
+.sound-pop { display: grid; gap: 6px; width: 230px; padding: 6px 4px 2px; }
 .lyric-track .cue.own-look::before { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--lyrics); pointer-events: none; }
 .look-scope { gap: 6px; }
 .look-cue { gap: 8px; min-width: 0; }
