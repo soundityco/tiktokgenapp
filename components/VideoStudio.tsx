@@ -4571,9 +4571,10 @@ export default function VideoStudio({
       const d = clipDrag.current;
       if (!d) return;
       // Up or down more than sideways: the clip is carried to another row (multicam, over or under another video).
-      if (!d.moved && d.mode === "move" && Math.abs(e.clientY - d.py) > 12 && Math.abs(e.clientY - d.py) > Math.abs(e.clientX - d.px)) {
+      if (d.mode === "move" && vertical(e, d)) {
         clipDrag.current = null;
-        startVdrag("base", 0, d.el, e, d.px);
+        if (d.moved) setV({ offset: d.offset }); // (the little sideways move before: undone)
+        startVdrag("base", 0, d.el, e, d.px, d.py);
         return;
       }
       if (!d.moved && Math.abs(e.clientX - d.px) < 4) return;
@@ -4635,7 +4636,7 @@ export default function VideoStudio({
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
                 {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
                 <span className="vc-name">
-                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span>
+                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">1</b>
                   {locked && <Icon name="lock" size={11} />}
                   <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
                 </span>
@@ -4688,6 +4689,7 @@ export default function VideoStudio({
   /** A video clip dragged up or down on the video block (its row, or the one of another video): where it lands. */
   type VZone = "above" | "over" | "base" | "below";
   const [vdrag, setVdrag] = useState<null | { from: "base" | "over" | "cam"; cam: number; label: string; colour: number; x: number; y: number; w: number; grab: number;
+    el: HTMLElement; x0: number; y0: number;
     zone: VZone | null; at: number; act: "swap" | "multicam" | "over" | null; cutX: number }>(null);
   const vdragRef = useRef(vdrag);
   vdragRef.current = vdrag;
@@ -4731,15 +4733,21 @@ export default function VideoStudio({
     }
     return { at, act, cutX: block ? clamp(left - block.left, 0, block.width) : 0 };
   };
+  /** A clip pressed and moved goes to another row once it went up or down by half a row (a little sideways first does
+   *  not stop it), or sooner when it goes more up or down than sideways. */
+  const vertical = (e: React.PointerEvent, d: { px: number; py: number }) => {
+    const dy = Math.abs(e.clientY - d.py), dx = Math.abs(e.clientX - d.px);
+    return dy > 16 || (dy > 8 && dy > dx);
+  };
   /** Start following a vertical drag (called by a clip's move once it goes more up or down than sideways). */
-  const startVdrag = (from: "base" | "over" | "cam", cam: number, el: HTMLElement, e: React.PointerEvent, x0?: number) => {
+  const startVdrag = (from: "base" | "over" | "cam", cam: number, el: HTMLElement, e: React.PointerEvent, x0?: number, y0?: number) => {
     const r = el.getBoundingClientRect();
     const c = from === "over" ? clips.find((q) => q.id === overlayOf(settingsRef.current)?.clip) : cam > 0 ? clips.find((q) => q.id === settingsRef.current.angles?.[cam - 1]) : clip;
     // Held where it was grabbed (its start stays the same distance left of the pointer).
     const grab = clamp((x0 ?? e.clientX) - r.left, 0, r.width);
     const zone = zoneAt(e.clientY);
     setVdrag({ from, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" ? overNo(settingsRef.current) : cam,
-      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, zone, ...landing({ from, grab }, e.clientX, zone) });
+      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, zone, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, grab }, e.clientX, zone) });
   };
   const moveVdrag = (e: React.PointerEvent) => {
     const d = vdragRef.current;
@@ -4752,6 +4760,32 @@ export default function VideoStudio({
    * Let go. On the other video's start (or above / under the block): the two change places. Further along the other
    * video's line: both in the multicam, cut where it was dropped (the other one before, the one dragged from there).
    */
+  // The clip carried follows the pointer (held by the video block, over the other rows); when letting go would make the
+  // two change places, the other one slides into its row already, as in CapCut.
+  useLayoutEffect(() => {
+    const d = vdrag;
+    if (!d) return;
+    const el = d.el, block = el.closest(".video-block");
+    el.classList.add("lifted");
+    el.style.translate = `${d.x - d.x0}px ${d.y - d.y0}px`;
+    let other: HTMLElement | null = null;
+    if (d.act === "swap" && block) {
+      other = d.from === "over"
+        ? block.querySelector<HTMLElement>(".video-track:not(.over-track) .video-clip, .cam-track .cam-shot.on")
+        : block.querySelector<HTMLElement>(".over-track .video-clip");
+      const mine = el.closest(".lyric-track"), theirs = other?.closest(".lyric-track");
+      if (other && mine && theirs) {
+        const gap = mine.getBoundingClientRect().top - theirs.getBoundingClientRect().top;
+        other.classList.add("shifted"); other.style.translate = `0 ${gap}px`;
+        // ...and the one carried snaps into the row left free (letting go keeps both at their times)
+        el.classList.add("shifted"); el.style.translate = `0 ${-gap}px`;
+      } else other = null;
+    }
+    return () => {
+      el.classList.remove("lifted", "shifted"); el.style.translate = "";
+      if (other) { other.classList.remove("shifted"); other.style.translate = ""; }
+    };
+  }, [vdrag]);
   const endVdrag = () => {
     const d = vdragRef.current;
     setVdrag(null);
@@ -4882,9 +4916,10 @@ export default function VideoStudio({
       const d = ovDrag.current;
       if (!d) return;
       // Up or down more than sideways: carried to another row (the base line: multicam; under it: it becomes the base).
-      if (d.mode === "move" && !d.moved && d.py !== undefined && d.el && Math.abs(e.clientY - d.py) > 12 && Math.abs(e.clientY - d.py) > Math.abs(e.clientX - d.px)) {
+      if (d.mode === "move" && d.py !== undefined && d.el && vertical(e, { px: d.px, py: d.py })) {
         ovDrag.current = null;
-        startVdrag("over", 0, d.el, e, d.px);
+        if (d.moved) setO({ offset: d.o.offset, clipIn: d.o.clipIn, clipOut: d.o.clipOut });
+        startVdrag("over", 0, d.el, e, d.px, d.py);
         return;
       }
       if (!d.moved && Math.abs(e.clientX - d.px) < 4) return;
@@ -4940,7 +4975,7 @@ export default function VideoStudio({
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
-                <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
+                <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{overNo(settings) + 1}</b><span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
@@ -4971,10 +5006,10 @@ export default function VideoStudio({
             onPointerMoveCapture={(e) => {
               if (moveVdrag(e)) { e.stopPropagation(); return; }
               const l = liftRef.current;
-              if (!l || Math.abs(e.clientY - l.y) <= 12 || Math.abs(e.clientY - l.y) <= Math.abs(e.clientX - l.x)) return;
+              if (!l || !vertical(e, { px: l.x, py: l.y })) return;
               liftRef.current = null; scrubRef.current = null;
               e.stopPropagation();
-              startVdrag("cam", l.cam, l.el, e, l.x);
+              startVdrag("cam", l.cam, l.el, e, l.x, l.y);
             }}
             onPointerUpCapture={(e) => { liftRef.current = null; if (vdragRef.current) { e.stopPropagation(); endVdrag(); } }}>
             {/* At its end: each camera's own sound (heard on its shots). */}
@@ -6026,9 +6061,7 @@ export default function VideoStudio({
                     {/* Dragging a take from the library: the row above the base line to drop it over the video. */}
                     {dragTake && !overlayOf(settings) && <div className="lyric-track drop-over-row">{t("Drop here: over the video")}</div>}
                     {/* A clip carried up or down: where it would land (a line above or under, or a row lit). */}
-                    {vdrag?.zone === "above" && <div className="vz-line top" />}
                     {overlayTrackEl()}{camsEl("track")}
-                    {vdrag?.zone === "below" && <div className="vz-line bottom" />}
                     {vdrag?.act === "multicam" && <div className="vz-cut" style={{ left: vdrag.cutX }} title={t("Cut here")} />}
                     {dragTake && <div className="drop-main-hint">{t("Drop on the base line: multicam")}</div>}
                     {dragTake && dropRow === "over" && dropAt && (
@@ -6041,11 +6074,6 @@ export default function VideoStudio({
                 <span className="tl-head" ref={tlHeadRef} aria-hidden />
                 </div>
                 {camsEl("controls")}
-                {vdrag && (
-                  <div className={"vdrag-ghost cam-" + Math.min(3, vdrag.colour)} style={{ left: vdrag.x - Math.min(vdrag.grab, vdrag.w - 20), top: vdrag.y - 17, width: vdrag.w }}>
-                    <b>{vdrag.colour + 1}</b><span className="truncate">{vdrag.label}</span>
-                  </div>
-                )}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
@@ -6460,7 +6488,6 @@ export default function VideoStudio({
               <div className={"look-of cam-" + (ovTake ? overNo(settings) : k)}>
                 <span className="xs muted">{t("Settings of")}</span> <b>{ovTake ? overNo(settings) + 1 : k + 1}</b> <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
                 <Hint text={t("Each video has its own colour, effects, framing, bars and progressive zoom: those of the camera on the preview, or of the video over it once clicked (on the preview or its track). Click a take in the library or a shot in the timeline to set another one. Kept in the take.")} />
-                {ovTake && <button className="btn sm quiet" onClick={() => setOverLook(false)}>{t("Back to the video under it")}</button>}
               </div>
             );
           })()}

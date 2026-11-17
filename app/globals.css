@@ -529,13 +529,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .video-block.drop-main .cam-track, .video-block.drop-main .video-track:not(.over-track) { background: color-mix(in srgb, var(--video) 14%, transparent); }
 .video-block .drop-ghost { position: absolute; top: 4px; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 8px; pointer-events: none; z-index: 5;
   font-size: 12px; color: var(--text); border-left: 2px solid var(--video); border-radius: 3px; background: color-mix(in srgb, var(--video) 40%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
-/* A clip carried up or down: the row it would join lit, or a line where it would go (above / under). */
+/* A clip carried up or down: the row it would join lit. */
 .video-block.vz-over .over-track, .video-block.vz-base .cam-track, .video-block.vz-base .video-track:not(.over-track) { background: color-mix(in srgb, var(--text) 8%, transparent); }
 .video-block .vz-cut { position: absolute; top: 2px; bottom: 2px; width: 2px; margin-left: -1px; background: var(--text); box-shadow: 0 0 8px color-mix(in srgb, var(--text) 50%, transparent); pointer-events: none; z-index: 6; }
-.video-block .vz-line { height: 2px; margin: 0 6px; border-radius: 1px; background: var(--text); box-shadow: 0 0 8px color-mix(in srgb, var(--text) 50%, transparent); }
-.vdrag-ghost { position: fixed; z-index: 200; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 9px; pointer-events: none; font-size: 12px; color: var(--text);
-  border-left: 2px solid var(--cam); border-radius: 3px; background: color-mix(in srgb, var(--cam) 32%, var(--panel)); box-shadow: 0 10px 28px rgba(0,0,0,.5); opacity: .95; }
-.vdrag-ghost b { color: var(--cam); }
 .video-block .drop-main-hint { font-size: 11px; color: var(--muted); padding: 0 6px; }
 .take-row[draggable="true"], .take[draggable="true"] { cursor: grab; }
 .cams-row { flex-wrap: wrap; gap: 6px; }
@@ -2952,14 +2948,24 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* (the glow over a playing text: drawn where the text is, after its icon) */
 .lyric-track .cue.on:not(.cam-shot):not(.video-clip)::after { padding-left: 22px; }
 @media (min-width: 641px) {
-  .tl-stack { row-gap: 6px; padding: 8px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
+  .tl-stack { row-gap: 2px; padding: 6px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
   /* (the lines lose their own frame: the whole is one) */
   .tl-stack .wave { border: 0; }
   .tl-stack .lyric-track { border: 0; background: none; border-radius: 0; }
-  .tl-stack > .video-block { border: 0; padding: 0; background: none; border-radius: 0; gap: 6px; }
+  .tl-stack > .video-block { border: 0; padding: 0; background: none; border-radius: 0; gap: 2px; }
   .tl-stack > .video-block.dragging { outline: 1px dashed var(--muted); outline-offset: 3px; }
   .tl-stack .lyric-head { display: none; }
   .tl-stack .track-seg { display: none; } /* (the segment is on the waveform, right above) */
   .tl-head { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 2px; margin-left: -1px; background: var(--text);
     pointer-events: none; z-index: 4; will-change: transform; }
 }
+
+/* A video clip carried up or down (the clip itself, as in CapCut): it follows the pointer over the other rows, held by
+   the video block; the one it would change places with slides into its row. Each video clip has its number. */
+.video-block.dragging { clip-path: inset(-400px -6px); } /* (held on the sides only: it can go above or under the block) */
+.video-block.dragging .cue-bar-glow { display: none; }
+.video-block.dragging .lyric-track { overflow: visible; }
+.video-block .lyric-track:has(.lifted) { z-index: 5; }
+.lyric-track .cue.lifted { z-index: 10 !important; cursor: grabbing; box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 80%, transparent); }
+.lyric-track .cue.shifted { transition: translate .16s ease; }
+.video-clip .vc-no { color: var(--vc); font-weight: 600; }
