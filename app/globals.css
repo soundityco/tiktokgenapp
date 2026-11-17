@@ -2144,6 +2144,11 @@ details.sec:first-of-type { background-image: none; }
 .copy-status > svg, .copy-status > .bg-ring { flex: none; margin-top: 2px; }
 .copy-status > span:not(.bg-ring):not(.pill-copy) { min-width: 0; }
 .copy-status .copy-act, .copy-status .hint { flex: none; }
+/* Its action and (i) together; in a library tile (narrow), the state takes its own line: the ring, the text beside it
+   (wrapping there, never a word a line), and the action under the text, never past the tile's edge. */
+.copy-tail { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.media-meta > .copy-status.copy-full { flex: 1 1 100%; min-width: 0; max-width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; row-gap: 6px; align-items: start; }
+.media-meta > .copy-status.copy-full > .copy-tail { grid-column: 2; justify-self: start; }
 /* Under the video, both studios' layouts: "Shown" over its two eyes, then a small sheet of facts under a hairline
    (Format, Take), each with its title on the left. */
 .video-stage > .shown-on { flex-wrap: wrap; row-gap: 8px; }

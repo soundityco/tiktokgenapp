@@ -1451,11 +1451,16 @@ export default function VideoStudio({
       {copyState.hint && <Hint text={copyState.hint} />}
     </span>
   ) : copyState && (
-    <span className={"copy-status xs" + (copyState.busy ? " busy" : "") + (copyState.ok ? " ok" : "") + (copyState.bad ? " bad" : "") + (compact ? " compact" : "")}>
+    <span className={"copy-status copy-full xs" + (copyState.busy ? " busy" : "") + (copyState.ok ? " ok" : "") + (copyState.bad ? " bad" : "") + (compact ? " compact" : "")}>
       {copyState.ok ? <Icon name="check" size={12} /> : <span className="bg-ring" style={{ "--p": copyState.p } as CSSProperties} aria-hidden />}
       <span className={copyState.busy ? "shine" : undefined}>{copyState.text}</span>
-      {copyState.action && <button type="button" className="btn sm quiet copy-act" onClick={copyState.action.run}>{copyState.action.label}</button>}
-      {copyState.hint && <Hint text={copyState.hint} />}
+      {/* What can be done, and its (i): together, under the text when the tile is narrow. */}
+      {(copyState.action || copyState.hint) && (
+        <span className="copy-tail">
+          {copyState.action && <button type="button" className="btn sm quiet copy-act" onClick={copyState.action.run}>{copyState.action.label}</button>}
+          {copyState.hint && <Hint text={copyState.hint} />}
+        </span>
+      )}
     </span>
   );
 
