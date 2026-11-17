@@ -624,7 +624,12 @@ export default function VideoStudio({
   const hookStyleRef = useRef(hookStyle);
   hookStyleRef.current = fontPreview?.which === "hook" ? { ...hookStyle, ...fontPreview.patch } : hookStyle;
   const activeRef = useRef<(time: number) => Cue | null>(() => null);
-  activeRef.current = (time: number) => (cues.length ? activeCue(cues, time) : null);
+  // (outside the segment, the playhead free while unlocked: the song's line there, on the preview only, never exported)
+  activeRef.current = (time: number) => {
+    const c = settingsRef.current.crop;
+    if (time < c.start || time > c.start + c.duration) return songCues.length ? activeCue(songCues, time) : null;
+    return cues.length ? activeCue(cues, time) : null;
+  };
 
   // ---- custom subtitles: a word (word by word) or a phrase with its own look over the lyrics' style (lib/cueLooks) ----
   const wordKeyMap = useMemo(() => wordKeys(project.lyricWords ?? []), [project.lyricWords]);
@@ -1062,10 +1067,13 @@ export default function VideoStudio({
     drawMatte(g, W, H, matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
-    const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / exportSettings(cfg.source?.fps, exportPrefsRef.current).fps);
+    // Outside the segment (the preview only, the playhead free while unlocked): the song's lyrics there, no hook (the
+    // hooks belong to the post's segment).
+    const segEnd = cfg.crop.start + cfg.crop.duration, outside = !!preview && (time < cfg.crop.start || time > segEnd + 0.05);
+    const at = outside ? time : Math.min(time, segEnd - 0.5 / exportSettings(cfg.source?.fps, exportPrefsRef.current).fps);
     const cue = cfg.captions ? activeRef.current(at) : null;
     const caption = cue ? drawStyledText(g, cue.text, cueStyleRef.current(cue), W, H) : null;
-    const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
+    const hook = cfg.showHooks === false || outside ? undefined : hookAt(cfg, at);
     return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
   }, []);
   const captionBox = useRef<TextBox | null>(null);
@@ -4788,6 +4796,7 @@ export default function VideoStudio({
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
       const w = viewRef.current ?? twRef.current;
       clipDrag.current = { mode, px: e.clientX, py: e.clientY, el: e.currentTarget, left: r.left, width: r.width, s: w.s, d: w.d, offset: settings.offset, ci, co };
+      dragHead.current = headRef.current;
     };
     // The preview follows the edge being moved (the picture there), as the segment's edges do.
     const inSeg = (t: number) => round2(clamp(t, settings.crop.start, end - 0.05));
@@ -4808,19 +4817,23 @@ export default function VideoStudio({
       const dur = audioBuf.duration;
       if (d.mode === "move") {
         if (locked) return; // (locked to the audio: it only changes rows)
+        // (its start, else its end, on a magnet: the segment's start or the playhead; the playhead stays where it is)
         let offset = round2(clamp(d.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
-        if (nearStart(e, offset + d.ci, d.width / d.d)) offset = round2(settings.crop.start - d.ci);
+        const px = d.width / d.d, ma = magnet(e, offset + d.ci, px), mb = ma === null ? magnet(e, offset + d.co, px) : null;
+        if (ma !== null) offset = round2(ma - d.ci); else if (mb !== null) offset = round2(mb - d.co);
         setV({ offset });
-        setHead(inSeg(Math.max(offset + d.ci, headRef.current)));
       } else if (d.mode === "in") {
         let clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
-        if (nearStart(e, d.offset + clipIn, d.width / d.d)) clipIn = round2(clamp(settings.crop.start - d.offset, 0, d.co - 0.2));
+        const m = magnet(e, d.offset + clipIn, d.width / d.d);
+        if (m !== null) clipIn = round2(clamp(m - d.offset, 0, d.co - 0.2));
         setV({ clipIn });
-        setHead(inSeg(d.offset + clipIn));
+        headOnEdge(d.offset + clipIn, inSeg);
       } else {
-        const clipOut = round2(clamp(d.co + dt, d.ci + 0.2, len));
+        let clipOut = round2(clamp(d.co + dt, d.ci + 0.2, len));
+        const m = magnet(e, d.offset + clipOut, d.width / d.d);
+        if (m !== null) clipOut = round2(clamp(m - d.offset, d.ci + 0.2, len));
         setV({ clipOut });
-        setHead(inSeg(d.offset + clipOut - 0.05));
+        headOnEdge(d.offset + clipOut - 0.05, inSeg);
       }
     };
     // A click (no drag): the playhead goes there, as on the other tracks.
@@ -5156,6 +5169,7 @@ export default function VideoStudio({
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
       const w = viewRef.current ?? twRef.current;
       ovDrag.current = { mode, px: e.clientX, py: e.clientY, el: e.currentTarget, left: r.left, width: r.width, s: w.s, d: w.d, o, ci, co, len };
+      dragHead.current = headRef.current;
     };
     const move = (e: React.PointerEvent<HTMLElement>) => {
       if (moveVdrag(e)) return;
@@ -5173,18 +5187,21 @@ export default function VideoStudio({
       const dt = ((e.clientX - d.px) / Math.max(1, d.width)) * d.d, dur = audioBuf.duration;
       if (d.mode === "move") {
         let offset = round2(clamp(d.o.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
-        if (nearStart(e, offset + d.ci, d.width / d.d)) offset = round2(settings.crop.start - d.ci);
+        const px = d.width / d.d, ma = magnet(e, offset + d.ci, px), mb = ma === null ? magnet(e, offset + d.co, px) : null;
+        if (ma !== null) offset = round2(ma - d.ci); else if (mb !== null) offset = round2(mb - d.co);
         setO({ offset });
-        setHead(inSeg(Math.max(offset + d.ci, headRef.current)));
       } else if (d.mode === "in") {
         let clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
-        if (nearStart(e, d.o.offset + clipIn, d.width / d.d)) clipIn = round2(clamp(settings.crop.start - d.o.offset, 0, d.co - 0.2));
+        const m = magnet(e, d.o.offset + clipIn, d.width / d.d);
+        if (m !== null) clipIn = round2(clamp(m - d.o.offset, 0, d.co - 0.2));
         setO({ clipIn });
-        setHead(inSeg(d.o.offset + clipIn));
+        headOnEdge(d.o.offset + clipIn, inSeg);
       } else {
-        const clipOut = round2(clamp(d.co + dt, d.ci + 0.2, d.len));
+        let clipOut = round2(clamp(d.co + dt, d.ci + 0.2, d.len));
+        const m = magnet(e, d.o.offset + clipOut, d.width / d.d);
+        if (m !== null) clipOut = round2(clamp(m - d.o.offset, d.ci + 0.2, d.len));
         setO({ clipOut });
-        setHead(inSeg(d.o.offset + clipOut - 0.05));
+        headOnEdge(d.o.offset + clipOut - 0.05, inSeg);
       }
     };
     const up = (e: React.PointerEvent<HTMLElement>) => {
@@ -5469,11 +5486,23 @@ export default function VideoStudio({
   //      Alt held: only that one moves ----
   const edgeRef = useRef<{ left: number; width: number } | null>(null);
   /**
-   * The magnet of the timeline's start: a clip (lyrics, hook, video) whose start comes within 8 px of the segment's start
-   * sticks to it (to start exactly at 0:00 of the post); ⌘ (Ctrl) held: placed freely.
+   * The magnets of the timeline: a clip's edge (lyrics, hook, video) within 8 px of the segment's start (to start exactly
+   * at 0:00 of the post) or of the playhead sticks to it; ⌘ (Ctrl) held: placed freely.
    */
-  const nearStart = (e: { metaKey: boolean; ctrlKey: boolean }, t: number, pxPerS: number) =>
-    !e.metaKey && !e.ctrlKey && Math.abs(t - settingsRef.current.crop.start) * pxPerS < 8;
+  /** The playhead where it was when a drag began: a clip's edge sticks to it (as in CapCut), the playhead never moving. */
+  const dragHead = useRef(0);
+  /** The magnet a time `t` sticks to within 8 px: the segment's start or the playhead; none (or ⌘ held): null. */
+  const magnet = (e: { metaKey: boolean; ctrlKey: boolean }, t: number, pxPerS: number): number | null => {
+    if (e.metaKey || e.ctrlKey) return null;
+    let best: number | null = null;
+    for (const m of [settingsRef.current.crop.start, dragHead.current]) if (Math.abs(t - m) * pxPerS < 8 && (best === null || Math.abs(t - m) < Math.abs(t - best))) best = m;
+    return best;
+  };
+  /** The playhead put on an edge being trimmed (its picture shown), only while it is inside the segment. */
+  const headOnEdge = (t: number, inSeg: (x: number) => number) => {
+    const c = settingsRef.current.crop, h = dragHead.current;
+    if (h >= c.start && h <= c.start + c.duration) setHead(inSeg(t));
+  };
   const edgeDrag = (move: (at: number, free: boolean) => void, wholeSong = false) => ({
     onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
       if (e.button === 1) return;
@@ -5481,6 +5510,7 @@ export default function VideoStudio({
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget.parentElement!).getBoundingClientRect(); // the track (its content may be sliding)
       edgeRef.current = { left: r.left, width: r.width };
+      dragHead.current = headRef.current;
     },
     onPointerMove: (e: React.PointerEvent<HTMLSpanElement>) => {
       const d = edgeRef.current;
@@ -5490,7 +5520,8 @@ export default function VideoStudio({
       // (a line outside the segment: anywhere in the song)
       const lo = wholeSong ? 0 : cfg.crop.start, hi = wholeSong ? audioBuf?.duration ?? Infinity : cfg.crop.start + Math.max(0.1, cfg.crop.duration);
       let at = round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, lo, hi));
-      if (!wholeSong && nearStart(e, at, d.width / w.d)) at = cfg.crop.start;
+      const m = wholeSong ? null : magnet(e, at, d.width / w.d);
+      if (m !== null) at = m;
       move(at, e.altKey);
     },
     onPointerUp: () => { if (edgeRef.current) { edgeRef.current = null; onSaveNow(); } },

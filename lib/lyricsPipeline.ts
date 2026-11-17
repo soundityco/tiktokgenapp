@@ -324,10 +324,49 @@ export async function applyRepeat(buf: AudioBuffer, em: Emissions, words: LyricW
   const clearest = new Map<string, { P: number; score: number }>();
   for (const x of plans) if (x.P) { const k = textOf(x.rep), c = clearest.get(k); if (!c || x.score > c.score) clearest.set(k, { P: x.P, score: x.score }); }
   let out = words;
+  const placed: { first: number; last: number }[] = [];
   for (const x of plans) {
     const best = clearest.get(textOf(x.rep));
     if (!best) { console.info("[align] repeated lines, but no clear repeat in the sound: left as they are"); continue; }
-    out = placeCopies(out, lineOf, x.rep, best.P, best.score, buf, em, french);
+    const next = placeCopies(out, lineOf, x.rep, best.P, best.score, buf, em, french);
+    if (next !== out) placed.push({ first: x.rep.from, last: x.rep.from + x.rep.unit * x.rep.times - 1 });
+    out = next;
+  }
+  return placed.length ? realignBetween(out, lineOf, placed, em) : out;
+}
+
+const FRAME = 0.02; // one frame of the alignment model, s
+
+/**
+ * The lines between the repeated blocks placed (the verses between a chorus in the intro and the one at the end), aligned
+ * again on their own, in the time left between those blocks. The whole song's alignment had placed them around the
+ * blocks' wrong places: WANNA TRY [MASTER] with its intro chorus written, the first verse line came 1.9 s early, the
+ * bridge 1.6 s.
+ */
+function realignBetween(words: LyricWord[], lineOf: number[][], placed: { first: number; last: number }[], em: Emissions): LyricWord[] {
+  const blocks = [...placed].sort((a, b) => a.first - b.first);
+  const out = words.slice();
+  // Each run of lines between two blocks (or a block and the song's edge), with the last line of the block before it as a
+  // guide: it takes the singing that runs over its estimated end (a held last word), never the run's first line. (The
+  // next block's first line as a guide too pulled the bridge before it 1.2 s early: the run ends at its start.)
+  const runs: { from: number; to: number; before: number[]; lines: number[]; after: number[] }[] = [];
+  for (let b = 0; b <= blocks.length; b++) {
+    const prev = blocks[b - 1], next = blocks[b];
+    const a = prev ? prev.last + 1 : 0, z = next ? next.first - 1 : lineOf.length - 1;
+    if (z < a) continue;
+    const before = prev ? lineOf[prev.last] : [], after: number[] = [];
+    const from = before.length ? out[before[0]].s : 0;
+    const to = next ? out[lineOf[next.first][0]].s : em.T * FRAME;
+    runs.push({ from, to, before, lines: lineOf.slice(a, z + 1).flat(), after });
+  }
+  for (const r of runs) {
+    const f0 = Math.max(0, Math.floor(r.from / FRAME)), f1 = Math.min(em.T, Math.ceil(r.to / FRAME));
+    const all = [...r.before, ...r.lines, ...r.after];
+    if (f1 - f0 < 10 || !r.lines.length) continue;
+    const written = all.map((i) => ({ w: out[i].w, line: out[i].line ?? 0 }));
+    const again = alignWordsForced(em.frames.subarray(f0 * em.V, f1 * em.V), f1 - f0, em.V, written);
+    if (!again || again.length !== all.length) continue;
+    r.lines.forEach((i, k) => { const x = again[r.before.length + k]; out[i] = { ...out[i], s: x.s + f0 * FRAME, e: x.e + f0 * FRAME, conf: x.conf, doubt: x.doubt }; });
   }
   return out;
 }
