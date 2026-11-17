@@ -5457,7 +5457,7 @@ export default function VideoStudio({
    */
   const nearStart = (e: { metaKey: boolean; ctrlKey: boolean }, t: number, pxPerS: number) =>
     !e.metaKey && !e.ctrlKey && Math.abs(t - settingsRef.current.crop.start) * pxPerS < 8;
-  const edgeDrag = (move: (at: number, free: boolean) => void) => ({
+  const edgeDrag = (move: (at: number, free: boolean) => void, wholeSong = false) => ({
     onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
       if (e.button === 1) return;
       e.stopPropagation(); stop();
@@ -5470,8 +5470,10 @@ export default function VideoStudio({
       if (!d) return;
       const cfg = settingsRef.current;
       const w = viewRef.current ?? twRef.current;
-      let at = round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration)));
-      if (nearStart(e, at, d.width / w.d)) at = cfg.crop.start;
+      // (a line outside the segment: anywhere in the song)
+      const lo = wholeSong ? 0 : cfg.crop.start, hi = wholeSong ? audioBuf?.duration ?? Infinity : cfg.crop.start + Math.max(0.1, cfg.crop.duration);
+      let at = round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, lo, hi));
+      if (!wholeSong && nearStart(e, at, d.width / w.d)) at = cfg.crop.start;
       move(at, e.altKey);
     },
     onPointerUp: () => { if (edgeRef.current) { edgeRef.current = null; onSaveNow(); } },
@@ -5484,6 +5486,16 @@ export default function VideoStudio({
     setHead(at);
     onProject((p) => ({ ...p, lyricWords: out }));
   });
+  /** A line outside the segment (the whole song's lines, `songCues`): its start or its end moved the same way, anywhere
+   *  in the song (to check and set the lyrics of a passage the post does not use yet, the segment locked elsewhere). */
+  const moveSongLine = (i: number) => edgeDrag((at, free) => {
+    const out = moveCueStart(project.lyricWords ?? [], songCues, i, at, free);
+    if (out) onProject((p) => ({ ...p, lyricWords: out }));
+  }, true);
+  const moveSongLineEnd = (i: number) => edgeDrag((at) => {
+    const out = moveCueEnd(project.lyricWords ?? [], songCues, i, at);
+    if (out) onProject((p) => ({ ...p, lyricWords: out }));
+  }, true);
   /** A line's end dragged (one followed by a gap, or the last: a glued end is the next line's start handle). */
   const moveLineEnd = (i: number) => edgeDrag((at) => {
     const out = moveCueEnd(project.lyricWords ?? [], cues, i, at);
@@ -6266,8 +6278,15 @@ export default function VideoStudio({
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
-                    <span key={"o" + i} className="cue outside" data-a={c.start} data-b={c.end} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}`}
-                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{c.text.replace(/\n/g, " ")}</span>
+                    <span key={"o" + i} className="cue outside" data-a={c.start} data-b={c.end} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
+                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}</span>
+                  ))}
+                  {/* Their start and end too, as the segment's lines (moved anywhere in the song). */}
+                  {mode !== "word" && songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.start) && (
+                    <span key={"oe" + i} className="cam-cut cue-edge" style={{ ...place(c.start) }} title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveSongLine(i)} />
+                  ))}
+                  {mode !== "word" && songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.end, c.end) && !(songCues[i + 1] && songCues[i + 1].start - c.end < 0.05) && (
+                    <span key={"ox" + i} className="cam-cut cue-edge end" style={{ ...place(c.end) }} title={t("Drag to change when it leaves")} {...moveSongLineEnd(i)} />
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
