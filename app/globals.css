@@ -2935,27 +2935,28 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 }
 @media (prefers-reduced-motion: reduce) { .lp-deck.ready .lp-slide { animation: none; } }
 
-/* The timeline in one frame (desktop): the waveform, the hook, the lyrics and the video tracks one under the other, each
-   line with its kind's icon in a narrow column on the left (the lyrics' T in gold, the hook's spark in blue, a film in
-   each video's colour; the waveform none), and one playhead across them all (.tl-head, placed by paintTracks). The phone
-   keeps its lines as they were (each framed, its own playhead). */
-.tl-stack { position: relative; display: grid; gap: var(--s2); grid-template-columns: minmax(0, 1fr); } /* (phone: the lines spaced as the timeline's) */
-.tl-ico { display: none; }
+/* The timeline in one frame (desktop): the waveform, the hook, the lyrics and the video tracks one under the other, and
+   one playhead across them all (.tl-head, placed by paintTracks). Each clip says what it is with a small icon before its
+   name (.cue-ico: the lyrics' T in gold, the hook's spark in blue, a film in the video's colour). The phone keeps its
+   lines as they were (each framed, its own playhead). */
+.tl-stack { position: relative; display: grid; gap: var(--s2); grid-template-columns: minmax(0, 1fr); } /* (the playhead's frame; phone: the lines spaced as the timeline's) */
 .tl-head { display: none; }
+/* Each kind of clip in its colour, as the video clips: a tinted ground, its left border, its glow and its icon (the
+   lyrics in gold, the hooks in blue); the text stays white. */
+.lyrics-track { --clip: var(--lyrics); }
+.lyrics-track .cue:not(.outside), .hook-track .cue { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 16%, var(--bg)); color: var(--text); }
+.lyrics-track .cue.on, .hook-track .cue.on { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 24%, var(--bg)); }
+.lyric-track .cue .cue-ico { display: inline-flex; vertical-align: -1px; margin-right: 5px; color: var(--clip); }
+.lyric-track .cue.video-clip .cue-ico, .lyric-track .cue.cam-shot .cue-ico { margin-right: 0; color: var(--vc, var(--cam)); }
+.lyric-track .cue .cue-ico svg { display: block; }
+/* (the glow over a playing text: drawn where the text is, after its icon) */
+.lyric-track .cue.on:not(.cam-shot):not(.video-clip)::after { padding-left: 22px; }
 @media (min-width: 641px) {
-  .tl-stack { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 6px; row-gap: 6px; padding: 8px 8px 8px 4px;
-    border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
-  .tl-stack > :not(.tl-ico):not(.tl-head) { grid-column: 2; }
-  .tl-stack .tl-ico { grid-column: 1; display: grid; place-items: center; align-self: center; height: 22px; color: var(--muted); }
-  .tl-ico.lyrics { color: var(--lyrics); }
-  .tl-ico.hook { color: var(--blue); }
-  .tl-ico[class*="cam-"] { color: var(--cam); }
+  .tl-stack { row-gap: 6px; padding: 8px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
   /* (the lines lose their own frame: the whole is one) */
   .tl-stack .wave { border: 0; }
   .tl-stack .lyric-track { border: 0; background: none; border-radius: 0; }
-  .tl-stack > .video-block { border: 0; padding: 0; background: none; border-radius: 0; gap: 6px; grid-template-columns: 0 minmax(0, 1fr); column-gap: 0; }
-  .tl-stack > .video-block > :not(.tl-ico) { grid-column: 2; }
-  .tl-stack > .video-block > .tl-ico { grid-column: 1; justify-self: start; width: 22px; margin-left: -28px; }
+  .tl-stack > .video-block { border: 0; padding: 0; background: none; border-radius: 0; gap: 6px; }
   .tl-stack > .video-block.dragging { outline: 1px dashed var(--muted); outline-offset: 3px; }
   .tl-stack .lyric-head { display: none; }
   .tl-stack .track-seg { display: none; } /* (the segment is on the waveform, right above) */

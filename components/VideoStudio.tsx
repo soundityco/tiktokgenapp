@@ -4604,7 +4604,6 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(false); setPinCam("main"); }
     };
     return (<>
-          <span className="tl-ico cam-0" title={t("Video")}><Icon name="film" size={13} /></span>
         <div className="lyric-track video-track" role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
@@ -4636,6 +4635,7 @@ export default function VideoStudio({
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
                 {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
                 <span className="vc-name">
+                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span>
                   {locked && <Icon name="lock" size={11} />}
                   <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
                 </span>
@@ -4912,7 +4912,6 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(true); }
     };
     return (<>
-          <span className={"tl-ico cam-" + overNo(settings)} title={t("Video over it")}><Icon name="film" size={13} /></span>
         <div className="lyric-track video-track over-track" role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             <Menu float trigger={(_, toggle) => (
@@ -4941,7 +4940,7 @@ export default function VideoStudio({
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
-                <span className="vc-name"><span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
+                <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
@@ -4967,7 +4966,6 @@ export default function VideoStudio({
     const camNow = camAt(settings.cuts, head);
     const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
     if (part === "track") return (<>
-          <span className={"tl-ico cam-" + camNow} title={t("Shots")}><Icon name="film" size={13} /></span>
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}
             // (the track holds the pointer while it is down: the pull up is followed here)
             onPointerMoveCapture={(e) => {
@@ -5023,7 +5021,7 @@ export default function VideoStudio({
                   style={{ ...place(x.from), width: wFull(x.from, x.to) }}
                   title={`${x.cam + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
                   onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
-                  <b>{x.cam + 1}</b> {a ? a.videoName?.replace(/\.[^.]+$/, "") ?? clipName(a) : ""}
+                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b>{x.cam + 1}</b> {a ? a.videoName?.replace(/\.[^.]+$/, "") ?? clipName(a) : ""}
                   {own && (
                     <button className="shot-x" aria-label={t("Remove this cut")} title={t("Remove this cut: the shot joins the one on its left")}
                       onPointerDown={(e) => e.stopPropagation()}
@@ -5949,7 +5947,6 @@ export default function VideoStudio({
                     onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
                 </div>
                 {hooks.length > 0 && (<>
-                  <span className="tl-ico hook" title={t("Hook")}><Icon name="sparkle" size={13} /></span>
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
@@ -5963,7 +5960,7 @@ export default function VideoStudio({
                         data-a={settings.crop.start + clamp(h.from, 0, segLen)} data-b={settings.crop.start + clamp(h.to ?? segLen, 0, segLen)}
                         title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
                         onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
-                        {h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
+                        <span className="cue-ico" aria-hidden><Icon name="sparkle" size={11} /></span>{h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                       </button>
                     ))}
                     {/* A hook starting at the segment's start (or before) has its handle on the left edge. */}
@@ -5985,8 +5982,7 @@ export default function VideoStudio({
                     </div>
                   </div>
                 </>)}
-                <span className="tl-ico lyrics" title={t("Lyrics")}><Icon name="type" size={13} /></span>
-                <div ref={trackRef} className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
+                <div ref={trackRef} className={"lyric-track lyrics-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
                   <div className="track-content">
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
@@ -6006,7 +6002,7 @@ export default function VideoStudio({
                       data-a={clamp(c.start, settings.crop.start, end)} data-b={clamp(c.end, settings.crop.start, end)}
                       data-at={Math.max(settings.crop.start, c.start)}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
-                      {c.text.replace(/\n/g, " ")}
+                      <span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}
                     </button>
                   ))}
                   {/* A line starting at the segment's start (or before it, still on screen) has its handle on the left edge. */}
