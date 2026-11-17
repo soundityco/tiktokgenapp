@@ -1813,6 +1813,8 @@ export default function VideoStudio({
         const ls = (version.lyricWords ?? []).map((w) => w.line).filter((l): l is number => l !== undefined);
         const was = cur.lyricLines;
         if (ls.length) version.lyricLines = [Math.max(was?.[0] ?? 0, Math.min(...ls)), Math.min(was?.[1] ?? Infinity, Math.max(...ls))];
+        // (the longer one had its lyrics placed, none sung in this part, an intro: no line here)
+        else if (cur.lyricWords?.length) version.lyricLines = [0, -1];
       }
       onRelease((p) => ({ ...p, audios: [...(p.audios ?? []), version] }));
       if (!driveId) uploadAudio(f, id, f.name);
@@ -3409,6 +3411,7 @@ export default function VideoStudio({
    * that has its lyrics placed (where this one sits in it, its lines there). None: not an excerpt, or nothing to tell.
    */
   const excerptLines = async (): Promise<[number, number] | undefined> => {
+    // (an excerpt where the longer version sings nothing, an intro: [0, -1], no line)
     if (!audioBuf) return undefined;
     for (const v of audioVersionsOf(releaseRef.current)) {
       if (v.id === audioId || !v.lyricWords?.length) continue;
@@ -3418,7 +3421,8 @@ export default function VideoStudio({
       const m = mapBetween(src.buf, audioBuf);
       if (sharedShare(m) < SAME_SONG) continue;
       const ls = (remapWords(m, v.lyricWords) ?? []).map((w) => w.line).filter((l): l is number => l !== undefined);
-      if (ls.length) { console.info(`[lyrics] this audio is an excerpt of “${v.audioName}”: lines ${Math.min(...ls)}–${Math.max(...ls)}`); return [Math.min(...ls), Math.max(...ls)]; }
+      console.info(`[lyrics] this audio is an excerpt of “${v.audioName}”: ${ls.length ? `lines ${Math.min(...ls)}–${Math.max(...ls)}` : "no line sung there"}`);
+      return ls.length ? [Math.min(...ls), Math.max(...ls)] : [0, -1];
     }
     return undefined;
   };
@@ -3439,6 +3443,14 @@ export default function VideoStudio({
       lines = await excerptLines().catch(() => undefined);
       setGenInfo(null);
       if (lines) { const ln = lines; onProject((p) => ({ ...p, lyricLines: ln })); next = { ...next, lyricLines: ln }; }
+    }
+    // An excerpt where the song sings none of the written lines (an intro): nothing to place, rather than the whole text
+    // crammed into it.
+    if (lines && lines[1] < lines[0]) {
+      onProject((p) => ({ ...p, lyricWords: [], heardWords: undefined, lyricsPlacedFrom: writtenOf(writtenSrc, next) }));
+      setGenInfo(t("This part of the song has no lyrics (none are sung there in the longer version): nothing to place."));
+      onSaveNow();
+      return;
     }
     // Asked by hand: always from scratch, nothing kept from an earlier placing (the words heard or aligned before, the
     // lines retimed by hand). Editing the text still re-places it at once on what was heard (resyncLyrics).
