@@ -397,6 +397,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue.video-clip:active { cursor: grabbing; }
 .lyric-track .cue.video-clip.locked { cursor: pointer; }
 .lyric-track .cue.video-clip.locked svg { flex: none; opacity: .7; }
+.lyric-track .cue.video-clip.over-clip { background: color-mix(in srgb, var(--video) 30%, var(--bg)); }
+.lyric-track .cue.video-clip.over-clip > svg { flex: none; opacity: .8; }
 .video-clip .clip-edge { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 1; }
 .video-clip .clip-edge.in { left: -2px; } .video-clip .clip-edge.out { right: -2px; }
 .video-clip .clip-edge::after { content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px; border-radius: 1px; background: var(--video); opacity: .8; }

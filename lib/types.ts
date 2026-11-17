@@ -395,6 +395,8 @@ export interface VideoSettings {
    *  in an editor (the video track of the timeline). None: the whole file. */
   clipIn?: number;
   clipOut?: number;
+  /** A second video over the first one (picture in picture): another take of the release, placed on its own track. */
+  overlay?: VideoOverlay;
   /** Volume of the camera file's own sound in the post, 0-1 (preview and export, mixed over the official audio, only
    *  in the part kept). None or 0: silent (the usual case: synced on the official audio). */
   clipVolume?: number;
@@ -451,6 +453,24 @@ export interface VideoSettings {
   /** Text style of the hooks; falls back to the caption style, placed at the top. */
   hookStyle?: TextStyle;
   frame: VideoFrame;
+}
+
+/**
+ * A video over the post's video (picture in picture): a take of the release (`clip`), placed on the official track as a
+ * clip of its own (`offset`: the official time of its file's t = 0; trimmed to [clipIn, clipOut] of the file), drawn
+ * whole at `w` % of the post's width, centred on (`x`, `y`) %, corners rounded by `radius` % of its shorter side, with
+ * its take's colour grade; its own sound at `volume` (0-1, none: silent).
+ */
+export interface VideoOverlay {
+  clip: string;
+  offset: number;
+  clipIn?: number;
+  clipOut?: number;
+  x: number;
+  y: number;
+  w: number;
+  radius?: number;
+  volume?: number;
 }
 
 /** One clip made for a release: its own official-audio segment, camera take and sync. */

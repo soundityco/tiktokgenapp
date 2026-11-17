@@ -30,6 +30,7 @@ import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, tr
 import { stopAlign } from "@/lib/alignAI";
 import { LYRICS_LAP, LYRICS_WIN, placeByAlignment } from "@/lib/lyricsPipeline";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
+import type { VideoOverlay } from "@/lib/types";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
 import CaptionStyle from "./CaptionStyle";
 import { presetNamed, presetOf, StylePresets, TextQuickMenu, withPreset } from "./TextControls";
@@ -95,7 +96,7 @@ const LYRICS_ALIGN_V = 3;
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
-const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "clipVolume", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "clipVolume", "overlay", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
@@ -724,7 +725,11 @@ export default function VideoStudio({
   // ---- multicam: the other cameras (videos of the release on the same audio), each with its sync, framing, grade ----
   const anglesRef = useRef(new Map<string, Angle>());
   const [angleRev, setAngleRev] = useState(0);
-  const angleClips = (settings.angles ?? []).map((id) => clips.find((c) => c.id === id && c.id !== clip.id) ?? null);
+  // The video over the post's video (overlay) is read the same way: a hidden player, its grade (never one of the
+  // project's cameras: those play as cameras).
+  const overlayOf = (s: VideoSettings) => (s.overlay && s.overlay.clip !== clip.id && !(s.angles ?? []).includes(s.overlay.clip) ? s.overlay : null);
+  const ovClip = overlayOf(settings) ? clips.find((c) => c.id === settings.overlay!.clip) ?? null : null;
+  const angleClips = [...(settings.angles ?? []).map((id) => clips.find((c) => c.id === id && c.id !== clip.id) ?? null), ...(ovClip ? [ovClip] : [])];
   // What a camera needs (its file, its offset, framing and grade): read again when one of them changes.
   const anglesKey = JSON.stringify(angleClips.map((c) => c && [c.id, c.media, c.videoSize, c.offset, c.frame, c.desqueeze, c.grade, lutLibrary?.find((l) => l.id === c.grade?.lut?.id)]));
   useEffect(() => {
@@ -802,6 +807,16 @@ export default function VideoStudio({
     if (still && !el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = Math.max(0, target);
     return el.readyState >= 2 && el.videoWidth && !el.seeking ? { src: el, w: el.videoWidth, h: el.videoHeight } : undefined;
   };
+  /** The overlay's player and picture at official time `time` (paused: placed there first); none outside its part. */
+  const overlayPicture = (time: number, still: boolean): { pic: Picture; a: Angle; o: VideoOverlay } | null => {
+    const o = overlayOf(settingsRef.current), a = o ? anglesRef.current.get(o.clip) : undefined;
+    if (!o || !a) return null;
+    const el = a.el, target = time - o.offset;
+    const [ci, co] = clipSpan(o, Number.isFinite(el.duration) ? el.duration : Infinity);
+    if (target < ci - 0.001 || target > co + 0.001) return null;
+    if (still && !el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = Math.max(0, target);
+    return el.readyState >= 2 && el.videoWidth ? { pic: { src: el, w: el.videoWidth, h: el.videoHeight }, a, o } : null;
+  };
   /** While playing: every camera plays with the sound, so a cut shows the next one at once (no black frame). */
   /**
    * While playing, the cameras 2 to 4 follow the sound. Only the one on screen and the one of the next cut (started
@@ -816,8 +831,18 @@ export default function VideoStudio({
     const add = (cam: number) => { const id = cam > 0 ? cfg.angles?.[cam - 1] : undefined; if (id) live.add(id); };
     add(camAt(cfg.cuts, heard));
     for (const c of cfg.cuts ?? []) if (c.at > heard && c.at <= heard + PREROLL) add(c.cam);
+    const ov = overlayOf(cfg);
     for (const a of anglesRef.current.values()) {
-      const el = a.el, target = heard - a.offset;
+      const isOv = ov?.clip === a.id;
+      const el = a.el, target = heard - (isOv ? ov!.offset : a.offset);
+      // The overlay: playing over its part kept on its track (started a moment before), its own sound at its volume.
+      if (isOv) {
+        const [ci, co] = clipSpan(ov!, Number.isFinite(el.duration) ? el.duration : Infinity);
+        if (target > ci - PREROLL && target < co) live.add(a.id);
+        const vol = clamp(ov!.volume ?? 0, 0, 1), audible = vol > 0 && target >= ci && target <= co;
+        if (el.muted === audible) el.muted = !audible;
+        if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
+      }
       const inFile = target > -PREROLL && (!Number.isFinite(el.duration) || target < el.duration);
       if (!live.has(a.id) || !inFile) {
         if (!el.paused) { el.pause(); el.playbackRate = 1; }
@@ -894,7 +919,9 @@ export default function VideoStudio({
    */
   const drawScene = useCallback((g: CanvasRenderingContext2D, W: number, H: number, pic: Picture | null, time: number, preview?: { raw: boolean; keep: boolean },
     /** Multicam: another camera's picture, with its own framing and grade. */
-    angle?: AngleLook) => {
+    angle?: AngleLook,
+    /** The video over it (picture in picture): its picture, its take's look, where it goes. */
+    over?: { pic: Picture; a: AngleLook; o: VideoOverlay } | null) => {
     const cfg = settingsRef.current;
     const lookFrame = angle ? angle.frame : cfg.frame, lookGrade = angle ? angle.grade : cfg.grade;
     const raw = !!preview?.raw;
@@ -948,6 +975,29 @@ export default function VideoStudio({
         if (preview?.keep && !raw && !angle) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
+    // The video over it: whole, at its size and place, its corners rounded, graded as its take; under the bars and texts.
+    let overBox: TextBox | null = null;
+    if (over && over.pic.w && over.pic.h) {
+      const o = over.o;
+      let op: Picture | null = desqueeze(over.pic, over.a.desqueeze);
+      const w = (W * clamp(o.w, 5, 100)) / 100, h = (w * op.h) / op.w;
+      const x = (W * o.x) / 100 - w / 2, y = (H * o.y) / 100 - h / 2;
+      if (!raw && !op.graded && over.a.lut && gradesColour(over.a.grade)) {
+        const grader = graderRef.current ?? (graderRef.current = Grader.shared());
+        if (grader && !grader.lost) { grader.setLut(over.a.lut, 33); op = grader.grade(op, { x: 0, y: 0, w: op.w, h: op.h }, Math.min(4096, w), Math.min(4096, h)); }
+      }
+      if (op) {
+        const r = (Math.min(w, h) * clamp(o.radius ?? 0, 0, 50)) / 100;
+        g.save();
+        g.beginPath();
+        g.roundRect(x, y, w, h, r);
+        g.clip();
+        drawPictureAt(g, op.src, op.w, op.h, x, y, w / op.w, op.part);
+        g.restore();
+        overBox = { x, y, w, h } as TextBox;
+      }
+    }
+    overlayBox.current = overBox;
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
     drawMatte(g, W, H, cfg.matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
@@ -959,6 +1009,8 @@ export default function VideoStudio({
     return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
   }, []);
   const captionBox = useRef<TextBox | null>(null);
+  /** Where the overlay video was drawn (to drag it on the preview). */
+  const overlayBox = useRef<TextBox | null>(null);
   const hookBox = useRef<TextBox | null>(null);
   /** Editing aids of the preview (TikTok zones, centre lines while a text is dragged): never in the export. */
   const [aids, setAidsRaw] = useState<{ zones: boolean; guides: boolean }>(() => {
@@ -990,7 +1042,7 @@ export default function VideoStudio({
     const pic = lostCam ? null : ang ? anglePicture(ang, time, !sourceRef.current) : pictureOf(el, time);
     // A camera not ready yet (starting, placing itself): the last picture stays on screen, never a black frame.
     if (pic === undefined) return;
-    const boxes = drawScene(g, c.width, c.height, pic, time, lostCam ? undefined : { raw: rawRef.current, keep }, ang ?? (lostCam ? { lut: null } : undefined));
+    const boxes = drawScene(g, c.width, c.height, pic, time, lostCam ? undefined : { raw: rawRef.current, keep }, ang ?? (lostCam ? { lut: null } : undefined), overlayPicture(time, !sourceRef.current));
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
     drawHelpers(g, c.width, c.height, fullRef.current ? { ...aidsRef.current, zones: false } : aidsRef.current);
@@ -1272,14 +1324,15 @@ export default function VideoStudio({
   // ---- The working copy for the other devices: made by itself once the take is synced ----
   // The passage used (+2 s), as rich as the take (lib/convert copyPlanFor), on the Drive; made again when the passage
   // moves out of it; 15 s after the last change (not while the sync is being set). Never from a copy.
-  const makeCopy = async (take?: { c: VideoSetup; blob: Blob; dur: number }) => {
+  const makeCopy = async (take?: { c: VideoSetup; blob: Blob; dur: number; off?: number }) => {
     const blob = take ? take.blob : videoBlob;
     if (!blob || (!take && onCopy) || copyAc.current) return;
     const cur = settingsRef.current;
     const clipId = take ? take.c.id : clip.id;
     const videoDur = take ? take.dur : videoDurRef.current;
     // A take of the multicam: the project's passage in its own time.
-    let segS = cur.crop.start - (take ? take.c.offset : cur.offset), segE = segS + cur.crop.duration;
+    // (the video over it: where it is placed on its track)
+    let segS = cur.crop.start - (take ? take.off ?? take.c.offset : cur.offset), segE = segS + cur.crop.duration;
     // The passages of every version, when they sit close enough: switching versions then needs no new copy.
     for (const v of take ? [] : cur.versions ?? []) {
       if (!v.v.crop || v.v.offset === undefined) continue;
@@ -1367,19 +1420,22 @@ export default function VideoStudio({
   useEffect(() => {
     if (!driveWrite || copyJob || copyDueAt || playing) return;
     const segS0 = settings.crop.start, segE0 = segS0 + settings.crop.duration;
-    const next = (settings.angles ?? []).map((id) => [clips.find((c) => c.id === id), anglesRef.current.get(id)] as const).find(([c, a]) => {
-      if (!c || !a || a.fromCopy || c.score === undefined) return false;
+    // (and the video over it, placed by hand on its own track: its copy holds the part the segment shows)
+    const ov = overlayOf(settings);
+    const next = [...(settings.angles ?? []), ...(ov ? [ov.clip] : [])].map((id) => [clips.find((c) => c.id === id), anglesRef.current.get(id)] as const).find(([c, a]) => {
+      if (!c || !a || a.fromCopy || (c.score === undefined && c.id !== ov?.clip)) return false;
       const dur = a.el.duration;
       if (!Number.isFinite(dur)) return false;
-      const s0 = segS0 - c.offset, e0 = segE0 - c.offset, cp = c.drive?.copy;
+      const off = c.id === ov?.clip ? ov.offset : c.offset;
+      const s0 = segS0 - off, e0 = segE0 - off, cp = c.drive?.copy;
       if (e0 <= 0 || s0 >= dur) return false;
       return !(cp && cp.of === a.blob.size && cp.from <= Math.max(0, s0 - 0.3) + 1e-3 && cp.to >= Math.min(dur, e0 + 0.3) - 1e-3);
     });
     if (!next) return;
     const [c, a] = next;
-    const id = window.setTimeout(() => void makeCopy({ c: c!, blob: a!.blob, dur: a!.el.duration }), 15_000);
+    const id = window.setTimeout(() => void makeCopy({ c: c!, blob: a!.blob, dur: a!.el.duration, off: c!.id === ov?.clip ? ov.offset : undefined }), 15_000);
     return () => clearTimeout(id);
-  }, [driveWrite, copyJob, copyDueAt, playing, angleRev, settings.crop.start, settings.crop.duration, anglesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [driveWrite, copyJob, copyDueAt, playing, angleRev, settings.crop.start, settings.crop.duration, anglesKey, settings.overlay?.offset]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
@@ -3356,37 +3412,45 @@ export default function VideoStudio({
 
   // ---- export ----
   /** Last resort when the browser cannot encode MP4 itself: record a hidden playback in real time. */
-  /** The camera file's sound, read once per file (for the exports that mix it in). */
-  const cameraSound = useRef<{ blob: Blob; buf: AudioBuffer | null } | null>(null);
+  /** A take's sound, read once per file (for the exports that mix it in). */
+  const takeSounds = useRef(new Map<Blob, AudioBuffer | null>());
   /**
-   * The official audio with the camera's own sound mixed in at its volume (VideoSettings.clipVolume), placed where the
-   * picture is and only in the part kept: as heard on the preview. No volume, or its sound unreadable: the audio alone.
+   * The official audio with the takes' own sounds mixed in at their volume: the post's video (VideoSettings.clipVolume)
+   * and the video over it (overlay.volume), each placed where its picture is and only in its part kept, as heard on
+   * the preview. No volume, or a sound unreadable: left out.
    */
   const withCameraSound = async (official: AudioBuffer, cfg: VideoSettings, signal: AbortSignal): Promise<AudioBuffer> => {
-    const vol = clamp(cfg.clipVolume ?? 0, 0, 1);
-    if (!vol || !videoBlob) return official;
-    let cam = cameraSound.current?.blob === videoBlob ? cameraSound.current.buf : undefined;
-    if (cam === undefined) {
-      const s = await readSound(videoBlob, videoDur || 60, () => {}, signal).catch(() => null);
-      cam = null;
-      if (s) { cam = new AudioBuffer({ length: s.samples.length, sampleRate: s.rate, numberOfChannels: 1 }); cam.copyToChannel(s.samples as Float32Array<ArrayBuffer>, 0); }
-      cameraSound.current = { blob: videoBlob, buf: cam };
-    }
-    if (!cam) { console.warn("[export] the camera's sound could not be read: exported without it"); return official; }
-    const [ci, co] = clipSpan(cfg, cam.duration);
+    const ov = overlayOf(cfg), ovA = ov ? anglesRef.current.get(ov.clip) : undefined;
+    const parts = [
+      { blob: videoBlob, vol: clamp(cfg.clipVolume ?? 0, 0, 1), span: cfg as Pick<VideoSettings, "clipIn" | "clipOut">, offset: cfg.offset, len: videoDur || 60 },
+      { blob: ovA?.blob ?? null, vol: clamp(ov?.volume ?? 0, 0, 1), span: ov ?? {}, offset: ov?.offset ?? 0, len: ovA && Number.isFinite(ovA.el.duration) ? ovA.el.duration : 60 },
+    ].filter((x) => x.blob && x.vol > 0);
+    if (!parts.length) return official;
     const ctx = new OfflineAudioContext(official.numberOfChannels, official.length, official.sampleRate);
     const music = ctx.createBufferSource();
     music.buffer = official;
     music.connect(ctx.destination);
     music.start(0);
-    const src = ctx.createBufferSource(), gain = ctx.createGain();
-    src.buffer = cam;
-    gain.gain.value = vol;
-    src.connect(gain).connect(ctx.destination);
-    // Where the kept part starts on the official track (before 0: its first seconds are not in the song).
-    const at = cfg.offset + ci, skip = Math.max(0, -at);
-    if (co - ci - skip > 0) src.start(Math.max(0, at), ci + skip, co - ci - skip);
-    return ctx.startRendering();
+    let mixed = false;
+    for (const x of parts) {
+      let cam = takeSounds.current.get(x.blob!);
+      if (cam === undefined) {
+        const s = await readSound(x.blob!, x.len, () => {}, signal).catch(() => null);
+        cam = null;
+        if (s) { cam = new AudioBuffer({ length: s.samples.length, sampleRate: s.rate, numberOfChannels: 1 }); cam.copyToChannel(s.samples as Float32Array<ArrayBuffer>, 0); }
+        takeSounds.current.set(x.blob!, cam);
+      }
+      if (!cam) { console.warn("[export] a take's sound could not be read: exported without it"); continue; }
+      const [ci, co] = clipSpan(x.span, cam.duration);
+      const src = ctx.createBufferSource(), gain = ctx.createGain();
+      src.buffer = cam;
+      gain.gain.value = x.vol;
+      src.connect(gain).connect(ctx.destination);
+      // Where the kept part starts on the official track (before 0: its first seconds are not in the song).
+      const at = x.offset + ci, skip = Math.max(0, -at);
+      if (co - ci - skip > 0) { src.start(Math.max(0, at), ci + skip, co - ci - skip); mixed = true; }
+    }
+    return mixed ? ctx.startRendering() : official;
   };
   const recordRealtime = async (el: HTMLVideoElement, W: number, H: number, from: number, until: number, signal: AbortSignal) => {
     const buf = audioBuf!;
@@ -3551,6 +3615,27 @@ export default function VideoStudio({
         // Multicam: each other camera read from its own file when its first shot comes (graded on the GPU from its
         // 10-bit frames when it needs it), its player as the last resort; closed at the end.
         const angleSrc = new Map<number, Promise<(time: number) => Promise<Picture | null>>>();
+        // The video over it: its file read in order over its part (graded when drawn, as on the preview).
+        const ov = overlayOf(cfg), ovA = ov ? anglesRef.current.get(ov.clip) : undefined;
+        let ovSrc: Promise<((time: number) => Promise<Picture | null>) | null> | null = null;
+        const overAt = async (time: number) => {
+          if (!ov || !ovA) return null;
+          const [ci, co] = clipSpan(ov, Number.isFinite(ovA.el.duration) ? ovA.el.duration : Infinity);
+          const tt = time - ov.offset;
+          if (tt < ci - 0.001 || tt > co + 0.001) return null;
+          ovSrc ??= (async () => {
+            await whenReady(ovA.el);
+            const s0 = Math.max(0, from - ov.offset, ci), s1 = Math.min(until - ov.offset, co);
+            const direct = await VideoSource.open(ovA.blob, s0, s1, undefined, ac.signal).catch(() => null);
+            if (direct) { angleClose.push(() => direct.close()); return (t: number) => direct.frameAt(t - ov.offset); }
+            const pf = playerFrames(ovA.el, s0);
+            angleClose.push(() => pf.stop());
+            return async (t: number) => { await visible(); await pf.frameAt(t - ov.offset); return ovA.el.readyState >= 2 ? { src: ovA.el, w: ovA.el.videoWidth, h: ovA.el.videoHeight } : null; };
+          })();
+          const at = await ovSrc;
+          const pic = at ? await at(time) : null;
+          return pic ? { pic, a: ovA as AngleLook, o: ov } : null;
+        };
         const openAngle = async (a: Angle): Promise<(time: number) => Promise<Picture | null>> => {
           await whenReady(a.el);
           const aw = a.el.videoWidth, ah = a.el.videoHeight;
@@ -3577,7 +3662,7 @@ export default function VideoStudio({
               if (!angleSrc.has(cam)) angleSrc.set(cam, openAngle(ang));
               const at = await angleSrc.get(cam)!;
               const tt = time - ang.offset;
-              drawScene(g, W, H, tt >= -0.001 ? await at(time) : null, time, undefined, ang);
+              drawScene(g, W, H, tt >= -0.001 ? await at(time) : null, time, undefined, ang, await overAt(time));
               return;
             }
             const target = time - cfg.offset;
@@ -3599,7 +3684,7 @@ export default function VideoStudio({
               if (sig && sig === lastSig) { if (time - sameSince >= 2) throw new FrozenVideo(target); }
               else { lastSig = sig; sameSince = time; }
             }
-            drawScene(g, W, H, pic, time);
+            drawScene(g, W, H, pic, time, undefined, undefined, await overAt(time));
           },
         }).catch((e) => {
           // The encoder gave no sound: record instead of handing over a silent video.
@@ -3739,15 +3824,14 @@ export default function VideoStudio({
     const p = clampPic(picOf(f, settingsRef.current.matte), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
     return { ...f, ox: p.ox, oy: p.oy };
   };
-  const pdrag = useRef<null | { kind: "text" | "hook" | "pic"; sx: number; sy: number; ox: number; oy: number; k: number; cue?: { key: string; st: TextStyle } }>(null);
+  const pdrag = useRef<null | { kind: "text" | "hook" | "pic" | "over"; sx: number; sy: number; ox: number; oy: number; k: number; cue?: { key: string; st: TextStyle } }>(null);
   const toCv = (e: { clientX: number; clientY: number }) => {
     const c = canvasRef.current!;
     const r = c.getBoundingClientRect();
     const k = c.width / r.width;
     return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k, k };
   };
-  const inBox = (b: TextBox | null, x: number, y: number) => {
-    const pad = 30;
+  const inBox = (b: TextBox | null, x: number, y: number, pad = 30) => {
     return !!b && x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad;
   };
   /** Which text is under the pointer: the hook (drawn on top), the lyrics, or none. */
@@ -3757,7 +3841,14 @@ export default function VideoStudio({
     if (!videoBlob) return;
     const c = toCv(e);
     e.currentTarget.setPointerCapture(e.pointerId);
-    const kind = textAt(c.x, c.y);
+    const textKind = textAt(c.x, c.y);
+    // Under the texts, the video over the picture (picture in picture): dragged to move it.
+    const ovNow = overlayOf(settingsRef.current);
+    if (!textKind && ovNow && inBox(overlayBox.current, c.x, c.y, 0)) {
+      pdrag.current = { kind: "over", sx: e.clientX, sy: e.clientY, ox: ovNow.x, oy: ovNow.y, k: c.k };
+      return;
+    }
+    const kind = textKind;
     const f = fitFrame(curFrame());
     // The lyrics: the caption shown alone when it has its own look (or "this word" is chosen), else all of them.
     const here = kind === "text" ? cueHere() : null;
@@ -3771,7 +3862,15 @@ export default function VideoStudio({
     const dx = (e.clientX - d.sx) * d.k, dy = (e.clientY - d.sy) * d.k;
     // ⌘ (Ctrl) held: no snapping, as in design apps.
     const free = e.metaKey || e.ctrlKey;
-    if (d.kind !== "pic") {
+    if (d.kind === "over") {
+      let x = clamp(d.ox + (dx / c.width) * 100, 0, 100), y = clamp(d.oy + (dy / c.height) * 100, 0, 100);
+      const sv = !free && Math.abs(x - 50) < 1.5, sh = !free && Math.abs(y - 50) < 1.5;
+      if (sv) x = 50;
+      if (sh) y = 50;
+      if (sv !== snap.v || sh !== snap.h) setSnap({ v: sv, h: sh });
+      const o = overlayOf(settingsRef.current);
+      if (o) setV({ overlay: { ...o, x: round2(x), y: round2(y) } });
+    } else if (d.kind !== "pic") {
       let x = clamp(d.ox + (dx / c.width) * 100, 0, 100), y = clamp(d.oy + (dy / c.height) * 100, 0, 100);
       // Snaps to the centre lines, shown in blue while dragging.
       const sv = !free && Math.abs(x - 50) < 1.5, sh = !free && Math.abs(y - 50) < 1.5;
@@ -3823,6 +3922,12 @@ export default function VideoStudio({
     const c = toCv(e);
     const dir = e.deltaY < 0 ? 1 : -1;
     const kind = textAt(c.x, c.y);
+    // The video over the picture: the wheel sets its size.
+    const ovNow = overlayOf(settingsRef.current);
+    if (!kind && ovNow && inBox(overlayBox.current, c.x, c.y, 0)) {
+      setV({ overlay: { ...ovNow, w: clamp(Math.round(ovNow.w + dir * 2), 5, 100) } });
+      return;
+    }
     if (kind) {
       const here = kind === "text" ? cueHere() : null;
       const st = kind === "hook" ? hookStyleRef.current : here?.one ? cueStyleRef.current(here.cue) : styleRef.current;
@@ -4198,6 +4303,9 @@ export default function VideoStudio({
       const menu = (close: () => void) => (<>
         {cam !== null && cam > 0 && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
         {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
+        {cam === null && (settings.overlay?.clip === c.id
+          ? <button onClick={() => { close(); setV({ overlay: undefined }); }}>{t("Remove from over the video")}</button>
+          : <button onClick={() => { close(); putOverlay(c); }}>{t("Put over the video (picture in picture)")}</button>)}
         <button disabled={(!!job && !job.err) || (cam === 0 && (!videoBlob || syncBusy))} onClick={() => { close(); if (cam === 0) void autoSync(); else void resyncTake(c); }}>{t("Sync again")}</button>
         {c.takeOnly && <>
           <div className="sep" />
@@ -4353,6 +4461,105 @@ export default function VideoStudio({
                 {locked && <Icon name="lock" size={11} />}
                 <span className="truncate">{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
                 {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  /** A take of the release over the post's video (picture in picture): from the library's take menu. Synced, it starts
+   *  in place; else at the segment's start. Top right, 42 % wide, corners slightly rounded. */
+  const putOverlay = (c: VideoSetup) => {
+    stop();
+    setV({ overlay: { clip: c.id, offset: c.score !== undefined ? c.offset : round2(settings.crop.start), x: 70, y: 28, w: 42, radius: 8 } });
+  };
+  /**
+   * The overlay's track (over the video track): its take as a clip, dragged to slide it along the track, its edges to
+   * trim it; at its end, its settings (size, corners, sound: the picture itself is moved and sized on the preview) and
+   * the way out.
+   */
+  const ovDrag = useRef<{ mode: "move" | "in" | "out"; px: number; left: number; width: number; s: number; d: number; o: VideoOverlay; ci: number; co: number; len: number; moved?: boolean } | null>(null);
+  const overlayTrackEl = () => {
+    const o = overlayOf(settings), a = o ? anglesRef.current.get(o.clip) : undefined;
+    const take = o ? clips.find((c) => c.id === o.clip) : undefined;
+    if (!o || !take || !audioBuf) return null;
+    const len = a && Number.isFinite(a.el.duration) ? a.el.duration : take.source?.duration ?? 0;
+    if (!len) return null;
+    const [ci, co] = clipSpan(o, len);
+    const a0 = o.offset + ci, b0 = o.offset + co;
+    const vol = clamp(o.volume ?? 0, 0, 1);
+    const trimmed = ci > 0.01 || co < len - 0.01;
+    const setO = (patch: Partial<VideoOverlay>) => { const cur = overlayOf(settingsRef.current); if (cur) setV({ overlay: { ...cur, ...patch } }); };
+    const inSeg = (t: number) => round2(clamp(t, settings.crop.start, end - 0.05));
+    const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
+      if (e.button !== 0) return;
+      e.stopPropagation(); stop();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
+      const w = viewRef.current ?? twRef.current;
+      ovDrag.current = { mode, px: e.clientX, left: r.left, width: r.width, s: w.s, d: w.d, o, ci, co, len };
+    };
+    const move = (e: React.PointerEvent<HTMLElement>) => {
+      const d = ovDrag.current;
+      if (!d) return;
+      if (!d.moved && Math.abs(e.clientX - d.px) < 4) return;
+      d.moved = true;
+      const dt = ((e.clientX - d.px) / Math.max(1, d.width)) * d.d, dur = audioBuf.duration;
+      if (d.mode === "move") {
+        const offset = round2(clamp(d.o.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
+        setO({ offset });
+        setHead(inSeg(Math.max(offset + d.ci, headRef.current)));
+      } else if (d.mode === "in") {
+        const clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
+        setO({ clipIn });
+        setHead(inSeg(d.o.offset + clipIn));
+      } else {
+        const clipOut = round2(clamp(d.co + dt, d.ci + 0.2, d.len));
+        setO({ clipOut });
+        setHead(inSeg(d.o.offset + clipOut - 0.05));
+      }
+    };
+    const up = (e: React.PointerEvent<HTMLElement>) => {
+      const d = ovDrag.current;
+      ovDrag.current = null;
+      if (d && !d.moved) setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d));
+    };
+    return (
+      <div className="cams">
+        <div className="lyric-track video-track over-track" role="group" aria-label={t("Video over it")} {...scrub()}>
+          <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
+            <Menu float trigger={(_, toggle) => (
+              <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Settings")} title={t("Size, corners and sound of the video over it")} onClick={toggle}>
+                <Icon name={vol > 0 ? "volume" : "tune"} size={14} />
+              </button>
+            )}>
+              {(close) => (
+                <div className="sound-pop" data-keep>
+                  <Range label={t("Size")} value={Math.round(o.w)} display={`${Math.round(o.w)} %`} min={10} max={100} step={1} onChange={(n) => setO({ w: n })} />
+                  <Range label={t("Rounded corners")} value={Math.round(o.radius ?? 0)} display={`${Math.round(o.radius ?? 0)} %`} min={0} max={50} step={1} onChange={(n) => setO({ radius: n })} />
+                  <Range label={t("Video sound")} value={Math.round(vol * 100)} display={vol > 0 ? `${Math.round(vol * 100)} %` : t("Muted")}
+                    min={0} max={100} step={1} onChange={(n) => setO({ volume: n > 0 ? n / 100 : undefined })} />
+                  <p className="muted xs">{t("Drag it on the video to move it, scroll on it to resize it.")}</p>
+                  <div className="row" style={{ gap: 6 }}>
+                    {trimmed && <button className="btn sm quiet" onClick={() => setO({ clipIn: undefined, clipOut: undefined })}>{t("Whole video")}</button>}
+                    <span className="grow" />
+                    <button className="btn sm quiet" style={{ color: "var(--danger)" }} onClick={() => { close(); setV({ overlay: undefined }); }}>{t("Remove")}</button>
+                  </div>
+                </div>
+              )}
+            </Menu>
+          </div>
+          <div className="track-content">
+            <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
+            {onTrack(a0, b0) && (
+              <div className={"cue video-clip over-clip" + (head >= a0 && head < b0 ? " on" : "")} style={{ ...place(a0), width: wFull(a0, b0) }}
+                title={t("Drag to slide the video along the track, its edges to trim it.")}
+                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
+                <span className="clip-edge in" onPointerDown={down("in")} />
+                <Icon name="layers" size={11} />
+                <span className="truncate">{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span>
+                <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
           </div>
@@ -5382,7 +5589,7 @@ export default function VideoStudio({
                   <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
                 </div>
-                {camsEl()}
+                {overlayTrackEl()}{camsEl()}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
