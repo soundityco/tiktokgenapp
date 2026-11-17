@@ -730,6 +730,8 @@ export default function VideoStudio({
 
   // ---- multicam: the other cameras (videos of the release on the same audio), each with its sync, framing, grade ----
   const anglesRef = useRef(new Map<string, Angle>());
+  /** A take's file linked again: its player is read again. */
+  const [takeFilesRev, setTakeFilesRev] = useState(0);
   const [angleRev, setAngleRev] = useState(0);
   // The video over the post's video (overlay) is read the same way: a hidden player, its grade (never one of the
   // project's cameras: those play as cameras).
@@ -752,7 +754,9 @@ export default function VideoStudio({
         let a = map.get(c.id);
         if (!a || a.media !== media) {
           // The camera file on this device, else its Drive working copy kept here, else that copy fetched from the Drive.
-          const own = await getMedia(`video:${media}`).catch(() => undefined);
+          const kept = await getMedia(`video:${media}`).catch(() => undefined);
+          // (another file under its key on this device: not its own, never shown in its place)
+          const own = kept && c.videoSize && kept.size !== c.videoSize ? undefined : kept;
           let blob = own ?? (await getMedia(`copy:${c.id}`).catch(() => undefined));
           if (!blob && c.drive?.copy?.id) {
             try { blob = (await downloadDriveFile(c.drive.copy.id)) ?? undefined; if (blob) void putMedia(`copy:${c.id}`, blob).catch(() => {}); }
@@ -800,7 +804,7 @@ export default function VideoStudio({
       if (!off) { setAngleRev((n) => n + 1); drawAt(headRef.current); }
     })();
     return () => { off = true; };
-  }, [anglesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [anglesKey, takeFilesRev]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { for (const a of anglesRef.current.values()) { a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); } }, []);
   /** The camera (2 to 4) of the shot at official time `time`; null: this video's own. */
   const angleAt = (time: number): Angle | null => {
@@ -1170,8 +1174,12 @@ export default function VideoStudio({
           if (!p || off || token !== ioRef.current) return;
           try { posterRef.current = await createImageBitmap(p); drawAt(swapOnly ? headRef.current : settingsRef.current.crop.start); } catch { /* not a picture */ }
         });
-        const [shared, legacy, b] = await Promise.all([getMedia(projectAudioKey), getMedia(`audio:${clip.id}`), getMedia(`video:${mediaId}`)]);
+        const [shared, legacy, b0] = await Promise.all([getMedia(projectAudioKey), getMedia(`audio:${clip.id}`), getMedia(`video:${mediaId}`)]);
         if (off || token !== ioRef.current) return;
+        // Not its file (another one kept under its key on this device: another browser's history, a take swapped…): never
+        // shown in its place; the video is "not here", to link again.
+        const want = settingsRef.current.videoSize;
+        const b = b0 && want && b0.size !== want ? (console.warn(`[load] the file kept for ${mediaId} is not this video's (${b0.size} ≠ ${want} bytes)`), undefined) : b0;
         console.debug(`[load] files read from the device in ${Math.round(performance.now() - t0)} ms (video ${b ? Math.round(b.size / 1e6) + " MB" : "none"})`);
         loadT0.current = t0;
         // The release has one official audio; older workspaces kept a copy per video: it becomes the project's.
@@ -4302,6 +4310,29 @@ export default function VideoStudio({
     void askPersistentStorage();
     for (const m of made) await prepareTake(m.c.id, m.f, cur.grade, true);
   };
+  /**
+   * "Link the original file" for a take (any of the project's videos, not only camera 1): the same camera file found
+   * again on this computer (its size decides, the name may have changed), its sync and settings kept.
+   */
+  const takeOriginal = useRef<HTMLInputElement>(null);
+  const relinkFor = useRef<string | null>(null);
+  const relinkTake = async (id: string, f: File) => {
+    const c = clips.find((x) => x.id === id);
+    if (!c) return;
+    let same = c.videoSize ? c.videoSize === f.size : false;
+    if (!c.videoSize) { const info = await probeVideo(f); same = !!info.duration && !!c.source?.duration && Math.abs(info.duration - c.source.duration) < 0.05; }
+    if (!same) { onToast?.(t("This is not the same camera file ({name}). Pick the original, or use “Replace” for another take.", { name: c.videoName ?? "" })); return; }
+    try { await putMedia(`video:${c.media ?? c.id}`, f); } catch { /* private mode */ }
+    void delMedia(`copy:${c.id}`).catch(() => {});
+    if (!c.videoSize) patchTake(c.id, { videoSize: f.size });
+    // Its player read again from the file (it may have shown its Drive copy, or nothing).
+    const a = anglesRef.current.get(c.id);
+    if (a) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); anglesRef.current.delete(c.id); }
+    setTakeJobs((j) => { const n = { ...j }; delete n[c.id]; return n; });
+    setTakeFilesRev((n) => n + 1);
+    void askPersistentStorage();
+    onToast?.(t("Camera file found again: the sync and the settings are kept."));
+  };
   const resyncTake = async (c: VideoSetup): Promise<number | null> => {
     const b = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
     if (!b) { setTakeJobs((j) => ({ ...j, [c.id]: { p: 0, err: t("Not in this browser: pick it again.") } })); return null; }
@@ -4472,6 +4503,8 @@ export default function VideoStudio({
           ? <button onClick={() => { close(); setV({ overlay: undefined }); }}>{t("Remove from over the video")}</button>
           : <button onClick={() => { close(); putOverlay(c); }}>{t("Put over the video (picture in picture)")}</button>)}
         <button disabled={(!!job && !job.err) || (cam === 0 && (!videoBlob || syncBusy))} onClick={() => { close(); if (cam === 0) void autoSync(); else void resyncTake(c); }}>{t("Sync again")}</button>
+        {/* Its camera file found again on this computer (camera 1: in its own card's menu). */}
+        {cam !== 0 && <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}>{t("Link the original file")}</button>}
         {c.takeOnly && <>
           <div className="sep" />
           <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
@@ -4528,6 +4561,8 @@ export default function VideoStudio({
         </button>
         <input ref={takeInput} type="file" accept="video/*,.mxf" multiple hidden
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void importTakes(f); }} />
+        <input ref={takeOriginal} type="file" accept="video/*,.mxf" hidden
+          onChange={(e) => { const f = e.target.files?.[0], id = relinkFor.current; e.target.value = ""; relinkFor.current = null; if (f && id) void relinkTake(id, f); }} />
         {others.length > 0 && (
           <details className="takes-more">
             <summary>{t("Other takes of the release ({n})", { n: others.length })}</summary>
