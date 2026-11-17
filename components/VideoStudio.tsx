@@ -1141,8 +1141,11 @@ export default function VideoStudio({
     // Another video became the base of this same project (a clip dragged in the timeline): only the camera file
     // changes. The official audio, its waveform, the playhead and the picture on screen stay (they used to be read
     // again, as if the page was reloaded).
-    const swapOnly = loadedFor.current === `${project.id}|${clip.id}`;
-    loadedFor.current = `${project.id}|${clip.id}`;
+    // (only when the camera file changed and the audio is there: run again for the same file — React runs it twice on
+    // opening in development, the first run cancelled —, everything is read, never an audio left out)
+    const prev = loadedFor.current, here = `${project.id}|${clip.id}|`;
+    const swapOnly = !!audioBuf && prev.startsWith(here) && prev !== here + mediaId;
+    loadedFor.current = here + mediaId;
     if (!swapOnly) {
       setAudioBlob(null);
       setAudioBuf(null);
