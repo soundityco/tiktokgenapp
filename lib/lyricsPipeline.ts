@@ -1,7 +1,7 @@
 import type { LyricWord } from "./types";
 import { type Emissions, alignDevice, alignEmissions } from "./alignAI";
 import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench } from "./forcedAlign";
-import { findRepeat, foldedFit, melFrames, repeatPeriod } from "./repeatBlocks";
+import { findRepeats, foldedFit, melFrames, repeatPeriodIn } from "./repeatBlocks";
 import { alignSong, cleanHeard, norm, similarity, splitWords, withoutLost, wordsFromSegments } from "./lyricsAlign";
 import { mergeHeard, noSpeech, relayWeakLines } from "./lyricsRelay";
 import { type AsrModel, type AsrStep, prepareAudio, transcribe } from "./transcribe";
@@ -293,28 +293,69 @@ export function spreadPacked(words: LyricWord[]): LyricWord[] {
 export async function applyRepeat(buf: AudioBuffer, em: Emissions, words: LyricWord[], french: boolean): Promise<LyricWord[]> {
   const lineOf: number[][] = [];
   words.forEach((w, i) => { const l = lineOf[lineOf.length - 1]; if (l && words[l[0]].line === w.line) l.push(i); else lineOf.push([i]); });
-  const rep = findRepeat(lineOf.map((l) => l.map((i) => words[i].w).join(" ")));
-  if (!rep) return words;
+  // Every repeated block (a chorus in the intro and again at the end: two), each placed on its own.
+  const reps = findRepeats(lineOf.map((l) => l.map((i) => words[i].w).join(" ")));
+  if (!reps.length) return words;
+  const textOf = (rep: { from: number; unit: number }) => lineOf.slice(rep.from, rep.from + rep.unit).map((l) => l.map((i) => norm(words[i].w)).join(" ")).join("|");
+  // First the period of each one's sound (the time between two copies), where it can be heard.
+  const plans: { rep: (typeof reps)[number]; P: number | null; score: number }[] = [];
+  for (const rep of reps) {
+    const first = rep.from, last = rep.from + rep.unit * rep.times - 1;
+    const lines = lineOf.slice(first, last + 1);
+    // Every copy with the same words, one for one ("Non non" and "Non-non" read alike but differ in words): else left.
+    const perCopy = lineOf.slice(first, first + rep.unit).reduce((n, l) => n + l.length, 0);
+    let same = true;
+    for (let k = 1; k < rep.times; k++) if (lineOf.slice(first + k * rep.unit, first + (k + 1) * rep.unit).reduce((n, l) => n + l.length, 0) !== perCopy) same = false;
+    if (!same) continue;
+    // Heard well: the alignment places it better than this.
+    const conf = lines.reduce((a, l) => a + (words[l[0]].conf ?? 0), 0) / lines.length;
+    if (conf >= 0.15) continue;
+    // Heard where the block can be: from the line before (its end) to the line after, not only where the alignment put
+    // it (a passage it hardly heard is placed seconds off: the sound measured there held other things, no repeat).
+    const end = last + 1 < lineOf.length ? words[lineOf[last + 1][0]].s : buf.duration;
+    const from = first > 0 ? words[lineOf[first - 1][lineOf[first - 1].length - 1]].e : 0;
+    const room = (end - from) / (rep.times - 0.5);
+    let per: { period: number; score: number } | null = null;
+    if (room >= 1.5) per = repeatPeriodIn(melFrames(await prepareAudio(buf, Math.max(0, from - 0.5), end)), 1.5, Math.min(9, room), rep.times);
+    plans.push({ rep, P: per?.period ?? null, score: per?.score ?? 0 });
+  }
+  // The same words repeated elsewhere in the song are sung at the same pace: a block whose sound tells no period (a
+  // blurred intro, its copies placed too early by the alignment) takes the clearest one of the same text.
+  const clearest = new Map<string, { P: number; score: number }>();
+  for (const x of plans) if (x.P) { const k = textOf(x.rep), c = clearest.get(k); if (!c || x.score > c.score) clearest.set(k, { P: x.P, score: x.score }); }
+  let out = words;
+  for (const x of plans) {
+    const best = clearest.get(textOf(x.rep));
+    if (!best) { console.info("[align] repeated lines, but no clear repeat in the sound: left as they are"); continue; }
+    out = placeCopies(out, lineOf, x.rep, best.P, best.score, buf, em, french);
+  }
+  return out;
+}
+
+/** The copies of a repeated block placed one period apart, where the folded copies fit their letters best. */
+function placeCopies(words: LyricWord[], lineOf: number[][], rep: { from: number; unit: number; times: number }, P: number, score: number,
+  buf: AudioBuffer, em: Emissions, french: boolean): LyricWord[] {
   const first = rep.from, last = rep.from + rep.unit * rep.times - 1;
   const lines = lineOf.slice(first, last + 1);
-  // Every copy with the same words, one for one ("Non non" and "Non-non" read alike but differ in words): else left.
-  const perCopy = lineOf.slice(first, first + rep.unit).reduce((n, l) => n + l.length, 0);
-  for (let k = 1; k < rep.times; k++) if (lineOf.slice(first + k * rep.unit, first + (k + 1) * rep.unit).reduce((n, l) => n + l.length, 0) !== perCopy) return words;
-  // Heard well: the alignment places it better than this.
-  const conf = lines.reduce((a, l) => a + (words[l[0]].conf ?? 0), 0) / lines.length;
-  if (conf >= 0.15) return words;
   const s0 = words[lineOf[first][0]].s;
   const end = last + 1 < lineOf.length ? words[lineOf[last + 1][0]].s : buf.duration;
-  const E = (end - s0) / rep.times;
-  if (E < 1) return words;
-  const frames = melFrames(await prepareAudio(buf, Math.max(0, s0 - 1), end));
-  const per = repeatPeriod(frames, E * 0.6, E * 1.5);
-  if (!per) { console.info("[align] repeated lines, but no clear repeat in the sound: left as they are"); return words; }
-  const P = per.period;
   const unit = lineOf.slice(first, first + rep.unit).flat();
   const toks: number[] = [], owner: number[] = [];
   unit.forEach((i, wi) => { const n = faNorm(words[i].w); for (const c of french ? frenchSound(n) : n) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
-  const fit = foldedFit(em.frames, em.T, em.V, s0 - 1.5, s0 + P, P, rep.times, toks, owner, (f, n, v, tk) => ctcStarts(f, n, v, tk));
+  // Its first copy may start anywhere between the line before (its end) and the last place all the copies still fit
+  // before the line after: not only around where the alignment put it (a passage it hardly heard, a blurred intro, was
+  // placed seconds too early, and its true start was never tried).
+  const prevEnd = first > 0 ? words[lineOf[first - 1][lineOf[first - 1].length - 1]].e : 0;
+  let lo = prevEnd, hi = end - (rep.times - 0.5) * P;
+  if (hi < lo) { lo = s0 - 1.5; hi = s0 + P; }
+  // A copy starts and ends in a breath, never in the middle of a word: its first letter at least 0.16 s in, its last one
+  // 0.1 s before its end. (WANNA TRY's chorus ends a copy and starts the next on the same line, "Tout mais pas ça", sung
+  // close together: without it, a copy began in the middle of the line before and every first line came 1.3 s early.)
+  const edged = (f: Float32Array, n: number, v: number, tk: number[]) => {
+    const lo = new Int32Array(tk.length).fill(8), hi = new Int32Array(tk.length).fill(n - 6);
+    return ctcStarts(f, n, v, tk, { lo, hi }) ?? ctcStarts(f, n, v, tk);
+  };
+  const fit = foldedFit(em.frames, em.T, em.V, lo, hi, P, rep.times, toks, owner, edged);
   if (!fit) return words;
   const out = words.slice();
   const times: number[] = [];
@@ -332,6 +373,6 @@ export async function applyRepeat(buf: AudioBuffer, em: Emissions, words: LyricW
     const lineEnd = q + 1 >= idx.length || words[idx[q + 1]].line !== words[i].line;
     out[i] = { ...words[i], s: sNow, e: lineEnd ? Math.max(sNow + 0.1, Math.min(next - 0.04, sNow + 1.2)) : Math.max(sNow + 0.05, next - 0.02), doubt: undefined };
   });
-  console.info(`[align] ${rep.times} copies of ${rep.unit} lines placed one period apart (${P.toFixed(2)} s, the sound alike at ${(per.score * 100).toFixed(0)} %), from ${times[0].toFixed(2)} s`);
+  console.info(`[align] ${rep.times} copies of ${rep.unit} lines placed one period apart (${P.toFixed(2)} s, the sound alike at ${(score * 100).toFixed(0)} %), from ${times[0].toFixed(2)} s`);
   return out;
 }

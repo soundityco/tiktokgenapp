@@ -26,6 +26,19 @@ export function findRepeat(lines: string[], minTimes = 3): Repeat | null {
   return best;
 }
 
+/** Every block repeated (≥ `minTimes` in a row) in the lyrics, the longest first found, none overlapping, in text
+ *  order: a chorus written in the intro and again at the end are two blocks. */
+export function findRepeats(lines: string[], minTimes = 3): Repeat[] {
+  const left = lines.slice(), out: Repeat[] = [];
+  for (;;) {
+    const r = findRepeat(left, minTimes);
+    if (!r) break;
+    out.push(r);
+    for (let i = r.from; i < r.from + r.unit * r.times; i++) left[i] = "";
+  }
+  return out.sort((a, b) => a.from - b.from);
+}
+
 // ---------- the sound's repetition period ----------
 
 function fft(re: Float64Array, im: Float64Array) {
@@ -99,6 +112,42 @@ export function repeatPeriod(frames: Float32Array[], min: number, max: number, f
   // The best that is not next to it (a different period): the peak must stand out.
   for (const [p, s] of scores) if (Math.abs(p - best.period) > 0.15 && s > second) second = s;
   // Measured: WANNA TRY's chorus 0.60 (clear), Fontaines D.C.'s repeated line 0.41 (placing it so cost a line): 0.5.
+  return best.score >= 0.5 && best.score - second >= 0.1 ? best : null;
+}
+
+/**
+ * The period of a block of `times` copies somewhere in `frames` (a passage that also holds other things: the bridge
+ * before a chorus, an intro's instrumental): for each period, the stretch of (times − 1) periods where the frames one
+ * period apart are the most alike (mean cosine), and the best period. Measured on WANNA TRY [MASTER INSTA]: over its
+ * whole intro (0–35 s) or its chorus with the bridge before it, the mean over everything found nothing, this finds
+ * 4.06 s (0.60 / 0.61) and where the copies start (16.7 / 64.7 s). A period's double or half is not a rival (the sound
+ * repeats there too), only another period is.
+ */
+export function repeatPeriodIn(frames: Float32Array[], min: number, max: number, times: number, frame = 0.02): { period: number; score: number; at: number } | null {
+  const n = frames.length;
+  if (times < 2) return null;
+  const nrm = frames.map((f) => Math.sqrt(f.reduce((a, v) => a + v * v, 0)) + 1e-9);
+  const scores: { period: number; score: number; at: number }[] = [];
+  for (let L = Math.max(1, Math.round(min / frame)); L <= Math.round(max / frame); L++) {
+    const m = (times - 1) * L;
+    if (m + L > n) break;
+    const pre = new Float64Array(n - L + 1);
+    for (let i = 0; i + L < n; i++) {
+      const a = frames[i], b = frames[i + L];
+      let d = 0;
+      for (let k = 0; k < a.length; k++) d += a[k] * b[k];
+      pre[i + 1] = pre[i] + d / (nrm[i] * nrm[i + L]);
+    }
+    let best = -1, at = 0;
+    for (let i = 0; i + m <= n - L; i++) { const s = (pre[i + m] - pre[i]) / m; if (s > best) { best = s; at = i; } }
+    scores.push({ period: L * frame, score: best, at: at * frame });
+  }
+  if (!scores.length) return null;
+  let best = scores[0];
+  for (const x of scores) if (x.score > best.score) best = x;
+  const harmonic = (p: number) => [0.5, 1, 2, 1 / 3, 3].some((k) => Math.abs(p - best.period * k) <= 0.15);
+  let second = -1;
+  for (const x of scores) if (!harmonic(x.period) && x.score > second) second = x.score;
   return best.score >= 0.5 && best.score - second >= 0.1 ? best : null;
 }
 
@@ -185,11 +234,13 @@ export function foldedFit(
   let best: { score: number; start: number; starts: Int32Array } | null = null;
   const folded = new Float32Array(P * V);
   for (let f0 = Math.round(from / frame); f0 <= Math.round(to / frame); f0++) {
-    if (f0 < 0 || f0 + (times - 1) * P + P > T) continue;
+    // (the last copy may run past the end of the audio after its last word, a song ending on its chorus: that time is
+    // silence there, the blank; else its true start was never tried and the copies were placed a second early)
+    if (f0 < 0 || f0 + (times - 1) * P >= T) continue;
     for (let t = 0; t < P; t++) {
       for (let v = 0; v < V; v++) {
         let p = 0;
-        for (let k = 0; k < times; k++) p += Math.exp(emis[(f0 + k * P + t) * V + v]);
+        for (let k = 0; k < times; k++) { const f = f0 + k * P + t; p += f < T ? Math.exp(emis[f * V + v]) : v === 0 ? 1 : 0; }
         folded[t * V + v] = Math.log(p / times + 1e-9);
       }
     }

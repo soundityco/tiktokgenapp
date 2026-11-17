@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findRepeat, foldedFit, melFrames, repeatPeriod } from "@/lib/repeatBlocks";
+import { findRepeat, findRepeats, foldedFit, melFrames, repeatPeriod, repeatPeriodIn } from "@/lib/repeatBlocks";
 import { FA_VOCAB, ctcStarts } from "@/lib/forcedAlign";
 
 describe("findRepeat", () => {
@@ -7,6 +7,11 @@ describe("findRepeat", () => {
     const block = ["Tout mais pas ça", "Non", "Non", "Non", "Non", "Tout mais pas ça"];
     const lines = ["Don't you wanna try", "Wanna try", "Wanna try", ...block, ...block, ...block, ...block];
     expect(findRepeat(lines)).toEqual({ from: 3, unit: 6, times: 4 });
+  });
+  it("a chorus in the intro and again at the end: two blocks, each found", () => {
+    const block = ["Tout mais pas ça", "Non", "Non", "Non", "Non", "Tout mais pas ça"];
+    const lines = [...block, ...block, ...block, ...block, "J'ai eu le malheur", "Don't you wanna try", ...block, ...block, ...block, ...block];
+    expect(findRepeats(lines)).toEqual([{ from: 0, unit: 6, times: 4 }, { from: 26, unit: 6, times: 4 }]);
   });
   it("nothing repeated three times: null", () => {
     expect(findRepeat(["a b", "c d", "a b", "c d"])).toBeNull();
@@ -23,6 +28,23 @@ describe("repeatPeriod", () => {
     const p = repeatPeriod(melFrames(x), 1.2, 3)!;
     expect(p.period).toBeCloseTo(2, 1);
     expect(p.score).toBeGreaterThan(0.5);
+  });
+});
+
+describe("repeatPeriodIn", () => {
+  it("finds the period of copies that fill only part of the passage (an intro's instrumental before them)", () => {
+    const rate = 16000, len = 2 * rate, lead = 6 * rate, x = new Float32Array(lead + len * 4);
+    let seed = 3; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) - 0.5;
+    // (the intro before it moves, as a real one: notes that never come back; a passage that holds one sound is alike to
+    // itself at any distance, no period stands out there: nothing is found, never a wrong one)
+    for (let i = 0; i < lead; i++) x[i] = Math.sin(2 * Math.PI * (150 + 37 * Math.floor(i / 3000)) * (i / rate)) * 0.4 + rnd() * 0.05;
+    // each copy a short tune of 8 notes (a sung line)
+    const notes = [220, 330, 262, 392, 294, 440, 247, 349];
+    const unit = Float32Array.from({ length: len }, (_, i) => Math.sin(2 * Math.PI * notes[Math.floor((i / len) * 8)] * (i / rate)) * 0.6);
+    for (let k = 0; k < 4; k++) x.set(unit, lead + k * len);
+    const p = repeatPeriodIn(melFrames(x), 1.7, 3, 4)!; // (pure tones are alike to each other: a range away from the half)
+    expect(p.period).toBeCloseTo(2, 1);
+    expect(p.at).toBeGreaterThan(5);
   });
 });
 
