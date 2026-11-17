@@ -4666,11 +4666,13 @@ export default function VideoStudio({
       const dur = audioBuf.duration;
       if (d.mode === "move") {
         if (locked) return; // (locked to the audio: it only changes rows)
-        const offset = round2(clamp(d.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
+        let offset = round2(clamp(d.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
+        if (nearStart(e, offset + d.ci, d.width / d.d)) offset = round2(settings.crop.start - d.ci);
         setV({ offset });
         setHead(inSeg(Math.max(offset + d.ci, headRef.current)));
       } else if (d.mode === "in") {
-        const clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
+        let clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
+        if (nearStart(e, d.offset + clipIn, d.width / d.d)) clipIn = round2(clamp(settings.crop.start - d.offset, 0, d.co - 0.2));
         setV({ clipIn });
         setHead(inSeg(d.offset + clipIn));
       } else {
@@ -5025,11 +5027,13 @@ export default function VideoStudio({
       d.moved = true;
       const dt = ((e.clientX - d.px) / Math.max(1, d.width)) * d.d, dur = audioBuf.duration;
       if (d.mode === "move") {
-        const offset = round2(clamp(d.o.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
+        let offset = round2(clamp(d.o.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
+        if (nearStart(e, offset + d.ci, d.width / d.d)) offset = round2(settings.crop.start - d.ci);
         setO({ offset });
         setHead(inSeg(Math.max(offset + d.ci, headRef.current)));
       } else if (d.mode === "in") {
-        const clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
+        let clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
+        if (nearStart(e, d.o.offset + clipIn, d.width / d.d)) clipIn = round2(clamp(settings.crop.start - d.o.offset, 0, d.co - 0.2));
         setO({ clipIn });
         setHead(inSeg(d.o.offset + clipIn));
       } else {
@@ -5317,6 +5321,12 @@ export default function VideoStudio({
   // ---- the start of a lyrics line or a hook dragged on its track (as a multicam cut): no gap made by the drag,
   //      Alt held: only that one moves ----
   const edgeRef = useRef<{ left: number; width: number } | null>(null);
+  /**
+   * The magnet of the timeline's start: a clip (lyrics, hook, video) whose start comes within 8 px of the segment's start
+   * sticks to it (to start exactly at 0:00 of the post); ⌘ (Ctrl) held: placed freely.
+   */
+  const nearStart = (e: { metaKey: boolean; ctrlKey: boolean }, t: number, pxPerS: number) =>
+    !e.metaKey && !e.ctrlKey && Math.abs(t - settingsRef.current.crop.start) * pxPerS < 8;
   const edgeDrag = (move: (at: number, free: boolean) => void) => ({
     onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
       if (e.button === 1) return;
@@ -5330,7 +5340,9 @@ export default function VideoStudio({
       if (!d) return;
       const cfg = settingsRef.current;
       const w = viewRef.current ?? twRef.current;
-      move(round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration))), e.altKey);
+      let at = round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration)));
+      if (nearStart(e, at, d.width / w.d)) at = cfg.crop.start;
+      move(at, e.altKey);
     },
     onPointerUp: () => { if (edgeRef.current) { edgeRef.current = null; onSaveNow(); } },
     onPointerCancel: () => { edgeRef.current = null; },
