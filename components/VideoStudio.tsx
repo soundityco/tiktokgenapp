@@ -837,9 +837,9 @@ export default function VideoStudio({
   };
   /** The videos over it at official time `time`, from the bottom up (each outside its part: left out). */
   const overlayPictures = (time: number, still: boolean) =>
-    overlaysOf(settingsRef.current).filter((o) => !o.hidden).map((o) => overlayPicture(o, time, still)).filter((x): x is { pic: Picture; a: Angle; o: VideoOverlay } => !!x);
+    overlaysOf(settingsRef.current).filter((o) => !o.hidden).map((o) => overlayPicture(o, time, still)).filter((x): x is { pic: Picture; a: Angle; o: VideoOverlay; stale?: boolean } => !!x);
   /** One over it: its player and picture at official time `time` (paused: placed there first); none outside its part. */
-  const overlayPicture = (o: VideoOverlay, time: number, still: boolean): { pic: Picture; a: Angle; o: VideoOverlay } | null => {
+  const overlayPicture = (o: VideoOverlay, time: number, still: boolean): { pic: Picture; a: Angle; o: VideoOverlay; stale?: boolean } | null => {
     const a = anglesRef.current.get(o.clip);
     if (!a) return null;
     const el = a.el, target = time - o.offset;
@@ -856,7 +856,8 @@ export default function VideoStudio({
       cv.getContext("2d")?.drawImage(el, 0, 0, cw, ch);
       return { pic: { src: el, w: el.videoWidth, h: el.videoHeight }, a, o };
     }
-    return cv ? { pic: { src: cv, w: cv.width, h: cv.height }, a, o } : null;
+    // (its last picture: the player is still looking for this one)
+    return cv ? { pic: { src: cv, w: cv.width, h: cv.height }, a, o, stale: true } : null;
   };
   /** Each one's last picture (by take), shown while its player seeks: never a blink of the video under it. */
   const overlayKeep = useRef(new Map<string, HTMLCanvasElement>());
@@ -1087,6 +1088,9 @@ export default function VideoStudio({
   const fullRef = useRef(false);
   // The full screen shows the picture as it will be posted: never TikTok's zones over it.
   aidsRef.current = { zones: aids.zones && settings.format !== "16:9", guideV: snap.v, guideH: snap.h };
+  /** Paused: since when the drawing waits for a video still looking for its picture (see drawAt), and its retry. */
+  const holdSince = useRef<number | null>(null);
+  const holdRetry = useRef(0);
   const drawAt = useCallback((time: number) => {
     const c = canvasRef.current;
     const g = c?.getContext("2d");
@@ -1099,9 +1103,26 @@ export default function VideoStudio({
     const lostCam = !ang && (pin ? pin !== "main" : camAt(settingsRef.current.cuts, time) > 0);
     const keep = !ang && !sourceRef.current && !!el && el.readyState >= 2 && fileClip.current === clipIdRef.current && !!videoUrlRef.current;
     const pic = lostCam ? null : ang ? anglePicture(ang, time, !sourceRef.current) : pictureOf(el, time);
+    // (every video over it asked for its picture at this time first: they all look for it together)
+    const overs = overlayPictures(time, !sourceRef.current);
     // A camera not ready yet (starting, placing itself): the last picture stays on screen, never a black frame.
     if (pic === undefined) return;
-    const boxes = drawScene(g, c.width, c.height, pic, time, lostCam ? undefined : { raw: rawRef.current, keep }, ang ?? (lostCam ? { lut: null } : undefined), overlayPictures(time, !sourceRef.current));
+    // Paused (the playhead moved by hand): drawn only once every video shown has its picture of this time, all together
+    // (else the one under it changed first and the one over it a moment later: they looked out of sync). Never held
+    // more than 0.3 s (a player slow to answer): then drawn as they are.
+    if (!sourceRef.current) {
+      const busy = (!ang && !lostCam && !!el && el.seeking) || overs.some((x) => x.stale && !x.o.hidden);
+      if (busy) {
+        const now = performance.now();
+        holdSince.current ??= now;
+        if (now - holdSince.current < 300) {
+          if (!holdRetry.current) holdRetry.current = window.setTimeout(() => { holdRetry.current = 0; drawAt(headRef.current); }, 60);
+          return;
+        }
+      }
+      holdSince.current = null;
+    }
+    const boxes = drawScene(g, c.width, c.height, pic, time, lostCam ? undefined : { raw: rawRef.current, keep }, ang ?? (lostCam ? { lut: null } : undefined), overs);
     captionBox.current = boxes.caption;
     hookBox.current = boxes.hook;
     drawHelpers(g, c.width, c.height, fullRef.current ? { ...aidsRef.current, zones: false } : aidsRef.current);
