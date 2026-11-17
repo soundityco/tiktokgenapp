@@ -4503,7 +4503,7 @@ export default function VideoStudio({
    * trim it; at its end, its settings (size, corners, sound: the picture itself is moved and sized on the preview) and
    * the way out.
    */
-  const ovDrag = useRef<{ mode: "move" | "in" | "out"; px: number; left: number; width: number; s: number; d: number; o: VideoOverlay; ci: number; co: number; len: number; moved?: boolean } | null>(null);
+  const ovDrag = useRef<{ mode: "move" | "in" | "out"; px: number; py?: number; left: number; width: number; s: number; d: number; o: VideoOverlay; ci: number; co: number; len: number; moved?: boolean } | null>(null);
   const overlayTrackEl = () => {
     const o = overlayOf(settings), a = o ? anglesRef.current.get(o.clip) : undefined;
     const take = o ? clips.find((c) => c.id === o.clip) : undefined;
@@ -4522,11 +4522,19 @@ export default function VideoStudio({
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
       const w = viewRef.current ?? twRef.current;
-      ovDrag.current = { mode, px: e.clientX, left: r.left, width: r.width, s: w.s, d: w.d, o, ci, co, len };
+      ovDrag.current = { mode, px: e.clientX, py: e.clientY, left: r.left, width: r.width, s: w.s, d: w.d, o, ci, co, len };
     };
     const move = (e: React.PointerEvent<HTMLElement>) => {
       const d = ovDrag.current;
       if (!d) return;
+      // Pulled down (as in CapCut), when the multicam has room: back among the cameras (cut to on the cameras' track).
+      const angles = (settingsRef.current.angles ?? []).filter(Boolean);
+      if (d.mode === "move" && !d.moved && d.py !== undefined && e.clientY - d.py > 22 && angles.length < MAX_CAMS - 1) {
+        ovDrag.current = null;
+        setOverLook(false);
+        setV({ overlay: undefined, angles: [...angles, d.o.clip] });
+        return;
+      }
       if (!d.moved && Math.abs(e.clientX - d.px) < 4) return;
       d.moved = true;
       const dt = ((e.clientX - d.px) / Math.max(1, d.width)) * d.d, dur = audioBuf.duration;
@@ -4592,6 +4600,8 @@ export default function VideoStudio({
       </div>
     );
   };
+  /** A shot pressed on the cameras' track: pulled up far enough, its camera goes over the video. */
+  const liftRef = useRef<{ y: number; cam: number } | null>(null);
   const camsEl = () => {
     const angles = settings.angles ?? [];
     const used = angles.filter(Boolean).length;
@@ -4605,7 +4615,16 @@ export default function VideoStudio({
     return (
       <div className="cams">
         {used > 0 && (
-          <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}>
+          <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}
+            // (the track holds the pointer while it is down: the pull up is followed here)
+            onPointerMoveCapture={(e) => {
+              const l = liftRef.current;
+              if (!l || e.clientY - l.y > -22) return;
+              liftRef.current = null; scrubRef.current = null;
+              const id = angles[l.cam - 1], c = clips.find((q) => q.id === id);
+              if (c) { stop(); removeAngle(l.cam - 1, { overlay: overlayFor(c) }); setOverLook(true); }
+            }}
+            onPointerUpCapture={() => { liftRef.current = null; }}>
             <div className="track-content">
             <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
             {shots.map((x, i) => {
@@ -4616,6 +4635,9 @@ export default function VideoStudio({
               const go = () => { stop(); setPinCam(null); setHead(round2(x.from + 0.01)); };
               return (
                 <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from} data-a={x.from} data-b={x.to}
+                  // Pulled up (as in CapCut): this camera leaves the cuts and goes over the video, on its own track.
+                  onPointerDown={(e) => { if (e.button === 0 && x.cam > 0) liftRef.current = { y: e.clientY, cam: x.cam }; }}
+
                   style={{ ...place(x.from), width: wFull(x.from, x.to) }}
                   title={`${x.cam + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
                   onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
