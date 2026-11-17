@@ -57,7 +57,9 @@ const LOOKS = new Map<string, CubeLut>();
 /** A multicam camera's look: its framing and grade (its LUT for the preview, 33 points). */
 type AngleLook = { frame?: VideoSettings["frame"]; desqueeze?: VideoSettings["desqueeze"]; grade?: VideoGrade; lut: Float32Array | null;
   /** Its own black bars and progressive zoom (none: the project's, camera 1's; 0 / false: none for this camera). */
-  matte?: number; push?: number; pushIn?: boolean };
+  matte?: number; push?: number; pushIn?: boolean;
+  /** Its own sound's volume (the take's clipVolume), heard on its shots. */
+  volume?: number };
 /** A camera's own value, else the project's (camera 1's): an explicit 0 / false is "none" for that camera. */
 const ownOr = <T,>(own: T | undefined, project: T | undefined) => (own !== undefined ? own : project);
 /** A multicam camera: another video of the release, its file played by a hidden player. */
@@ -735,7 +737,7 @@ export default function VideoStudio({
   const ovClip = overlayOf(settings) ? clips.find((c) => c.id === settings.overlay!.clip) ?? null : null;
   const angleClips = [...(settings.angles ?? []).map((id) => clips.find((c) => c.id === id && c.id !== clip.id) ?? null), ...(ovClip ? [ovClip] : [])];
   // What a camera needs (its file, its offset, framing and grade): read again when one of them changes.
-  const anglesKey = JSON.stringify(angleClips.map((c) => c && [c.id, c.media, c.videoSize, c.offset, c.frame, c.desqueeze, c.matte, c.push, c.pushIn, c.grade, lutLibrary?.find((l) => l.id === c.grade?.lut?.id)]));
+  const anglesKey = JSON.stringify(angleClips.map((c) => c && [c.id, c.media, c.videoSize, c.offset, c.frame, c.desqueeze, c.matte, c.push, c.pushIn, c.clipVolume, c.grade, lutLibrary?.find((l) => l.id === c.grade?.lut?.id)]));
   useEffect(() => {
     let off = false;
     const map = anglesRef.current;
@@ -775,7 +777,7 @@ export default function VideoStudio({
           a = { id: c.id, media, blob, el, url, offset: 0, frame: undefined, desqueeze: undefined, grade: undefined, look: null, lut: null, fromCopy: !own };
           map.set(c.id, a);
         }
-        a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze; a.matte = c.matte; a.push = c.push; a.pushIn = c.pushIn;
+        a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze; a.matte = c.matte; a.push = c.push; a.pushIn = c.pushIn; a.volume = c.clipVolume;
         // The new grade is made ready apart and put in at once: the camera keeps its current look until then (cleared
         // first, it was drawn black while its LUT was being read, at each move of a colour setting).
         const grade = withLutSettings(c.grade);
@@ -819,8 +821,20 @@ export default function VideoStudio({
     const [ci, co] = clipSpan(o, Number.isFinite(el.duration) ? el.duration : Infinity);
     if (target < ci - 0.001 || target > co + 0.001) return null;
     if (still && !el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = Math.max(0, target);
-    return el.readyState >= 2 && el.videoWidth ? { pic: { src: el, w: el.videoWidth, h: el.videoHeight }, a, o } : null;
+    // Ready: its picture, copied (a player that seeks or starts gives none for a moment: the copy is shown then,
+    // never a blink of the video under it).
+    const keep = overlayKeep.current;
+    if (el.readyState >= 2 && el.videoWidth && !el.seeking) {
+      const cw = Math.min(1280, el.videoWidth), ch = Math.round((cw * el.videoHeight) / el.videoWidth);
+      const cv = keep.cv ?? (keep.cv = document.createElement("canvas"));
+      if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+      cv.getContext("2d")?.drawImage(el, 0, 0, cw, ch);
+      keep.id = o.clip;
+      return { pic: { src: el, w: el.videoWidth, h: el.videoHeight }, a, o };
+    }
+    return keep.cv && keep.id === o.clip ? { pic: { src: keep.cv, w: keep.cv.width, h: keep.cv.height }, a, o } : null;
   };
+  const overlayKeep = useRef<{ cv?: HTMLCanvasElement; id?: string }>({});
   /** While playing: every camera plays with the sound, so a cut shows the next one at once (no black frame). */
   /**
    * While playing, the cameras 2 to 4 follow the sound. Only the one on screen and the one of the next cut (started
@@ -844,6 +858,13 @@ export default function VideoStudio({
         const [ci, co] = clipSpan(ov!, Number.isFinite(el.duration) ? el.duration : Infinity);
         if (target > ci - PREROLL && target < co) live.add(a.id);
         const vol = clamp(ov!.volume ?? 0, 0, 1), audible = vol > 0 && target >= ci && target <= co;
+        if (el.muted === audible) el.muted = !audible;
+        if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
+      }
+      // A camera of the multicam: its sound on its own shots, at its volume.
+      if (!isOv) {
+        const vol = clamp(a.volume ?? 0, 0, 1), k = (cfg.angles ?? []).indexOf(a.id) + 1;
+        const audible = vol > 0 && k > 0 && camAt(cfg.cuts, heard) === k && target >= 0;
         if (el.muted === audible) el.muted = !audible;
         if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
       }
@@ -987,7 +1008,7 @@ export default function VideoStudio({
     if (over && over.pic.w && over.pic.h) {
       const o = over.o;
       let op: Picture | null = desqueeze(over.pic, over.a.desqueeze);
-      const w = (W * clamp(o.w, 5, 100)) / 100, h = (w * op.h) / op.w;
+      const w = (W * clamp(o.w, 5, 400)) / 100, h = (w * op.h) / op.w;
       const x = (W * o.x) / 100 - w / 2, y = (H * o.y) / 100 - h / 2;
       if (!raw && !op.graded && over.a.lut && gradesColour(over.a.grade)) {
         const grader = graderRef.current ?? (graderRef.current = Grader.shared());
@@ -999,9 +1020,7 @@ export default function VideoStudio({
         g.beginPath();
         g.roundRect(x, y, w, h, r);
         g.clip();
-        // Its take's own framing (zoom, position, fill / fit) inside its box: ×1 shows it whole.
-        g.translate(x, y);
-        drawFramed(g, op.src, op.w, op.h, picOf(over.a.frame ?? DEFAULT_VIDEO.frame), w, h, op.part);
+        drawPictureAt(g, op.src, op.w, op.h, x, y, w / op.w, op.part);
         g.restore();
         overBox = { x, y, w, h } as TextBox;
       }
@@ -2145,7 +2164,8 @@ export default function VideoStudio({
         // The camera's own sound at its volume, only in the part of the file kept (trimmed on the video track).
         const cfgNow = settingsRef.current, vol = clamp(cfgNow.clipVolume ?? 0, 0, 1);
         const [ci, co] = clipSpan(cfgNow, Number.isFinite(el.duration) ? el.duration : Infinity);
-        const t0 = heard - cfgNow.offset, audible = vol > 0 && t0 >= ci && t0 <= co;
+        // (multicam: on its own shots only, as each camera's sound on its shots)
+        const t0 = heard - cfgNow.offset, audible = vol > 0 && t0 >= ci && t0 <= co && camAt(cfgNow.cuts, heard) === 0;
         if (el.muted === audible) el.muted = !audible;
         if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
       }
@@ -3430,9 +3450,17 @@ export default function VideoStudio({
    */
   const withCameraSound = async (official: AudioBuffer, cfg: VideoSettings, signal: AbortSignal): Promise<AudioBuffer> => {
     const ov = overlayOf(cfg), ovA = ov ? anglesRef.current.get(ov.clip) : undefined;
-    const parts = [
-      { blob: videoBlob, vol: clamp(cfg.clipVolume ?? 0, 0, 1), span: cfg as Pick<VideoSettings, "clipIn" | "clipOut">, offset: cfg.offset, len: videoDur || 60 },
-      { blob: ovA?.blob ?? null, vol: clamp(ov?.volume ?? 0, 0, 1), span: ov ?? {}, offset: ov?.offset ?? 0, len: ovA && Number.isFinite(ovA.el.duration) ? ovA.el.duration : 60 },
+    // Multicam: each camera heard on its own shots (`win`, official time); the others all along.
+    const angles = (cfg.angles ?? []).filter(Boolean);
+    const shots = angles.length ? shotsOf(cfg.cuts, 0, official.duration) : null;
+    const winOf = (cam: number) => shots ? shots.filter((x) => x.cam === cam).map((x) => [x.from, x.to] as [number, number]) : null;
+    const parts: { blob: Blob | null; vol: number; span: Pick<VideoSettings, "clipIn" | "clipOut">; offset: number; len: number; win: [number, number][] | null }[] = [
+      { blob: videoBlob, vol: clamp(cfg.clipVolume ?? 0, 0, 1), span: cfg, offset: cfg.offset, len: videoDur || 60, win: winOf(0) },
+      ...angles.map((id, k) => {
+        const a = anglesRef.current.get(id);
+        return { blob: a?.blob ?? null, vol: clamp(a?.volume ?? 0, 0, 1), span: {}, offset: a?.offset ?? 0, len: a && Number.isFinite(a.el.duration) ? a.el.duration : 60, win: winOf(k + 1) };
+      }),
+      { blob: ovA?.blob ?? null, vol: clamp(ov?.volume ?? 0, 0, 1), span: ov ?? {}, offset: ov?.offset ?? 0, len: ovA && Number.isFinite(ovA.el.duration) ? ovA.el.duration : 60, win: null },
     ].filter((x) => x.blob && x.vol > 0);
     if (!parts.length) return official;
     const ctx = new OfflineAudioContext(official.numberOfChannels, official.length, official.sampleRate);
@@ -3451,13 +3479,19 @@ export default function VideoStudio({
       }
       if (!cam) { console.warn("[export] a take's sound could not be read: exported without it"); continue; }
       const [ci, co] = clipSpan(x.span, cam.duration);
-      const src = ctx.createBufferSource(), gain = ctx.createGain();
-      src.buffer = cam;
+      const gain = ctx.createGain();
       gain.gain.value = x.vol;
-      src.connect(gain).connect(ctx.destination);
-      // Where the kept part starts on the official track (before 0: its first seconds are not in the song).
-      const at = x.offset + ci, skip = Math.max(0, -at);
-      if (co - ci - skip > 0) { src.start(Math.max(0, at), ci + skip, co - ci - skip); mixed = true; }
+      gain.connect(ctx.destination);
+      // Its part kept, on the official track, cut to its shots: each window played from its own place in the file.
+      for (const [w0, w1] of x.win ?? [[-Infinity, Infinity]]) {
+        const a = Math.max(0, x.offset + ci, w0), b = Math.min(official.duration, x.offset + co, w1);
+        if (b - a < 0.01) continue;
+        const src = ctx.createBufferSource();
+        src.buffer = cam;
+        src.connect(gain);
+        src.start(a, a - x.offset, b - a);
+        mixed = true;
+      }
     }
     return mixed ? ctx.startRendering() : official;
   };
@@ -3948,7 +3982,7 @@ export default function VideoStudio({
     // The video over the picture: the wheel sets its size.
     const ovNow = overlayOf(settingsRef.current);
     if (!kind && ovNow && inBox(overlayBox.current, c.x, c.y, 0)) {
-      setV({ overlay: { ...ovNow, w: clamp(Math.round(ovNow.w + dir * 2), 5, 100) } });
+      setV({ overlay: { ...ovNow, w: clamp(Math.round(ovNow.w + dir * 2), 5, 400) } });
       return;
     }
     if (kind) {
@@ -4307,9 +4341,12 @@ export default function VideoStudio({
   /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
   const takesEl = (part: "first" | "rest") => {
     const angles = (settings.angles ?? []).filter(Boolean);
-    const others = camChoices.filter((c) => !angles.includes(c.id));
+    // The video over it is one of the project's takes too (listed with them, not with the release's others).
+    const ovId = overlayOf(settings)?.clip;
+    const others = camChoices.filter((c) => !angles.includes(c.id) && c.id !== ovId);
     const room = angles.length < MAX_CAMS - 1;
     const card = (c: VideoSetup, cam: number | null) => {
+      const isOver = cam === null && c.id === ovId;
       const job = takeJobs[c.id];
       const i = cam === null ? -1 : cam - 1;
       const open = takeOpen === c.id;
@@ -4328,7 +4365,7 @@ export default function VideoStudio({
         {cam !== null && cam > 0 && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
         {/* A camera of the multicam over camera 1 instead (picture in picture): out of the cameras, onto its own track. */}
         {cam !== null && cam > 0 && <button onClick={() => { close(); stop(); removeAngle(i, { overlay: overlayFor(c) }); }}>{t("Put over the video (picture in picture)")}</button>}
-        {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
+        {cam === null && <button disabled={!room} onClick={() => { close(); setV({ angles: [...angles, c.id].slice(0, MAX_CAMS - 1), ...(isOver ? { overlay: undefined } : null) }); }}>{isOver ? t("Put in the multicam") : t("Add to the project")}</button>}
         {cam === null && (settings.overlay?.clip === c.id
           ? <button onClick={() => { close(); setV({ overlay: undefined }); }}>{t("Remove from over the video")}</button>
           : <button onClick={() => { close(); putOverlay(c); }}>{t("Put over the video (picture in picture)")}</button>)}
@@ -4360,7 +4397,7 @@ export default function VideoStudio({
         <div className={"take-row" + (job && !job.err ? " shine-box" : "")}>
           <button className="take-main" aria-expanded={false}
             title={cam !== null ? t("Show it on the preview and set its colour and framing") : undefined} onClick={toggle}>
-            {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name="film" size={13} />}
+            {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name={isOver ? "layers" : "film"} size={13} />}
             <span className="take-name" title={c.videoName ?? ""}>{name}</span>
           </button>
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
@@ -4370,7 +4407,7 @@ export default function VideoStudio({
             // Not synced is not a fault (a video placed by hand on the video track): said quietly.
             : c.score === undefined ? <span className="muted xs take-free" title={t("Not synced")}>—</span>
             : <Icon name="check" size={12} />}
-          {cam === null && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
+          {cam === null && !isOver && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => addAngle(c.id)}><Icon name="plus" size={12} /></button>}
           {<Menu float trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
         </div>
         </div>
@@ -4381,6 +4418,7 @@ export default function VideoStudio({
     return (
       <div className="takes">
         {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
+        {ovId && (() => { const c = clips.find((x) => x.id === ovId); return c ? card(c, null) : null; })()}
         <button className="btn sm take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
           <Icon name="plus" size={14} />{t("Import takes")}
         </button>
@@ -4452,7 +4490,6 @@ export default function VideoStudio({
       if (d && !d.moved) setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d));
     };
     return (
-      <div className="cams">
         <div className="lyric-track video-track" role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
@@ -4491,7 +4528,6 @@ export default function VideoStudio({
             )}
           </div>
         </div>
-      </div>
     );
   };
   /** A take of the release over the post's video (picture in picture): from the library's take menu. Synced, it starts
@@ -4559,21 +4595,19 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(true); }
     };
     return (
-      <div className="cams">
         <div className="lyric-track video-track over-track" role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             <Menu float trigger={(_, toggle) => (
-              <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Settings")} title={t("Size, corners and sound of the video over it")} onClick={toggle}>
+              <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Settings")} title={t("Corners and sound of the video over it")} onClick={toggle}>
                 <Icon name={vol > 0 ? "volume" : "tune"} size={14} />
               </button>
             )}>
               {(close) => (
                 <div className="sound-pop" data-keep>
-                  <Range label={t("Size")} value={Math.round(o.w)} display={`${Math.round(o.w)} %`} min={10} max={100} step={1} onChange={(n) => setO({ w: n })} />
                   <Range label={t("Rounded corners")} value={Math.round(o.radius ?? 0)} display={`${Math.round(o.radius ?? 0)} %`} min={0} max={50} step={1} onChange={(n) => setO({ radius: n })} />
                   <Range label={t("Video sound")} value={Math.round(vol * 100)} display={vol > 0 ? `${Math.round(vol * 100)} %` : t("Muted")}
                     min={0} max={100} step={1} onChange={(n) => setO({ volume: n > 0 ? n / 100 : undefined })} />
-                  <p className="muted xs">{t("Drag it on the video to move it, scroll on it to resize it.")}</p>
+                  <p className="muted xs">{t("Click it to set it in the right column (its size is the Zoom of the framing, its colour…); drag it on the video to move it.")}</p>
                   <div className="row" style={{ gap: 6 }}>
                     {trimmed && <button className="btn sm quiet" onClick={() => setO({ clipIn: undefined, clipOut: undefined })}>{t("Whole video")}</button>}
                     <span className="grow" />
@@ -4597,24 +4631,23 @@ export default function VideoStudio({
             )}
           </div>
         </div>
-      </div>
     );
   };
   /** A shot pressed on the cameras' track: pulled up far enough, its camera goes over the video. */
   const liftRef = useRef<{ y: number; cam: number } | null>(null);
-  const camsEl = () => {
+  /** The cameras: their track (in the video block, under the video over it), or the multicam's buttons (under the
+   *  block, only with two cameras or more). */
+  const camsEl = (part: "track" | "controls") => {
     const angles = settings.angles ?? [];
     const used = angles.filter(Boolean).length;
-    if (!used) return videoTrackEl();
+    if (!used) return part === "track" ? videoTrackEl() : null;
     const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
     const sortedCuts = [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at);
     /** Camera `cam` (0-3) from a button: as its key (playing: cut to it now; paused: the shot under the playhead). */
     const pickCam = chooseCam;
     const camNow = camAt(settings.cuts, head);
     const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
-    return (
-      <div className="cams">
-        {used > 0 && (
+    if (part === "track") return (
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}
             // (the track holds the pointer while it is down: the pull up is followed here)
             onPointerMoveCapture={(e) => {
@@ -4625,6 +4658,35 @@ export default function VideoStudio({
               if (c) { stop(); removeAngle(l.cam - 1, { overlay: overlayFor(c) }); setOverLook(true); }
             }}
             onPointerUpCapture={() => { liftRef.current = null; }}>
+            {/* At its end: each camera's own sound (heard on its shots). */}
+            <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
+              {(() => {
+                const cams = [clip, ...angles.map((id) => clips.find((c) => c.id === id))];
+                const anyOn = cams.some((c) => (c?.id === clip.id ? settings.clipVolume : c?.clipVolume) ?? 0);
+                return (
+                  <Menu float trigger={(_, toggle) => (
+                    <button className={"btn icon sm quiet" + (anyOn ? " on" : "")} aria-label={t("Cameras' sound")} title={t("Cameras' sound")} onClick={toggle}>
+                      <Icon name={anyOn ? "volume" : "volume-off"} size={14} />
+                    </button>
+                  )}>
+                    {() => (
+                      <div className="sound-pop" data-keep>
+                        {cams.map((c, k) => {
+                          if (!c) return null;
+                          const vol = clamp((k === 0 ? settings.clipVolume : c.clipVolume) ?? 0, 0, 1);
+                          const set = (n: number) => { const x = n > 0 ? n / 100 : undefined; if (k === 0) setV({ clipVolume: x }); else patchTake(c.id, { clipVolume: x }); };
+                          return (
+                            <Range key={c.id} label={`${k + 1} · ${c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}`} value={Math.round(vol * 100)}
+                              display={vol > 0 ? `${Math.round(vol * 100)} %` : t("Muted")} min={0} max={100} step={1} onChange={set} />
+                          );
+                        })}
+                        <p className="muted xs">{t("Each camera's own sound, over the official audio, heard on its shots.")}</p>
+                      </div>
+                    )}
+                  </Menu>
+                );
+              })()}
+            </div>
             <div className="track-content">
             <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
             {shots.map((x, i) => {
@@ -4684,7 +4746,8 @@ export default function VideoStudio({
             <span className="lyric-head" style={{ ...pos(head) }} />
             </div>
           </div>
-        )}
+    );
+    return (
         <div className="row cams-row">
           <span className="label">{t("Edit")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
           {[0, ...angles.map((_, k) => k + 1)].filter((k) => k === 0 || angles[k - 1]).map((k) => (
@@ -4693,7 +4756,6 @@ export default function VideoStudio({
           ))}
           <span className="muted xs">{t("A camera cuts to it at the playhead; at a shot's start, the whole shot.")}</span>
         </div>
-      </div>
     );
   };
   /** The strip's passage and file (not its grade): a change of colour only waits longer before it is made again. */
@@ -5636,7 +5698,9 @@ export default function VideoStudio({
                   <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
                 </div>
-                {overlayTrackEl()}{camsEl()}
+                {/* The video part of the timeline: every video track in one block (the one over it on top). */}
+                {audioBuf && videoBlob && <div className="video-block">{overlayTrackEl()}{camsEl("track")}</div>}
+                {camsEl("controls")}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
                 <div className="row seg-versions" role="group" aria-label={t("Versions")}>
@@ -6064,7 +6128,7 @@ export default function VideoStudio({
               onClick={() => setV({ format: "9:16" })}>9:16</button>
             <button className={"btn sm" + (settings.format === "16:9" ? " on" : "")} aria-pressed={settings.format === "16:9"}
               onClick={() => setV({ format: "16:9" })}>16:9</button>
-            <Select className="input sm grow" aria-label={t("Framing")}
+            {!ovTake && <Select className="input sm grow" aria-label={t("Framing")}
               value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
               onChange={(e) => {
                 const v = e.target.value;
@@ -6073,8 +6137,15 @@ export default function VideoStudio({
               <option value="fill">{t("Fill (crop)")}</option>
               <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
               <option value="fit-black">{t("Fit whole, black bars")}</option>
-            </Select>
+            </Select>}
           </div>
+          {/* The video over it: whole, its size is its zoom (×1: as wide as the post), moved on the preview. */}
+          {ovTake && settings.overlay && (
+            <Range label={t("Zoom")} value={settings.overlay.w / 100} display={`${(settings.overlay.w / 100).toFixed(2)}×`} min={0.15} max={4} step={0.01}
+              onChange={(z) => { const o = overlayOf(settingsRef.current); if (o) setV({ overlay: { ...o, w: Math.round(z * 1000) / 10 } }); }}
+              onReset={() => { const o = overlayOf(settingsRef.current); if (o) setV({ overlay: { ...o, w: 42 } }); }} />
+          )}
+          {!ovTake && <>
           <div className="row" title={t("An anamorphic lens squeezes the picture across: pick its factor to see it as filmed. It goes with the camera file (all its versions).")}>
             <span className="label">{t("Anamorphic lens")}</span>
             <Select className="input sm grow" aria-label={t("Anamorphic lens")} value={String(desq ?? 1)}
@@ -6116,6 +6187,7 @@ export default function VideoStudio({
               <button className={"btn sm grow" + (lookPushIn ? " on" : "")} aria-pressed={!!lookPushIn} onClick={() => writeLook({ pushIn: true })}>{t("Inside the video")}</button>
             </div>
           )}
+          </>}
           </Section>
           {tab === "hook" ? (
             <div className="stack sheet-text">

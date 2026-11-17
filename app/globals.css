@@ -497,6 +497,11 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .media-meta .warn-text { color: var(--warn); }
 /* Multicam: the cameras (one colour each, from the app's own) and the shots of the segment. */
 .cams { display: flex; flex-direction: column; gap: 6px; }
+/* The video part of the timeline: every video track (the one over it on top, then the video or the cameras) in one
+   bordered block, a small gap between them; the tracks inside have no border of their own (their width stays the
+   waveform's: no side padding). */
+.video-block { display: grid; gap: 4px; padding: 4px 0; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
+.video-block > .lyric-track { border: 0; border-radius: 0; background: none; }
 .cams-row { flex-wrap: wrap; gap: 6px; }
 .cams-row .label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
 .cam-0 { --cam: var(--accent); } .cam-1 { --cam: var(--video); } .cam-2 { --cam: var(--music); } .cam-3 { --cam: var(--lyrics); }
@@ -2330,7 +2335,7 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .hook-track { order: 4; }
 .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
 /* The multicam edit (shots, then 1 to 4) right under the lyrics, before the versions (same order: after them in the page). */
-.video-side .timeline > .cams { order: 5; }
+.video-side .timeline > .cams, .video-side .timeline > .video-block, .video-side .timeline > .cams-row { order: 5; }
 /* Takes, everywhere: "Takes" then "Take 1 0:04–0:34"… on one line (the full detail stays in each one's tooltip). */
 
 /* The segment's tools, everywhere: lock, length, then the passage. */
