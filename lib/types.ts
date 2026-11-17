@@ -400,6 +400,9 @@ export interface VideoSettings {
   /** Volume of the camera file's own sound in the post, 0-1 (preview and export, mixed over the official audio, only
    *  in the part kept). None or 0: silent (the usual case: synced on the official audio). */
   clipVolume?: number;
+  /** Where and how big this video is when it is the one over another (picture in picture): kept with the video, so it
+   *  finds its own size and place again when it goes back over (never the one of the video it changed place with). */
+  box?: { x: number; y: number; w: number; radius?: number };
   /** Confidence of the automatic sync, 0 to 1. */
   score?: number;
   /** Clip seconds where the music really plays, found by the automatic sync. */

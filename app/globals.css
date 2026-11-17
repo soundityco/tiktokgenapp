@@ -395,6 +395,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   background: color-mix(in srgb, var(--vc) 16%, var(--bg)); }
 .lyric-track .cue.video-clip.on { background: color-mix(in srgb, var(--vc) 24%, var(--bg)); border-left-color: var(--vc); }
 
+/* (its name: kept on the left edge of the view while the clip's start is past it, see paintTracks) */
+.video-clip .vc-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; will-change: transform; }
 .lyric-track .cue.video-clip:active { cursor: grabbing; }
 .lyric-track .cue.video-clip.locked { cursor: pointer; }
 .lyric-track .cue.video-clip.locked svg { flex: none; opacity: .7; }

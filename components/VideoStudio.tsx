@@ -900,6 +900,8 @@ export default function VideoStudio({
   const posterTimer = useRef(0);
   // This video's files on the device: its own, or the ones of the video it duplicates (see VideoSetup.media).
   const mediaId = clip.media ?? clip.id;
+  /** The project and video the files were last read for ("<project>|<video>"): see the files effect. */
+  const loadedFor = useRef("");
   /** Another video of the release reads these device files too (a duplicate, or the video it was made from). */
   const sharedFiles = (key = mediaId) => clips.some((c) => c.id !== clip.id && (c.media ?? c.id) === key);
   const posterKey = `poster:${mediaId}`;
@@ -1136,15 +1138,22 @@ export default function VideoStudio({
     const token = ++ioRef.current;
     syncRef.current?.abort();
     stop();
-    setAudioBlob(null);
-    setAudioBuf(null);
-    setPeaks([]);
-    setVideoBlob(null);
-    setVideoDur(0);
-    setLoadedClip(null);
+    // Another video became the base of this same project (a clip dragged in the timeline): only the camera file
+    // changes. The official audio, its waveform, the playhead and the picture on screen stay (they used to be read
+    // again, as if the page was reloaded).
+    const swapOnly = loadedFor.current === `${project.id}|${clip.id}`;
+    loadedFor.current = `${project.id}|${clip.id}`;
+    if (!swapOnly) {
+      setAudioBlob(null);
+      setAudioBuf(null);
+      setPeaks([]);
+      setVideoBlob(null);
+      setVideoDur(0);
+      setLoadedClip(null);
+      setHead(settingsRef.current.crop.start);
+    } else setVideoDur(settingsRef.current.source?.duration ?? 0);
     setErr(null);
     setNote(null);
-    setHead(settingsRef.current.crop.start);
     void (async () => {
       try {
         const t0 = performance.now();
@@ -1156,7 +1165,7 @@ export default function VideoStudio({
         stillWant.current = null;
         void getMedia(posterKey).then(async (p) => {
           if (!p || off || token !== ioRef.current) return;
-          try { posterRef.current = await createImageBitmap(p); drawAt(settingsRef.current.crop.start); } catch { /* not a picture */ }
+          try { posterRef.current = await createImageBitmap(p); drawAt(swapOnly ? headRef.current : settingsRef.current.crop.start); } catch { /* not a picture */ }
         });
         const [shared, legacy, b] = await Promise.all([getMedia(projectAudioKey), getMedia(`audio:${clip.id}`), getMedia(`video:${mediaId}`)]);
         if (off || token !== ioRef.current) return;
@@ -1165,7 +1174,7 @@ export default function VideoStudio({
         // The release has one official audio; older workspaces kept a copy per video: it becomes the project's.
         let a = shared ?? legacy;
         // Not on this device (another computer, browser data cleared): back from the Drive file.
-        if (!a && project.audioDriveId) {
+        if (!a && !swapOnly && project.audioDriveId) {
           setNote(t("Getting the official audio back from Google Drive…"));
           try {
             const blob = await downloadDriveFile(project.audioDriveId);
@@ -1181,7 +1190,7 @@ export default function VideoStudio({
           void putMedia(projectAudioKey, legacy).then(() => delMedia(`audio:${clip.id}`)).catch(() => {});
           if (!project.audioName && settingsRef.current.audioName) onProject((p) => ({ ...p, audioName: settingsRef.current.audioName }));
         }
-        if (a) {
+        if (a && !swapOnly) {
           setAudioBlob(a);
           const ta = performance.now();
           decodeAudio(getCtx(), a)
@@ -2254,11 +2263,15 @@ export default function VideoStudio({
   const autoSync = async () => {
     const official = audioBuf;
     const recording = videoBlob;
-    if (!official || !recording) return;
+    if (!official) return;
+    // No camera file for the base here: the other videos are still synced.
+    if (!recording) { tellSync(null, await syncOthers()); return; }
     syncRef.current?.abort();
     stop();
     void askNotifyPermission(); // inside the click: lets the browser tell the user when the analysis is over
     let outcome: { title: string; body: string } | null = null;
+    // Why the base found no place (told with the others' result, once they are all tried).
+    let baseFail: string | null = null;
     setSyncBusy(true); setSyncPct(0); setErr(null); setNote(null);
     // Start the real-time capture right away, inside the click: the video cannot be muted
     // (mute zeroes the samples before the Web Audio graph), so it needs the user gesture.
@@ -2293,8 +2306,7 @@ export default function VideoStudio({
         /* result ignored */
       } else if (!r.anchors || r.score < 0.4) {
         // Nothing in the official track resembles this recording: keep the current offset untouched.
-        setErr(t("No match found in the official audio. Check it is the right track, or sync by ear."));
-        outcome = { title: t("Sync failed"), body: t("No match found in the official audio. Check it is the right track, or sync by ear.") };
+        baseFail = t("No match found in the official audio. Check it is the right track, or sync by ear.");
       } else {
         const takes = r.takes.map((k) => ({ offset: round2(k.offset), musicStart: round2(k.musicStart), musicEnd: round2(k.musicEnd) }));
         const kept = takes.length > 1 ? takes : undefined;
@@ -2323,32 +2335,53 @@ export default function VideoStudio({
       if (!ac.signal.aborted) {
         console.error("auto sync failed", e);
         const reading = e instanceof Error && ["no-url", "silent", "decode"].includes(e.message);
-        const msg = reading ? t("The video has no readable audio track. Sync it manually.") : t("The analysis failed. Sync it by ear.");
-        setErr(msg);
-        outcome = { title: t("Sync failed"), body: msg };
+        baseFail = reading ? t("The video has no readable audio track. Sync it manually.") : t("The analysis failed. Sync it by ear.");
       }
     }
-    if (outcome && !ac.signal.aborted) notify(outcome.title, outcome.body);
+    setSyncPct(0);
+    // The project's other videos too (its cameras, the one over it), every one of them, whatever the base gave: each
+    // one that matches the official audio is placed on it; one that does not stays free, where it is (to place by hand).
+    const others = ac.signal.aborted ? null : await syncOthers();
     if (syncRef.current === ac) syncRef.current = null;
     setSyncBusy(false);
-    setSyncPct(0);
-    // The project's other videos too (its cameras, the one over it): each one that matches the official audio is
-    // placed on it; one that does not stays free, where it is (to place by hand on its track).
-    if (!ac.signal.aborted) await syncOthers();
+    if (!ac.signal.aborted && others) tellSync(baseFail ? { name: baseName(), why: baseFail } : null, others, outcome);
   };
+  const baseName = () => settingsRef.current.videoName?.replace(/\.[^.]+$/, "") || clip.name;
+  /** The project's other videos synced, one after the other: the names of those placed and of those left free. */
   const syncOthers = async () => {
     const cur = settingsRef.current, ov = overlayOf(cur);
-    let free = 0;
+    const synced: string[] = [], free: string[] = [];
     for (const id of [...(cur.angles ?? []).filter(Boolean), ...(ov ? [ov.clip] : [])]) {
       const c = clips.find((x) => x.id === id);
       if (!c) continue;
       const at = await resyncTake(c);
-      if (at === null) free++;
+      (at === null ? free : synced).push(c.name);
       // The one over it follows its sync (else it keeps the place it was given).
       const o = overlayOf(settingsRef.current);
       if (at !== null && o && o.clip === id) setV({ overlay: { ...o, offset: at } });
     }
-    if (free) onToast?.(free === 1 ? t("One video does not match the audio: it stays free, place it by hand.") : t("{n} videos do not match the audio: they stay free, place them by hand.", { n: free }));
+    return { synced, free };
+  };
+  /** One word on the whole sync: the base's result (`outcome`, or why it failed) with the other videos'. */
+  const tellSync = (fail: { name: string; why: string } | null, others: { synced: string[]; free: string[] },
+    outcome: { title: string; body: string } | null = null) => {
+    const list = (n: string[]) => n.map((x) => `« ${x} »`).join(", ");
+    const freeNames = [...(fail ? [fail.name] : []), ...others.free];
+    if (fail && !others.synced.length) {
+      // Nothing placed at all: the error, as before.
+      setErr(fail.why);
+      notify(t("Sync failed"), fail.why);
+      if (others.free.length) onToast?.(t("No video matches the official audio: they stay free, place them by hand."));
+      return;
+    }
+    const said = [
+      ...(fail ? [t("{a} synced.", { a: list(others.synced) })] : []),
+      ...(freeNames.length ? [freeNames.length === 1 ? t("{a} does not match the official audio (no sound in common): it stays free, place it by hand.", { a: list(freeNames) })
+        : t("{a} do not match the official audio (no sound in common): they stay free, place them by hand.", { a: list(freeNames) })] : []),
+    ].join(" ");
+    if (said) onToast?.(said);
+    if (outcome) notify(outcome.title, said ? `${outcome.body} · ${said}` : outcome.body);
+    else if (said) notify(t("Sync finished"), said);
   };
 
   // ---- audio ↔ video link ----
@@ -4108,13 +4141,14 @@ export default function VideoStudio({
    * playing moved. Every frame while playing; after each render too (the tracks laid out again for a new view).
    */
   /** The timeline's moving parts, found once per layout (not searched for at every frame). */
-  const timelineEls = useRef<{ contents: HTMLElement[]; clips: HTMLElement[][]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
+  const timelineEls = useRef<{ contents: HTMLElement[]; clips: HTMLElement[][]; names: { el: HTMLElement; w: number }[]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
   const findTimelineEls = () => {
     const root = waveRef.current?.closest(".timeline");
     const all = (sel: string, r: ParentNode | null | undefined = root) => (r ? [...r.querySelectorAll<HTMLElement>(sel)] : []);
     const contents = all(".lyric-track .track-content");
     timelineEls.current = {
-      contents, clips: contents.map((c) => all(":scope > .cue[data-a]", c)), heads: all(".lyric-track .lyric-head"),
+      contents, clips: contents.map((c) => all(":scope > .cue[data-a]", c)),
+      names: all(".lyric-track .vc-name[data-a]").map((el) => ({ el, w: el.offsetWidth })), heads: all(".lyric-track .lyric-head"),
       bars: all(".lyric-track .cue-bar-glow[data-a]"), playing: all(".lyric-track .cue.on[data-a]"),
       dock: all(".dp-track .dp-played", document), dockHeads: all(".dp-track .dp-head", document),
     };
@@ -4147,6 +4181,13 @@ export default function VideoStudio({
         el.style.transform = `translate3d(${xOf(from)}px,0,0)`;
         el.style.zIndex = el === stuck ? "0" : "1"; // the stuck one under: the next slides in over it
       }
+    });
+    // A video clip (long, never moved whole): its name stays on the left edge of what is on screen while its start has
+    // gone past it, up to its own end (the next clip of its line then shows its own).
+    const edge = xOf(live.s);
+    els.names.forEach(({ el, w }) => {
+      const a = xOf(Number(el.dataset.a)), b = xOf(Number(el.dataset.b));
+      el.style.transform = `translate3d(${clamp(edge - a, 0, Math.max(0, b - a - w - 14))}px,0,0)`;
     });
     // The playing clip's bar: at its start, or on the left edge once its start has gone past it; its text glows under the playhead.
     els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
@@ -4574,8 +4615,10 @@ export default function VideoStudio({
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
                 {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
-                {locked && <Icon name="lock" size={11} />}
-                <span className="truncate">{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
+                <span className="vc-name" data-a={a} data-b={b}>
+                  {locked && <Icon name="lock" size={11} />}
+                  <span className="truncate">{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
+                </span>
                 {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
               </div>
             )}
@@ -4593,7 +4636,15 @@ export default function VideoStudio({
    * place with the base (the base goes over, at the place it had; the new base at the place it had over it).
    */
   const CAM_KEYS = ["media", "videoName", "videoSize", "source", "offset", "score", "anchors", "musicStart", "musicEnd", "takes", "linked", "frame",
-    "desqueeze", "grade", "drive", "clipIn", "clipOut", "clipVolume", "matte", "push", "pushIn"] as const satisfies readonly (keyof VideoSetup)[];
+    "desqueeze", "grade", "drive", "clipIn", "clipOut", "clipVolume", "matte", "push", "pushIn", "box"] as const satisfies readonly (keyof VideoSetup)[];
+  /** A video's size and place over another one: its own (`VideoSettings.box`), else top right, 42 % wide. */
+  const boxOr = (b: VideoSettings["box"]) => ({ x: b?.x ?? 70, y: b?.y ?? 28, w: b?.w ?? 42, radius: b?.radius ?? 8 });
+  const boxOf = (o: VideoOverlay): NonNullable<VideoSettings["box"]> => ({ x: o.x, y: o.y, w: o.w, radius: o.radius });
+  // The one over the video keeps its size and place in its own take (it finds them again wherever it goes).
+  useEffect(() => {
+    const o = overlayOf(settings), c = o ? clips.find((x) => x.id === o.clip) : undefined;
+    if (o && c && JSON.stringify(c.box) !== JSON.stringify(boxOf(o))) patchTake(o.clip, { box: boxOf(o) });
+  }, [settings.overlay?.clip, settings.overlay?.x, settings.overlay?.y, settings.overlay?.w, settings.overlay?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
   const swapBase = (x: VideoSetup, more: Partial<VideoSettings> = {}) => {
     stop();
     setPinCam(null); setOverLook(false);
@@ -4603,8 +4654,9 @@ export default function VideoStudio({
     let overlay: VideoOverlay | undefined;
     if (ov && ov.clip === x.id) {
       // Its place over the video goes to the old base, and the base takes the place it had.
-      theirs.offset = ov.offset; theirs.clipIn = ov.clipIn; theirs.clipOut = ov.clipOut; theirs.linked = false;
-      overlay = { ...ov, offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut };
+      // (each keeps its own size and place over a video: the base finds the one it had last time it was over one)
+      theirs.offset = ov.offset; theirs.clipIn = ov.clipIn; theirs.clipOut = ov.clipOut; theirs.linked = false; theirs.box = boxOf(ov);
+      overlay = { ...ov, ...boxOr(base.box), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut };
     }
     onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, ...theirs, ...(overlay ? { overlay } : null), ...more } : c.id === x.id ? { ...c, ...mine } : c)) }));
     onSaveNow();
@@ -4705,7 +4757,7 @@ export default function VideoStudio({
       const next = clips.find((c) => c.id === angles[0]);
       if (!next || d.act !== "over") return;
       swapBase(next, { angles: angles.slice(1).length ? angles.slice(1) : undefined, cuts: undefined,
-        overlay: { ...overlayFor(next), offset: cur.offset, clipIn: cur.clipIn, clipOut: cur.clipOut } });
+        overlay: { ...overlayFor(next), ...boxOr(cur.box), offset: cur.offset, clipIn: cur.clipIn, clipOut: cur.clipOut } });
       return;
     }
     const id = angles[d.cam - 1], c = clips.find((q) => q.id === id);
@@ -4717,7 +4769,7 @@ export default function VideoStudio({
       setOverLook(true);
     } else if (d.act === "swap") swapBase(c);
   };
-  const overlayFor = (c: VideoSetup): VideoOverlay => ({ clip: c.id, offset: c.score !== undefined ? c.offset : round2(settings.crop.start), x: 70, y: 28, w: 42, radius: 8 });
+  const overlayFor = (c: VideoSetup): VideoOverlay => ({ clip: c.id, offset: c.score !== undefined ? c.offset : round2(settings.crop.start), ...boxOr(c.box) });
   const putOverlay = (c: VideoSetup) => { stop(); setV({ overlay: overlayFor(c) }); };
   /**
    * A take dragged from the library onto the video block (as in CapCut): dropped on the base line it joins the cameras
@@ -4865,7 +4917,7 @@ export default function VideoStudio({
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
-                <span className="truncate">{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span>
+                <span className="vc-name" data-a={a0} data-b={b0}><span className="truncate">{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
