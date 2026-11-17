@@ -495,7 +495,10 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .take-row > .warn-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .take.other { opacity: .6; }
 .take.other:hover, .take.other.open { opacity: 1; }
-.take-import { align-self: flex-start; }
+.take-import { align-self: flex-start; margin-top: 6px; } /* (12 px from the last take: the videos 6 px apart) */
+/* The project's takes 6 px apart all along (camera 1's card, then the others), its title as far as before. */
+.tree-branch.takes-branch { row-gap: 6px; }
+.tree-branch.takes-branch > .tree-head { margin-bottom: 6px; }
 .clip-strip.folded { display: none; }
 .look-of { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam); border-radius: var(--r); font-size: 13px; min-width: 0; }
 .look-of b { color: var(--cam); }

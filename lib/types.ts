@@ -395,8 +395,11 @@ export interface VideoSettings {
    *  in an editor (the video track of the timeline). None: the whole file. */
   clipIn?: number;
   clipOut?: number;
-  /** A second video over the first one (picture in picture): another take of the release, placed on its own track. */
+  /** Older single video over the first one: read as `overlays` (one), never written any more. */
   overlay?: VideoOverlay;
+  /** Videos over the first one (picture in picture), from the bottom up: other takes of the release, each on its own
+   *  track of the timeline (numbered after the cameras, 2, 3, 4 from the base up), drawn in this order. */
+  overlays?: VideoOverlay[];
   /** Volume of the camera file's own sound in the post, 0-1 (preview and export, mixed over the official audio, only
    *  in the part kept). None or 0: silent (the usual case: synced on the official audio). */
   clipVolume?: number;
