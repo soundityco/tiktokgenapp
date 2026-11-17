@@ -55,7 +55,11 @@ const DEFAULT_VIDEO: VideoSettings = defaultVideo();
 /** Look LUTs already read on this page (id → LUT). */
 const LOOKS = new Map<string, CubeLut>();
 /** A multicam camera's look: its framing and grade (its LUT for the preview, 33 points). */
-type AngleLook = { frame?: VideoSettings["frame"]; desqueeze?: VideoSettings["desqueeze"]; grade?: VideoGrade; lut: Float32Array | null };
+type AngleLook = { frame?: VideoSettings["frame"]; desqueeze?: VideoSettings["desqueeze"]; grade?: VideoGrade; lut: Float32Array | null;
+  /** Its own black bars and progressive zoom (none: the project's, camera 1's; 0 / false: none for this camera). */
+  matte?: number; push?: number; pushIn?: boolean };
+/** A camera's own value, else the project's (camera 1's): an explicit 0 / false is "none" for that camera. */
+const ownOr = <T,>(own: T | undefined, project: T | undefined) => (own !== undefined ? own : project);
 /** A multicam camera: another video of the release, its file played by a hidden player. */
 type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoElement; url: string; offset: number; look: CubeLut | null;
   /** Its file here is its Drive working copy (the camera file is on another device). */
@@ -731,7 +735,7 @@ export default function VideoStudio({
   const ovClip = overlayOf(settings) ? clips.find((c) => c.id === settings.overlay!.clip) ?? null : null;
   const angleClips = [...(settings.angles ?? []).map((id) => clips.find((c) => c.id === id && c.id !== clip.id) ?? null), ...(ovClip ? [ovClip] : [])];
   // What a camera needs (its file, its offset, framing and grade): read again when one of them changes.
-  const anglesKey = JSON.stringify(angleClips.map((c) => c && [c.id, c.media, c.videoSize, c.offset, c.frame, c.desqueeze, c.grade, lutLibrary?.find((l) => l.id === c.grade?.lut?.id)]));
+  const anglesKey = JSON.stringify(angleClips.map((c) => c && [c.id, c.media, c.videoSize, c.offset, c.frame, c.desqueeze, c.matte, c.push, c.pushIn, c.grade, lutLibrary?.find((l) => l.id === c.grade?.lut?.id)]));
   useEffect(() => {
     let off = false;
     const map = anglesRef.current;
@@ -771,7 +775,7 @@ export default function VideoStudio({
           a = { id: c.id, media, blob, el, url, offset: 0, frame: undefined, desqueeze: undefined, grade: undefined, look: null, lut: null, fromCopy: !own };
           map.set(c.id, a);
         }
-        a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze;
+        a.offset = c.offset; a.frame = c.frame; a.desqueeze = c.desqueeze; a.matte = c.matte; a.push = c.push; a.pushIn = c.pushIn;
         // The new grade is made ready apart and put in at once: the camera keeps its current look until then (cleared
         // first, it was drawn black while its LUT was being read, at each move of a colour setting).
         const grade = withLutSettings(c.grade);
@@ -924,6 +928,9 @@ export default function VideoStudio({
     over?: { pic: Picture; a: AngleLook; o: VideoOverlay } | null) => {
     const cfg = settingsRef.current;
     const lookFrame = angle ? angle.frame : cfg.frame, lookGrade = angle ? angle.grade : cfg.grade;
+    // The camera's own bars and progressive zoom, else the project's.
+    const matte = (angle ? ownOr(angle.matte, cfg.matte) : cfg.matte) || undefined;
+    const pushK = (angle ? ownOr(angle.push, cfg.push) : cfg.push) || undefined, pushIn = angle ? ownOr(angle.pushIn, cfg.pushIn) : cfg.pushIn;
     const raw = !!preview?.raw;
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
@@ -932,12 +939,12 @@ export default function VideoStudio({
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
       pic = desqueeze(pic, angle ? angle.desqueeze : cfg.desqueeze);
-      let f = picOf(lookFrame ?? DEFAULT_VIDEO.frame, cfg.matte);
+      let f = picOf(lookFrame ?? DEFAULT_VIDEO.frame, matte);
       // Progressive zoom: ×1 at the start of the segment, `push` on its last frame. The whole framed picture around the
       // centre, or (`pushIn`) only what is inside its frame, around the frame's centre (below).
-      const push = cfg.push ?? 1;
+      const push = pushK ?? 1;
       const k = push > 1 ? 1 + (push - 1) * clamp((time - cfg.crop.start) / Math.max(0.1, cfg.crop.duration), 0, 1) : 1;
-      const inside = !!cfg.pushIn && k > 1;
+      const inside = !!pushIn && k > 1;
       if (k > 1 && !inside) f = zoomPic(f, f.zoom * k);
       // A camera of the multicam can be graded while camera 1 is not: the shared grader then made for it.
       const grader = graderRef.current ?? (angle?.lut ? (graderRef.current = Grader.shared()) : null);
@@ -992,14 +999,16 @@ export default function VideoStudio({
         g.beginPath();
         g.roundRect(x, y, w, h, r);
         g.clip();
-        drawPictureAt(g, op.src, op.w, op.h, x, y, w / op.w, op.part);
+        // Its take's own framing (zoom, position, fill / fit) inside its box: ×1 shows it whole.
+        g.translate(x, y);
+        drawFramed(g, op.src, op.w, op.h, picOf(over.a.frame ?? DEFAULT_VIDEO.frame), w, h, op.part);
         g.restore();
         overBox = { x, y, w, h } as TextBox;
       }
     }
     overlayBox.current = overBox;
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
-    drawMatte(g, W, H, cfg.matte);
+    drawMatte(g, W, H, matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
     const at = Math.min(time, cfg.crop.start + cfg.crop.duration - 0.5 / exportSettings(cfg.source?.fps, exportPrefsRef.current).fps);
@@ -3642,7 +3651,7 @@ export default function VideoStudio({
           const s0 = Math.max(0, from - a.offset), s1 = until - a.offset;
           const g = a.grade;
           if (g && aw && ah && gradesColour(g) && (convertsFootage(g) || !!g.lut) && (!g.lut || a.look)) {
-            const crop = cropFor(picOf(a.frame ?? DEFAULT_VIDEO.frame, cfg.matte), aw, ah, W, H, cfg.push ?? 1, a.desqueeze);
+            const crop = cropFor(picOf(a.frame ?? DEFAULT_VIDEO.frame, ownOr(a.matte, cfg.matte) || undefined), aw, ah, W, H, ownOr(a.push, cfg.push) || 1, a.desqueeze);
             const gpu = await gpuGradedSource(a.blob, s0, s1, crop, aw, ah, buildGradeLut(g, g.lut ? a.look : null, 65), 65, () => {}, ac.signal).catch(() => null);
             if (gpu) { angleClose.push(() => gpu.close()); return async (time) => { const p = await gpu.frameAt(time - a.offset); return p && { src: p.src, w: aw, h: ah, part: crop, graded: true }; }; }
           }
@@ -3790,14 +3799,18 @@ export default function VideoStudio({
 
   // ---- progressive zoom: a preset of the menu, or its own factor ("Custom…", on a slider) ----
   const [pushCustom, setPushCustom] = useState(false);
-  const pushIsCustom = pushCustom || (!!settings.push && !PUSH_PRESETS.includes(settings.push));
   const timesText = (v: number) => `×${String(Math.round(v * 100) / 100).replace(".", lang === "fr" ? "," : ".")}`;
   // ---- framing on the preview: drag the video or the lyrics, wheel to zoom / resize, double-click to reset ----
   // ---- multicam: the camera the right column sets (colour, effects, framing) = the one on the paused preview: a take
   //      pinned from the library, else the shot under the playhead. Kept in the take (every project using it). ----
   const shotTake = (() => { const k = camAt(settings.cuts, head); return k > 0 ? settings.angles?.[k - 1] ?? null : null; })();
   const lookId = pinCam ?? (playing ? null : shotTake);
-  const camTake = lookId && lookId !== "main" && settings.angles?.includes(lookId) ? clips.find((c) => c.id === lookId) : undefined;
+  // The video over it, picked on the preview or its track: the right column sets its take (colour, framing…).
+  const [overLook, setOverLook] = useState(false);
+  const ovTake = overLook && overlayOf(settings) ? clips.find((c) => c.id === settings.overlay!.clip) : undefined;
+  useEffect(() => { if (pinCam) setOverLook(false); }, [pinCam]);
+  useEffect(() => { if (!settings.overlay) setOverLook(false); }, [settings.overlay]);
+  const camTake = ovTake ?? (lookId && lookId !== "main" && settings.angles?.includes(lookId) ? clips.find((c) => c.id === lookId) : undefined);
   const camTakeRef = useRef(camTake);
   camTakeRef.current = camTake;
   /** Its look written where it belongs: the take's, or this project's own (camera 1). */
@@ -3815,13 +3828,19 @@ export default function VideoStudio({
   const curFrame = () => (camTakeRef.current ? camTakeRef.current.frame : settingsRef.current.frame) ?? DEFAULT_VIDEO.frame;
   const frame = (camTake ? camTake.frame : settings.frame) ?? DEFAULT_VIDEO.frame;
   const desq = camTake ? camTake.desqueeze : settings.desqueeze;
+  // The camera's own bars and progressive zoom (written in its take), else the project's (camera 1's).
+  const lookMatte = (camTake ? ownOr(camTake.matte, settings.matte) : settings.matte) || undefined;
+  const lookPush = (camTake ? ownOr(camTake.push, settings.push) : settings.push) || undefined;
+  const lookPushIn = camTake ? ownOr(camTake.pushIn, settings.pushIn) : settings.pushIn;
+  const setPush = (k: number | undefined) => writeLook({ push: camTake ? k ?? 0 : k });
+  const pushIsCustom = pushCustom || (!!lookPush && !PUSH_PRESETS.includes(lookPush));
   const setFrame = (patch: Partial<VideoFrame>) => writeLook({ frame: { ...curFrame(), ...patch } });
   /** Offsets kept in bounds, as for the carousel photos (a drag reacts at once in the other direction). */
   const fitFrame = (f: VideoFrame, squeeze = (camTakeRef.current ? camTakeRef.current.desqueeze : settingsRef.current.desqueeze) ?? 1): VideoFrame => {
     const take = camTakeRef.current;
     const el = take ? anglesRef.current.get(take.id)?.el : videoRef.current, c = canvasRef.current;
     if (!el?.videoWidth || !c) return f;
-    const p = clampPic(picOf(f, settingsRef.current.matte), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
+    const p = clampPic(picOf(f, (take ? ownOr(take.matte, settingsRef.current.matte) : settingsRef.current.matte) || undefined), el.videoWidth * squeeze, el.videoHeight, c.width, c.height);
     return { ...f, ox: p.ox, oy: p.oy };
   };
   const pdrag = useRef<null | { kind: "text" | "hook" | "pic" | "over"; sx: number; sy: number; ox: number; oy: number; k: number; cue?: { key: string; st: TextStyle } }>(null);
@@ -3845,9 +3864,13 @@ export default function VideoStudio({
     // Under the texts, the video over the picture (picture in picture): dragged to move it.
     const ovNow = overlayOf(settingsRef.current);
     if (!textKind && ovNow && inBox(overlayBox.current, c.x, c.y, 0)) {
+      // Picked: the right column sets it (its colour, its framing inside its box).
+      setPinCam(null); setOverLook(true);
       pdrag.current = { kind: "over", sx: e.clientX, sy: e.clientY, ox: ovNow.x, oy: ovNow.y, k: c.k };
       return;
     }
+    // The video over it was picked: a press beside it only gives the right column back to the picture under it.
+    if (!textKind && overLook) { setOverLook(false); return; }
     const kind = textKind;
     const f = fitFrame(curFrame());
     // The lyrics: the caption shown alone when it has its own look (or "this word" is chosen), else all of them.
@@ -4149,14 +4172,15 @@ export default function VideoStudio({
     await prepareTake(c.id, b, c.grade, false);
   };
   /** Camera `i + 2` taken out of this project: its shots go back to camera 1. */
-  const removeAngle = (i: number) => {
+  /** `more`: set together (a camera that becomes the video over it). */
+  const removeAngle = (i: number, more: Partial<VideoSettings> = {}) => {
     const angles = [...(settings.angles ?? [])];
     // The take on the preview, or unfolded: back to the shots (never a black preview for a camera gone).
     if (pinCam === angles[i]) setPinCam(null);
     if (takeOpen === angles[i]) setTakeOpen(null);
     angles.splice(i, 1);
     const cuts = settings.cuts?.map((c) => (c.cam === i + 1 ? { ...c, cam: 0 } : c.cam > i + 1 ? { ...c, cam: c.cam - 1 } : c));
-    setV({ angles: angles.length ? angles : undefined, cuts: angles.length ? cuts : undefined });
+    setV({ angles: angles.length ? angles : undefined, cuts: angles.length ? cuts : undefined, ...more });
   };
   const addAngle = (id: string) => setV({ angles: [...(settings.angles ?? []).filter(Boolean), id].slice(0, MAX_CAMS - 1) });
   /** A take only imported, used by no project: off the release, its file off this device. */
@@ -4302,6 +4326,8 @@ export default function VideoStudio({
         : null;
       const menu = (close: () => void) => (<>
         {cam !== null && cam > 0 && <button onClick={() => { close(); removeAngle(i); }}>{t("Take out of the project")}</button>}
+        {/* A camera of the multicam over camera 1 instead (picture in picture): out of the cameras, onto its own track. */}
+        {cam !== null && cam > 0 && <button onClick={() => { close(); stop(); removeAngle(i, { overlay: overlayFor(c) }); }}>{t("Put over the video (picture in picture)")}</button>}
         {cam === null && <button disabled={!room} onClick={() => { close(); addAngle(c.id); }}>{t("Add to the project")}</button>}
         {cam === null && (settings.overlay?.clip === c.id
           ? <button onClick={() => { close(); setV({ overlay: undefined }); }}>{t("Remove from over the video")}</button>
@@ -4470,10 +4496,8 @@ export default function VideoStudio({
   };
   /** A take of the release over the post's video (picture in picture): from the library's take menu. Synced, it starts
    *  in place; else at the segment's start. Top right, 42 % wide, corners slightly rounded. */
-  const putOverlay = (c: VideoSetup) => {
-    stop();
-    setV({ overlay: { clip: c.id, offset: c.score !== undefined ? c.offset : round2(settings.crop.start), x: 70, y: 28, w: 42, radius: 8 } });
-  };
+  const overlayFor = (c: VideoSetup): VideoOverlay => ({ clip: c.id, offset: c.score !== undefined ? c.offset : round2(settings.crop.start), x: 70, y: 28, w: 42, radius: 8 });
+  const putOverlay = (c: VideoSetup) => { stop(); setV({ overlay: overlayFor(c) }); };
   /**
    * The overlay's track (over the video track): its take as a clip, dragged to slide it along the track, its edges to
    * trim it; at its end, its settings (size, corners, sound: the picture itself is moved and sized on the preview) and
@@ -4523,7 +4547,8 @@ export default function VideoStudio({
     const up = (e: React.PointerEvent<HTMLElement>) => {
       const d = ovDrag.current;
       ovDrag.current = null;
-      if (d && !d.moved) setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d));
+      // A click: the playhead there, and the right column on this video.
+      if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(true); }
     };
     return (
       <div className="cams">
@@ -5997,13 +6022,14 @@ export default function VideoStudio({
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")} ref={rightColRef}>
           <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} tone="video" />
           {/* Multicam: whose look the column sets (the camera on the preview). */}
-          {(settings.angles ?? []).some(Boolean) && (() => {
-            const k = camTake ? (settings.angles ?? []).indexOf(camTake.id) + 1 : 0;
+          {((settings.angles ?? []).some(Boolean) || !!overlayOf(settings)) && (() => {
+            const k = camTake && !ovTake ? (settings.angles ?? []).indexOf(camTake.id) + 1 : 0;
             const c = camTake ?? clip;
             return (
-              <div className={"look-of cam-" + k}>
-                <span className="xs muted">{t("Settings of")}</span> <b>{k + 1}</b> <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
-                <Hint text={t("Colour, effects and framing are those of the camera on the preview: click a take in the library or a shot in the timeline to set another one. Kept in the take.")} />
+              <div className={"look-of cam-" + k + (ovTake ? " over" : "")}>
+                <span className="xs muted">{t("Settings of")}</span> {ovTake ? <Icon name="layers" size={12} /> : <b>{k + 1}</b>} <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
+                <Hint text={t("Each video has its own colour, effects, framing, bars and progressive zoom: those of the camera on the preview, or of the video over it once clicked (on the preview or its track). Click a take in the library or a shot in the timeline to set another one. Kept in the take.")} />
+                {ovTake && <button className="btn sm quiet" onClick={() => setOverLook(false)}>{t("Back to the video under it")}</button>}
               </div>
             );
           })()}
@@ -6037,7 +6063,7 @@ export default function VideoStudio({
           </div>
           <div className="row">
             <span className="label">{t("Black bars")}</span>
-            <MatteSelect className="input sm grow" value={settings.matte} onChange={(v) => setV({ matte: v })} />
+            <MatteSelect className="input sm grow" value={lookMatte} onChange={(v) => writeLook({ matte: camTake ? v ?? 0 : v })} />
           </div>
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.15} max={4} step={0.05}
             onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
@@ -6045,27 +6071,27 @@ export default function VideoStudio({
           {/* Progressive zoom: its factor on one line (like the lens), then, when on, what it zooms. */}
           <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>
             <span className="label">{t("Progressive zoom")}</span>
-            <Select className="input sm grow" aria-label={t("Progressive zoom")} value={pushIsCustom ? "custom" : String(settings.push ?? 0)}
+            <Select className="input sm grow" aria-label={t("Progressive zoom")} value={pushIsCustom ? "custom" : String(lookPush ?? 0)}
               onChange={(e) => {
                 const v = e.target.value;
-                if (v === "custom") { setPushCustom(true); if (!settings.push) setV({ push: 1.15 }); return; }
+                if (v === "custom") { setPushCustom(true); if (!lookPush) setPush(1.15); return; }
                 setPushCustom(false);
-                setV({ push: Number(v) || undefined });
+                setPush(Number(v) || undefined);
               }}>
               {PUSH_PRESETS.map((v) => <option key={v} value={String(v)}>{v ? timesText(v) : t("Off")}</option>)}
               <option value="custom">{t("Custom…")}</option>
             </Select>
           </div>
           {/* Custom: its own factor, on a slider under the menu (up to ×1.3: beyond, it is no longer a slow push). */}
-          {pushIsCustom && settings.push && (
-            <Range label={t("Strength")} value={settings.push} display={timesText(settings.push)} min={1.01} max={1.3} step={0.01}
-              onChange={(v) => setV({ push: Math.round(v * 100) / 100 })} onReset={() => setV({ push: 1.15 })} />
+          {pushIsCustom && lookPush && (
+            <Range label={t("Strength")} value={lookPush} display={timesText(lookPush)} min={1.01} max={1.3} step={0.01}
+              onChange={(v) => setPush(Math.round(v * 100) / 100)} onReset={() => setPush(1.15)} />
           )}
-          {settings.push && (
+          {lookPush && (
             <div className="row" role="group" aria-label={t("Progressive zoom")}
               title={t("Inside the video: the picture zooms inside its frame, which keeps its place and size (the bars and the texts around do not move).")}>
-              <button className={"btn sm grow" + (!settings.pushIn ? " on" : "")} aria-pressed={!settings.pushIn} onClick={() => setV({ pushIn: undefined })}>{t("The whole frame")}</button>
-              <button className={"btn sm grow" + (settings.pushIn ? " on" : "")} aria-pressed={!!settings.pushIn} onClick={() => setV({ pushIn: true })}>{t("Inside the video")}</button>
+              <button className={"btn sm grow" + (!lookPushIn ? " on" : "")} aria-pressed={!lookPushIn} onClick={() => writeLook({ pushIn: camTake ? false : undefined })}>{t("The whole frame")}</button>
+              <button className={"btn sm grow" + (lookPushIn ? " on" : "")} aria-pressed={!!lookPushIn} onClick={() => writeLook({ pushIn: true })}>{t("Inside the video")}</button>
             </div>
           )}
           </Section>

@@ -353,6 +353,8 @@ export const FR: Record<string, string> = {
   "Drag to slide the video along the track, its edges to trim it.": "Glisse pour déplacer la vidéo sur la piste, ses bords pour la rogner.",
   "Whole video": "Vidéo entière",
   "Video sound": "Son de la vidéo",
+  "Each video has its own colour, effects, framing, bars and progressive zoom: those of the camera on the preview, or of the video over it once clicked (on the preview or its track). Click a take in the library or a shot in the timeline to set another one. Kept in the take.": "Chaque vidéo a sa propre couleur, ses effets, son cadrage, ses bandes noires et son zoom progressif : ceux de la caméra à l'aperçu, ou de la vidéo par-dessus une fois cliquée (sur l'aperçu ou sa piste). Clique une prise dans la bibliothèque ou un plan dans la timeline pour en régler une autre. Gardé dans la prise.",
+  "Back to the video under it": "Revenir à la vidéo du dessous",
   "Remove from over the video": "Retirer de par-dessus la vidéo",
   "Put over the video (picture in picture)": "Mettre par-dessus la vidéo (incrustation)",
   "Video over it": "Vidéo par-dessus",
