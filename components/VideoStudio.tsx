@@ -3437,13 +3437,15 @@ export default function VideoStudio({
     if (!hasLyrics || !audioBuf) return;
     // An excerpt of the song (a version added before it was known, or never told): the lines it holds found now, by
     // where it sits in a longer version that has its lyrics; kept with it.
-    let lines = next.lyricLines;
-    if (!lines) {
-      setGenInfo(t("Finding which part of the song this audio is…"));
-      lines = await excerptLines().catch(() => undefined);
-      setGenInfo(null);
-      if (lines) { const ln = lines; onProject((p) => ({ ...p, lyricLines: ln })); next = { ...next, lyricLines: ln }; }
-    }
+    // Found again at each sync asked by hand (the lyrics may have changed since: lines added at the top shift the numbers,
+    // the longer version placed again with a chorus it did not have); the one kept before only when none is found now.
+    const longer = audioVersionsOf(releaseRef.current).some((v) => v.id !== audioId && v.lyricWords?.length);
+    if (longer) setGenInfo(t("Finding which part of the song this audio is…"));
+    const found = longer ? await excerptLines().catch(() => undefined) : undefined;
+    if (longer) setGenInfo(null);
+    const lines = found ?? next.lyricLines;
+    if (found) onProject((p) => ({ ...p, lyricLines: found }));
+    next = { ...next, lyricLines: lines };
     // An excerpt where the song sings none of the written lines (an intro): nothing to place, rather than the whole text
     // crammed into it.
     if (lines && lines[1] < lines[0]) {
