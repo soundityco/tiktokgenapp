@@ -352,6 +352,8 @@ export const FR: Record<string, string> = {
   "Locked to the audio (synced): unlock it to slide or trim the video freely.": "Verrouillée sur l'audio (synchronisée) : déverrouille-la pour glisser ou rogner la vidéo librement.",
   "Drag to slide the video along the track, its edges to trim it.": "Glisse pour déplacer la vidéo sur la piste, ses bords pour la rogner.",
   "Whole video": "Vidéo entière",
+  "Video sound": "Son de la vidéo",
+  "Muted": "Coupé",
   "All the lyrics": "Toutes les paroles",
   "This word": "Ce mot",
   "This phrase": "Cette phrase",

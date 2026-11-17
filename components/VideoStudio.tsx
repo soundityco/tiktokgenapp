@@ -95,7 +95,7 @@ const LYRICS_ALIGN_V = 3;
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
-const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "clipVolume", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
@@ -2023,7 +2023,7 @@ export default function VideoStudio({
     // No camera file: only the sound plays, at once.
     const el = videoUrl && fileClip.current === clip.id ? videoRef.current : null;
     if (el) {
-      el.muted = true;
+      el.muted = true; // (its own sound, when it has a volume: turned on by the playback below, in the part kept)
       el.playbackRate = 1;
       await whenReady(el);
       if (mine !== playToken.current) return;
@@ -2071,6 +2071,12 @@ export default function VideoStudio({
         // (no visible jumps).
         if (Math.abs(diff) > 0.4) { el.currentTime = target; el.playbackRate = 1; }
         else el.playbackRate = Math.abs(diff) < 0.02 ? 1 : Math.min(1.1, Math.max(0.9, 1 + diff * 0.8));
+        // The camera's own sound at its volume, only in the part of the file kept (trimmed on the video track).
+        const cfgNow = settingsRef.current, vol = clamp(cfgNow.clipVolume ?? 0, 0, 1);
+        const [ci, co] = clipSpan(cfgNow, Number.isFinite(el.duration) ? el.duration : Infinity);
+        const t0 = heard - cfgNow.offset, audible = vol > 0 && t0 >= ci && t0 <= co;
+        if (el.muted === audible) el.muted = !audible;
+        if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
       }
       syncAngles(heard);
       drawAt(heard);
@@ -3344,6 +3350,38 @@ export default function VideoStudio({
 
   // ---- export ----
   /** Last resort when the browser cannot encode MP4 itself: record a hidden playback in real time. */
+  /** The camera file's sound, read once per file (for the exports that mix it in). */
+  const cameraSound = useRef<{ blob: Blob; buf: AudioBuffer | null } | null>(null);
+  /**
+   * The official audio with the camera's own sound mixed in at its volume (VideoSettings.clipVolume), placed where the
+   * picture is and only in the part kept: as heard on the preview. No volume, or its sound unreadable: the audio alone.
+   */
+  const withCameraSound = async (official: AudioBuffer, cfg: VideoSettings, signal: AbortSignal): Promise<AudioBuffer> => {
+    const vol = clamp(cfg.clipVolume ?? 0, 0, 1);
+    if (!vol || !videoBlob) return official;
+    let cam = cameraSound.current?.blob === videoBlob ? cameraSound.current.buf : undefined;
+    if (cam === undefined) {
+      const s = await readSound(videoBlob, videoDur || 60, () => {}, signal).catch(() => null);
+      cam = null;
+      if (s) { cam = new AudioBuffer({ length: s.samples.length, sampleRate: s.rate, numberOfChannels: 1 }); cam.copyToChannel(s.samples as Float32Array<ArrayBuffer>, 0); }
+      cameraSound.current = { blob: videoBlob, buf: cam };
+    }
+    if (!cam) { console.warn("[export] the camera's sound could not be read: exported without it"); return official; }
+    const [ci, co] = clipSpan(cfg, cam.duration);
+    const ctx = new OfflineAudioContext(official.numberOfChannels, official.length, official.sampleRate);
+    const music = ctx.createBufferSource();
+    music.buffer = official;
+    music.connect(ctx.destination);
+    music.start(0);
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = cam;
+    gain.gain.value = vol;
+    src.connect(gain).connect(ctx.destination);
+    // Where the kept part starts on the official track (before 0: its first seconds are not in the song).
+    const at = cfg.offset + ci, skip = Math.max(0, -at);
+    if (co - ci - skip > 0) src.start(Math.max(0, at), ci + skip, co - ci - skip);
+    return ctx.startRendering();
+  };
   const recordRealtime = async (el: HTMLVideoElement, W: number, H: number, from: number, until: number, signal: AbortSignal) => {
     const buf = audioBuf!;
     const canvas = document.createElement("canvas");
@@ -3524,7 +3562,7 @@ export default function VideoStudio({
           return async (time) => { await visible(); await pf.frameAt(time - a.offset); return a.el.readyState >= 2 ? { src: a.el, w: aw, h: ah } : null; };
         };
         blob = await exportMp4({
-          width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, audioBitrate: rate.audioBitrate, from, until, audio: audioBuf, signal: ac.signal,
+          width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, audioBitrate: rate.audioBitrate, from, until, audio: await withCameraSound(audioBuf, cfg, ac.signal), signal: ac.signal,
           onProgress: (p, step) => setExp({ p: 0.05 + p * 0.95, step }),
           frame: async (g, time) => {
             const cam = camAt(cfg.cuts, time);
@@ -4287,9 +4325,13 @@ export default function VideoStudio({
             )}
           </div>
         </div>
-        {trimmed && !locked && (
-          <button className="btn sm quiet video-untrim" onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>{t("Whole video")}</button>
-        )}
+        <div className="row video-sound">
+          <Range label={t("Video sound")} value={Math.round(clamp(settings.clipVolume ?? 0, 0, 1) * 100)} display={(settings.clipVolume ?? 0) > 0 ? `${Math.round((settings.clipVolume ?? 0) * 100)} %` : t("Muted")}
+            min={0} max={100} step={1} onChange={(n) => setV({ clipVolume: n > 0 ? n / 100 : undefined })} />
+          {trimmed && !locked && (
+            <button className="btn sm quiet video-untrim" onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>{t("Whole video")}</button>
+          )}
+        </div>
       </div>
     );
   };

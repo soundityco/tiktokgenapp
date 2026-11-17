@@ -395,6 +395,9 @@ export interface VideoSettings {
    *  in an editor (the video track of the timeline). None: the whole file. */
   clipIn?: number;
   clipOut?: number;
+  /** Volume of the camera file's own sound in the post, 0-1 (preview and export, mixed over the official audio, only
+   *  in the part kept). None or 0: silent (the usual case: synced on the official audio). */
+  clipVolume?: number;
   /** Confidence of the automatic sync, 0 to 1. */
   score?: number;
   /** Clip seconds where the music really plays, found by the automatic sync. */
