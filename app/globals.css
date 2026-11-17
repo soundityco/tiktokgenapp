@@ -502,6 +502,21 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
    waveform's: no side padding). */
 .video-block { display: grid; gap: 4px; padding: 4px 0; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
 .video-block > .lyric-track { border: 0; border-radius: 0; background: none; }
+/* A take dragged from the library: the block shows where it can go (over the video: the row above; the base line:
+   multicam), the row under the pointer lit. */
+.video-block { position: relative; }
+.video-block.dragging { border-style: dashed; border-color: var(--muted); }
+.video-block .drop-over-row { display: grid; place-items: center; font-size: 11px; color: var(--muted); border: 1px dashed var(--line-2); margin: 0 4px; }
+.video-block.drop-over .drop-over-row, .video-block.drop-over .over-track { background: color-mix(in srgb, var(--video) 14%, transparent); color: var(--text); }
+.video-block.drop-main .cam-track, .video-block.drop-main .video-track:not(.over-track) { background: color-mix(in srgb, var(--video) 14%, transparent); }
+.video-block .drop-ghost { position: absolute; top: 4px; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 8px; pointer-events: none; z-index: 5;
+  font-size: 12px; color: var(--text); border-left: 2px solid var(--video); border-radius: 3px; background: color-mix(in srgb, var(--video) 40%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.video-block .drop-main-hint { font-size: 11px; color: var(--muted); padding: 0 6px; }
+.take-row[draggable="true"], .take[draggable="true"] { cursor: grab; }
+/* The take over the video: the cameras' look, in the video's violet; "Over" in place of a camera number. */
+.take.over { --cam: var(--video); }
+.take-tag { flex: none; font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px;
+  color: var(--video); border: 1px solid color-mix(in srgb, var(--video) 50%, transparent); }
 .cams-row { flex-wrap: wrap; gap: 6px; }
 .cams-row .label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
 .cam-0 { --cam: var(--accent); } .cam-1 { --cam: var(--video); } .cam-2 { --cam: var(--music); } .cam-3 { --cam: var(--lyrics); }
@@ -1286,7 +1301,8 @@ button.media.warn .media-name { color: var(--warn); }
 /* Multicam: each take's card in its camera's colour (1 white, 2 violet, 3 green, 4 gold), as on the shots track. */
 .take[class*="cam-"] .media.m-film, .clip-card .media.m-film { --kind: var(--cam); }
 /* Its Drive pills ("Drive copy", "Backed up") in its camera's colour too. */
-.take[class*="cam-"] .media, .clip-card .media { --video: var(--cam); --grad-video: var(--cam); }
+.take[class*="cam-"] .media, .take.over .media, .clip-card .media { --video: var(--cam); --grad-video: var(--cam); }
+.take.over .media.m-film { --kind: var(--cam); }
 .media.m-lyrics, .media.m-music, .media.m-film { border-color: color-mix(in srgb, var(--kind) 42%, var(--line)); }
 .media.m-lyrics.empty, .media.m-music.empty, .media.m-film.empty { border-color: color-mix(in srgb, var(--kind) 34%, transparent); }
 .media.m-lyrics .media-ic, .media.m-music .media-ic, .media.m-film .media-ic { color: var(--kind); background: color-mix(in srgb, var(--kind) 10%, var(--bg)); }

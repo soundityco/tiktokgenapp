@@ -2330,6 +2330,23 @@ export default function VideoStudio({
     if (syncRef.current === ac) syncRef.current = null;
     setSyncBusy(false);
     setSyncPct(0);
+    // The project's other videos too (its cameras, the one over it): each one that matches the official audio is
+    // placed on it; one that does not stays free, where it is (to place by hand on its track).
+    if (!ac.signal.aborted) await syncOthers();
+  };
+  const syncOthers = async () => {
+    const cur = settingsRef.current, ov = overlayOf(cur);
+    let free = 0;
+    for (const id of [...(cur.angles ?? []).filter(Boolean), ...(ov ? [ov.clip] : [])]) {
+      const c = clips.find((x) => x.id === id);
+      if (!c) continue;
+      const at = await resyncTake(c);
+      if (at === null) free++;
+      // The one over it follows its sync (else it keeps the place it was given).
+      const o = overlayOf(settingsRef.current);
+      if (at !== null && o && o.clip === id) setV({ overlay: { ...o, offset: at } });
+    }
+    if (free) onToast?.(free === 1 ? t("One video does not match the audio: it stays free, place it by hand.") : t("{n} videos do not match the audio: they stay free, place them by hand.", { n: free }));
   };
 
   // ---- audio ↔ video link ----
@@ -4151,25 +4168,29 @@ export default function VideoStudio({
   const patchTake = (id: string, patch: Partial<VideoSetup>) =>
     onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
   /** A take read (what it is, the grade it gets) and synced on the official audio, in the background. */
-  const prepareTake = async (id: string, file: Blob, grade0: VideoGrade | undefined, fresh: boolean) => {
+  /** Its offset on the official audio once synced; null: it did not match (it stays where it was, free). */
+  const prepareTake = async (id: string, file: Blob, grade0: VideoGrade | undefined, fresh: boolean): Promise<number | null> => {
     const official = audioBuf;
     const cfg = settingsRef.current; // the passage of the audio it is placed on: read now, with `official` (a project opened meanwhile has others)
     setTakeJobs((j) => ({ ...j, [id]: { p: 0 } }));
     try {
       const info = await probeVideo(file);
       patchTake(id, { source: info, ...(fresh ? gradeForSource(info, grade0) : null) });
-      if (!official) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return; }
+      if (!official) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return null; }
       const sound = await readSound(file, info.duration ?? 60, (p) => setTakeJobs((j) => ({ ...j, [id]: { p: p * 0.9 } })), new AbortController().signal);
       if (!sound) throw new Error(t("Its sound could not be read."));
       await new Promise((r) => setTimeout(r, 30));
       const r = syncAudio(sound.samples, sound.rate, monoOf(official), official.sampleRate, { from: cfg.crop.start, to: cfg.crop.start + cfg.crop.duration });
-      if (!r.anchors || r.score < 0.4) throw new Error(t("No match found in the official audio."));
+      // No match: not a fault, it stays free (placed by hand on its track), quietly.
+      if (!r.anchors || r.score < 0.4) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return null; }
       patchTake(id, { offset: round2(r.offset), score: round2(r.score), anchors: r.anchors, takes: undefined, linked: false });
       onSaveNow();
       setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; });
+      return round2(r.offset);
     } catch (e) {
       console.warn("[takes] not synced", e);
       setTakeJobs((j) => ({ ...j, [id]: { p: 0, err: e instanceof Error ? e.message : String(e) } }));
+      return null;
     }
   };
   /** Takes imported (one or many): each a take of the release, the first ones joining this project as cameras. */
@@ -4200,10 +4221,10 @@ export default function VideoStudio({
     void askPersistentStorage();
     for (const m of made) await prepareTake(m.c.id, m.f, cur.grade, true);
   };
-  const resyncTake = async (c: VideoSetup) => {
+  const resyncTake = async (c: VideoSetup): Promise<number | null> => {
     const b = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
-    if (!b) { setTakeJobs((j) => ({ ...j, [c.id]: { p: 0, err: t("Not in this browser: pick it again.") } })); return; }
-    await prepareTake(c.id, b, c.grade, false);
+    if (!b) { setTakeJobs((j) => ({ ...j, [c.id]: { p: 0, err: t("Not in this browser: pick it again.") } })); return null; }
+    return prepareTake(c.id, b, c.grade, false);
   };
   /** Camera `i + 2` taken out of this project: its shots go back to camera 1. */
   /** `more`: set together (a camera that becomes the video over it). */
@@ -4377,12 +4398,12 @@ export default function VideoStudio({
             onClick={() => { close(); deleteTake(c); }}>{t("Delete this take")}</button>
         </>}
       </>);
-      const cls = "take" + (cam === null ? " other" : " cam-" + cam) + (open ? " open" : "");
+      const cls = "take" + (isOver ? " over" : cam === null ? " other" : " cam-" + cam) + (open ? " open" : "");
       // Unfolded: the same full card as camera 1's (its name, file, what it is, its sync), in place of its line.
       if (open) return (
-        <div key={c.id} className={cls}>
+        <div key={c.id} className={cls} {...takeDrag(c, cam)}>
           <MediaTile icon="film" name={c.videoName ?? null} warn={missing} loading={!!job && !job.err} menu={cam === 0 ? false : menu}
-            label={<button className="take-label" onClick={toggle} title={t("Fold")}>{cam !== null && <b>{cam + 1}</b>}{cam !== null && " · "}{clipName(c)} <Icon name="chevron" size={11} /></button>}
+            label={<button className="take-label" onClick={toggle} title={t("Fold")}>{cam !== null && <b>{cam + 1}</b>}{cam !== null && " · "}{isOver && <b>{t("Over")}</b>}{isOver && " · "}{clipName(c)} <Icon name="chevron" size={11} /></button>}
             meta={<>
               {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
               {c.source && <span className="row" style={{ gap: 4 }}>{colourTag(c.source)}<Hint text={sourceNote(c.source)} /></span>}
@@ -4394,10 +4415,11 @@ export default function VideoStudio({
       // Folded: one slim line (all the cameras seen at once), number and colour as on the shots track.
       return (
         <div key={c.id} className={cls}>
-        <div className={"take-row" + (job && !job.err ? " shine-box" : "")}>
+        <div className={"take-row" + (job && !job.err ? " shine-box" : "")} {...takeDrag(c, cam)}>
           <button className="take-main" aria-expanded={false}
             title={cam !== null ? t("Show it on the preview and set its colour and framing") : undefined} onClick={toggle}>
-            {cam !== null ? <b className="take-n">{cam + 1}</b> : <Icon name={isOver ? "layers" : "film"} size={13} />}
+            {cam !== null ? <b className="take-n">{cam + 1}</b> : !isOver && <Icon name="film" size={13} />}
+            {isOver && <span className="take-tag">{t("Over")}</span>}
             <span className="take-name" title={c.videoName ?? ""}>{name}</span>
           </button>
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
@@ -4535,6 +4557,62 @@ export default function VideoStudio({
   const overlayFor = (c: VideoSetup): VideoOverlay => ({ clip: c.id, offset: c.score !== undefined ? c.offset : round2(settings.crop.start), x: 70, y: 28, w: 42, radius: 8 });
   const putOverlay = (c: VideoSetup) => { stop(); setV({ overlay: overlayFor(c) }); };
   /**
+   * A take dragged from the library onto the video block (as in CapCut): dropped on the base line it joins the cameras
+   * (the multicam's buttons then show), dropped above it, it goes over the video. Camera 1 stays the base.
+   */
+  const [dragTake, setDragTake] = useState<string | null>(null);
+  const [dropRow, setDropRow] = useState<"over" | "main" | null>(null);
+  /** Where the dragged take would land over the video: its start on the track (s), and in the block (px). */
+  const [dropAt, setDropAt] = useState<{ t: number; x: number; w: number } | null>(null);
+  const takeDrag = (c: VideoSetup, cam: number | null) => cam === 0 ? {} : {
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => { e.dataTransfer.setData("text/x-raw-take", c.id); e.dataTransfer.effectAllowed = "move"; setDragTake(c.id); },
+    onDragEnd: () => { setDragTake(null); setDropRow(null); setDropAt(null); },
+  };
+  const rowOf = (e: React.DragEvent<HTMLElement>): "over" | "main" => {
+    const main = e.currentTarget.querySelector<HTMLElement>(".video-track:not(.over-track), .cam-track");
+    return main && e.clientY < main.getBoundingClientRect().top - 1 ? "over" : "main";
+  };
+  const blockDrop = {
+    onDragOver: (e: React.DragEvent<HTMLDivElement>) => {
+      if (!dragTake) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const r = rowOf(e);
+      if (r !== dropRow) setDropRow(r);
+      // Over the video: the clip shown where it would land, following the pointer (its start under it).
+      const box = e.currentTarget.getBoundingClientRect(), w = viewRef.current ?? twRef.current;
+      const c = clips.find((x) => x.id === dragTake), len = c?.source?.duration ?? 10;
+      const x = clamp(e.clientX - box.left, 0, box.width);
+      const t = round2(w.s + (x / Math.max(1, box.width)) * w.d);
+      if (r === "over") { if (!dropAt || Math.abs(dropAt.x - x) > 0.5) setDropAt({ t, x, w: (len / w.d) * box.width }); }
+      else if (dropAt) setDropAt(null);
+    },
+    onDragLeave: (e: React.DragEvent<HTMLDivElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setDropRow(null); setDropAt(null); } },
+    onDrop: (e: React.DragEvent<HTMLDivElement>) => {
+      const id = e.dataTransfer.getData("text/x-raw-take") || dragTake;
+      const row = rowOf(e), at = dropAt?.t;
+      setDragTake(null); setDropRow(null); setDropAt(null);
+      const c = id ? clips.find((x) => x.id === id) : undefined;
+      if (!c || c.id === clip.id) return;
+      e.preventDefault();
+      stop();
+      const angles = (settings.angles ?? []).filter((x) => x && x !== c.id);
+      if (row === "over") {
+        // Out of the cameras (its cuts back to camera 1), over the video.
+        // (starting where it was dropped)
+        const o = { ...overlayFor(c), ...(at !== undefined ? { offset: at } : null) };
+        const i = (settings.angles ?? []).indexOf(c.id);
+        if (i >= 0) removeAngle(i, { overlay: o });
+        else setV({ overlay: o });
+        setOverLook(true);
+      } else {
+        if (angles.length >= MAX_CAMS - 1 && !(settings.angles ?? []).includes(c.id)) { onToast?.(t("Up to {n} cameras.", { n: MAX_CAMS })); return; }
+        setV({ angles: [...angles, c.id], ...(settings.overlay?.clip === c.id ? { overlay: undefined } : null) });
+      }
+    },
+  };
+  /**
    * The overlay's track (over the video track): its take as a clip, dragged to slide it along the track, its edges to
    * trim it; at its end, its settings (size, corners, sound: the picture itself is moved and sized on the preview) and
    * the way out.
@@ -4624,7 +4702,6 @@ export default function VideoStudio({
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
-                <Icon name="layers" size={11} />
                 <span className="truncate">{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
@@ -5699,7 +5776,19 @@ export default function VideoStudio({
                   </div>
                 </div>
                 {/* The video part of the timeline: every video track in one block (the one over it on top). */}
-                {audioBuf && videoBlob && <div className="video-block">{overlayTrackEl()}{camsEl("track")}</div>}
+                {audioBuf && videoBlob && (
+                  <div className={"video-block" + (dragTake ? " dragging" : "") + (dropRow ? " drop-" + dropRow : "")} {...blockDrop}>
+                    {/* Dragging a take from the library: the row above the base line to drop it over the video. */}
+                    {dragTake && !overlayOf(settings) && <div className="lyric-track drop-over-row">{t("Drop here: over the video")}</div>}
+                    {overlayTrackEl()}{camsEl("track")}
+                    {dragTake && <div className="drop-main-hint">{t("Drop on the base line: multicam")}</div>}
+                    {dragTake && dropRow === "over" && dropAt && (
+                      <div className="drop-ghost" style={{ left: dropAt.x, width: Math.max(8, dropAt.w) }}>
+                        <span className="truncate">{clips.find((x) => x.id === dragTake)?.videoName?.replace(/\.[^.]+$/, "")}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {camsEl("controls")}
                 {/* Versions of this video to compare (A/B): one selector (each line: show it, rename, delete), a new one
                     beside it. Each keeps its segment, hooks and lyrics. */}
@@ -6113,7 +6202,7 @@ export default function VideoStudio({
             const c = camTake ?? clip;
             return (
               <div className={"look-of cam-" + k + (ovTake ? " over" : "")}>
-                <span className="xs muted">{t("Settings of")}</span> {ovTake ? <Icon name="layers" size={12} /> : <b>{k + 1}</b>} <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
+                <span className="xs muted">{t("Settings of")}</span> {ovTake ? <b>{t("Over")}</b> : <b>{k + 1}</b>} <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
                 <Hint text={t("Each video has its own colour, effects, framing, bars and progressive zoom: those of the camera on the preview, or of the video over it once clicked (on the preview or its track). Click a take in the library or a shot in the timeline to set another one. Kept in the take.")} />
                 {ovTake && <button className="btn sm quiet" onClick={() => setOverLook(false)}>{t("Back to the video under it")}</button>}
               </div>
