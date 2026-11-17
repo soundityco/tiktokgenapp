@@ -391,6 +391,10 @@ export interface VideoSettings {
   crop: { start: number; duration: number };
   /** Official-audio time of the first video frame (video t=0). */
   offset: number;
+  /** The camera file trimmed (seconds in the file): only [clipIn, clipOut] is shown, black outside, as a clip trimmed
+   *  in an editor (the video track of the timeline). None: the whole file. */
+  clipIn?: number;
+  clipOut?: number;
   /** Confidence of the automatic sync, 0 to 1. */
   score?: number;
   /** Clip seconds where the music really plays, found by the automatic sync. */

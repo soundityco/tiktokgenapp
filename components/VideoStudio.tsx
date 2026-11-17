@@ -95,10 +95,15 @@ const LYRICS_ALIGN_V = 3;
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
-const VERSION_KEYS = ["crop", "offset", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
+/** The part of the camera file shown (seconds in the file, `len` its length): trimmed on the video track, else all. */
+const clipSpan = (s: Pick<VideoSettings, "clipIn" | "clipOut">, len: number): [number, number] => {
+  const a = clamp(s.clipIn ?? 0, 0, Math.max(0, len));
+  return [a, clamp(s.clipOut ?? len, a, Math.max(a, len))];
+};
 const versionOf = (s: VideoSettings): Partial<VideoSettings> => Object.fromEntries(VERSION_KEYS.map((k) => [k, s[k]]));
 
 
@@ -867,7 +872,9 @@ export default function VideoStudio({
     // This video has no camera file (yet), or the player still holds the previous video's: nothing to show.
     if (!videoUrlRef.current || fileClip.current !== clipIdRef.current) return null;
     const off = settingsRef.current.offset;
-    const inVideo = time >= off - 0.001 && (!Number.isFinite(el?.duration) || time <= off + (el?.duration ?? 0) + 0.001);
+    // (the part kept on the video track: black before and after it)
+    const [ci, co] = clipSpan(settingsRef.current, Number.isFinite(el?.duration) ? el!.duration : Infinity);
+    const inVideo = time >= off + ci - 0.001 && time <= off + co + 0.001;
     // No picture from the player yet (Safari, before the first play): the frame read from the file. Only until the
     // player gave one: ffmpeg's decoding differs slightly in colour, so coming back on that frame later (a seek, the
     // pause going back to the start) flashed another grade for a moment.
@@ -2635,7 +2642,7 @@ export default function VideoStudio({
     const t = v.s + f * v.d;
     const base = { x: f, px, vs: v.s, vd: v.d };
     // Top strip of the violet "video available" band: slide it to move the sync by hand.
-    if (!cfg.linked && videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2 && t >= cfg.offset && t <= cfg.offset + videoDur) {
+    if (!cfg.linked && videoBlob && videoDur > 0 && (e.clientY - rect.top) / rect.height < 0.2 && t >= cfg.offset + clipSpan(cfg, videoDur)[0] && t <= cfg.offset + clipSpan(cfg, videoDur)[1]) {
       dragWave.current = { mode: "offset", ...base, start: cfg.offset, duration: 0 };
       return;
     }
@@ -2709,7 +2716,9 @@ export default function VideoStudio({
       if (!videoBlob || videoDur <= 0) return t;
       // (the same length the notice checks: on the Drive copy, the take's own)
       const cur = settingsRef.current;
-      const off = cur.offset, vEnd = off + (onCopy && cur.source?.duration ? cur.source.duration : videoDur);
+      const len = onCopy && cur.source?.duration ? cur.source.duration : videoDur;
+      const [ci, co] = clipSpan(cur, len);
+      const off = cur.offset + ci, vEnd = cur.offset + co;
       if (edge === "end" && Math.abs(t - vEnd) <= 8 * pxSec) return Math.floor(vEnd * 100) / 100;
       if (edge === "start" && Math.abs(t - off) <= 8 * pxSec) return Math.ceil(off * 100) / 100;
       return t;
@@ -2899,9 +2908,10 @@ export default function VideoStudio({
     const x0 = X(settings.crop.start);
     const x1 = X(Math.min(dur, settings.crop.start + settings.crop.duration));
     // Where the camera video exists on the official track.
+    const [ci, co] = clipSpan(settings, videoDur);
     if (videoBlob && videoDur > 0) {
-      const v0 = clamp(X(settings.offset), 0, W);
-      const v1 = clamp(X(settings.offset + videoDur), 0, W);
+      const v0 = clamp(X(settings.offset + ci), 0, W);
+      const v1 = clamp(X(settings.offset + co), 0, W);
       g.fillStyle = vid;
       g.globalAlpha = 0.14;
       g.fillRect(v0, 0, Math.max(0, v1 - v0), H);
@@ -2982,8 +2992,8 @@ export default function VideoStudio({
     g.fillStyle = head0;
     g.fillRect(hx - 1, 0, 2, H);
     if (videoBlob && videoDur > 0) {
-      const v0 = clamp(X(settings.offset), 0, W);
-      if (clamp(X(settings.offset + videoDur), 0, W) - v0 > 56) {
+      const v0 = clamp(X(settings.offset + ci), 0, W);
+      if (clamp(X(settings.offset + co), 0, W) - v0 > 56) {
         g.fillStyle = "#0c0c0e";
         g.font = "600 10px ui-monospace, 'JetBrains Mono', monospace";
         g.textBaseline = "middle";
@@ -2993,7 +3003,7 @@ export default function VideoStudio({
   };
   const paintWaveRef = useRef(paintWave);
   paintWaveRef.current = paintWave;
-  useEffect(() => { paintWaveRef.current(viewRef.current, headRef.current); }, [peaks, settings.crop, settings.offset, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, view, audioBuf, videoBlob, videoDur, waveBox, peakMax]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { paintWaveRef.current(viewRef.current, headRef.current); }, [peaks, settings.crop, settings.offset, settings.clipIn, settings.clipOut, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, view, audioBuf, videoBlob, videoDur, waveBox, peakMax]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- lyrics timing ----
 
@@ -3527,7 +3537,8 @@ export default function VideoStudio({
               return;
             }
             const target = time - cfg.offset;
-            const inside = target >= -0.001 && (!Number.isFinite(vdur) || target <= vdur + 0.001);
+            const [ci, co] = clipSpan(cfg, Number.isFinite(vdur) ? vdur : Infinity);
+            const inside = target >= ci - 0.001 && target <= co + 0.001;
             let pic: Picture | null = null;
             if (inside && src) {
               pic = await src.frameAt(target - base);
@@ -4208,10 +4219,84 @@ export default function VideoStudio({
       </div>
     );
   };
+  /**
+   * The video track, one camera (no multicam): the camera file as a clip on the timeline. Not locked to the audio, it
+   * can be edited as in any editor: dragged to slide it along the track, its edges to trim it (black where there is
+   * no picture). Locked (synced and linked): shown, not moved.
+   */
+  const clipDrag = useRef<{ mode: "move" | "in" | "out"; px: number; left: number; width: number; s: number; d: number; offset: number; ci: number; co: number; moved?: boolean } | null>(null);
+  const videoTrackEl = () => {
+    if (!videoBlob || videoDur <= 0 || !audioBuf) return null;
+    const len = onCopy && settings.source?.duration ? settings.source.duration : videoDur;
+    const [ci, co] = clipSpan(settings, len);
+    const a = settings.offset + ci, b = settings.offset + co;
+    const locked = !!settings.linked;
+    const trimmed = ci > 0.01 || co < len - 0.01;
+    const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
+      if (e.button !== 0 || locked) return;
+      e.stopPropagation(); stop();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
+      const w = viewRef.current ?? twRef.current;
+      clipDrag.current = { mode, px: e.clientX, left: r.left, width: r.width, s: w.s, d: w.d, offset: settings.offset, ci, co };
+    };
+    // The preview follows the edge being moved (the picture there), as the segment's edges do.
+    const inSeg = (t: number) => round2(clamp(t, settings.crop.start, end - 0.05));
+    const move = (e: React.PointerEvent<HTMLElement>) => {
+      const d = clipDrag.current;
+      if (!d) return;
+      if (!d.moved && Math.abs(e.clientX - d.px) < 4) return;
+      d.moved = true;
+      const dt = ((e.clientX - d.px) / Math.max(1, d.width)) * d.d;
+      const dur = audioBuf.duration;
+      if (d.mode === "move") {
+        const offset = round2(clamp(d.offset + dt, -d.co + 0.5, dur - d.ci - 0.5));
+        setV({ offset });
+        setHead(inSeg(Math.max(offset + d.ci, headRef.current)));
+      } else if (d.mode === "in") {
+        const clipIn = round2(clamp(d.ci + dt, 0, d.co - 0.2));
+        setV({ clipIn });
+        setHead(inSeg(d.offset + clipIn));
+      } else {
+        const clipOut = round2(clamp(d.co + dt, d.ci + 0.2, len));
+        setV({ clipOut });
+        setHead(inSeg(d.offset + clipOut - 0.05));
+      }
+    };
+    // A click (no drag): the playhead goes there, as on the other tracks.
+    const up = (e: React.PointerEvent<HTMLElement>) => {
+      const d = clipDrag.current;
+      clipDrag.current = null;
+      if (d && !d.moved) setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d));
+    };
+    return (
+      <div className="cams">
+        <div className="lyric-track video-track" role="group" aria-label={t("Video")} {...scrub()}>
+          <div className="track-content">
+            <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
+            {onTrack(a, b) && (
+              <div className={"cue video-clip" + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "")}
+                style={{ ...place(a), width: wFull(a, b) }}
+                title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
+                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
+                {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
+                {locked && <Icon name="lock" size={11} />}
+                <span className="truncate">{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
+                {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
+              </div>
+            )}
+          </div>
+        </div>
+        {trimmed && !locked && (
+          <button className="btn sm quiet video-untrim" onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>{t("Whole video")}</button>
+        )}
+      </div>
+    );
+  };
   const camsEl = () => {
     const angles = settings.angles ?? [];
     const used = angles.filter(Boolean).length;
-    if (!used) return null;
+    if (!used) return videoTrackEl();
     const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
     const sortedCuts = [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at);
     /** Camera `cam` (0-3) from a button: as its key (playing: cut to it now; paused: the shot under the playhead). */
