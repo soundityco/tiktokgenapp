@@ -2368,6 +2368,7 @@ details.sec:first-of-type { background-image: none; }
 .video-side .timeline > .seg-top { order: 1; }
 
 .video-side .timeline > .wave-wrap { order: 3; }
+.video-side .timeline > .tl-stack { order: 3; }
 .video-side .timeline > .hook-track { order: 4; }
 .video-side .timeline > .lyric-track:not(.hook-track) { order: 5; }
 /* The multicam edit (shots, then 1 to 4) right under the lyrics, before the versions (same order: after them in the page). */
@@ -2933,3 +2934,31 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   .lp-ctas .lp-cta { width: 100%; justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce) { .lp-deck.ready .lp-slide { animation: none; } }
+
+/* The timeline in one frame (desktop): the waveform, the hook, the lyrics and the video tracks one under the other, each
+   line with its kind's icon in a narrow column on the left (the lyrics' T in gold, the hook's spark in blue, a film in
+   each video's colour; the waveform none), and one playhead across them all (.tl-head, placed by paintTracks). The phone
+   keeps its lines as they were (each framed, its own playhead). */
+.tl-stack { position: relative; display: grid; gap: var(--s2); grid-template-columns: minmax(0, 1fr); } /* (phone: the lines spaced as the timeline's) */
+.tl-ico { display: none; }
+.tl-head { display: none; }
+@media (min-width: 641px) {
+  .tl-stack { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 6px; row-gap: 6px; padding: 8px 8px 8px 4px;
+    border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
+  .tl-stack > :not(.tl-ico):not(.tl-head) { grid-column: 2; }
+  .tl-stack .tl-ico { grid-column: 1; display: grid; place-items: center; align-self: center; height: 22px; color: var(--muted); }
+  .tl-ico.lyrics { color: var(--lyrics); }
+  .tl-ico.hook { color: var(--blue); }
+  .tl-ico[class*="cam-"] { color: var(--cam); }
+  /* (the lines lose their own frame: the whole is one) */
+  .tl-stack .wave { border: 0; }
+  .tl-stack .lyric-track { border: 0; background: none; border-radius: 0; }
+  .tl-stack > .video-block { border: 0; padding: 0; background: none; border-radius: 0; gap: 6px; grid-template-columns: 0 minmax(0, 1fr); column-gap: 0; }
+  .tl-stack > .video-block > :not(.tl-ico) { grid-column: 2; }
+  .tl-stack > .video-block > .tl-ico { grid-column: 1; justify-self: start; width: 22px; margin-left: -28px; }
+  .tl-stack > .video-block.dragging { outline: 1px dashed var(--muted); outline-offset: 3px; }
+  .tl-stack .lyric-head { display: none; }
+  .tl-stack .track-seg { display: none; } /* (the segment is on the waveform, right above) */
+  .tl-head { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 2px; margin-left: -1px; background: var(--text);
+    pointer-events: none; z-index: 4; will-change: transform; }
+}

@@ -3056,6 +3056,8 @@ export default function VideoStudio({
     const [i, o] = clipSpan(settings, videoDur);
     return { off: settings.offset, ci: i, co: o, cam: 0 };
   };
+  /** Desktop: one playhead crosses the whole timeline (the phone keeps one per line, the waveform's in it). */
+  const wideTimeline = () => typeof window !== "undefined" && window.matchMedia("(min-width: 641px)").matches;
   const paintWave = (vw: { s: number; d: number } | null, at: number) => {
     const c = waveRef.current;
     if (!c || !peaks.length || !audioBuf || !waveBox.w) return;
@@ -3160,8 +3162,7 @@ export default function VideoStudio({
     g.globalAlpha = 1;
     g.fillRect(x0 - 3, H / 2 - 10, 5, 20);
     g.fillRect(x1 - 2, H / 2 - 10, 5, 20);
-    g.fillStyle = head0;
-    g.fillRect(hx - 1, 0, 2, H);
+    if (!wideTimeline()) { g.fillStyle = head0; g.fillRect(hx - 1, 0, 2, H); }
     if (videoBlob && videoDur > 0 && co > ci) {
       const v0 = clamp(X(bandSel.off + ci), 0, W);
       if (clamp(X(bandSel.off + co), 0, W) - v0 > 56) {
@@ -4147,13 +4148,18 @@ export default function VideoStudio({
    * playing moved. Every frame while playing; after each render too (the tracks laid out again for a new view).
    */
   /** The timeline's moving parts, found once per layout (not searched for at every frame). */
-  const timelineEls = useRef<{ contents: HTMLElement[]; clips: HTMLElement[][]; vclips: { el: HTMLElement; name: HTMLElement | null; at: number }[]; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
+  /** The timeline's frame and its one playhead (desktop). */
+  const stackRef = useRef<HTMLDivElement>(null);
+  const tlHeadRef = useRef<HTMLSpanElement>(null);
+  const timelineEls = useRef<{ contents: HTMLElement[]; clips: HTMLElement[][]; vclips: { el: HTMLElement; name: HTMLElement | null; at: number }[]; headOff: number; heads: HTMLElement[]; bars: HTMLElement[]; playing: HTMLElement[]; dock: HTMLElement[]; dockHeads: HTMLElement[] } | null>(null);
   const findTimelineEls = () => {
     const root = waveRef.current?.closest(".timeline");
     const all = (sel: string, r: ParentNode | null | undefined = root) => (r ? [...r.querySelectorAll<HTMLElement>(sel)] : []);
     const contents = all(".lyric-track .track-content");
     timelineEls.current = {
       contents, clips: contents.map((c) => all(":scope > .cue[data-a]", c)),
+      // (where the tracks' time starts in the frame: the one playhead is placed from there)
+      headOff: (() => { const st = stackRef.current, tr = st?.querySelector<HTMLElement>(":scope > .lyric-track:not(.hook-track)"); if (!st || !tr) return 0; return tr.getBoundingClientRect().left + tr.clientLeft - st.getBoundingClientRect().left - st.clientLeft; })(),
       vclips: all(".lyric-track .video-clip[data-va]").map((el) => { const name = el.querySelector<HTMLElement>(".vc-name .truncate"); return { el, name, at: name?.offsetLeft ?? 0 }; }), heads: all(".lyric-track .lyric-head"),
       bars: all(".lyric-track .cue-bar-glow[data-a]"), playing: all(".lyric-track .cue.on[data-a]"),
       dock: all(".dp-track .dp-played", document), dockHeads: all(".dp-track .dp-head", document),
@@ -4174,6 +4180,8 @@ export default function VideoStudio({
     els.contents.forEach((el) => { el.style.transform = `translate3d(${dx}px,0,0)`; });
     const hx = xOf(clamp(at, live.s, live.s + live.d));
     els.heads.forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
+    // The one playhead across the frame: where the tracks' playheads are (their slide, then their place).
+    if (tlHeadRef.current) tlHeadRef.current.style.transform = `translate3d(${els.headOff + dx + hx}px,0,0)`;
     // On each track the clip that has reached the left edge of what is on screen sticks to it, whole (its text read in
     // full), played or not, until the next one, sliding in over it from the right, reaches the edge and takes its place
     // (as the sticky headers of a list). The others sit at their time.
@@ -4595,7 +4603,8 @@ export default function VideoStudio({
       // A click: the playhead there, and the right column (and the waveform's band) on this video.
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(false); setPinCam("main"); }
     };
-    return (
+    return (<>
+          <span className="tl-ico cam-0" title={t("Video")}><Icon name="film" size={13} /></span>
         <div className="lyric-track video-track" role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
@@ -4637,6 +4646,7 @@ export default function VideoStudio({
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
+        </>
     );
   };
   /** A take of the release over the post's video (picture in picture): from the library's take menu. Synced, it starts
@@ -4901,7 +4911,8 @@ export default function VideoStudio({
       // A click: the playhead there, and the right column on this video.
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(true); }
     };
-    return (
+    return (<>
+          <span className={"tl-ico cam-" + overNo(settings)} title={t("Video over it")}><Icon name="film" size={13} /></span>
         <div className="lyric-track video-track over-track" role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             <Menu float trigger={(_, toggle) => (
@@ -4938,6 +4949,7 @@ export default function VideoStudio({
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div>
+        </>
     );
   };
   /** A shot pressed on the cameras' track: pulled up far enough, its camera goes over the video. */
@@ -4954,7 +4966,8 @@ export default function VideoStudio({
     const pickCam = chooseCam;
     const camNow = camAt(settings.cuts, head);
     const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
-    if (part === "track") return (
+    if (part === "track") return (<>
+          <span className={"tl-ico cam-" + camNow} title={t("Shots")}><Icon name="film" size={13} /></span>
           <div className="lyric-track cam-track" role="group" aria-label={t("Shots")} {...scrub()}
             // (the track holds the pointer while it is down: the pull up is followed here)
             onPointerMoveCapture={(e) => {
@@ -5053,6 +5066,7 @@ export default function VideoStudio({
             <span className="lyric-head" style={{ ...pos(head) }} />
             </div>
           </div>
+        </>
     );
     return (
         <div className="row cams-row">
@@ -5926,12 +5940,16 @@ export default function VideoStudio({
                     {zoomEl()}
                   </div>
                 )}
+                {/* One frame for every line of the timeline (waveform, hook, lyrics, videos), each with its kind's icon on
+                    the left, and one playhead across them all (desktop; the phone keeps one per line). */}
+                <div className="tl-stack" ref={stackRef}>
                 <div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
                     onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
                 </div>
-                {hooks.length > 0 && (
+                {hooks.length > 0 && (<>
+                  <span className="tl-ico hook" title={t("Hook")}><Icon name="sparkle" size={13} /></span>
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
@@ -5966,7 +5984,8 @@ export default function VideoStudio({
                     <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                     </div>
                   </div>
-                )}
+                </>)}
+                <span className="tl-ico lyrics" title={t("Lyrics")}><Icon name="type" size={13} /></span>
                 <div ref={trackRef} className={"lyric-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
                   <div className="track-content">
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
@@ -6023,6 +6042,8 @@ export default function VideoStudio({
                     )}
                   </div>
                 )}
+                <span className="tl-head" ref={tlHeadRef} aria-hidden />
+                </div>
                 {camsEl("controls")}
                 {vdrag && (
                   <div className={"vdrag-ghost cam-" + Math.min(3, vdrag.colour)} style={{ left: vdrag.x - Math.min(vdrag.grab, vdrag.w - 20), top: vdrag.y - 17, width: vdrag.w }}>
