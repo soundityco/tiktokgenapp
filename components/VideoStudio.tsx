@@ -5716,31 +5716,43 @@ export default function VideoStudio({
       window.addEventListener("pointercancel", cancel);
     },
   });
+  // (a line's edges: anywhere in the song, a line may run past the segment; the playhead stays on the edge, stopped
+  // with it where the line can go no further: 0.2 s at least, as `moveCueStart` / `retimeCue`)
+  /** A clip's own handles, inside it (as a video clip's): its start and its end, each its own even where two clips
+   *  touch (one handle for both moved the next line when the end of this one was meant). Shown on hover. */
+  const grips = (start: ReturnType<typeof edgeDrag>, end: ReturnType<typeof edgeDrag>) => (<>
+    <span className="cue-grip in" title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...start} />
+    <span className="cue-grip out" title={t("Drag to change when it leaves")} {...end} />
+  </>);
   const moveLine = (i: number) => edgeDrag((at, free) => {
+    const c = cues[i], prev = cues[i - 1];
     const out = moveCueStart(project.lyricWords ?? [], cues, i, at, free);
-    if (!out) return;
+    if (!out || !c) return;
     setTab("lyrics");
-    setHead(at);
+    setHead(round2(clamp(at, prev ? prev.start + 0.2 : 0, c.end - 0.2)));
     onProject((p) => ({ ...p, lyricWords: out }));
-  });
+  }, true, true);
   /** A line outside the segment (the whole song's lines, `songCues`): its start or its end moved the same way, anywhere
    *  in the song (to check and set the lyrics of a passage the post does not use yet, the segment locked elsewhere). */
   const moveSongLine = (i: number) => edgeDrag((at, free) => {
+    const c = songCues[i], prev = songCues[i - 1];
     const out = moveCueStart(project.lyricWords ?? [], songCues, i, at, free);
-    if (out) { setHead(at); onProject((p) => ({ ...p, lyricWords: out })); }
+    if (out && c) { setHead(round2(clamp(at, prev ? prev.start + 0.2 : 0, c.end - 0.2))); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   const moveSongLineEnd = (i: number) => edgeDrag((at) => {
+    const c = songCues[i], next = songCues[i + 1];
     const out = moveCueEnd(project.lyricWords ?? [], songCues, i, at);
-    if (out) { setHead(at); onProject((p) => ({ ...p, lyricWords: out })); }
+    if (out && c) { setHead(round2(clamp(at, c.start + 0.2, next ? next.end - 0.2 : Infinity))); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   /** A line's end dragged (one followed by a gap, or the last: a glued end is the next line's start handle). */
   const moveLineEnd = (i: number) => edgeDrag((at) => {
+    const c = cues[i], next = cues[i + 1];
     const out = moveCueEnd(project.lyricWords ?? [], cues, i, at);
-    if (!out) return;
+    if (!out || !c) return;
     setTab("lyrics");
-    setHead(at); // (on the edge pulled, exactly: as a hook's)
+    setHead(round2(clamp(at, c.start + 0.2, next ? next.end - 0.2 : Infinity))); // (on the edge pulled, exactly: as a hook's)
     onProject((p) => ({ ...p, lyricWords: out }));
-  });
+  }, true, true);
   /** A hook's end dragged: later past the next hook's start, that one starts later (it keeps its end). */
   const moveHookEnd = (id: string) => edgeDrag((at) => {
     const h = hooks.find((x) => x.id === id);
@@ -6494,22 +6506,9 @@ export default function VideoStudio({
                         title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
                         onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
                         <span className="cue-ico" aria-hidden><Icon name="sparkle" size={11} /></span>{h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
+                        {grips(moveHook(h.id), moveHookEnd(h.id))}
                       </button>
                     ))}
-                    {/* A hook starting at the segment's start (or before) has its handle on the left edge. */}
-                    {hooks.map((h) => onTrack(settings.crop.start + h.from, settings.crop.start + h.from) && (
-                      <span key={"e" + h.id} className={"cam-cut cue-edge" + (settings.crop.start + h.from <= tw.s + 0.01 ? " at-left" : "")} style={{ ...place(settings.crop.start + h.from) }}
-                        title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveHook(h.id)} />
-                    ))}
-                    {/* Its end: a hook followed by a gap, or the last one (glued to the next: that one's start handle). */}
-                    {hooks.map((h) => {
-                      const to = h.to ?? segLen;
-                      const glued = hooks.some((x) => x.id !== h.id && Math.abs(x.from - to) < 0.05);
-                      return !glued && onTrack(settings.crop.start + to, settings.crop.start + to) && (
-                        <span key={"x" + h.id} className={"cam-cut cue-edge end" + (settings.crop.start + to >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(settings.crop.start + to) }}
-                          title={t("Drag to change when it leaves")} {...moveHookEnd(h.id)} />
-                      );
-                    })}
                     {(() => { const h = hookAt(settings, head); const a0 = h ? settings.crop.start + h.from : 0, b0 = h ? settings.crop.start + (h.to ?? segLen) : 0; const at = h ? barAt(a0, b0) : null; return at !== null ? <span className="cue-bar-glow" data-a={a0} data-b={b0} style={place(at)} /> : null; })()}
                     <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                     </div>
@@ -6521,14 +6520,7 @@ export default function VideoStudio({
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
                     <span key={"o" + i} className="cue outside" data-a={c.start} data-b={c.end} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
-                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}</span>
-                  ))}
-                  {/* Their start and end too, as the segment's lines (moved anywhere in the song). */}
-                  {mode !== "word" && songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.start) && (
-                    <span key={"oe" + i} className="cam-cut cue-edge" style={{ ...place(c.start) }} title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveSongLine(i)} />
-                  ))}
-                  {mode !== "word" && songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.end, c.end) && !(songCues[i + 1] && songCues[i + 1].start - c.end < 0.05) && (
-                    <span key={"ox" + i} className="cam-cut cue-edge end" style={{ ...place(c.end) }} title={t("Drag to change when it leaves")} {...moveSongLineEnd(i)} />
+                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}{mode !== "word" && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
@@ -6544,17 +6536,8 @@ export default function VideoStudio({
                       data-at={Math.max(settings.crop.start, c.start)}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       <span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}
+                      {mode !== "word" && grips(moveLine(i), moveLineEnd(i))}
                     </button>
-                  ))}
-                  {/* A line starting at the segment's start (or before it, still on screen) has its handle on the left edge. */}
-                  {mode !== "word" && cues.map((c, i) => c.start < end && c.end > settings.crop.start && onTrack(c.start, c.end) && (
-                    <span key={"e" + i} className={"cam-cut cue-edge" + (Math.max(c.start, settings.crop.start) <= tw.s + 0.01 ? " at-left" : "")} style={{ ...place(Math.max(c.start, settings.crop.start)) }}
-                      title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveLine(i)} />
-                  ))}
-                  {/* A line's end: followed by a gap, or the last (glued to the next: that one's start handle). */}
-                  {mode !== "word" && cues.map((c, i) => c.end > settings.crop.start && onTrack(c.start, c.end) && !(cues[i + 1] && cues[i + 1].start - c.end < 0.05) && (
-                    <span key={"x" + i} className={"cam-cut cue-edge end" + (c.end >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(c.end) }}
-                      title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
                   {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" data-a={Math.max(current.start, settings.crop.start)} data-b={Math.min(current.end, end)} style={place(barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))!)} />}
