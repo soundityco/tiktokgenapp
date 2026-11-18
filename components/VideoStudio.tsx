@@ -646,7 +646,10 @@ export default function VideoStudio({
   // (outside the segment, the playhead free while unlocked: the song's line there, on the preview only, never exported)
   activeRef.current = (time: number) => {
     const c = settingsRef.current.crop;
-    if (time < c.start || time > c.start + c.duration) return songCues.find((x) => time >= x.start && time < x.end) ?? null;
+    // (a line of the segment past its edge: as the segment shows it, its own end; the song's other lines for their time)
+    const seg = cues.find((x) => time >= x.start && time < x.end);
+    if (seg) return seg;
+    if (time < c.start || time > c.start + c.duration) return songCues.find((x) => (x.end <= c.start || x.start >= c.start + c.duration) && time >= x.start && time < x.end) ?? null;
     return cues.length ? activeCue(cues, time) : null;
   };
 
@@ -2881,7 +2884,6 @@ export default function VideoStudio({
     const ovs = overlaysOf(cur).map((o) => { const c = takes.find((x) => x.id === o.clip); return c ? { ...o, offset: c.offset } : o; });
     setV({ linked: true, crop, ...withOverlays(ovs) });
     for (const c of takes) patchTake(c.id, { linked: true });
-    setHead(crop.start);
   };
   const linked = !!settings.linked && !!linkRangeOf(settings);
 
@@ -4994,7 +4996,11 @@ export default function VideoStudio({
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name">
                   <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">1</b>
-                  {locked && <Icon name="lock" size={11} />}
+                  {/* Its own padlock, as the ones over it (the one above the tracks: every video at once). */}
+                  {settings.score !== undefined && <button className="clip-lock" aria-label={locked ? t("Audio and video linked") : t("Link audio and video")}
+                    title={(locked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (locked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}
+                    onPointerDown={(e) => e.stopPropagation()} onClick={() => { stop(); if (locked) setV({ linked: false }); else { const range = linkRangeOf(settingsRef.current); setV({ linked: true, ...(range ? { crop: fitCrop(settingsRef.current.crop.start, settingsRef.current.crop.duration, range) } : null) }); } }}>
+                    <Icon name={locked ? "lock" : "unlock"} size={11} /></button>}
                   <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
                 </span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
@@ -6457,15 +6463,6 @@ export default function VideoStudio({
                   <div className="track-content">
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
-                  {/* (a line across the segment's edge: its part outside it too, where it still plays) */}
-                  {songCues.map((c, i) => {
-                    const a = c.start < settings.crop.start && c.end > settings.crop.start ? [c.start, settings.crop.start] : null;
-                    const z = c.start < end && c.end > end ? [end, c.end] : null;
-                    return [a, z].map((part, k) => part && onTrack(part[0], part[1]) && (
-                      <span key={"p" + i + k} className="cue outside" data-a={part[0]} data-b={part[1]} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
-                        style={{ ...place(part[0]), width: wFull(part[0], part[1]) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}</span>
-                    ));
-                  })}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
                     <span key={"o" + i} className="cue outside" data-a={c.start} data-b={c.end} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
                       style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}</span>
@@ -6481,12 +6478,13 @@ export default function VideoStudio({
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
                     <button key={i} className={"cue" + (c === current ? " on" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
                       data-text={c.text.replace(/\n/g, " ")}
+                      // (a line across the segment's edge drawn whole, one clip: its end handle where it really ends)
                       style={{
-                        ...place(clamp(c.start, settings.crop.start, end)),
-                        width: wFull(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)),
+                        ...place(c.start),
+                        width: wFull(c.start, c.end),
                         ...(c === current ? { ["--hx" as string]: hxIn(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)) } : null),
                       }}
-                      data-a={clamp(c.start, settings.crop.start, end)} data-b={clamp(c.end, settings.crop.start, end)}
+                      data-a={c.start} data-b={c.end}
                       data-at={Math.max(settings.crop.start, c.start)}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       <span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}
@@ -6498,8 +6496,8 @@ export default function VideoStudio({
                       title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveLine(i)} />
                   ))}
                   {/* A line's end: followed by a gap, or the last (glued to the next: that one's start handle). */}
-                  {mode !== "word" && cues.map((c, i) => c.end > settings.crop.start && c.end < end + 0.01 && onTrack(c.start, c.end) && !(cues[i + 1] && cues[i + 1].start - c.end < 0.05) && (
-                    <span key={"x" + i} className={"cam-cut cue-edge end" + (Math.min(c.end, end) >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(Math.min(c.end, end)) }}
+                  {mode !== "word" && cues.map((c, i) => c.end > settings.crop.start && onTrack(c.start, c.end) && !(cues[i + 1] && cues[i + 1].start - c.end < 0.05) && (
+                    <span key={"x" + i} className={"cam-cut cue-edge end" + (c.end >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(c.end) }}
                       title={t("Drag to change when it leaves")} {...moveLineEnd(i)} />
                   ))}
                   {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}

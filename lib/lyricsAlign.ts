@@ -616,6 +616,14 @@ export function shiftCue(all: LyricWord[], cue: Cue, delta: number): LyricWord[]
 export function setCueEnd(all: LyricWord[], cue: Cue, end: number): LyricWord[] {
   const mine = new Set(cue.words);
   const last = cue.words[cue.words.length - 1];
+  // Shortened to before its last word starts: its words drawn together into what is left, in the same rhythm (an end
+  // before the last word was dropped as out of order, and the line went back to its old end, glued to the next one).
+  if (end <= last.s + 0.05 && cue.words.length) {
+    const s0 = cue.start, span = Math.max(0.05, Math.max(cue.end, last.e) - s0), room = Math.max(0.1, end - 0.05 - s0);
+    const at = (t: number) => r3(s0 + ((t - s0) / span) * room);
+    const moved = new Map<LyricWord, LyricWord>(cue.words.map((x) => [x, { ...x, s: at(x.s), e: Math.max(at(x.s) + 0.03, at(x.e)), manual: true, ...(x === last ? { until: r3(end) } : {}) }]));
+    return all.map((x) => moved.get(x) ?? x);
+  }
   return all.map((x) => (x === last ? { ...x, until: r3(end), manual: true } : mine.has(x) ? { ...x, manual: true } : x));
 }
 

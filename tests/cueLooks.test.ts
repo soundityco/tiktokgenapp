@@ -55,3 +55,21 @@ describe("a line tapped (the tap mode)", () => {
     expect(out[2]).toBe(ws[2]);
   });
 });
+
+describe("a line's end shortened", () => {
+  it("before its last word starts: the words drawn into what is left, the end kept (never glued back to the next)", async () => {
+    const { setCueEnd, repairOrder } = await import("@/lib/lyricsAlign");
+    const ws: LyricWord[] = [
+      { w: "Tout", s: 1, e: 1.3, line: 0 }, { w: "mais", s: 1.3, e: 1.6, line: 0 }, { w: "ça", s: 1.6, e: 2.4, line: 0 },
+      { w: "Non", s: 2.6, e: 3, line: 1 },
+    ];
+    let words = ws;
+    for (let k = 0; k < 12; k++) {
+      const c = buildCues(words, "phrase")[0];
+      words = repairOrder(setCueEnd(words, c, Math.max(c.start + 0.2, c.end - 0.1)));
+    }
+    const c = buildCues(words, "phrase")[0];
+    expect(c.end).toBeLessThan(1.5);
+    expect(c.end).toBeLessThan(buildCues(words, "phrase")[1].start - 0.5);
+  });
+});
