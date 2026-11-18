@@ -5727,18 +5727,18 @@ export default function VideoStudio({
    *  in the song (to check and set the lyrics of a passage the post does not use yet, the segment locked elsewhere). */
   const moveSongLine = (i: number) => edgeDrag((at, free) => {
     const out = moveCueStart(project.lyricWords ?? [], songCues, i, at, free);
-    if (out) onProject((p) => ({ ...p, lyricWords: out }));
+    if (out) { setHead(at); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   const moveSongLineEnd = (i: number) => edgeDrag((at) => {
     const out = moveCueEnd(project.lyricWords ?? [], songCues, i, at);
-    if (out) onProject((p) => ({ ...p, lyricWords: out }));
+    if (out) { setHead(at); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   /** A line's end dragged (one followed by a gap, or the last: a glued end is the next line's start handle). */
   const moveLineEnd = (i: number) => edgeDrag((at) => {
     const out = moveCueEnd(project.lyricWords ?? [], cues, i, at);
     if (!out) return;
     setTab("lyrics");
-    setHead(round2(Math.max(settings.crop.start, at - 0.3)));
+    setHead(at); // (on the edge pulled, exactly: as a hook's)
     onProject((p) => ({ ...p, lyricWords: out }));
   });
   /** A hook's end dragged: later past the next hook's start, that one starts later (it keeps its end). */
@@ -5748,7 +5748,7 @@ export default function VideoStudio({
     const next = hooks.filter((x) => x.id !== id && x.from > h.from).sort((a, b) => a.from - b.from)[0];
     const to = round2(clamp(at - settings.crop.start, h.from + 0.2, next ? (next.to ?? segLen) - 0.2 : hookMax));
     setTab("hook");
-    setHead(round2(settings.crop.start + Math.max(h.from, to - 0.3)));
+    setHead(round2(settings.crop.start + to));
     setHooks(hooks.map((x) => (x.id === id ? { ...x, to } : next && x.id === next.id && to > next.from ? { ...x, from: to } : x)));
   }, true, true);
   const moveHook = (id: string) => edgeDrag((at, free) => {
