@@ -56,6 +56,20 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("locked lines (padlock)", () => {
+  it("stay as they are when the lyrics are placed again from scratch; the others take the new placing", async () => {
+    const { keepLocked } = await import("@/lib/lyricsAlign");
+    const prev: LyricWord[] = [
+      { w: "one", s: 1, e: 1.4, line: 0, lock: true }, { w: "two", s: 1.5, e: 2, line: 0, lock: true },
+      { w: "three", s: 3, e: 3.5, line: 1, manual: true },
+    ];
+    const next: LyricWord[] = [{ w: "one", s: 1.3, e: 1.6, line: 0 }, { w: "two", s: 1.7, e: 2.1, line: 0 }, { w: "three", s: 3.4, e: 3.8, line: 1 }];
+    const out = keepLocked(prev, next);
+    expect(out.map((x) => x.s)).toEqual([1, 1.5, 3.4]);
+    expect(out[0].lock).toBe(true);
+  });
+});
+
 describe("a line the model hardly hears (inLines)", () => {
   it("its words dragging or piled up share it by syllables; words that look sung stay", async () => {
     const { inLines } = await import("@/lib/lyricsPipeline");

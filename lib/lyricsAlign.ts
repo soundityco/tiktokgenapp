@@ -827,7 +827,7 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
       // word's new line plus the cut's fraction. A word joined to the line before stays joined (glue): it takes the line
       // of the word before it, as joinCue gave it.
       const cutLine = o.split && o.line !== undefined && b[j].line !== undefined ? b[j].line! + (o.line - Math.floor(o.line)) : o.line;
-      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true,
+      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true, ...(o.lock ? { lock: true } : {}),
         ...(o.split ? { line: cutLine, split: true } : {}),
         ...(o.glue ? { glue: true, line: j > 0 ? out[j - 1].line : b[j].line } : {}) };
       // The word-by-word retouches stay too.
@@ -857,6 +857,16 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
 
 /** Some words were retimed by hand. */
 export const hasManual = (words: LyricWord[] | undefined): boolean => !!words?.some((x) => x.manual);
+/** The lines locked by the artist (their padlock), as line numbers. */
+export const lockedLines = (words: LyricWord[] | undefined): Set<number> => new Set((words ?? []).filter((x) => x.lock).map((x) => x.line ?? -1));
+/**
+ * Lyrics placed again from scratch, the locked lines kept as they were (their times, their retouches): only those count
+ * as retouched for keepManual, the other lines take the new placing.
+ */
+export function keepLocked(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
+  if (!prev.some((x) => x.lock)) return next;
+  return keepManual(prev.map((x) => (x.lock ? { ...x, manual: true as const } : { ...x, manual: undefined, ws: undefined, we: undefined, wu: undefined })), next);
+}
 
 export function activeCue(cues: Cue[], time: number): Cue | null {
   let found: Cue | null = null;

@@ -1386,4 +1386,13 @@ export const FR: Record<string, string> = {
   "Around its place": "Autour de sa place",
   "Downwards (first line fixed)": "Vers le bas (1re ligne fixe)",
   "Upwards (last line fixed)": "Vers le haut (dernière ligne fixe)",
+  "Re-place the lyrics?": "Recaler les paroles ?",
+  "You retimed lines by hand. Placing the lyrics again listens to the song and places every line from scratch.": "Tu as retouché des lignes à la main. Recaler les paroles réécoute le morceau et replace chaque ligne de zéro.",
+  "Your {n} locked lines stay as they are.": "Tes {n} lignes verrouillées restent telles quelles.",
+  "To keep a line as you set it, lock it first with the padlock on its clip (on the timeline).": "Pour garder une ligne telle que tu l'as calée, verrouille-la d'abord avec le cadenas de son clip (sur la timeline).",
+  "Re-place everything": "Tout recaler",
+  "Re-place the others": "Recaler les autres",
+  "Locked: kept as it is when the lyrics are placed again. Click to unlock.": "Verrouillée : gardée telle quelle quand les paroles sont recalées. Clic pour déverrouiller.",
+  "Lock this line: kept as it is when the lyrics are placed again": "Verrouiller cette ligne : gardée telle quelle quand les paroles sont recalées",
+  "Your locked line stays as it is.": "Ta ligne verrouillée reste telle quelle.",
 };

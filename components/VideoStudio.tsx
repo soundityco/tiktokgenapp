@@ -7,7 +7,7 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
-import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -3559,7 +3559,7 @@ export default function VideoStudio({
     if (!heard?.length) { void generateLyrics(); return; }
     const cfg = settingsRef.current;
     const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
-    onProject((x) => ({ ...x, lyricWords: fresh ? r.words : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p), lyricsAlignV: LYRICS_ALIGN_V }));
+    onProject((x) => ({ ...x, lyricWords: fresh ? keepLocked(x.lyricWords ?? [], r.words) : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p), lyricsAlignV: LYRICS_ALIGN_V }));
     setGenInfo(r.info);
     if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
@@ -3660,6 +3660,18 @@ export default function VideoStudio({
     return undefined;
   };
   /** The written lyrics on the official audio only. They do not depend on the video: changing it never moves them. */
+  /** "Re-place the lyrics" asked with lines retimed by hand: first a question (keep the locked ones, or lose them all). */
+  const [askReplace, setAskReplace] = useState(false);
+  /** The next placing from scratch drops the locks too (everything placed again). */
+  const dropLocks = useRef(false);
+  /** A line locked (padlock on its clip) or unlocked: kept as it is when the lyrics are placed again. */
+  const toggleLock = (c: Cue) => {
+    const mine = new Set(c.words), on = !c.words.every((x) => x.lock);
+    const words = (project.lyricWords ?? []).map((x) => (mine.has(x) ? (on ? { ...x, lock: true as const } : (({ lock: _l, ...rest }) => rest)(x)) : x));
+    lyricWordsRef.current = words;
+    onProject((p) => ({ ...p, lyricWords: words }));
+    onSaveNow();
+  };
   const syncLyrics = async () => {
     let next = project;
     if (writtenSrc === "song" && !lyricsLinked && paste.trim() !== (project.songLyrics ?? "").trim()) {
@@ -3815,7 +3827,8 @@ export default function VideoStudio({
         const doubts = new Set((forced ?? []).filter((x) => x.doubt).map((x) => x.line));
         const words = doubts.size ? placed.words.map((x) => (x.line !== undefined && doubts.has(x.line) ? { ...x, doubt: true } : x)) : placed.words;
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
-        onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? words : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
+        onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? (dropLocks.current ? words : keepLocked(p.lyricWords ?? [], words)) : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
+        dropLocks.current = false;
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
         const said = forced
           ? t("Your lyrics are placed on the audio, word by word ({n} words)", { n: words.length }) + (doubts.size ? " · " + (doubts.size === 1 ? t("1 line to check (yellow dot)") : t("{n} lines to check (yellow dot)", { n: doubts.size })) : "")
@@ -5787,6 +5800,17 @@ export default function VideoStudio({
   // with it where the line can go no further: 0.2 s at least, as `moveCueStart` / `retimeCue`)
   /** A clip's own handles, inside it (as a video clip's): its start and its end, each its own even where two clips
    *  touch (one handle for both moved the next line when the end of this one was meant). Shown on hover. */
+  /** A line's padlock, on its clip (shown on hover, always once locked): kept as it is when the lyrics are placed again. */
+  const cueLockEl = (c: Cue) => {
+    const on = c.words.length > 0 && c.words.every((x) => x.lock);
+    return (
+      <span role="button" tabIndex={-1} className={"cue-lock" + (on ? " on" : "")} aria-pressed={on}
+        title={on ? t("Locked: kept as it is when the lyrics are placed again. Click to unlock.") : t("Lock this line: kept as it is when the lyrics are placed again")}
+        onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); toggleLock(c); }}>
+        <Icon name={on ? "lock" : "unlock"} size={10} />
+      </span>
+    );
+  };
   const grips = (start: ReturnType<typeof edgeDrag>, end: ReturnType<typeof edgeDrag>) => (<>
     <span className="cue-grip in" title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...start} />
     <span className="cue-grip out" title={t("Drag to change when it leaves")} {...end} />
@@ -6521,7 +6545,7 @@ export default function VideoStudio({
                             <Icon name="film" size={14} />{settings.score === undefined ? t("Sync the video") : t("Resync the video")}{settings.score === undefined && <span className="tab-dot" />}
                           </button>
                         )}
-                        <button disabled={!hasLyrics} onClick={() => { closeMenu(); void syncLyrics(); }}
+                        <button disabled={!hasLyrics} onClick={() => { closeMenu(); if (hasManual(project.lyricWords) || lockedLines(project.lyricWords).size) setAskReplace(true); else void syncLyrics(); }}
                           title={!hasLyrics ? t("Import the video or paste the lyrics first.") : placed ? t("Listen to the whole song again and place the lyrics from scratch (the lines retimed by hand too).") : undefined}>
                           {/* One action, always from scratch (it was two, the second shown only once the first was done). */}
                           <Icon name="type" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}{hasLyrics && !placed && <span className="tab-dot" />}
@@ -6592,7 +6616,7 @@ export default function VideoStudio({
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
                     <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={"song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
-                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}{mode !== "word" && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
+                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}{mode !== "word" && grips(moveSongLine(i), moveSongLineEnd(i))}{mode !== "word" && cueLockEl(c)}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
@@ -6609,6 +6633,7 @@ export default function VideoStudio({
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       <span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}
                       {mode !== "word" && grips(moveLine(i), moveLineEnd(i))}
+                      {mode !== "word" && cueLockEl(c)}
                     </button>
                   ))}
                   {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
@@ -7338,6 +7363,20 @@ export default function VideoStudio({
           onConfirm={() => void deleteClip()} onClose={() => setClipDialog(null)} />
       )}
       {/* A new audio while there is one: another version of it, kept next to it; which videos go on it. */}
+      {askReplace && (() => {
+        const n = lockedLines(project.lyricWords).size;
+        return (
+          <Modal title={t("Re-place the lyrics?")} onClose={() => setAskReplace(false)}>
+            <p>{t("You retimed lines by hand. Placing the lyrics again listens to the song and places every line from scratch.")}</p>
+            <p className="muted sm">{n === 1 ? t("Your locked line stays as it is.") : n ? t("Your {n} locked lines stay as they are.", { n }) : t("To keep a line as you set it, lock it first with the padlock on its clip (on the timeline).")}</p>
+            <div className="modal-foot">
+              <button className="btn left quiet" onClick={() => setAskReplace(false)}>{t("Cancel")}</button>
+              <button className={"btn" + (n ? "" : " danger")} onClick={() => { setAskReplace(false); dropLocks.current = true; void syncLyrics(); }}>{t("Re-place everything")}</button>
+              {n > 0 && <button className="btn primary" onClick={() => { setAskReplace(false); void syncLyrics(); }}>{t("Re-place the others")}</button>}
+            </div>
+          </Modal>
+        );
+      })()}
       {audioAsk && (
         <Modal title={t("Another version of the audio")} onClose={() => { if (!audioAsk.busy) setAudioAsk(null); }}>
           {audioAsk.busy ? (

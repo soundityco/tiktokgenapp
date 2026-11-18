@@ -181,6 +181,9 @@ export interface LyricWord {
   doubt?: boolean;
   /** Retimed by hand: this timing wins over the automatic one, also when the lyrics are placed again. */
   manual?: boolean;
+  /** Its line locked by the artist (padlock on its clip): kept as it is when the lyrics are placed again (from scratch,
+   *  or the words in their lines). */
+  lock?: true;
   /** Starts a caption cut by hand (its own `line`): the cut stays when the lyrics are placed again. */
   split?: boolean;
   /** Joined by hand to the caption before it ("Join with the next"): no automatic cut there (a pause, a comma, length). */

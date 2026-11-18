@@ -564,6 +564,12 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 /* A line is grabbed by its body and moved whole (as a clip in an editor). */
 .lyrics-track .cue:not(.video-clip) { cursor: grab; }
 .lyrics-track .cue:not(.video-clip):active { cursor: grabbing; }
+/* A line's padlock, on its clip's right (before its end handle): on hover, always once locked (kept when re-placing). */
+.lyric-track .cue .cue-lock { position: absolute; top: 50%; right: 9px; z-index: 2; display: inline-grid; place-items: center; width: 16px; height: 16px; margin-top: -8px;
+  border-radius: 4px; color: var(--muted); background: color-mix(in srgb, var(--bg) 70%, transparent); opacity: 0; cursor: pointer; pointer-events: auto; transition: opacity .15s; }
+.lyric-track .cue:hover .cue-lock { opacity: .85; }
+.lyric-track .cue .cue-lock:hover { opacity: 1; color: var(--text); }
+.lyric-track .cue .cue-lock.on { opacity: 1; color: var(--clip, var(--lyrics)); }
 /* A text's or a hook's own handles, inside the clip (as a video clip's): its start on its coloured edge, its end a bar
    shown on hover; each clip its own, even where two touch. */
 .lyric-track .cue .cue-grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 1; touch-action: none; pointer-events: auto; }

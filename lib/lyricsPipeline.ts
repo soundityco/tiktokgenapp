@@ -475,6 +475,7 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
   starts.forEach((a, k) => {
     const b = k + 1 < starts.length ? starts[k + 1] : words.length;
     if (only && !only.has(words[a].line ?? -1)) return;
+    if (words.slice(a, b).some((x) => x.lock)) return; // (locked by the artist: as it is)
     const to = b < words.length ? words[b].s : Math.min(end, words[b - 1].e + 0.3);
     // (each line in its own language: an English hook in a French song, read the French way, was hardly heard)
     const line = words.slice(a, b), own = french && looksFrench(line.map((x) => faNorm(x.w)));
