@@ -478,8 +478,22 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
   starts.forEach((a, k) => {
     const b = k + 1 < starts.length ? starts[k + 1] : words.length;
     const line = words.slice(a, b);
-    if (line.some((x) => x.lock)) { done.push({ a, b, heard: true, words: null, to: 0 }); return; } // (locked: as it is)
     const to = b < words.length ? words[b].s : Math.min(end, words[b - 1].e + 0.3);
+    if (line.some((x) => x.lock)) {
+      // Locked: its words stay where the artist set them; only their syllables' times are added, heard inside each word
+      // (the syllables the model hears in the line, kept where they fall in the word as it is placed).
+      if (!only || only.has(line[0].line ?? -1)) {
+        const own = french && looksFrench(line.map((x) => faNorm(x.w)));
+        const again = wordsInSpan(em.frames, em.T, em.V, line, line[0].s, to, own);
+        if (again && again.heard >= HEARD) line.forEach((x, j) => {
+          const g = again.words[j];
+          if (!g.sy) return;
+          const sy = g.sy.map((f) => (g.s + f * (g.e - g.s) - x.s) / Math.max(0.05, x.e - x.s));
+          if (sy.slice(1).every((f, q) => f > sy[q] && f > 0.02 && f < 0.97)) out[a + j] = { ...x, sy: [0, ...sy.slice(1).map((f) => Math.round(f * 1000) / 1000)] };
+        });
+      }
+      done.push({ a, b, heard: true, words: null, to: 0 }); return;
+    }
     if (only && !only.has(words[a].line ?? -1)) { done.push({ a, b, heard: !looksOff(line), words: null, to }); return; }
     // (each line in its own language: an English hook in a French song, read the French way, was hardly heard)
     const own = french && looksFrench(line.map((x) => faNorm(x.w)));

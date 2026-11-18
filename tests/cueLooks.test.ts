@@ -56,6 +56,24 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("a locked line (syllables)", () => {
+  it("keeps its words where they are and gets its syllables' times", async () => {
+    const { inLines } = await import("@/lib/lyricsPipeline");
+    const { FA_VOCAB } = await import("@/lib/forcedAlign");
+    const V = Math.max(...Object.values(FA_VOCAB)) + 1, T = 500;
+    const frames = new Float32Array(T * V).fill(Math.log(1e-4));
+    // "je vouloir" heard from 1.0 s: j e at 1.0-1.2, v o u from 1.3, l o i r from 1.7
+    const at: [string, number][] = [["j", 50], ["e", 55], ["v", 65], ["o", 68], ["u", 71], ["l", 85], ["o", 88], ["i", 91], ["r", 94]];
+    for (const [c, f0] of at) for (let f = f0; f < f0 + 3; f++) frames[f * V + FA_VOCAB[c]] = 0;
+    const ws: LyricWord[] = [{ w: "je", s: 1, e: 1.25, line: 0, lock: true }, { w: "vouloir", s: 1.3, e: 2, line: 0, lock: true }, { w: "fin", s: 4, e: 4.5, line: 1 }];
+    const out = inLines(ws, { frames, T, V }, true);
+    expect(out[1]).toMatchObject({ s: 1.3, e: 2, lock: true });
+    expect(out[1].sy?.length).toBe(2);
+    expect(out[1].sy![1]).toBeGreaterThan(0.4);
+    expect(out[1].sy![1]).toBeLessThan(0.75);
+  });
+});
+
 describe("a hardly heard line with a twin heard well (a chorus)", () => {
   it("takes its twin's rhythm", async () => {
     const { inLines } = await import("@/lib/lyricsPipeline");
