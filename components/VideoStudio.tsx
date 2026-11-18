@@ -4488,14 +4488,18 @@ export default function VideoStudio({
     // The one playhead across the frame: where the tracks' playheads are (their slide, then their place).
     if (tlHeadRef.current) tlHeadRef.current.style.transform = `translate3d(${els.headOff + dx + hx}px,0,0)`;
     // On each track the clip that has reached the left edge of what is on screen sticks to it, whole (its text read in
-    // full), played or not, until the next one, sliding in over it from the right, reaches the edge and takes its place
-    // (as the sticky headers of a list). The others sit at their time.
-    const stuckAt = new Map<HTMLElement, number>();
+    // full), played or not, until the next one, coming from the right, meets its end and pushes it off the edge (as the
+    // sticky headers of a list: a long text never shows past the next one under it). The others sit at their time.
+    const stuckAt = new Map<HTMLElement, number>(), pushedAt = new Map<string, number>();
     els.clips.forEach((list) => {
-      let stuck: HTMLElement | null = null, best = -Infinity;
+      let stuck: HTMLElement | null = null, best = -Infinity, after = Infinity;
       for (const el of list) { const a = Number(el.dataset.a); if (a < live.s && a > best) { best = a; stuck = el; } }
+      for (const el of list) { const a = Number(el.dataset.a); if (a > best && a < after) after = a; }
+      // (its width as time on screen: pushed so that its right side stays on the next one's start, never before its own)
+      const pinned = stuck ? Math.max(best, Math.min(live.s, after - (stuck.offsetWidth / W) * laid.d)) : 0;
       for (const el of list) {
-        const from = el === stuck ? live.s : Number(el.dataset.a);
+        const from = el === stuck ? pinned : Number(el.dataset.a);
+        if (el === stuck) pushedAt.set(el.dataset.a ?? "", pinned);
         stuckAt.set(el, from);
         el.style.transform = `translate3d(${xOf(from)}px,0,0)`;
         el.style.zIndex = el === stuck ? "0" : "1"; // the stuck one under: the next slides in over it
@@ -4514,7 +4518,7 @@ export default function VideoStudio({
       if (name && el.classList.contains("on")) name.style.setProperty("--hx", `${hxPx - x0 - nameAt}px`);
     });
     // The playing clip's bar: at its start, or on the left edge once its start has gone past it; its text glows under the playhead.
-    els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
+    els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(pushedAt.get(el.dataset.a ?? "") ?? Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
     els.playing.forEach((el) => {
       const a = Number(el.dataset.a), b = Number(el.dataset.b), from = stuckAt.get(el) ?? a;
       el.style.setProperty("--hx", `${b > a ? clamp((at - from) / (b - a), 0, 1) * 100 : 0}%`);
