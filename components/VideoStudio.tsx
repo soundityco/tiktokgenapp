@@ -99,7 +99,9 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
 const FADE = 0.02;
 
 /** The way the lyrics are placed on the audio: raised when it changes, so lyrics placed before are placed again once. */
-const LYRICS_ALIGN_V = 3;
+// (4: a sign alone in the written lyrics, French spacing « revoir ? », goes with its word: the lyrics placed before
+// it lost it; placed again once, retouches kept)
+const LYRICS_ALIGN_V = 4;
 
 /** What each version of a video keeps for itself: every choice of the post. The rest is the video's: the camera file
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
