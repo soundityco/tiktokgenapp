@@ -1413,6 +1413,13 @@ button.media.m-lyrics.warn .media-name, .lib-lyrics.empty .media-head > svg:last
 /* Undo / redo: square buttons (as wide as tall), side by side with no gap. */
 .top .top-hist, .top .top-hist.btn.icon { width: auto; aspect-ratio: 1; padding: 0; justify-content: center; }
 .top .top-hist + .top-hist { margin-left: -8px; } /* touching: the top bar's gap (8px) taken back */
+/* Computer: undo / redo right before the studio switch, at hand, never pushed by the saved badge growing ("Saving…"). */
+@media (min-width: 641px) {
+  .top > * { order: 3; }
+  .top > .brand { order: 0; }
+  .top > .top-hist { order: 1; }
+  .top > .studio-switch { order: 2; margin-left: var(--s3); }
+}
 
 @media (max-width: 640px) {
   /* Room for it on a 360px screen: slimmer tabs. */
