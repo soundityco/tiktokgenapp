@@ -612,6 +612,26 @@ export function shiftCue(all: LyricWord[], cue: Cue, delta: number): LyricWord[]
     : x));
 }
 
+/**
+ * A caption dragged whole on the timeline (as a clip in an editor): it keeps its length and moves by `delta`, in the
+ * room between the line before and the line after (never over them, never pushing them). Its end and the end of the
+ * line before are pinned (`until`): an end glued to the next start would stretch to follow it. Null: it cannot move.
+ */
+export function moveCueBy(all: LyricWord[], cues: Cue[], i: number, delta: number): LyricWord[] | null {
+  const c = cues[i], prev = cues[i - 1], next = cues[i + 1];
+  if (!c?.words.length) return null;
+  const d = Math.max((prev ? prev.end : 0) - c.start, Math.min(next ? next.start - c.end : Infinity, delta));
+  if (Math.abs(d) < 0.005) return null;
+  let out = shiftCue(all, c, d);
+  const last = c.words[c.words.length - 1];
+  out = out.map((x, k) => (all[k] === last ? { ...x, until: r3(c.end + d) } : x));
+  if (prev?.words.length) {
+    const pl = prev.words[prev.words.length - 1];
+    if (pl.until === undefined) out = out.map((x) => (x === pl ? { ...x, until: r3(prev.end), manual: true } : x));
+  }
+  return out;
+}
+
 /** When a caption leaves the screen, set by hand on its last word. */
 export function setCueEnd(all: LyricWord[], cue: Cue, end: number): LyricWord[] {
   const mine = new Set(cue.words);

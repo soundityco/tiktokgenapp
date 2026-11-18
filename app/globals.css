@@ -459,7 +459,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue { position: absolute; top: 4px; bottom: 4px; min-width: 3px; padding: 0 6px; border: 0; border-left: 2px solid var(--line-2); border-radius: 2px;
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
-.lyric-track .cue.outside { pointer-events: none; display: flex; align-items: center; /* dimmed with solid colours, not see-through */
+.lyric-track .cue.outside { display: flex; align-items: center; /* dimmed with solid colours, not see-through */
   background: color-mix(in srgb, var(--raised) 45%, var(--bg)); color: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-left-color: color-mix(in srgb, var(--line-2) 45%, var(--bg)); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
 /* The clip playing glows in its own colour (--clip): a line of the lyrics in white, a hook in the hooks' blue, a shot
@@ -560,6 +560,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .cam-cut.at-left::after { left: 1px; }
 .cam-cut.at-right { margin-left: -10px; }
 .cam-cut.at-right::after { left: auto; right: 1px; }
+/* A line is grabbed by its body and moved whole (as a clip in an editor). */
+.lyrics-track .cue:not(.video-clip) { cursor: grab; }
+.lyrics-track .cue:not(.video-clip):active { cursor: grabbing; }
 /* A text's or a hook's own handles, inside the clip (as a video clip's): its start on its coloured edge, its end a bar
    shown on hover; each clip its own, even where two touch. */
 .lyric-track .cue .cue-grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 1; touch-action: none; pointer-events: auto; }
@@ -2995,8 +2998,9 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 
 /* The song's lines outside the segment: readable (the lyrics' gold, softer), their edges moved as the others', never in
    the post (only the segment's are). */
-.lyrics-track .cue.outside { pointer-events: auto; cursor: default; color: color-mix(in srgb, var(--text) 55%, var(--bg));
+.lyrics-track .cue.outside { pointer-events: auto; cursor: grab; color: color-mix(in srgb, var(--text) 55%, var(--bg));
   background: color-mix(in srgb, var(--lyrics) 7%, var(--bg)); border-left-color: color-mix(in srgb, var(--lyrics) 45%, var(--bg)); }
+.lyrics-track .cue.outside.sel { background: color-mix(in srgb, var(--lyrics) 18%, var(--bg)); color: var(--text); }
 
 /* A synced video over another: its padlock on the clip (locked: it only changes rows; click: unlocked, or put back). */
 .video-clip .clip-lock { display: inline-grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; opacity: .75; cursor: pointer; }

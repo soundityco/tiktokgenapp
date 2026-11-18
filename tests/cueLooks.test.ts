@@ -56,6 +56,27 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("a line dragged whole", () => {
+  it("keeps its length, stays between its neighbours, and the line before keeps its end", async () => {
+    const { moveCueBy } = await import("@/lib/lyricsAlign");
+    const ws: LyricWord[] = [
+      { w: "one", s: 1, e: 1.5, line: 0 }, { w: "two", s: 1.6, e: 2, line: 0 },
+      { w: "three", s: 3, e: 3.5, line: 1 }, { w: "four", s: 3.6, e: 4, line: 1 },
+      { w: "five", s: 8, e: 8.5, line: 2 },
+    ];
+    const cs = buildCues(ws, "phrase");
+    const len = cs[1].end - cs[1].start, before = cs[0].end;
+    const out = moveCueBy(ws, cs, 1, 1.5)!;
+    const after = buildCues(out, "phrase");
+    expect(after[1].start).toBeCloseTo(cs[1].start + 1.5, 3);
+    expect(after[1].end - after[1].start).toBeCloseTo(len, 3);
+    expect(after[0].end).toBeCloseTo(before, 3);
+    // never over the next line
+    const far = buildCues(moveCueBy(ws, cs, 1, 100)!, "phrase");
+    expect(far[1].end).toBeLessThanOrEqual(cs[2].start + 1e-6);
+  });
+});
+
 describe("a line moved later by the ↓ arrow", () => {
   it("leaves the line before at its own end (never stretched to the moved line)", async () => {
     const { placeLine, setCueEnd } = await import("@/lib/lyricsAlign");

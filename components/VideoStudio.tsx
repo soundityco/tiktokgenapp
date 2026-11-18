@@ -7,7 +7,7 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
-import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -3036,7 +3036,9 @@ export default function VideoStudio({
    * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
    * a click elsewhere puts the playhead there. `onCue`: also called for a click on a caption.
    */
-  const scrubRef = useRef<{ px: number; at: number | null; pick: string | null; moved: boolean } | null>(null);
+  const scrubRef = useRef<{ px: number; at: number | null; pick: string | null; moved: boolean;
+    /** A line grabbed by its body (as a clip in an editor: moved whole, its length kept): which, and the lines then. */
+    mv?: { i: number; cues: Cue[]; words: LyricWord[]; w: { s: number; d: number }; width: number } } | null>(null);
   const scrub = (onCue?: () => void) => {
     const timeOf = (el: HTMLElement, x: number) => {
       const r = el.getBoundingClientRect();
@@ -3051,17 +3053,36 @@ export default function VideoStudio({
         e.currentTarget.setPointerCapture(e.pointerId);
         const cue = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
         scrubRef.current = { px: e.clientX, at: cue ? Number(cue.dataset.at) : null, pick: cue?.dataset.pick ?? null, moved: false };
+        // A line's body: dragged, the line moves whole (the segment's lines or the song's, outside it).
+        const line = (e.target as HTMLElement).closest<HTMLElement>("[data-mv]");
+        if (line && mode !== "word") {
+          const [kind, n] = (line.dataset.mv ?? "").split(":");
+          dragHead.current = headRef.current;
+          scrubRef.current.mv = { i: Number(n), cues: kind === "song" ? songCues : cues, words: project.lyricWords ?? [], w: viewRef.current ?? twRef.current, width: e.currentTarget.getBoundingClientRect().width };
+        }
       },
       onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
         const d = scrubRef.current;
         if (!d) return;
         if (!d.moved && Math.abs(e.clientX - d.px) < 4) return;
         d.moved = true;
+        if (d.mv) {
+          const { i, cues: cs, words, w, width } = d.mv, c = cs[i];
+          if (!c) return;
+          let delta = ((e.clientX - d.px) / Math.max(1, width)) * w.d;
+          // (its start, else its end, to the segment's start or the playhead within 8 px; ⌘: free)
+          const pps = width / w.d, ms = magnet(e, c.start + delta, pps), me = ms === null ? magnet(e, c.end + delta, pps) : null;
+          if (ms !== null) delta = ms - c.start; else if (me !== null) delta = me - c.end;
+          const out = moveCueBy(words, cs, i, delta);
+          if (out) { setTab("lyrics"); onProject((p) => ({ ...p, lyricWords: out })); }
+          return;
+        }
         setHead(timeOf(e.currentTarget, e.clientX));
       },
       onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
         const d = scrubRef.current;
         scrubRef.current = null;
+        if (d?.moved && d.mv) { setPick(d.pick); onSaveNow(); return; }
         if (!d || d.moved) return;
         if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); onCue?.(); }
         else { setHead(timeOf(e.currentTarget, e.clientX)); setPick(null); }
@@ -6519,12 +6540,12 @@ export default function VideoStudio({
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
-                    <span key={"o" + i} className="cue outside" data-a={c.start} data-b={c.end} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
+                    <span key={"o" + i} className={"cue outside" + (pick === "text:" + (keyOf(c) ?? "o" + i) ? " sel" : "")} data-a={c.start} data-b={c.end} data-mv={"song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
                       style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}{mode !== "word" && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
-                    <button key={i} className={"cue" + (c === current ? " on" : "") + (pick === "text:" + (keyOf(c) ?? i) ? " sel" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} data-pick={"text:" + (keyOf(c) ?? i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
+                    <button key={i} className={"cue" + (c === current ? " on" : "") + (pick === "text:" + (keyOf(c) ?? i) ? " sel" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} data-pick={"text:" + (keyOf(c) ?? i)} data-mv={"seg:" + i} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
                       data-text={c.text.replace(/\n/g, " ")}
                       // (a line across the segment's edge drawn whole, one clip: its end handle where it really ends)
                       style={{
