@@ -564,12 +564,12 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 /* A line is grabbed by its body and moved whole (as a clip in an editor). */
 .lyrics-track .cue:not(.video-clip) { cursor: grab; }
 .lyrics-track .cue:not(.video-clip):active { cursor: grabbing; }
-/* A lyric clip's icon is its padlock: T, on the clip's hover an open padlock (click: locked); locked, a gold padlock
-   (on hover open: click to unlock). One icon, no button beside it. */
+/* A lyric clip's icon is its padlock: T, the icon itself hovered an open padlock (click: locked); locked, a gold
+   padlock, open only when the icon itself is hovered (click: unlocked) — never on the clip's hover. One icon. */
 .lyric-track .cue .cue-ico.lockable { cursor: pointer; pointer-events: auto; border-radius: 3px; }
 .lyric-track .cue .cue-ico.lockable .ico-hover { display: none; }
-.lyric-track .cue:hover .cue-ico.lockable .ico-idle { display: none; }
-.lyric-track .cue:hover .cue-ico.lockable .ico-hover { display: inline-flex; }
+.lyric-track .cue .cue-ico.lockable:hover .ico-idle { display: none; }
+.lyric-track .cue .cue-ico.lockable:hover .ico-hover { display: inline-flex; }
 .lyric-track .cue .cue-ico.lockable:hover { color: var(--text); }
 .lyric-track .cue .cue-ico.locked { color: var(--clip, var(--lyrics)); }
 .lyric-track .cue:has(.cue-ico.locked) { cursor: default; }
