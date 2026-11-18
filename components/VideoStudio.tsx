@@ -2869,7 +2869,7 @@ export default function VideoStudio({
     const i = which === "next" ? cur + 1 : Math.max(0, cur), c = cs[i];
     if (!c || i < 0) return;
     if (lockedCue(c)) { tapCursor.current = i; return; } // (locked: it stays, the next arrow goes on from it)
-    if (cs[i - 1] && lockedCue(cs[i - 1]) && at < cs[i - 1].end + 0.02) return; // (never over a locked line)
+    if (cs[i - 1] && lockedCue(cs[i - 1]) && at < cs[i - 1].end) return; // (never over a locked line)
     const next = cs[i + 1], before = cs[i - 1]?.end;
     // (its end: as long as it was, never past the next line unless that one starts sooner than now)
     words = placeLine(words, c, at, at + Math.max(0.3, Math.min(c.end - c.start, next && next.start > at ? next.start - 0.04 - at : Infinity)));
@@ -5832,7 +5832,7 @@ export default function VideoStudio({
   </>);
   const moveLine = (i: number) => edgeDrag((at, free) => {
     const c = cues[i], prev = cues[i - 1];
-    if (prev && lockedCue(prev)) at = Math.max(at, prev.end + 0.02); // (a locked line before: it stops there)
+    if (prev && lockedCue(prev)) at = Math.max(at, prev.end); // (a locked line before: it stops there)
     const out = moveCueStart(project.lyricWords ?? [], cues, i, at, free);
     if (!out || !c) return;
     setTab("lyrics");
@@ -5843,20 +5843,20 @@ export default function VideoStudio({
    *  in the song (to check and set the lyrics of a passage the post does not use yet, the segment locked elsewhere). */
   const moveSongLine = (i: number) => edgeDrag((at, free) => {
     const c = songCues[i], prev = songCues[i - 1];
-    if (prev && lockedCue(prev)) at = Math.max(at, prev.end + 0.02);
+    if (prev && lockedCue(prev)) at = Math.max(at, prev.end);
     const out = moveCueStart(project.lyricWords ?? [], songCues, i, at, free);
     if (out && c) { setHead(round2(clamp(at, prev ? prev.start + 0.2 : 0, c.end - 0.2))); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   const moveSongLineEnd = (i: number) => edgeDrag((at) => {
     const c = songCues[i], next = songCues[i + 1];
-    if (next && lockedCue(next)) at = Math.min(at, next.start - 0.02);
+    if (next && lockedCue(next)) at = Math.min(at, next.start);
     const out = moveCueEnd(project.lyricWords ?? [], songCues, i, at);
     if (out && c) { setHead(round2(clamp(at, c.start + 0.2, next ? next.end - 0.2 : Infinity))); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   /** A line's end dragged (one followed by a gap, or the last: a glued end is the next line's start handle). */
   const moveLineEnd = (i: number) => edgeDrag((at) => {
     const c = cues[i], next = cues[i + 1];
-    if (next && lockedCue(next)) at = Math.min(at, next.start - 0.02); // (a locked line after: it stops there)
+    if (next && lockedCue(next)) at = Math.min(at, next.start); // (a locked line after: it stops there)
     const out = moveCueEnd(project.lyricWords ?? [], cues, i, at);
     if (!out || !c) return;
     setTab("lyrics");
@@ -6032,8 +6032,8 @@ export default function VideoStudio({
   // (the list holds every line of the song, the segment's and the others: `songCues`)
   const retime = (i: number, what: "start" | "end", dir: 1 | -1) => {
     const c = songCues[i];
-    if (!c || lockedCue(c) || (what === "end" && dir > 0 && songCues[i + 1] && lockedCue(songCues[i + 1]) && c.end + 0.1 > songCues[i + 1].start - 0.02)
-      || (what === "start" && dir < 0 && songCues[i - 1] && lockedCue(songCues[i - 1]) && c.start - 0.1 < songCues[i - 1].end + 0.02)) return;
+    if (!c || lockedCue(c) || (what === "end" && dir > 0 && songCues[i + 1] && lockedCue(songCues[i + 1]) && c.end + 0.1 > songCues[i + 1].start + 1e-3)
+      || (what === "start" && dir < 0 && songCues[i - 1] && lockedCue(songCues[i - 1]) && c.start - 0.1 < songCues[i - 1].end - 1e-3)) return;
     // Word by word: that mode's own timing (the phrases never move from it).
     const out = c && (mode === "word" ? retimeWordCue : retimeCue)(project.lyricWords ?? [], songCues, i, what, dir * 0.1);
     if (!out) return;
