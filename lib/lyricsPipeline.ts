@@ -2,7 +2,7 @@ import type { LyricWord } from "./types";
 import { type Emissions, alignDevice, alignEmissions } from "./alignAI";
 import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench, wordsInSpan } from "./forcedAlign";
 import { findRepeats, foldedFit, melFrames, repeatPeriodIn } from "./repeatBlocks";
-import { alignSong, cleanHeard, norm, similarity, splitWords, withoutLost, wordsFromSegments } from "./lyricsAlign";
+import { alignSong, cleanHeard, norm, similarity, splitWords, syllables, withoutLost, wordsFromSegments } from "./lyricsAlign";
 import { mergeHeard, noSpeech, relayWeakLines } from "./lyricsRelay";
 import { type AsrModel, type AsrStep, prepareAudio, transcribe } from "./transcribe";
 import { clamp } from "./render";
@@ -476,8 +476,44 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
     const b = k + 1 < starts.length ? starts[k + 1] : words.length;
     if (only && !only.has(words[a].line ?? -1)) return;
     const to = b < words.length ? words[b].s : Math.min(end, words[b - 1].e + 0.3);
-    const again = wordsInSpan(em.frames, em.T, em.V, words.slice(a, b), words[a].s, to, french);
-    if (again) again.forEach((x, j) => { out[a + j] = x; });
+    // (each line in its own language: an English hook in a French song, read the French way, was hardly heard)
+    const line = words.slice(a, b), own = french && looksFrench(line.map((x) => faNorm(x.w)));
+    const again = wordsInSpan(em.frames, em.T, em.V, line, words[a].s, to, own);
+    // Heard: its words where the model hears them. Hardly heard (a voice it follows badly, high-pitched…): its words stay
+    // as they are when they look sung, else (a word dragging over the line, words piled up: they lit late, all at once)
+    // they share the line by syllables, at a sung pace. Measured on WANNA TRY: its lines heard 0.18-0.40, its hook 0.07.
+    const fixed = again && again.heard >= HEARD ? again.words : looksOff(line) ? bySyllables(line, words[a].s, Math.min(to, line[line.length - 1].until ?? to)) : null;
+    if (fixed) fixed.forEach((x, j) => { out[a + j] = x; });
   });
   return out;
+}
+
+/** Under this, a line's letters are not heard well enough to place its words (mean probability on the path). */
+const HEARD = 0.15;
+
+/** A line's words that do not look sung: one dragging over half the line with under a third of its syllables, or two
+ *  piled on the same instant. */
+function looksOff(line: LyricWord[]): boolean {
+  if (line.length < 2) return false;
+  const S = line[0].s, E = Math.max(line[line.length - 1].e, S + 0.05), total = line.reduce((n, x) => n + syllables(x.w), 0);
+  let piled = 0;
+  for (let i = 0; i < line.length; i++) {
+    const end = i + 1 < line.length ? line[i + 1].s : line[i].e;
+    if (i + 1 < line.length && end - line[i].s < 0.04) piled++;
+    if ((end - line[i].s) / (E - S) > 0.5 && syllables(line[i].w) / total < 0.35) return true;
+  }
+  return piled >= 2;
+}
+
+/** A line's words sharing it by syllables, from its start, at a sung pace (0.45 s a syllable at most), within `end`. */
+function bySyllables(line: LyricWord[], from: number, end: number): LyricWord[] {
+  const syl = line.map((x) => syllables(x.w)), total = syl.reduce((a, b) => a + b, 0);
+  const E = Math.max(from + 0.1 * total, Math.min(end, from + 0.45 * total + 0.2));
+  let at = 0;
+  return line.map((x, i) => {
+    const s = from + ((E - from) * at) / total;
+    at += syl[i];
+    const e = from + ((E - from) * at) / total;
+    return { ...x, s: Math.round(s * 1000) / 1000, e: Math.round(Math.max(s + 0.05, e) * 1000) / 1000 };
+  });
 }

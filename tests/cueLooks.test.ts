@@ -56,6 +56,25 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("a line the model hardly hears (inLines)", () => {
+  it("its words dragging or piled up share it by syllables; words that look sung stay", async () => {
+    const { inLines } = await import("@/lib/lyricsPipeline");
+    const { FA_VOCAB } = await import("@/lib/forcedAlign");
+    const V = Math.max(...Object.values(FA_VOCAB)) + 1, T = 500;
+    const em = { frames: new Float32Array(T * V).fill(Math.log(1 / V)), T, V }; // nothing heard anywhere
+    const off: LyricWord[] = [
+      { w: "Don't", s: 1, e: 3, line: 0 }, { w: "you", s: 3, e: 3.02, line: 0 }, { w: "wanna", s: 3.02, e: 3.04, line: 0 }, { w: "try", s: 3.04, e: 3.3, line: 0 },
+      { w: "next", s: 5, e: 5.4, line: 1 },
+    ];
+    const out = inLines(off, em, false);
+    expect(out[0].s).toBe(1);
+    expect(out[1].s - out[0].s).toBeLessThan(0.6); // "Don't" no longer drags
+    expect(out[2].s - out[1].s).toBeGreaterThan(0.2); // nor are the others piled
+    const sung: LyricWord[] = [{ w: "tout", s: 1, e: 1.3, line: 0 }, { w: "mais", s: 1.3, e: 1.6, line: 0 }, { w: "pas", s: 1.6, e: 1.9, line: 0 }, { w: "ça", s: 1.9, e: 2.4, line: 0 }];
+    expect(inLines(sung, em, true)).toEqual(sung);
+  });
+});
+
 describe("first letter capital (sentence case)", () => {
   it("capitalises the sentence, not each line of it; the English I stays", async () => {
     const { sentenceCase } = await import("@/lib/render");

@@ -288,7 +288,7 @@ const HOLD = 1.0;
  * a line sung fast then slow). The line keeps its start (its first word starts at `from`) and its end; each word keeps
  * its other fields (`manual`, `until`…). Null when the span is too short for its letters.
  */
-export function wordsInSpan(emis: Float32Array, T: number, V: number, line: LyricWord[], from: number, to: number, french = looksFrench(line.map((x) => faNorm(x.w)))): LyricWord[] | null {
+export function wordsInSpan(emis: Float32Array, T: number, V: number, line: LyricWord[], from: number, to: number, french = looksFrench(line.map((x) => faNorm(x.w)))): { words: LyricWord[]; heard: number } | null {
   const f0 = Math.max(0, Math.floor(from / FA_FRAME)), f1 = Math.min(T, Math.ceil(to / FA_FRAME)), n = f1 - f0;
   const toks: number[] = [], owner: number[] = [];
   line.forEach((x, wi) => { const w = faNorm(x.w); for (const c of french ? frenchSound(w) : w) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
@@ -300,13 +300,17 @@ export function wordsInSpan(emis: Float32Array, T: number, V: number, line: Lyri
   if (!st) return null;
   const placed = wordsOf(st, toks.length, owner, line.map((x) => ({ w: x.w, line: x.line ?? 0 })));
   const base = f0 * FA_FRAME;
+  // How well the model hears it there: the mean probability of its letters on the path (0..1).
+  let heard = 0;
+  for (let k = 0; k < toks.length; k++) heard += Math.exp(emis[(f0 + st[k]) * V + toks[k]]);
   let prev = from;
-  return line.map((x, i) => {
+  const words = line.map((x, i) => {
     const s = i === 0 ? from : Math.max(prev + 0.01, Math.min(to - 0.05, base + placed[i].s));
     const e = Math.max(s + 0.05, Math.min(to, base + placed[i].e));
     prev = s;
     return { ...x, s: Math.round(s * 1000) / 1000, e: Math.round(e * 1000) / 1000 };
   });
+  return { words, heard: heard / toks.length };
 }
 
 function wordsOf(starts: Int32Array, N: number, owner: number[], written: { w: string; line: number }[]): LyricWord[] {
