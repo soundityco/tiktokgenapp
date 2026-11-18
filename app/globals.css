@@ -459,7 +459,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue { position: absolute; top: 4px; bottom: 4px; min-width: 3px; padding: 0 6px; border: 0; border-left: 2px solid var(--line-2); border-radius: 2px;
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
-.lyric-track .cue.outside { display: flex; align-items: center; /* dimmed with solid colours, not see-through */
+.lyric-track .cue.song-line { display: flex; align-items: center; }
+.lyric-track .cue.outside { /* dimmed with solid colours, not see-through */
   background: color-mix(in srgb, var(--raised) 45%, var(--bg)); color: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-left-color: color-mix(in srgb, var(--line-2) 45%, var(--bg)); }
 .lyric-track .cue.on { border-left-color: var(--accent-hi); color: var(--text); background: #1d1d23; }
 /* The clip playing glows in its own colour (--clip): a line of the lyrics in white, a hook in the hooks' blue, a shot

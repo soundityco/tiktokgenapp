@@ -6540,7 +6540,7 @@ export default function VideoStudio({
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
-                    <span key={"o" + i} className={"cue outside" + (pick === "text:" + (keyOf(c) ?? "o" + i) ? " sel" : "")} data-a={c.start} data-b={c.end} data-mv={"song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
+                    <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={"song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
                       style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}{mode !== "word" && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
@@ -6561,6 +6561,8 @@ export default function VideoStudio({
                     </button>
                   ))}
                   {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  {/* Loop off: the whole song plays as the segment does, its lines outside lit under the playhead too (loop on: dimmed). */}
+                  {!loopSeg && (() => { const o = songCues.find((c) => (c.end <= settings.crop.start || c.start >= end) && head >= c.start && head < c.end); const at = o ? barAt(o.start, o.end) : null; return o && at !== null ? <span className="cue-bar-glow" data-a={o.start} data-b={o.end} style={place(at)} /> : null; })()}
                   {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" data-a={Math.max(current.start, settings.crop.start)} data-b={Math.min(current.end, end)} style={place(barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))!)} />}
                   <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
