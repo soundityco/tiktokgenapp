@@ -56,6 +56,15 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("first letter capital (sentence case)", () => {
+  it("capitalises the sentence, not each line of it; the English I stays", async () => {
+    const { sentenceCase } = await import("@/lib/render");
+    expect(sentenceCase("DON'T YOU WANNA\nTRY ? i'll try")).toBe("Don't you wanna\ntry ? I'll try");
+    expect(sentenceCase("on se perd. dans la nuit\n\nencore")).toBe("On se perd. Dans la nuit\n\nEncore");
+    expect(sentenceCase("« oui » dit-il")).toBe("« Oui » dit-il");
+  });
+});
+
 describe("signs standing alone in the written lyrics (French spacing)", () => {
   it("go with their word, joined by a no-break space: never dropped", async () => {
     const { splitWords } = await import("@/lib/lyricsAlign");

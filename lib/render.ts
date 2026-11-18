@@ -233,7 +233,7 @@ function layout(ctx: CanvasRenderingContext2D, raw: string, st: TextStyle, W: nu
   let text = raw.replace(/\|/g, "\n");
   if (st.case === "upper") text = text.toUpperCase();
   if (st.case === "lower") text = text.toLowerCase();
-  if (st.case === "sentence") text = text.toLowerCase().replace(/(^|\n)(\P{L}*)(\p{L})/gu, (_, a, b, c) => a + b + c.toUpperCase());
+  if (st.case === "sentence") text = sentenceCase(text);
   const maxW = (st.width / 100) * W;
   const maxH = H * 0.92;
   let size = st.size;
@@ -297,6 +297,16 @@ export function litWords(words: { s: number; e: number }[], at: number, sweep: b
 }
 /** How early a word lights (s), and the longest a word takes to fill (s). */
 export const LIT_LEAD = 0.12, LIT_FILL = 0.5;
+
+/**
+ * "First letter capital", as a sentence: lower case, a capital at the start, after a sentence's end (. ! ? …) and after
+ * an empty line — not at each line (a phrase cut on two lines got a capital in its middle). The English "I" stays one.
+ */
+export function sentenceCase(text: string): string {
+  return text.toLowerCase()
+    .replace(/(^|[.!?…]["»”’)\]]*\s+|\n\s*\n)(\P{L}*)(\p{L})/gu, (_, a, b, c) => a + b + c.toUpperCase())
+    .replace(/(^|[^\p{L}])i(?=$|[^\p{L}])(?=['’\s,.!?…]|$)/gu, "$1I");
+}
 
 export function drawStyledText(
   ctx: CanvasRenderingContext2D,

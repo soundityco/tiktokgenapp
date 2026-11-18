@@ -98,6 +98,11 @@ const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
  *  the first or last syllable of a line (a video that starts right on the voice). The export has none. */
 const FADE = 0.02;
 
+/** Where the playhead was left on this video (this browser), if anywhere. */
+const savedHead = (id: string): number | null => {
+  try { const v = Number(localStorage.getItem(`tktgen-tl-head:${id}`)); return Number.isFinite(v) && v > 0 ? v : null; } catch { return null; }
+};
+
 /** The way the lyrics are placed on the audio: raised when it changes, so lyrics placed before are placed again once. */
 // (4: a sign alone in the written lyrics, French spacing « revoir ? », goes with its word: the lyrics placed before
 // it lost it; placed again once, retouches kept)
@@ -1241,7 +1246,7 @@ export default function VideoStudio({
       setVideoBlob(null);
       setVideoDur(0);
       setLoadedClip(null);
-      setHead(settingsRef.current.crop.start);
+      setHead(savedHead(clip.id) ?? settingsRef.current.crop.start);
     } else setVideoDur(settingsRef.current.source?.duration ?? 0);
     setErr(null);
     setNote(null);
@@ -2939,6 +2944,13 @@ export default function VideoStudio({
   // Kept on this device, per release: the zoom and where it looks, the last one set, the same on every video of the
   // release and after a refresh (on another version of the audio too, kept within its length).
   const viewKey = `tktgen-tl-view:${release.id}`;
+  // The playhead too, per video: where it was left (outside the segment as well), found again after a refresh. Saved once
+  // it stops (not while playing).
+  useEffect(() => {
+    if (playing || !audioBuf) return;
+    const id = window.setTimeout(() => { try { localStorage.setItem(`tktgen-tl-head:${clip.id}`, String(round2(head))); } catch { /* private mode */ } }, 400);
+    return () => clearTimeout(id);
+  }, [head, playing, audioBuf, clip.id]);
   useEffect(() => {
     if (!audioBuf) { setView(null); return; }
     try {

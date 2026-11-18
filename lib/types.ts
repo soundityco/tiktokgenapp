@@ -23,7 +23,7 @@ export interface TextStyle {
   /** Width of a loaded family that has condensed / expanded files (CSS font-stretch keyword). */
   stretch?: string;
   look: "outline" | "box" | "shadow" | "plain";
-  /** "sentence": lower case with a capital at the start of each line. */
+  /** "sentence": lower case with a capital at the start of each sentence (not of each line). */
   case: "asis" | "upper" | "lower" | "sentence";
   /** Outline thickness, % of the text size (default 20). Drawn outside the letters. */
   stroke?: number;
