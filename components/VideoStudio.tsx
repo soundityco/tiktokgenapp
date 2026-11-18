@@ -3240,14 +3240,23 @@ export default function VideoStudio({
     return () => c.removeEventListener("wheel", h);
   }, [audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** The loudest sample of the track: the zoomed waveform is drawn on the same scale as the overview. */
-  const peakMax = useMemo(() => {
-    if (!audioBuf) return 1;
-    const ch = audioBuf.getChannelData(0);
+  /** The track's envelope, as Ableton draws it: the lowest and highest sample of every 256 (about 5 ms), and the
+   *  loudest sample (the scale of the whole waveform, zoomed or not). Read by `paintWave`, never per frame from the samples. */
+  const waveEnv = useMemo(() => {
+    if (!audioBuf) return null;
+    const ch = audioBuf.getChannelData(0), hop = 256, n = Math.ceil(ch.length / hop);
+    const lo = new Float32Array(n), hi = new Float32Array(n);
     let m = 1e-9;
-    for (let i = 0; i < ch.length; i += 2) { const x = Math.abs(ch[i]); if (x > m) m = x; }
-    return m;
+    for (let k = 0; k < n; k++) {
+      let a = 0, b = 0;
+      for (let i = k * hop, e = Math.min(ch.length, i + hop); i < e; i++) { const x = ch[i]; if (x < a) a = x; else if (x > b) b = x; }
+      lo[k] = a; hi[k] = b;
+      if (-a > m) m = -a;
+      if (b > m) m = b;
+    }
+    return { lo, hi, hop, max: m };
   }, [audioBuf]);
+  const peakMax = waveEnv?.max ?? 1;
   // The tracks' inner width (px), for placing their clips by transform (see `place`).
   const [trackW, setTrackW] = useState(0);
   const trackRo = useRef<ResizeObserver | null>(null);
@@ -3331,50 +3340,56 @@ export default function VideoStudio({
     g.globalAlpha = 0.09;
     g.fillRect(x0, 0, Math.max(0, x1 - x0), H);
     g.globalAlpha = 1;
-    // One bar per 3 px of screen, snapped to whole pixels: crisp at any width. Zoomed in, read from the samples
-    // themselves (the overview's 600 points would only give blocks).
-    // Each bar is a fixed slice of the track (a grid in seconds, not in the view): when the view slides (while playing,
-    // zoomed) the bars move along with the sound instead of being cut again at every step, which made it shimmer.
-    g.fillStyle = "#6f6e78";
-    const step = 3;
-    const fine = !!vw && v.d / dur < 0.5;
-    const ch = fine ? audioBuf.getChannelData(0) : null;
+    // A filled waveform (as Ableton: the sound's lowest and highest point in every pixel column, one shape, no bars).
+    // Each column is a fixed slice of the track (a grid in seconds, not in the view): when the view slides (playing,
+    // zoomed) the shape moves along with the sound instead of being cut again at every step, which made it shimmer.
+    // Zoomed in further than the envelope's 5 ms, read from the samples themselves (only the view's few).
+    const env = waveEnv;
     const sr = audioBuf.sampleRate;
-    // Seconds per bar: exactly 3 px of screen (a bar every 3.0x px, once rounded, left a 4 px gap now and then: dark bands).
-    const bin = (v.d / W) * step;
-    // Around the playhead the bars light up in white, fading back to grey on both sides (what is playing).
+    const bin = v.d / W; // seconds per CSS pixel
+    const ch = env && bin * sr < env.hop * 2 ? audioBuf.getChannelData(0) : null;
+    // Around the playhead the shape lights up in white, fading back to grey on both sides (what is playing).
     // (on the screen's pixel grid: not zoomed, the playhead moves less than a pixel a frame, and drawn between pixels
     // it blurred and sharpened in turn, which read as stutter)
     const hx = Math.round(X(at) * dpr) / dpr, trail = 70;
-    // The bars between the violet band (top, 15 px) and the green strip (bottom, 4 px) when there is a camera video,
-    // never under them; else centred on the whole height.
+    // Between the violet band (top, 15 px) and the green strip (bottom, 4 px) when there is a camera video, never
+    // under them; else centred on the whole height.
     const band = videoBlob && videoDur > 0;
-    const top = band ? 17 : 9, room = H - top - (band ? 6 : 9);
-    let glow: CanvasGradient | null = null;
-    if (hx + trail > 0 && hx - trail < W) {
-      // Centred on the playhead: the bars' grey far on each side, white around the playhead.
-      glow = g.createLinearGradient(hx - trail, 0, hx + trail, 0);
-      glow.addColorStop(0, "rgba(255,255,255,0)");
-      glow.addColorStop(0.5, head0);
-      glow.addColorStop(1, "rgba(255,255,255,0)");
-    }
-    for (let k = Math.floor(v.s / bin); k * bin < v.s + v.d; k++) {
+    const top = band ? 17 : 9, room = H - top - (band ? 6 : 9), mid = top + room / 2, half = room / 2;
+    const xs: number[] = [], ups: number[] = [], downs: number[] = [];
+    for (let k = Math.floor(v.s / bin) - 1; k * bin < v.s + v.d + bin; k++) {
       const t0 = k * bin, t1 = t0 + bin;
-      let val = 0;
-      if (ch) {
-        const a = Math.max(0, Math.floor(t0 * sr)), b = Math.min(ch.length, Math.max(a + 1, Math.floor(t1 * sr)));
-        for (let q = a - (a % 4); q < b; q += 4) { const x = Math.abs(ch[q] ?? 0); if (x > val) val = x; }
-        val /= peakMax;
-      } else {
-        const a = Math.floor((t0 / dur) * peaks.length), b = Math.max(a + 1, Math.floor((t1 / dur) * peaks.length));
-        for (let q = Math.max(0, a); q < b && q < peaks.length; q++) val = Math.max(val, peaks[q]);
+      let a = 0, b = 0;
+      if (t1 > 0 && t0 < dur) {
+        if (ch) {
+          const i0 = Math.max(0, Math.floor(t0 * sr)), i1 = Math.min(ch.length, Math.max(i0 + 1, Math.ceil(t1 * sr)));
+          for (let q = i0; q < i1; q++) { const x = ch[q]; if (x < a) a = x; else if (x > b) b = x; }
+        } else if (env) {
+          const i0 = Math.max(0, Math.floor((t0 * sr) / env.hop)), i1 = Math.min(env.lo.length, Math.max(i0 + 1, Math.ceil((t1 * sr) / env.hop)));
+          for (let q = i0; q < i1; q++) { if (env.lo[q] < a) a = env.lo[q]; if (env.hi[q] > b) b = env.hi[q]; }
+        }
       }
-      const h = Math.max(1, Math.round(Math.min(1, val) * room));
-      const bx = X(t0); // exact (sub-pixel): rounded, the bars jumped a pixel now and then as the view slid
+      xs.push(X(t0 + bin / 2));
+      ups.push(mid - Math.max(0.5, Math.min(1, b / peakMax) * half));
+      downs.push(mid + Math.max(0.5, Math.min(1, -a / peakMax) * half));
+    }
+    if (xs.length) {
+      g.beginPath();
+      g.moveTo(xs[0], ups[0]);
+      for (let j = 1; j < xs.length; j++) g.lineTo(xs[j], ups[j]);
+      for (let j = xs.length - 1; j >= 0; j--) g.lineTo(xs[j], downs[j]);
+      g.closePath();
       g.fillStyle = "#6f6e78";
-      const by = top + Math.round((room - h) / 2);
-      g.fillRect(bx, by, 2, h);
-      if (glow && bx >= hx - trail && bx <= hx + trail) { g.fillStyle = glow; g.fillRect(bx, by, 2, h); }
+      g.fill();
+      if (hx + trail > 0 && hx - trail < W) {
+        // Centred on the playhead: the grey far on each side, white around the playhead.
+        const glow = g.createLinearGradient(hx - trail, 0, hx + trail, 0);
+        glow.addColorStop(0, "rgba(255,255,255,0)");
+        glow.addColorStop(0.5, head0);
+        glow.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = glow;
+        g.fill();
+      }
     }
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
