@@ -7,7 +7,7 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
-import { activeCue, alignLyrics, alignSong, buildCues, placeLine, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepManual, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -2856,13 +2856,15 @@ export default function VideoStudio({
     const cur = tapCursor.current ?? cs.reduce((k, x, j) => (x.start - 0.02 <= at ? j : k), -1);
     const i = which === "next" ? cur + 1 : Math.max(0, cur), c = cs[i];
     if (!c || i < 0) return;
-    const next = cs[i + 1];
+    const next = cs[i + 1], before = cs[i - 1]?.end;
     // (its end: as long as it was, never past the next line unless that one starts sooner than now)
     words = placeLine(words, c, at, at + Math.max(0.3, Math.min(c.end - c.start, next && next.start > at ? next.start - 0.04 - at : Infinity)));
-    if (i > 0) {
+    if (i > 0 && before !== undefined) {
+      // The line before keeps its own end (it never stretches to the moved line: a line placed later leaves a blank),
+      // only cut short when it would run into it.
       cs = buildCues(words, "phrase", opts);
       const p = cs[i - 1];
-      if (p && p.start < at) words = placeLine(words, p, p.start, Math.max(p.start + 0.1, at - 0.04));
+      if (p && p.start < at) words = setCueEnd(words, p, Math.max(p.start + 0.1, Math.min(before, at - 0.04)));
     }
     tapCursor.current = i;
     lyricWordsRef.current = words;

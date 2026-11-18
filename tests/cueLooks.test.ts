@@ -56,6 +56,24 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("a line moved later by the ↓ arrow", () => {
+  it("leaves the line before at its own end (never stretched to the moved line)", async () => {
+    const { placeLine, setCueEnd } = await import("@/lib/lyricsAlign");
+    let ws: LyricWord[] = [
+      { w: "Wanna", s: 1, e: 1.4, line: 0 }, { w: "try", s: 1.4, e: 2, line: 0 },
+      { w: "oh", s: 2.3, e: 2.8, line: 1 },
+    ];
+    let cs = buildCues(ws, "phrase");
+    const before = cs[0].end;
+    ws = placeLine(ws, cs[1], 5, 5.5);
+    cs = buildCues(ws, "phrase");
+    ws = setCueEnd(ws, cs[0], Math.max(cs[0].start + 0.1, Math.min(before, 5 - 0.04)));
+    cs = buildCues(ws, "phrase");
+    expect(cs[0].end).toBeCloseTo(before, 3);
+    expect(cs[1].start).toBe(5);
+  });
+});
+
 describe("a line's end shortened", () => {
   it("before its last word starts: the words drawn into what is left, the end kept (never glued back to the next)", async () => {
     const { setCueEnd, repairOrder } = await import("@/lib/lyricsAlign");
