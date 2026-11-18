@@ -56,8 +56,10 @@
 /* ---- the headline, centred ---- */
 .lp-hero2 { display: grid; justify-items: center; gap: 22px; padding: 96px 0 56px; text-align: center; }
 .lp-title2 { margin: 0; font-size: clamp(48px, 8.4vw, 112px); line-height: .95; letter-spacing: -.02em; }
-.lp-title2 em, .lp-block-head h2 em, .lp-end h2 em { font-style: italic; color: transparent; background: var(--grad-holo); background-size: 220% 100%;
-  -webkit-background-clip: text; background-clip: text; animation: lp-holo 9s ease-in-out infinite alternate; padding-right: .06em; }
+/* The headlines in the holographic gradient of Generate, drifting; their italic part in a dim grey, a hint of violet. */
+.lp-title2, .lp-block-head h2, .lp-end h2 { color: transparent; background: var(--grad-holo); background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; animation: lp-holo 9s ease-in-out infinite alternate; }
+.lp-title2 em, .lp-block-head h2 em, .lp-end h2 em { font-style: italic; color: color-mix(in srgb, var(--muted) 78%, var(--video)); padding-right: .06em; }
 @keyframes lp-holo { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
 .lp-lead2 { margin: 0; max-width: 560px; color: var(--muted); font-size: 16px; line-height: 1.6; }
 .lp-hero2 .lp-ctas { margin-top: 6px; }

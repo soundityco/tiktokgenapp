@@ -76,7 +76,11 @@ export default function StudioScene({ labels }: { labels: { video: string; hookT
     };
     const paint = (t: number) => {
       draw(t);
-      if (head.current) head.current.style.left = `calc(6px + (100% - 12px) * ${t / T})`;
+      if (head.current) {
+        head.current.style.left = `calc(6px + (100% - 12px) * ${t / T})`;
+        const name = el.querySelector<HTMLElement>(".video-clip.on .truncate");
+        if (name) name.style.setProperty("--hx", `${head.current.getBoundingClientRect().left - name.getBoundingClientRect().left}px`);
+      }
       const li = LINES.findIndex((l) => t >= l.a && t < l.b), l = LINES[li];
       const word = l ? Math.min(l.text.split(" ").length - 1, Math.floor(((t - l.a) / (l.b - l.a)) * l.text.split(" ").length)) : -1;
       const shot = SHOTS.reduce((k, s, i) => (t >= s.at ? i : k), 0), hook = t >= HOOK.a && t < HOOK.b;
@@ -117,27 +121,32 @@ export default function StudioScene({ labels }: { labels: { video: string; hookT
         {/* The app's timeline, with its own classes. */}
         <div className="tl-stack lp-tl">
           <div className="wave-wrap"><canvas ref={wave} className="wave" /></div>
+          {/* As VideoStudio draws them: text clips are buttons (their content centred), the playing one lit (.on: its
+              text glowing under the playhead, --hx) with its bar on its left (.cue-bar-glow); a video clip's name glows. */}
           <div className="lyric-track hook-track"><div className="track-content">
-            <span className={"cue" + (now.hook ? " on" : "")} data-text={labels.hookText} style={{ ...clip(HOOK.a, HOOK.b), ["--hx" as string]: hx(HOOK.a, HOOK.b) }}>
+            <button tabIndex={-1} className={"cue" + (now.hook ? " on" : "")} data-text={labels.hookText} style={{ ...clip(HOOK.a, HOOK.b), ...(now.hook ? { ["--hx" as string]: hx(HOOK.a, HOOK.b) } : null) }}>
               <span className="cue-ico"><Icon name="sparkle" size={11} /></span>{labels.hookText}
-            </span>
+            </button>
+            {now.hook && <span className="cue-bar-glow" style={{ left: pct(HOOK.a) }} />}
           </div></div>
           <div className="lyric-track lyrics-track"><div className="track-content">
             {LINES.map((l, i) => (
-              <span key={i} className={"cue" + (i === now.line ? " on" : "")} data-text={l.text} style={{ ...clip(l.a, l.b), ["--hx" as string]: hx(l.a, l.b) }}>
+              <button key={i} tabIndex={-1} className={"cue" + (i === now.line ? " on" : "")} data-text={l.text} style={{ ...clip(l.a, l.b), ...(i === now.line ? { ["--hx" as string]: hx(l.a, l.b) } : null) }}>
                 <span className="cue-ico"><Icon name="type" size={11} /></span>{l.text}
-              </span>
+              </button>
             ))}
+            {line && <span className="cue-bar-glow" style={{ left: pct(line.a) }} />}
           </div></div>
           <div className="video-block">
             {[3, 2, 1].map((k) => (
               <div key={k} className="lyric-track video-track"><div className="track-content">
                 {SHOTS.map((s, i) => s.cam === k && (
-                  <span key={i} className={`cue video-clip cam-${k - 1}` + (i === now.shot ? " on" : "")} style={clip(s.at, SHOTS[i + 1]?.at ?? T)}>
+                  <div key={i} className={`cue video-clip cam-${k - 1}` + (i === now.shot ? " on" : "")} style={clip(s.at, SHOTS[i + 1]?.at ?? T)}>
                     <span className="vc-name"><span className="cue-ico"><Icon name="film" size={11} /></span><b className="vc-no">{k}</b>
-                      <span className="truncate">{labels.takes[k - 1]}</span></span>
-                  </span>
+                      <span className="truncate" data-text={labels.takes[k - 1]}>{labels.takes[k - 1]}</span></span>
+                  </div>
                 ))}
+                {SHOTS[now.shot].cam === k && <span className={`cue-bar-glow cam-glow cam-${k - 1}`} style={{ left: pct(SHOTS[now.shot].at) }} />}
               </div></div>
             ))}
           </div>
