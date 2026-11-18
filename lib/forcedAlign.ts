@@ -1,4 +1,5 @@
 import type { LyricWord } from "./types";
+import { syllableSpans } from "./syllables";
 
 /**
  * Forced alignment: the written lyrics are known, so nothing has to be recognised, only placed. A CTC model
@@ -303,12 +304,34 @@ export function wordsInSpan(emis: Float32Array, T: number, V: number, line: Lyri
   // How well the model hears it there: the mean probability of its letters on the path (0..1).
   let heard = 0;
   for (let k = 0; k < toks.length; k++) heard += Math.exp(emis[(f0 + st[k]) * V + toks[k]]);
+  // When each syllable of each word starts: the first letter of each syllable of the word as the model reads it (its
+  // sound for French), mapped onto the syllables as written (one for one, else by rank).
+  const firstTok: number[] = []; // word -> its first token
+  owner.forEach((o, k) => { if (firstTok[o] === undefined) firstTok[o] = k; });
+  const sylTimes = (wi: number): number[] | null => {
+    const n = faNorm(line[wi].w), sound = french ? frenchSound(n) : n;
+    const shown = syllableSpans(line[wi].w).length;
+    if (shown < 2 || firstTok[wi] === undefined) return null;
+    // the letters of the sound that are tokens, in order: their place in `sound`
+    const at: number[] = [];
+    [...sound].forEach((c, ci) => { if (FA_VOCAB[c] !== undefined) at.push(ci); });
+    const spans = syllableSpans(sound);
+    if (spans.length < 2) return null;
+    const starts = spans.map(([a]) => { const q = at.findIndex((ci) => ci >= a); return q < 0 ? null : base + st[firstTok[wi] + q] * FA_FRAME; });
+    if (starts.some((x) => x === null)) return null;
+    const pick = (k: number) => starts[shown === spans.length ? k : Math.round((k * (spans.length - 1)) / (shown - 1))]!;
+    return Array.from({ length: shown }, (_, k) => pick(k));
+  };
   let prev = from;
   const words = line.map((x, i) => {
     const s = i === 0 ? from : Math.max(prev + 0.01, Math.min(to - 0.05, base + placed[i].s));
     const e = Math.max(s + 0.05, Math.min(to, base + placed[i].e));
     prev = s;
-    return { ...x, s: Math.round(s * 1000) / 1000, e: Math.round(e * 1000) / 1000 };
+    const t = sylTimes(i);
+    // (as fractions of the word, increasing, the first 0; none when they make no sense)
+    const sy = t ? t.map((v) => Math.min(0.95, Math.max(0, (v - s) / (e - s)))).map((v, k, a) => (k === 0 ? 0 : Math.max(v, a[k - 1] + 0.02))) : null;
+    const { sy: _old, ...rest } = x;
+    return { ...rest, s: Math.round(s * 1000) / 1000, e: Math.round(e * 1000) / 1000, ...(sy && sy[sy.length - 1] < 0.98 ? { sy: sy.map((v) => Math.round(v * 1000) / 1000) } : {}) };
   });
   return { words, heard: heard / toks.length };
 }

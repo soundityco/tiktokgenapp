@@ -472,20 +472,81 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
   const out = words.slice(), end = em.T * FRAME;
   const starts: number[] = [];
   for (let i = 0; i < words.length; i++) if (i === 0 || words[i].line !== words[i - 1].line) starts.push(i);
+  const textOf = (l: LyricWord[]) => l.map((x) => norm(x.w)).join(" ");
+  // each line heard again in its span; the hardly heard ones are settled after, with what the heard ones give
+  const done: { a: number; b: number; heard: boolean; words: LyricWord[] | null; to: number }[] = [];
   starts.forEach((a, k) => {
     const b = k + 1 < starts.length ? starts[k + 1] : words.length;
-    if (only && !only.has(words[a].line ?? -1)) return;
-    if (words.slice(a, b).some((x) => x.lock)) return; // (locked by the artist: as it is)
+    const line = words.slice(a, b);
+    if (line.some((x) => x.lock)) { done.push({ a, b, heard: true, words: null, to: 0 }); return; } // (locked: as it is)
     const to = b < words.length ? words[b].s : Math.min(end, words[b - 1].e + 0.3);
+    if (only && !only.has(words[a].line ?? -1)) { done.push({ a, b, heard: !looksOff(line), words: null, to }); return; }
     // (each line in its own language: an English hook in a French song, read the French way, was hardly heard)
-    const line = words.slice(a, b), own = french && looksFrench(line.map((x) => faNorm(x.w)));
+    const own = french && looksFrench(line.map((x) => faNorm(x.w)));
     const again = wordsInSpan(em.frames, em.T, em.V, line, words[a].s, to, own);
-    // Heard: its words where the model hears them. Hardly heard (a voice it follows badly, high-pitched…): its words stay
-    // as they are when they look sung, else (a word dragging over the line, words piled up: they lit late, all at once)
-    // they share the line by syllables, at a sung pace. Measured on WANNA TRY: its lines heard 0.18-0.40, its hook 0.07.
-    const fixed = again && again.heard >= HEARD ? again.words : looksOff(line) ? bySyllables(line, words[a].s, Math.min(to, line[line.length - 1].until ?? to)) : null;
-    if (fixed) fixed.forEach((x, j) => { out[a + j] = x; });
+    done.push({ a, b, to, heard: !!again && again.heard >= HEARD, words: again && again.heard >= HEARD ? again.words : null });
   });
+  for (const d of done) if (d.words) d.words.forEach((x, j) => { out[d.a + j] = x; });
+  // Hardly heard (a voice the model follows badly, high-pitched…): its words stay when they look sung; else (a word
+  // dragging over the line, words piled up: they lit late, all at once) they take the rhythm of the same line heard
+  // elsewhere (a chorus, a repeated "Non"), or share the line by syllables at a sung pace. Measured on WANNA TRY: its
+  // lines heard 0.18-0.40, its hook 0.07, a chorus's last line ~0.1 (spread over 2 s, its last word past the line).
+  for (const d of done) {
+    if (d.heard || d.words || (only && !only.has(words[d.a].line ?? -1))) continue;
+    const line = words.slice(d.a, d.b);
+    if (line.some((x) => x.lock) || !looksOff(line)) continue;
+    const from = line[0].s, room = Math.min(d.to, line[line.length - 1].until ?? d.to) - from;
+    const twin = done.find((o) => o !== d && o.heard && o.b - o.a === line.length && textOf(out.slice(o.a, o.b)) === textOf(line));
+    let fixed: LyricWord[];
+    if (twin) {
+      const ref = out.slice(twin.a, twin.b), s0 = ref[0].s, len = Math.max(0.05, ref[ref.length - 1].e - s0);
+      const k = room > 0 && len > room ? room / len : 1; // (squeezed only if its room is shorter)
+      fixed = line.map((x, j) => ({ ...x, s: Math.round((from + (ref[j].s - s0) * k) * 1000) / 1000, e: Math.round((from + (ref[j].e - s0) * k) * 1000) / 1000, ...(ref[j].sy ? { sy: ref[j].sy } : {}) }));
+    } else fixed = bySyllables(line, from, from + room);
+    fixed.forEach((x, j) => { out[d.a + j] = x; });
+  }
+  return unpileLines(out, only);
+}
+
+/**
+ * The same line said again and piled on one instant (starting less than PILED apart: a repeated "Non / Non / Non /
+ * Non" whose first two came together, the next two in time) share the room up to the next line, each moving whole. Locked lines
+ * stay; with `only`, only runs touching those lines move.
+ */
+const PILED = 0.1;
+export function unpileLines(words: LyricWord[], only?: Set<number>): LyricWord[] {
+  const starts: number[] = [];
+  for (let i = 0; i < words.length; i++) if (i === 0 || words[i].line !== words[i - 1].line) starts.push(i);
+  const lineOf = (k: number) => words.slice(starts[k], k + 1 < starts.length ? starts[k + 1] : words.length);
+  const out = words.slice();
+  for (let k = 0; k < starts.length;) {
+    let j = k;
+    while (j + 1 < starts.length && words[starts[j + 1]].s - words[starts[j]].s < PILED) j++;
+    if (j === k) { k++; continue; }
+    const run = Array.from({ length: j - k + 1 }, (_, q) => lineOf(k + q));
+    const touches = !only || run.some((l) => only.has(l[0].line ?? -1));
+    const locked = run.some((l) => l.some((x) => x.lock));
+    // (only a line said again, word for word: "Non / Non"; two different lines piled are a placing to check, and moving
+    // the second one later was wrong as often as right — measured: Sombr, Temper)
+    const same = run.every((l) => l.map((x) => norm(x.w)).join(" ") === run[0].map((x) => norm(x.w)).join(" "));
+    const a = words[starts[k]].s;
+    const nextStart = j + 1 < starts.length ? words[starts[j + 1]].s : Math.max(...run.map((l) => l[l.length - 1].e));
+    k = j + 1;
+    if (!touches || locked || !same || nextStart - a < 0.15 * run.length) continue;
+    // each line its share of the room, by syllables, moved whole (its words keep their rhythm, squeezed into its share)
+    const syl = run.map((l) => l.reduce((n, x) => n + syllables(x.w), 0)), total = syl.reduce((x, y) => x + y, 0);
+    let at = a, idx = starts[k - run.length];
+    run.forEach((l, q) => {
+      const len = ((nextStart - a) * syl[q]) / total, s0 = l[0].s, span = Math.max(0.05, l[l.length - 1].e - s0);
+      const k2 = Math.min(1, (len - 0.02) / span);
+      l.forEach((x, w) => {
+        const s = at + (x.s - s0) * k2, e = Math.min(at + len - 0.02, at + (x.e - s0) * k2);
+        out[idx + w] = { ...x, s: Math.round(s * 1000) / 1000, e: Math.round(Math.max(s + 0.05, e) * 1000) / 1000, ...(x.until !== undefined ? { until: Math.round((at + len - 0.02) * 1000) / 1000 } : {}) };
+      });
+      idx += l.length;
+      at += len;
+    });
+  }
   return out;
 }
 
@@ -506,15 +567,16 @@ function looksOff(line: LyricWord[]): boolean {
   return piled >= 2;
 }
 
-/** A line's words sharing it by syllables, from its start, at a sung pace (0.45 s a syllable at most), within `end`. */
+/** A line's words sharing it by syllables, from its start, at a sung pace (0.3 s a syllable at most), within `end`. */
 function bySyllables(line: LyricWord[], from: number, end: number): LyricWord[] {
   const syl = line.map((x) => syllables(x.w)), total = syl.reduce((a, b) => a + b, 0);
-  const E = Math.max(from + 0.1 * total, Math.min(end, from + 0.45 * total + 0.2));
+  const E = Math.max(from + 0.1 * total, Math.min(end, from + 0.3 * total + 0.2)); // (0.3 s a syllable at most)
   let at = 0;
   return line.map((x, i) => {
     const s = from + ((E - from) * at) / total;
     at += syl[i];
     const e = from + ((E - from) * at) / total;
-    return { ...x, s: Math.round(s * 1000) / 1000, e: Math.round(Math.max(s + 0.05, e) * 1000) / 1000 };
+    const { sy: _sy, ...rest } = x; // (its syllables' times were heard elsewhere: none now)
+    return { ...rest, s: Math.round(s * 1000) / 1000, e: Math.round(Math.max(s + 0.05, e) * 1000) / 1000 };
   });
 }

@@ -154,7 +154,7 @@ export function alignLyrics(text: string, heard: LyricWord[], minCoverage = 0.35
   while (k <= last) {
     const h = pair.get(k);
     if (h !== undefined) {
-      out.push({ w: lyr[k].w, s: hrd[h].s, e: Math.max(hrd[h].e, hrd[h].s + 0.05), line: lyr[k].line });
+      out.push({ w: lyr[k].w, s: hrd[h].s, e: Math.max(hrd[h].e, hrd[h].s + 0.05), line: lyr[k].line, ...(hrd[h].sy && norm(hrd[h].w) === norm(lyr[k].w) ? { sy: hrd[h].sy } : {}) });
       k++;
       continue;
     }
@@ -289,7 +289,7 @@ export function alignSong(text: string, heard: LyricWord[]): AlignResult | null 
   while (k <= last) {
     const h = pair.get(k);
     if (h !== undefined) {
-      out.push({ w: lyr[k].w, s: hrd[h].s, e: Math.max(hrd[h].e, hrd[h].s + 0.05), line: lyr[k].line });
+      out.push({ w: lyr[k].w, s: hrd[h].s, e: Math.max(hrd[h].e, hrd[h].s + 0.05), line: lyr[k].line, ...(hrd[h].sy && norm(hrd[h].w) === norm(lyr[k].w) ? { sy: hrd[h].sy } : {}) });
       k++;
       continue;
     }
@@ -827,7 +827,7 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
       // word's new line plus the cut's fraction. A word joined to the line before stays joined (glue): it takes the line
       // of the word before it, as joinCue gave it.
       const cutLine = o.split && o.line !== undefined && b[j].line !== undefined ? b[j].line! + (o.line - Math.floor(o.line)) : o.line;
-      if (o.manual || o.lock) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true, ...(o.lock ? { lock: true } : {}),
+      if (o.manual || o.lock) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true, ...(o.lock ? { lock: true } : {}), ...(o.sy ? { sy: o.sy } : {}),
         ...(o.split ? { line: cutLine, split: true } : {}),
         ...(o.glue ? { glue: true, line: j > 0 ? out[j - 1].line : b[j].line } : {}) };
       // The word-by-word retouches stay too.

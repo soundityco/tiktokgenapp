@@ -1,3 +1,4 @@
+import { syllableSpans } from "./syllables";
 import { FORMATS, FontId, PicSettings, SlideCfg, TextStyle } from "./types";
 import { buildGradeLut, drawLook, gradeKey, gradesColour, photoGrade } from "./grade";
 import { Grader } from "./gradeGL";
@@ -280,15 +281,28 @@ export function textOverflow(cfg: SlideCfg, text: string): boolean {
  * How much of a phrase is sung at `at` (the "lit" captions): the words started, the one being sung counted for the part
  * of it already sung when `sweep` (it fills left to right), else whole as soon as it starts. Words: their start and end.
  */
-export function litWords(words: { s: number; e: number }[], at: number, sweep: boolean): number {
+export function litWords(words: { s: number; e: number; w?: string; sy?: number[] }[], at: number, sweep: boolean): number {
   // A word lit right when it is sung reads late (the eye wants it a hair before, as karaoke and Apple Music do): lit
   // LIT_LEAD early. Measured: the aligned starts sit on the voice's attacks (median 0 / -10 ms on 375 words of two songs
   // against their isolated vocals), so the lag seen was the reading, not the timing. Filling: over the word, 0.5 s at most
-  // (a held word filled to its end looked slow).
+  // (a held word filled to its end looked slow). A word whose syllables were heard (`sy`) lights syllable by syllable
+  // ("vou" then "loir"), each when it is sung; the fraction returned for the word being sung is then of its letters.
   const t = at + LIT_LEAD;
   let n = 0;
   for (const w of words) {
     if (t < w.s) break;
+    const syl = w.sy && w.w ? syllableSpans(w.w) : null;
+    if (syl && w.sy && syl.length === w.sy.length && t < w.e) {
+      const len = w.w!.length, dur = Math.max(0.05, w.e - w.s), times = w.sy.map((f) => w.s + f * dur);
+      let k = 0;
+      while (k + 1 < times.length && t >= times[k + 1]) k++;
+      const [a, b] = syl[k];
+      const next = k + 1 < times.length ? times[k + 1] : w.e;
+      const fill = sweep ? clamp((t - times[k]) / Math.max(0.05, Math.min(0.25, next - times[k])), 0, 1) : 1;
+      const lit = a + (b - a) * fill;
+      if (lit >= len) { n += 1; continue; }
+      return n + lit / len;
+    }
     const fill = Math.min(LIT_FILL, Math.max(0.05, w.e - w.s));
     n += !sweep || t >= w.s + fill ? 1 : clamp((t - w.s) / fill, 0, 1);
     if (sweep && t < w.s + fill) break;
@@ -388,7 +402,9 @@ export function drawStyledText(
         if (done <= 0) break;
         const [a, b] = spans[j];
         if (done >= 1) { upTo = textW(ctx, p.line.slice(0, b)); continue; }
-        upTo = (a ? textW(ctx, p.line.slice(0, a)) : 0) + done * textW(ctx, p.line.slice(a, b));
+        // (the part of the word lit, in letters: a syllable, or the filling — interpolated inside the letter it reaches)
+        const chars = done * (b - a), i = Math.floor(chars);
+        upTo = textW(ctx, p.line.slice(0, a + i)) + (chars - i) * (a + i < b ? textW(ctx, p.line.slice(a + i, a + i + 1)) : 0);
       }
       before += spans.length;
       if (upTo === -Infinity) continue;

@@ -75,6 +75,7 @@ dans ton Google Drive.
 - **Verrouiller une ligne de paroles** (cadenas sur son clip, ou toutes d'un coup avec le cadenas au bout de la piste : fermé = toutes, point jaune = certaines) : elle reste telle quelle quand on recale les paroles ; « Recaler les paroles » demande d'abord confirmation s'il y a des retouches (tout recaler, ou seulement les lignes non verrouillées). — En test
 - **Recaler les mots dans leurs lignes** (menu Synchroniser) : chaque ligne reste à sa place, ses mots se recalent sur la voix ; aussi tout seul quand on place une ligne aux flèches. — En test
 - **Les lignes s'ajoutent** (style des paroles et du hook) : autour de sa place, vers le bas (la 1re ligne reste) ou vers le haut. — En test
+- **Syllabe par syllabe** : en phrase allumée, un mot bien entendu s'allume syllabe par syllabe (« vou » puis « loir »), chacune quand elle est chantée. — En test
 - **Paroles « Phrase, allumée mot à mot »** : la phrase entière à l'écran, ses mots s'allument quand ils sont chantés (d'un coup comme TikTok, ou en se remplissant comme Apple Music), les autres estompés (réglable) ; à côté de « Phrase par phrase » et « Mot à mot ». — En test
 - **Paroles hors du segment** : boucle activée, grisées ; boucle coupée, toute la timeline se lit comme le segment (en couleur, allumées quand la tête passe dessus), sans entrer dans le post. — En test
 - **Déplacer une ligne de paroles** : on la glisse par son corps sur la timeline, comme un clip de montage ; elle garde sa durée et reste entre ses voisines. — En test

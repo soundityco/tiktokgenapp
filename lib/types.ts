@@ -184,6 +184,9 @@ export interface LyricWord {
   /** Its line locked by the artist (padlock on its clip): kept as it is when the lyrics are placed again (from scratch,
    *  or the words in their lines). */
   lock?: true;
+  /** When each of its written syllables starts (lib/syllables), as fractions of the word's duration (the first 0):
+   *  the "lit" lyrics light it syllable by syllable. Only where the alignment heard the line well. */
+  sy?: number[];
   /** Starts a caption cut by hand (its own `line`): the cut stays when the lyrics are placed again. */
   split?: boolean;
   /** Joined by hand to the caption before it ("Join with the next"): no automatic cut there (a pause, a comma, length). */

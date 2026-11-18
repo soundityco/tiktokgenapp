@@ -56,6 +56,42 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("a hardly heard line with a twin heard well (a chorus)", () => {
+  it("takes its twin's rhythm", async () => {
+    const { inLines } = await import("@/lib/lyricsPipeline");
+    const { FA_VOCAB } = await import("@/lib/forcedAlign");
+    const V = Math.max(...Object.values(FA_VOCAB)) + 1, T = 2000;
+    const frames = new Float32Array(T * V).fill(Math.log(1e-4));
+    // the first copy heard clearly: its letters, one a frame from 1.0 s ("toutmaispasa")
+    const letters = [..."toutmaispasa"];
+    letters.forEach((c, i) => { for (let f = 50 + i * 6; f < 56 + i * 6; f++) frames[f * V + FA_VOCAB[c]] = 0; });
+    const em = { frames, T, V };
+    const ws: LyricWord[] = [
+      { w: "tout", s: 1, e: 1.3, line: 0 }, { w: "mais", s: 1.3, e: 1.6, line: 0 }, { w: "pas", s: 1.6, e: 1.9, line: 0 }, { w: "ça", s: 1.9, e: 2.4, line: 0 },
+      { w: "tout", s: 10, e: 12, line: 1 }, { w: "mais", s: 12, e: 12.02, line: 1 }, { w: "pas", s: 12.02, e: 12.04, line: 1 }, { w: "ça", s: 12.04, e: 12.3, line: 1 },
+      { w: "fin", s: 20, e: 20.5, line: 2 },
+    ];
+    const out = inLines(ws, em, false);
+    const a = out.slice(0, 4).map((x) => x.s - out[0].s), b = out.slice(4, 8).map((x) => x.s - out[4].s);
+    b.forEach((v, i) => expect(v).toBeCloseTo(a[i], 2));
+  });
+});
+
+describe("lines piled on one instant (a repeated Non)", () => {
+  it("share the room up to the next line; lines in time stay", async () => {
+    const { unpileLines } = await import("@/lib/lyricsPipeline");
+    const ws: LyricWord[] = [
+      { w: "Non", s: 17.64, e: 17.9, line: 1 }, { w: "Non", s: 17.66, e: 17.9, line: 2 },
+      { w: "Non", s: 18.16, e: 18.4, line: 3 }, { w: "Non", s: 18.42, e: 18.6, line: 4 },
+    ];
+    const out = unpileLines(ws);
+    expect(out[0].s).toBe(17.64);
+    expect(out[1].s).toBeCloseTo(17.9, 2);
+    expect(out[2].s).toBe(18.16);
+    expect(out[3].s).toBe(18.42);
+  });
+});
+
 describe("locked lines (padlock)", () => {
   it("stay as they are when the lyrics are placed again from scratch; the others take the new placing", async () => {
     const { keepLocked } = await import("@/lib/lyricsAlign");
@@ -125,6 +161,16 @@ describe("signs standing alone in the written lyrics (French spacing)", () => {
     const { splitWords } = await import("@/lib/lyricsAlign");
     expect(splitWords("J'ai eu le malheur de te revoir ?\n« oui » !").map((x) => x.w)).toEqual(
       ["J'ai", "eu", "le", "malheur", "de", "te", "revoir\u00a0?", "«\u00a0oui\u00a0»\u00a0!"]);
+  });
+});
+
+describe("a word lit syllable by syllable (its syllables heard)", () => {
+  it("lights « vou » then « loir », each at its time", async () => {
+    const { litWords, LIT_LEAD: L } = await import("@/lib/render");
+    const ws = [{ w: "vouloir", s: 1, e: 2, sy: [0, 0.5] }];
+    expect(litWords(ws, 1.2 - L, false)).toBeCloseTo(3 / 7, 5); // « vou »
+    expect(litWords(ws, 1.6 - L, false)).toBe(1); // « vou » + « loir »
+    expect(litWords(ws, 1.05 - L, true)).toBeLessThan(3 / 7); // filling « vou »
   });
 });
 
