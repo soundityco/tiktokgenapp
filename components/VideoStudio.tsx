@@ -611,9 +611,8 @@ export default function VideoStudio({
     () => buildCues(project.lyricWords ?? [], "phrase", { lineChars, wordTiming: settings.wordTiming }),
     [project.lyricWords, lineChars, settings.wordTiming]
   );
-  /** While playing, as Musixmatch: ↓ = the next line starts now. The line the last ↓ started (set where playing started:
-   *  the line under the playhead then), so each ↓ takes the next one whatever the old timing says. */
-  const tapCursor = useRef(-1);
+  /** While playing, as Musixmatch: the line the last arrow placed (null: none yet since playing started). */
+  const tapCursor = useRef<number | null>(null);
   const lyricWordsRef = useRef(project.lyricWords);
   lyricWordsRef.current = project.lyricWords;
   const songCues = useMemo(
@@ -2242,8 +2241,8 @@ export default function VideoStudio({
     if (outside) until = audioBuf.duration;
     let from = outside ? head : head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
     playStartRef.current = from;
-    // (↓ while playing: the line after the one under the playhead now comes first)
-    tapCursor.current = tapCues.reduce((k, c, i) => (c.start <= from + 0.05 ? i : k), -1);
+    // (the arrows start again: their first press takes the line nearest to it)
+    tapCursor.current = null;
     const cfgStart = outside ? 0 : cfg.crop.start;
     const from0 = from;
     // The view keeps the playhead where it is when play is pressed (between a third and 3/4): no jump back to a third.
@@ -2806,16 +2805,19 @@ export default function VideoStudio({
 
   /**
    * While playing (as Musixmatch), the arrows set where lines start, right at the moment pressed (no delay taken off):
-   * ↓ = the next line starts now (the one playing ends just before); ↑ = the line playing starts now (↓ pressed too early:
-   * pressed again at its true start, the line before lasts until then). Its words keep their rhythm inside it
-   * (`placeLine`), retouched (kept at the next sync).
+   * the first press since playing started takes the line whose start is nearest to that moment (the one being put right,
+   * a little early or late: never the line before it); then ↓ = the next line starts now (the one playing ends just
+   * before), ↑ = the line the last arrow placed starts now instead (↓ pressed too early). Its words keep their rhythm
+   * inside it (`placeLine`), retouched (kept at the next sync).
    */
   const lineStartsNow = (which: "next" | "this") => {
     const at = round2(Math.max(0, headRef.current));
     let words = lyricWordsRef.current ?? [];
     const opts = { lineChars, wordTiming: settingsRef.current.wordTiming };
     let cs = buildCues(words, "phrase", opts);
-    const i = which === "next" ? tapCursor.current + 1 : tapCursor.current, c = cs[i];
+    const nearest = () => cs.reduce((k, x, j) => (Math.abs(x.start - at) < Math.abs(cs[k].start - at) ? j : k), 0);
+    const cur = tapCursor.current;
+    const i = cur === null ? nearest() : which === "next" ? cur + 1 : cur, c = cs[i];
     if (!c || i < 0) return;
     const next = cs[i + 1];
     // (its end: as long as it was, never past the next line unless that one starts sooner than now)
@@ -4573,6 +4575,35 @@ export default function VideoStudio({
     void askPersistentStorage();
     onToast?.(t("Camera file found again: the sync and the settings are kept."));
   };
+  /**
+   * "Replace from this computer" for a take: another file in its place (a montage with the song under it, a new export),
+   * its row, size and place kept; synced at once (the song in it: placed on it and locked, else left free).
+   */
+  const replaceFor = useRef<string | null>(null);
+  const takeReplace = useRef<HTMLInputElement>(null);
+  const replaceTake = async (id: string, f: File) => {
+    const c = clips.find((x) => x.id === id);
+    if (!c) return;
+    stop();
+    // Nothing of the previous file stays: its working copy (Drive and device), its file on the device unless another
+    // video still reads it.
+    const oldKey = c.media ?? c.id;
+    if (c.drive?.copy?.id) void deleteDriveFile(c.drive.copy.id);
+    void delMedia(`copy:${id}`).catch(() => {});
+    if (!clips.some((x) => x.id !== id && (x.media ?? x.id) === oldKey)) void delMedia(`video:${oldKey}`).catch(() => {});
+    // (its own key on the device: never the previous file's, another video may still read it)
+    const media = uid();
+    try { await putMedia(`video:${media}`, f); } catch { /* private mode */ }
+    patchTake(id, { media, videoName: f.name, videoSize: f.size, name: f.name.replace(/\.[^.]+$/, ""), source: undefined, drive: undefined,
+      score: undefined, anchors: undefined, musicStart: undefined, musicEnd: undefined, takes: undefined, linked: false, clipIn: undefined, clipOut: undefined });
+    const a = anglesRef.current.get(id);
+    if (a) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); anglesRef.current.delete(id); }
+    setTakeFilesRev((n) => n + 1);
+    void askPersistentStorage();
+    const at = await prepareTake(id, f, c.grade, true);
+    if (at !== null && overlayOf(settingsRef.current, id)) patchOverlay(id, { offset: at });
+    onToast?.(at !== null ? t("“{name}” replaced and synced.", { name: f.name }) : t("“{name}” replaced: no match with the official audio, it stays free.", { name: f.name }));
+  };
   const resyncTake = async (c: VideoSetup): Promise<number | null> => {
     const b = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
     if (!b) { setTakeJobs((j) => ({ ...j, [c.id]: { p: 0, err: t("Not in this browser: pick it again.") } })); return null; }
@@ -4745,6 +4776,7 @@ export default function VideoStudio({
         <button disabled={(!!job && !job.err) || (cam === 0 && (!videoBlob || syncBusy))} onClick={() => { close(); if (cam === 0) void autoSync(); else void resyncTake(c); }}>{t("Sync again")}</button>
         {/* Its camera file found again on this computer (camera 1: in its own card's menu). */}
         {cam !== 0 && <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}>{t("Link the original file")}</button>}
+        {cam !== 0 && <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}>{t("Replace from this computer")}</button>}
         {c.takeOnly && <>
           <div className="sep" />
           <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
@@ -4801,6 +4833,8 @@ export default function VideoStudio({
         </button>
         <input ref={takeInput} type="file" accept="video/*,.mxf" multiple hidden
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void importTakes(f); }} />
+        <input ref={takeReplace} type="file" accept="video/*,.mxf" hidden
+          onChange={(e) => { const f = e.target.files?.[0], id = replaceFor.current; e.target.value = ""; replaceFor.current = null; if (f && id) void replaceTake(id, f); }} />
         <input ref={takeOriginal} type="file" accept="video/*,.mxf" hidden
           onChange={(e) => { const f = e.target.files?.[0], id = relinkFor.current; e.target.value = ""; relinkFor.current = null; if (f && id) void relinkTake(id, f); }} />
         {others.length > 0 && (

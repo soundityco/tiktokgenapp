@@ -363,6 +363,8 @@ export const FR: Record<string, string> = {
   "Lock it back on its synced place": "La reverrouiller à sa place synchronisée",
   "Locked to the audio (synced): click to unlock and slide it freely.": "Verrouillée sur l'audio (synchronisée) : clique pour la déverrouiller et la déplacer librement.",
   "Click to put it back where its sync places it, locked.": "Clique pour la remettre à sa place synchronisée, verrouillée.",
+  "“{name}” replaced and synced.": "« {name} » remplacée et synchronisée.",
+  "“{name}” replaced: no match with the official audio, it stays free.": "« {name} » remplacée : pas de correspondance avec l'audio officiel, elle reste libre.",
   "Show the video": "Afficher la vidéo",
   "Hide the video": "Masquer la vidéo",
   "Hide the video (preview and export; its sound stays)": "Masquer la vidéo (aperçu et export ; son son reste)",
