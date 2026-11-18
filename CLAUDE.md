@@ -72,6 +72,7 @@ Réponds en français. Andy (Angers) construit RAW by aurare (« RAW », une app
 - Sécurité : tout fichier relayé par le serveur (photos trouvées, couvertures TikTok, fichiers du partage) passe par `lib/safeFile.ts` (`fileHeaders` : types limités, pas de SVG, CSP sandbox, nosniff). Un seul partage en cours par compte. Les fichiers du plan B Drive ne sont lisibles par lien que le temps du partage (+5 min), fermés par `closeOpenLinks` (`lib/shareP2P.ts`).
 
 ## Design
+- Home (déconnecté) : `app/page.tsx` + `app/landing.css` (chargé sur cette page seulement) + `components/landing/` : héro centré, bande de posts 9:16 qui défile, studio vidéo animé en code (`StudioScene`, tourne seulement à l'écran), quatre styles (`STYLES`), six bénéfices en langage d'artiste, 3 étapes. Les posts (`posts.ts`, `PostCard`, CSS pur) sont dessinés en attendant de vraies vidéos faites avec RAW : fichier dans `public/home/`, chemin dans `video` / `poster` (jamais de TikToks d'autres artistes : leurs droits).
 - Look « éditorial » sombre, sobre, pas de look « SaaS généré par IA ». Accent blanc (le rouge ne sert qu'au danger) ; couleurs en variables CSS dans `app/globals.css` (`--accent`, `--on-accent`, `--danger`, `--video`, `--music`…), jamais en dur.
 - Attention aux noms de classes : `.card.sel` = slide sélectionnée (le menu déroulant utilise `.dd`).
 - Ne pas animer `filter`/`transform` sur une colonne (ça décale les menus flottants).

@@ -1,0 +1,188 @@
+/* The home page (app/page.tsx), loaded on it only. The app's look: dark, serif headlines, mono labels, hairlines.
+   The posts' grounds are drawn here (their tones), until real videos replace them (components/landing/posts.ts). */
+
+/* The page, its bar, its buttons, its steps and its end (from the first home page). */
+.lp { --lp-w: 1180px; min-height: 100dvh; color: var(--text); overflow-x: hidden; }
+.lp > section, .lp-nav, .lp-foot { width: min(var(--lp-w), calc(100% - 48px)); margin-inline: auto; }
+.lp .display em { font-style: italic; }
+.lp-nav { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; height: 64px; }
+.lp-nav::before { content: ""; position: absolute; inset: 0 calc(50% - 50vw); z-index: -1; background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.lp-ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+.lp-ctas.center { justify-content: center; }
+.lp-cta { text-decoration: none; height: 46px; padding: 0 20px; gap: 10px; font-size: 14px; border-radius: 10px; }
+.lp-fine { margin: 0; font-size: var(--fs-xs); color: var(--faint); letter-spacing: .02em; }
+/* Three steps, numbered, between hairlines. */
+.lp-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.lp-step { display: grid; gap: 10px; align-content: start; padding: 36px 32px 40px 0; }
+.lp-step + .lp-step { padding-left: 32px; border-left: 1px solid var(--line); }
+.lp-step-n { font-size: var(--fs-xs); color: var(--faint); letter-spacing: .1em; }
+.lp-step h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 34px; line-height: 1; }
+.lp-step p { margin: 0; color: var(--muted); line-height: 1.55; }
+.lp-kicker { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.lp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--grad-carousel); }
+.lp-end { display: grid; gap: 26px; justify-items: center; text-align: center; padding: 140px 0 120px; }
+.lp-end h2 { margin: 0; font-size: clamp(44px, 6vw, 84px); line-height: 1; letter-spacing: -.02em; }
+.lp-foot { display: flex; align-items: center; gap: 22px; padding: 28px 0 36px; border-top: 1px solid var(--line); font-size: var(--fs-xs); color: var(--faint); }
+.lp-foot a { color: var(--muted); text-decoration: none; font-family: var(--mono); }
+.lp-foot a:hover { color: var(--text); }
+@media (max-width: 900px) {
+  .lp-steps { grid-template-columns: minmax(0, 1fr); }
+  .lp-step, .lp-step + .lp-step { padding: 26px 0; border-left: 0; }
+  .lp-step + .lp-step { border-top: 1px solid var(--line); }
+  .lp-end { padding: 96px 0 80px; }
+}
+@media (max-width: 640px) {
+  .lp > section, .lp-nav, .lp-foot { width: calc(100% - 32px); }
+  .lp-foot { flex-wrap: wrap; }
+  .lp-ctas > * { flex: 1 1 100%; }
+  .lp-ctas .lp-cta { width: 100%; justify-content: center; }
+}
+
+.lp {
+  /* The posts' tones: two colours each, for a slow ground (decor of the page only). */
+  --tone-ember-a: #ff7a3d; --tone-ember-b: #5a1a12;
+  --tone-tide-a: #3fd6ff; --tone-tide-b: #0b2a4a;
+  --tone-dusk-a: #a184ff; --tone-dusk-b: #1c1240;
+  --tone-rose-a: #ff6fa8; --tone-rose-b: #3a0f2a;
+  --tone-moss-a: #b6e36a; --tone-moss-b: #13301c;
+  --tone-smoke-a: #d8d4cc; --tone-smoke-b: #1d1c22;
+  --lp-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+.lp-nav-link { margin-right: 18px; font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); text-decoration: none; }
+.lp-nav-link:hover { color: var(--text); }
+
+/* ---- the headline, centred ---- */
+.lp-hero2 { display: grid; justify-items: center; gap: 22px; padding: 96px 0 56px; text-align: center; }
+.lp-title2 { margin: 0; font-size: clamp(48px, 8.4vw, 112px); line-height: .95; letter-spacing: -.02em; }
+.lp-title2 em { font-style: italic; color: var(--faint); }
+.lp-lead2 { margin: 0; max-width: 560px; color: var(--muted); font-size: 16px; line-height: 1.6; }
+.lp-hero2 .lp-ctas { margin-top: 6px; }
+
+/* ---- the strip of posts sliding by (twice the list: it loops without a seam) ---- */
+.lp-strip { position: relative; overflow: hidden; padding: 8px 0 88px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+.lp-strip-track { display: flex; gap: 14px; width: max-content; animation: lp-slide 60s linear infinite; }
+.lp-strip:hover .lp-strip-track { animation-play-state: paused; }
+@keyframes lp-slide { to { transform: translateX(calc(-50% - 7px)); } }
+
+/* ---- a post, 9:16 ---- */
+.lp-post { position: relative; flex: none; aspect-ratio: 9 / 16; overflow: hidden; border-radius: 14px; background: var(--b);
+  border: 1px solid var(--line); isolation: isolate; container-type: inline-size; }
+.lp-post-sm { width: 172px; }
+.lp-post-md { width: 100%; }
+.lp-post-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tone-ember { --a: var(--tone-ember-a); --b: var(--tone-ember-b); }
+.tone-tide { --a: var(--tone-tide-a); --b: var(--tone-tide-b); }
+.tone-dusk { --a: var(--tone-dusk-a); --b: var(--tone-dusk-b); }
+.tone-rose { --a: var(--tone-rose-a); --b: var(--tone-rose-b); }
+.tone-moss { --a: var(--tone-moss-a); --b: var(--tone-moss-b); }
+.tone-smoke { --a: var(--tone-smoke-a); --b: var(--tone-smoke-b); }
+/* Its ground: three soft lights drifting slowly over a dark tone (a filmed scene, blurred). */
+.lp-post-ground { position: absolute; inset: -20%; z-index: -2; }
+.lp-post-ground i { position: absolute; border-radius: 50%; filter: blur(28px); opacity: .75; background: radial-gradient(circle, var(--a), transparent 68%); }
+.lp-post-ground i:nth-child(1) { width: 70%; height: 45%; left: 5%; top: 18%; animation: lp-drift-a 13s ease-in-out infinite alternate; }
+.lp-post-ground i:nth-child(2) { width: 55%; height: 38%; right: 0; top: 48%; opacity: .5; animation: lp-drift-b 17s ease-in-out infinite alternate; }
+.lp-post-ground i:nth-child(3) { width: 90%; height: 30%; left: -10%; bottom: 2%; opacity: .35; background: radial-gradient(circle, color-mix(in srgb, var(--a) 50%, #000), transparent 70%); animation: lp-drift-a 21s ease-in-out infinite alternate-reverse; }
+@keyframes lp-drift-a { to { transform: translate(18%, 10%) scale(1.15); } }
+@keyframes lp-drift-b { to { transform: translate(-22%, -14%) scale(.9); } }
+.lp-post::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, .55)); }
+.lp-post-grain { position: absolute; inset: 0; z-index: 0; background-image: var(--lp-grain); opacity: .22; mix-blend-mode: overlay; pointer-events: none; }
+
+/* Its lines, one after the other (each its share of the loop), in its look. */
+.lp-post-lines { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; padding: 0 9%; text-align: center; }
+.lp-post-line { grid-area: 1 / 1; opacity: 0; color: #fff; animation: var(--lp-line-anim) calc(var(--line) * var(--n)) infinite; }
+.lines-2 { --lp-line-anim: lp-line-2; }
+.lines-3 { --lp-line-anim: lp-line-3; }
+@keyframes lp-line-2 { 0% { opacity: 0; transform: translateY(6px); } 4%, 46% { opacity: 1; transform: none; } 50%, 100% { opacity: 0; } }
+@keyframes lp-line-3 { 0% { opacity: 0; transform: translateY(6px); } 3%, 30% { opacity: 1; transform: none; } 33.3%, 100% { opacity: 0; } }
+.look-serif .lp-post-line { font-family: var(--serif); font-style: italic; font-size: 11.5cqw; line-height: 1.05; text-shadow: 0 2px 18px rgba(0, 0, 0, .45); }
+.look-outline .lp-post-line { font-family: var(--sans); font-weight: 900; font-size: 10cqw; line-height: 1; letter-spacing: -.01em;
+  -webkit-text-stroke: .9cqw #000; paint-order: stroke fill; }
+.look-mono .lp-post-line { font-family: var(--mono); font-size: 6.4cqw; letter-spacing: .14em; text-transform: uppercase; padding: 2cqw 3.5cqw; background: rgba(0, 0, 0, .62); border-radius: 1.5cqw; }
+.look-karaoke .lp-post-line { font-family: var(--sans); font-weight: 800; font-size: 9cqw; line-height: 1.1; }
+.look-karaoke .lp-word { color: rgba(255, 255, 255, .38); animation: lp-word calc(var(--line) * var(--n)) infinite; }
+@keyframes lp-word { 0% { color: rgba(255, 255, 255, .38); } 3%, 100% { color: var(--lyrics); text-shadow: 0 0 14px color-mix(in srgb, var(--lyrics) 60%, transparent); } }
+
+/* ---- a block of the page: its head centred, then what it shows ---- */
+.lp-block { display: grid; gap: 44px; padding: 120px 0 40px; }
+.lp-block-head { display: grid; justify-items: center; gap: 18px; text-align: center; }
+.lp-block-head h2 { margin: 0; font-size: clamp(38px, 5.6vw, 68px); line-height: 1; letter-spacing: -.015em; }
+.lp-block-head h2 em { color: var(--faint); }
+.lp-dot.carousel { background: var(--grad-carousel); }
+.lp-dot.music { background: var(--grad-music); }
+.lp-studio .lp-dot { background: var(--grad-video); }
+
+/* ---- the video studio, playing (StudioScene) ---- */
+.lp-scene { --p: 0; position: relative; border: 1px solid var(--line-2); border-radius: 18px; overflow: hidden;
+  background: linear-gradient(180deg, var(--raised), var(--panel)); box-shadow: 0 40px 120px -40px var(--glow-video), 0 0 0 1px rgba(255, 255, 255, .02) inset; }
+.lp-scene-bar { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.lp-scene-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
+.lp-scene-bar span { margin-left: 10px; font-size: var(--fs-xs); color: var(--faint); letter-spacing: .08em; }
+.lp-scene-body { display: grid; grid-template-columns: minmax(180px, 250px) minmax(0, 1fr); gap: 28px; align-items: center; padding: 28px; }
+.lp-scene-preview { position: relative; aspect-ratio: 9 / 16; overflow: hidden; border-radius: 12px; border: 1px solid var(--line); isolation: isolate; container-type: inline-size; transition: background .2s; }
+.lp-scene-preview.cam-1 { --a: var(--tone-dusk-a); --b: var(--tone-dusk-b); background: var(--b); }
+.lp-scene-preview.cam-2 { --a: var(--tone-ember-a); --b: var(--tone-ember-b); background: var(--b); }
+.lp-scene-preview.cam-3 { --a: var(--tone-tide-a); --b: var(--tone-tide-b); background: var(--b); }
+.lp-scene-preview::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, .6)); }
+.lp-scene-hook { position: absolute; top: 12%; left: 8%; right: 8%; z-index: 1; text-align: center; font-family: var(--sans); font-weight: 800; font-size: 8cqw; color: #fff;
+  text-transform: uppercase; letter-spacing: .02em; -webkit-text-stroke: .7cqw #000; paint-order: stroke fill; }
+.lp-scene-lyric { position: absolute; left: 8%; right: 8%; bottom: 22%; z-index: 1; text-align: center; font-family: var(--sans); font-weight: 800; font-size: 9cqw; line-height: 1.1; color: rgba(255, 255, 255, .4);
+  animation: lp-in .25s ease-out; }
+.lp-scene-lyric .lit { color: #fff; text-shadow: 0 0 16px rgba(255, 255, 255, .35); }
+@keyframes lp-in { from { opacity: 0; transform: translateY(5px); } }
+.lp-scene-cam { position: absolute; top: 4%; right: 5%; z-index: 1; font-size: 5cqw; color: rgba(255, 255, 255, .7); letter-spacing: .1em; }
+.lp-scene-tl { position: relative; display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.lp-scene-status { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 4px; }
+.lp-scene-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 99px; font-family: var(--mono); font-size: var(--fs-xs); color: var(--music); border: 1px solid color-mix(in srgb, var(--music) 35%, transparent); background: color-mix(in srgb, var(--music) 8%, transparent); }
+.lp-scene-chip.gold { color: var(--lyrics); border-color: color-mix(in srgb, var(--lyrics) 35%, transparent); background: color-mix(in srgb, var(--lyrics) 8%, transparent); }
+.lp-scene-wave { width: 100%; height: 70px; display: block; }
+.lp-scene-wave path { fill: #6f6e78; }
+.lp-scene-row { position: relative; height: 28px; }
+.lp-scene-clip { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; gap: 6px; padding: 0 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: 11px; color: var(--text); border-left: 2px solid var(--c); border-radius: 2px; background: color-mix(in srgb, var(--c) 16%, var(--bg)); transition: background .2s; }
+.lp-scene-clip.on { background: color-mix(in srgb, var(--c) 32%, var(--bg)); }
+.lp-scene-row.hook { --c: var(--blue); }
+.lp-scene-row.lyrics { --c: var(--lyrics); }
+.lp-scene-row.video.cam-1 { --c: var(--accent); }
+.lp-scene-row.video.cam-2 { --c: var(--video); }
+.lp-scene-row.video.cam-3 { --c: var(--music); }
+.lp-scene-head { position: absolute; top: 6px; bottom: 6px; left: calc(10px + (100% - 20px) * var(--p)); width: 2px; border-radius: 1px; background: var(--accent-hi);
+  box-shadow: 0 0 12px rgba(255, 255, 255, .5); }
+
+/* ---- four styles, side by side ---- */
+.lp-styles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.lp-style { margin: 0; display: grid; gap: 12px; }
+.lp-style figcaption { display: grid; gap: 4px; }
+.lp-style figcaption b { font-family: var(--serif); font-weight: 400; font-size: 24px; }
+.lp-style figcaption span { font-size: var(--fs-xs); color: var(--faint); letter-spacing: .04em; }
+
+/* ---- what it does for you, six lines ---- */
+.lp-perks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.lp-perk { display: grid; gap: 10px; align-content: start; padding: 32px 28px 36px; border-bottom: 1px solid var(--line); }
+.lp-perk:not(:nth-child(3n + 1)) { border-left: 1px solid var(--line); }
+.lp-perk-ico { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line-2); color: var(--text); }
+.lp-perk h3 { margin: 6px 0 0; font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1.05; }
+.lp-perk p { margin: 0; color: var(--muted); line-height: 1.55; }
+.lp-steps { margin-top: 100px; }
+
+@media (max-width: 900px) {
+  .lp-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-perks { grid-template-columns: minmax(0, 1fr); }
+  .lp-perk:not(:nth-child(3n + 1)) { border-left: 0; }
+  .lp-perk { padding-inline: 0; }
+  .lp-scene-body { grid-template-columns: minmax(0, 1fr); justify-items: center; padding: 16px; }
+  .lp-scene-preview { width: min(240px, 70%); }
+  .lp-scene-tl { width: 100%; }
+}
+@media (max-width: 640px) {
+  .lp-nav-link { display: none; }
+  .lp-hero2 { padding: 56px 0 40px; }
+  .lp-block { padding-top: 80px; }
+  .lp-post-sm { width: 132px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-strip-track, .lp-post-ground i, .lp-post-line, .lp-word { animation: none; }
+  .lp-post-line:first-child { opacity: 1; }
+  .lp-word { color: var(--lyrics); }
+}
