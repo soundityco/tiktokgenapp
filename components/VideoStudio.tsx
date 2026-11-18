@@ -2831,19 +2831,20 @@ export default function VideoStudio({
 
   /**
    * While playing (as Musixmatch), the arrows set where lines start, right at the moment pressed (no delay taken off):
-   * the first press since playing started takes the line whose start is nearest to that moment (the one being put right,
-   * a little early or late: never the line before it); then ↓ = the next line starts now (the one playing ends just
-   * before), ↑ = the line the last arrow placed starts now instead (↓ pressed too early). Its words keep their rhythm
-   * inside it (`placeLine`), retouched (kept at the next sync).
+   * ↓ = the next line starts now (a line late: it had not started yet; the one playing ends just before), ↑ = the line lit
+   * starts now (a line early: it was already playing; ↓ pressed too early too). The line lit: the one playing, or the
+   * last one started, then the one the last arrow placed. Its words keep their rhythm inside it (`placeLine`), retouched
+   * (kept at the next sync).
    */
   const lineStartsNow = (which: "next" | "this") => {
     const at = round2(Math.max(0, headRef.current));
     let words = lyricWordsRef.current ?? [];
     const opts = { lineChars, wordTiming: settingsRef.current.wordTiming };
     let cs = buildCues(words, "phrase", opts);
-    const nearest = () => cs.reduce((k, x, j) => (Math.abs(x.start - at) < Math.abs(cs[k].start - at) ? j : k), 0);
-    const cur = tapCursor.current;
-    const i = cur === null ? nearest() : which === "next" ? cur + 1 : cur, c = cs[i];
+    // The line lit (playing, or the last one started: the list under the timeline shows it), or the one the last arrow
+    // placed: ↓ takes the one after it, ↑ that one.
+    const cur = tapCursor.current ?? cs.reduce((k, x, j) => (x.start - 0.02 <= at ? j : k), -1);
+    const i = which === "next" ? cur + 1 : Math.max(0, cur), c = cs[i];
     if (!c || i < 0) return;
     const next = cs[i + 1];
     // (its end: as long as it was, never past the next line unless that one starts sooner than now)
@@ -3008,13 +3009,13 @@ export default function VideoStudio({
     const seg = { ...base, start: cfg.crop.start, duration: cfg.crop.duration };
     const end = cfg.crop.start + cfg.crop.duration;
     // The playhead first (a thin line inside the segment), then the edges (each one crops its side), then the segment.
-    if (near(head) && (!loopRef.current || (head > cfg.crop.start + 0.05 && head < end - 0.05))) dragWave.current = { mode: "head", ...seg };
+    if (near(head) && (head < cfg.crop.start + 0.05 || head > end - 0.05 || Math.abs(head - cfg.crop.start) > 0.05 && Math.abs(head - end) > 0.05)) dragWave.current = { mode: "head", ...seg };
     else if (near(cfg.crop.start, 9) && (!near(end, 9) || Math.abs(e.clientX - xOf(cfg.crop.start)) <= Math.abs(e.clientX - xOf(end)))) dragWave.current = { mode: "start", ...seg };
     else if (near(end, 9)) dragWave.current = { mode: "end", ...seg };
     else if (t > cfg.crop.start && t < end) dragWave.current = { mode: "press", ...seg };
     // Unlocked: outside the segment, the playhead goes there (and follows the drag).
-    else if (!loopRef.current) { setHead(headAt(f)); dragWave.current = { mode: "head", ...seg }; }
-    else dragWave.current = { mode: viewRef.current ? "pan" : "none", ...seg };
+    // Outside the segment: the playhead goes there (and follows the drag), loop on or off.
+    else { setHead(headAt(f)); dragWave.current = { mode: "head", ...seg }; }
   };  /**
    * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
    * a click elsewhere puts the playhead there. `onCue`: also called for a click on a caption.
@@ -3025,7 +3026,7 @@ export default function VideoStudio({
       const r = el.getBoundingClientRect();
       const cfg = settingsRef.current;
       const w = viewRef.current ?? twRef.current; // what is on screen (live while playing)
-      const [lo, hi] = loopRef.current ? [cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration - 0.05)] : headRange();
+      const [lo, hi] = headRange();
       return round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, lo, hi));
     };
     return {
@@ -3064,7 +3065,8 @@ export default function VideoStudio({
    */
   const headRange = (): [number, number] => {
     const cfg = settingsRef.current;
-    return loopRef.current ? [cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05] : [0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - 0.05)];
+    // (anywhere, loop on or off: the loop only keeps the playing in the segment)
+    return [0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - 0.05)];
   };
   const waveMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, e.clientX);
@@ -5783,7 +5785,9 @@ export default function VideoStudio({
     document.addEventListener("pointerdown", down, true);
     return () => document.removeEventListener("pointerdown", down, true);
   }, []);
-  const currentIdx = current ? cues.indexOf(current) : -1;
+  // The line of the list under the timeline (every line of the song) lit and brought to the middle: the last one started
+  // at the playhead, still lit in a gap (as Musixmatch or Spotify: where the song is, even between two lines).
+  const currentIdx = songCues.reduce((k, c, i) => (c.start - 0.02 <= head ? i : k), -1);
   /** The line `idx` of the lyrics list to the middle of the part of the list on screen (between the header and the
    *  dock / the board's player); only the list scrolls, never the page; its own ends stop it. */
   const centreLine = (idx: number) => {
@@ -6693,7 +6697,7 @@ export default function VideoStudio({
                   </div>
                   <div className="lyric-timing">
                     {songCues.map((c, i) => (
-                      <div key={i} className={"cue-row" + (current && c.start === current.start ? " on" : "")}>
+                      <div key={i} className={"cue-row" + (i === currentIdx ? " on" : "")}>
                         <span className="nudge">
                           <button className="btn sm quiet" aria-label={t("Earlier")} title={t("Show this line earlier (−0.1 s)")} onClick={() => retime(i, "start", -1)}>−</button>
                           <span className="mono xs">{fmtTime(c.start)}</span>
