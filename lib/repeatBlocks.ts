@@ -1,4 +1,3 @@
-import type { LyricWord } from "./types";
 import { norm } from "./lyricsAlign";
 
 /**
@@ -149,73 +148,6 @@ export function repeatPeriodIn(frames: Float32Array[], min: number, max: number,
   let second = -1;
   for (const x of scores) if (!harmonic(x.period) && x.score > second) second = x.score;
   return best.score >= 0.5 && best.score - second >= 0.1 ? best : null;
-}
-
-// ---------- placing the copies ----------
-
-const GAP = 3; // letters' worth of time between two lines
-
-/**
- * Every copy of the repeated block placed one period after the other: inside a copy, its lines share the period by
- * their letters; the copies are phased on the lines the alignment heard clearly (`conf`), else on the first copy's
- * start. `lineOf`: the words' indexes of each line. Only the repeat's lines move; null when it does not fit in order.
- */
-export function placeRepeat(words: LyricWord[], lineOf: number[][], rep: Repeat, period: number, heardConf = 0.15, fit?: (placed: LyricWord[], lines: number[]) => number): LyricWord[] | null {
-  const unitLetters = Array.from({ length: rep.unit }, (_, j) => lineOf[rep.from + j].reduce((n, i) => n + Math.max(1, norm(words[i].w).length), 0) + GAP);
-  const total = unitLetters.reduce((a, b) => a + b, 0);
-  const off = unitLetters.map((_, j) => (period * unitLetters.slice(0, j).reduce((a, b) => a + b, 0)) / total);
-  const first = rep.from, last = rep.from + rep.unit * rep.times - 1;
-  const start = (k: number) => words[lineOf[k][0]].s;
-  // The phase: the lines heard clearly vote for where a copy starts (modulo the period), weighted by how well heard.
-  let sx = 0, sy = 0;
-  for (let k = first; k <= last; k++) {
-    const c = words[lineOf[k][0]].conf ?? 0;
-    if (c < heardConf) continue;
-    const ph = (((start(k) - off[(k - first) % rep.unit]) % period) + period) % period;
-    sx += c * Math.cos((2 * Math.PI * ph) / period); sy += c * Math.sin((2 * Math.PI * ph) / period);
-  }
-  const guess = start(first);
-  let s0 = guess;
-  if (sx || sy) {
-    const ph = (((Math.atan2(sy, sx) / (2 * Math.PI)) * period) % period + period) % period;
-    // The copy start with that phase nearest the first copy's own start.
-    s0 = ph + Math.round((guess - ph) / period) * period;
-  }
-  const before = first > 0 ? words[lineOf[first - 1][0]].s : -Infinity;
-  const after = last + 1 < lineOf.length ? start(last + 1) : Infinity;
-  const lines = Array.from({ length: last - first + 1 }, (_, i) => first + i);
-  // `fit`: how well the copies placed from a start agree with what the alignment heard (the letters expected at each
-  // moment against the ones heard there): every start over one period tried, the best kept.
-  if (fit) {
-    let bestScore = -Infinity, bestStart = s0;
-    for (let d = -period / 2; d < period / 2; d += 0.02) {
-      const at = s0 + d;
-      if (at <= before + 0.3 || at + period * rep.times > after + 0.5) continue;
-      const sc = fit(layout(at), lines);
-      if (sc > bestScore) { bestScore = sc; bestStart = at; }
-    }
-    s0 = bestStart;
-  }
-  if (s0 <= before + 0.3 || s0 + period * rep.times > after + 0.5) return null;
-  return layout(s0);
-
-  function layout(s0: number): LyricWord[] {
-  const out = words.slice();
-  for (let k = first; k <= last; k++) {
-    const r = k - first, j = r % rep.unit, copy = Math.floor(r / rep.unit);
-    const ls = s0 + copy * period + off[j];
-    const le = s0 + copy * period + (j + 1 < rep.unit ? off[j + 1] : period) - 0.04;
-    const idx = lineOf[k], n = idx.reduce((m, i) => m + Math.max(1, norm(words[i].w).length), 0);
-    let u = 0;
-    idx.forEach((i, q) => {
-      const len = Math.max(1, norm(words[i].w).length);
-      const span = le - ls;
-      out[i] = { ...words[i], s: ls + span * 0.75 * (u / n), e: q === idx.length - 1 ? le : ls + span * 0.75 * ((u + len) / n), doubt: undefined };
-      u += len;
-    });
-  }
-  return out;
-  }
 }
 
 /**

@@ -85,6 +85,8 @@ const GRAIN_FPS = 30;
 const picOf = (f: VideoFrame, matte?: number): PicSettings => ({ framing: f.framing ?? "fill", bars: f.bars ?? "blur", zoom: f.zoom, ox: f.ox, oy: f.oy, darken: 0 , matte });
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** The hook on screen at official time `time` (the first one when several overlap). */
+/** The film icon (components/Icon.tsx), drawn on the waveform's video band. */
+const FILM_PATH = typeof Path2D === "undefined" ? (undefined as unknown as Path2D) : new Path2D("M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4");
 const hookAt = (cfg: VideoSettings, time: number): VideoHook | undefined => {
   const rel = time - cfg.crop.start;
   return cfg.hooks?.find((h) => h.text.trim() && rel >= h.from - 0.001 && rel < (h.to ?? cfg.crop.duration));
@@ -1543,7 +1545,7 @@ export default function VideoStudio({
   };
   useEffect(() => {
     // (also a video never synced, placed by hand on the video track: its copy holds the passage shown)
-    if (!videoBlob || onCopy || !driveWrite || copyJob || !videoDur) return;
+    if (!videoBlob || onCopy || !driveWrite || copyJob || !videoDur || !audioBuf) return; // (the song decides what to copy)
     // (what of the file falls on the song where it is placed: the copy holds it all)
     const need = copyNeed(settings.offset, clipSpan(settings, videoDur), videoDur);
     if (need[1] - need[0] < 0.5) return;
@@ -1557,7 +1559,7 @@ export default function VideoStudio({
   // The project's other cameras: each gets its Drive working copy too (one after the other, after this video's own),
   // so another device opens the multicam. 15 s after the passage last moved, never while playing.
   useEffect(() => {
-    if (!driveWrite || copyJob || copyDueAt || playing) return;
+    if (!driveWrite || copyJob || copyDueAt || playing || !audioBuf) return;
     // (and the videos over it, placed on their own tracks: each copy holds what of it falls on the song there)
     const ovs = overlaysOf(settings);
     const next = [...(settings.angles ?? []), ...ovs.map((o) => o.clip)].map((id) => [clips.find((c) => c.id === id), anglesRef.current.get(id)] as const).find(([c, a]) => {
@@ -2210,7 +2212,7 @@ export default function VideoStudio({
     const others = projects.filter((c) => c.id !== id);
     const nextId = others[Math.max(0, projects.indexOf(clip) - 1)].id;
     // Its file is a camera of another project: the project goes, its take stays (that edit is not broken).
-    if (clips.some((c) => c.id !== id && c.angles?.includes(id))) {
+    if (usedAsCamera(id)) {
       onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === id ? { ...c, takeOnly: true, angles: undefined, cuts: undefined, versions: undefined } : c)), videoId: nextId }));
       onSaveNow();
       return;
@@ -2874,6 +2876,8 @@ export default function VideoStudio({
     const k = (e: KeyboardEvent) => {
       if (!sourceRef.current || !tapCues.length || e.metaKey || e.ctrlKey || e.altKey) return;
       if (/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement)?.tagName ?? "") || (e.target as HTMLElement)?.isContentEditable) return;
+      // (a control that takes the arrows itself — a colour wheel, a dial, a menu — keeps them)
+      if ((e.target as HTMLElement)?.closest?.('[role="slider"], [role="listbox"], [aria-haspopup], .dd-list')) return;
       if (e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); lineStartsNow("next"); }
       else if (e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); lineStartsNow("this"); }
     };
@@ -3036,7 +3040,6 @@ export default function VideoStudio({
   const scrub = (onCue?: () => void) => {
     const timeOf = (el: HTMLElement, x: number) => {
       const r = el.getBoundingClientRect();
-      const cfg = settingsRef.current;
       const w = viewRef.current ?? twRef.current; // what is on screen (live while playing)
       const [lo, hi] = headRange();
       return round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, lo, hi));
@@ -3068,7 +3071,7 @@ export default function VideoStudio({
   };
   /** Time under the pointer, kept inside the segment (where the playhead lives). */
   const headAt = (f: number) => {
-    const cfg = settingsRef.current, v = viewOf(), [lo, hi] = headRange();
+    const v = viewOf(), [lo, hi] = headRange();
     return round2(clamp(v.s + f * v.d, lo, hi));
   };
   /**
@@ -3410,11 +3413,19 @@ export default function VideoStudio({
     if (!wideTimeline()) { g.fillStyle = head0; g.fillRect(hx - 1, 0, 2, H); }
     if (videoBlob && videoDur > 0 && co > ci) {
       const v0 = clamp(X(bandSel.off + ci), 0, W);
-      if (clamp(X(bandSel.off + co), 0, W) - v0 > 56) {
-        g.fillStyle = "#0c0c0e";
+      if (clamp(X(bandSel.off + co), 0, W) - v0 > 80) {
+        // As on its clip: the film icon, then « VIDÉO 2 » (the number of the video set: its colour is the band's).
+        g.fillStyle = g.strokeStyle = "#0c0c0e";
+        g.save();
+        g.translate(Math.round(v0 + 5), 2.5);
+        g.scale(10 / 24, 10 / 24);
+        g.lineWidth = 2.4;
+        g.lineJoin = "round";
+        g.stroke(FILM_PATH);
+        g.restore();
         g.font = "600 10px ui-monospace, 'JetBrains Mono', monospace";
         g.textBaseline = "middle";
-        g.fillText("VIDEO", Math.round(v0 + 6), 8);
+        g.fillText(`${t("Video").toLocaleUpperCase()} ${bandSel.cam + 1}`, Math.round(v0 + 19), 8);
       }
     }
   };
@@ -4527,8 +4538,6 @@ export default function VideoStudio({
   // (the tracks laid out again: their slide put back to what is on screen, before it is seen)
   // After every layout (the elements may have changed, and their positions were set back by it): the tracks put back.
   useLayoutEffect(() => { findTimelineEls(); paintTracks(headRef.current); });
-  /** A time of the track as a position on the tracks (%), and a span as a width. */
-  const tl = (t: number) => `${((t - tw.s) / tw.d) * 100}%`;
   /**
    * Where something sits on the tracks, moved by the graphics card (transform, to the sub-pixel) rather than laid out
    * again (left): while the view slides under the playhead, the clips and their text glide instead of shaking.
@@ -4688,12 +4697,17 @@ export default function VideoStudio({
     const cuts = settings.cuts?.map((c) => (c.cam === i + 1 ? { ...c, cam: 0 } : c.cam > i + 1 ? { ...c, cam: c.cam - 1 } : c));
     setV({ angles: angles.length ? angles : undefined, cuts: angles.length ? cuts : undefined, ...more });
   };
-  const addAngle = (id: string) => setV({ angles: [...(settings.angles ?? []).filter(Boolean), id].slice(0, MAX_CAMS - 1) });
   /** A take only imported, used by no project: off the release, its file off this device. */
   const deleteTake = (c: VideoSetup) => {
+    const rest = clips.filter((x) => x.id !== c.id), media = c.media ?? c.id;
     onProject((p) => ({ ...p, videos: clipsOf(p).filter((x) => x.id !== c.id) }));
-    void delMedia(`video:${c.id}`).catch(() => {});
     onSaveNow();
+    // Its files (the one it reads: a replaced take has its own key) and its Drive copy, unless another video uses them.
+    if (!rest.some((x) => (x.media ?? x.id) === media)) { void delMedia(`video:${media}`).catch(() => {}); void delMedia(`poster:${media}`).catch(() => {}); }
+    const copyId = c.drive?.copy?.id;
+    if (copyId && !rest.some((x) => x.drive?.copy?.id === copyId)) void deleteDriveFile(copyId);
+    stopCopyOf(c.id);
+    void delMedia(`copy:${c.id}`).catch(() => {});
   };
   /** A camera chosen (button or key 1-4): playing, or paused in the middle of a shot, it cuts there to it; paused at a
    *  shot's start (a click on a shot puts the playhead there), the whole shot takes it. */
@@ -4726,7 +4740,8 @@ export default function VideoStudio({
     })();
     return () => { off = true; };
   }, [release.id, clips.length]); // eslint-disable-line react-hooks/exhaustive-deps
-  const usedAsCamera = (id: string) => clips.some((c) => c.angles?.includes(id));
+  /** A project uses this take: as a camera of its multicam or as a video over it. */
+  const usedAsCamera = (id: string) => clips.some((c) => c.id !== id && (c.angles?.includes(id) || [...(c.overlays ?? []), ...(c.overlay ? [c.overlay] : [])].some((o) => o?.clip === id)));
   // The same file imported twice (same name and size: before the check, or on two devices): one take kept (a
   // project's own first), every project using the other one uses it, its cuts kept on the right camera.
   useEffect(() => {

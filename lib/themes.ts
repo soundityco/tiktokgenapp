@@ -127,11 +127,6 @@ export function lexTags(text: string): string[] {
   return themeScores(text).filter((x) => x.score >= THRESHOLD).sort((a, b) => b.score - a.score).slice(0, MAX_TAGS).map((x) => x.id);
 }
 
-/** The tag a text speaks of most (its id), or null when nothing in the lexicon fits well enough. */
-export function themeOfText(text: string): string | null {
-  return lexTags(text)[0] ?? null;
-}
-
 // ---------- the texts no theme fits: grouped by the words they share ----------
 
 const STOP = new Set(("a au aux avec ce ces c'est cette d de des du elle en et eux il ils je j'ai la le les leur lui ma mais me mes moi mon ne nos notre nous on ou par pas pour qu que qui sa se ses si son sur ta te tes toi ton tu un une vos votre vous y est etre ai as avait fait faire tout tous tres plus bien comme quand dans meme encore aussi alors " +

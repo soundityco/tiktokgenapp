@@ -331,7 +331,7 @@ export async function applyRepeat(buf: AudioBuffer, em: Emissions, words: LyricW
   for (const x of plans) {
     const best = clearest.get(textOf(x.rep));
     if (!best) { console.info("[align] repeated lines, but no clear repeat in the sound: left as they are"); continue; }
-    const next = placeCopies(out, lineOf, x.rep, best.P, best.score, buf, em, french);
+    const next = await placeCopies(out, lineOf, x.rep, best.P, best.score, buf, em, french);
     if (next !== out) placed.push({ first: x.rep.from, last: x.rep.from + x.rep.unit * x.rep.times - 1 });
     out = next;
   }
@@ -386,8 +386,8 @@ function markUnsure(before: LyricWord[], after: LyricWord[]): LyricWord[] {
 }
 
 /** The copies of a repeated block placed one period apart, where the folded copies fit their letters best. */
-function placeCopies(words: LyricWord[], lineOf: number[][], rep: { from: number; unit: number; times: number }, P: number, score: number,
-  buf: AudioBuffer, em: Emissions, french: boolean): LyricWord[] {
+async function placeCopies(words: LyricWord[], lineOf: number[][], rep: { from: number; unit: number; times: number }, P: number, score: number,
+  buf: AudioBuffer, em: Emissions, french: boolean): Promise<LyricWord[]> {
   const first = rep.from, last = rep.from + rep.unit * rep.times - 1;
   const lines = lineOf.slice(first, last + 1);
   const s0 = words[lineOf[first][0]].s;
@@ -410,12 +410,23 @@ function placeCopies(words: LyricWord[], lineOf: number[][], rep: { from: number
   };
   const fit = foldedFit(em.frames, em.T, em.V, lo, hi, P, rep.times, toks, owner, edged);
   if (!fit) return words;
+  // One period earlier or later fits the folded letters almost as well (a copy laid over the intro's music: the other
+  // three still say it all), and a hair of difference in the model's numbers chose one or the other (WANNA TRY's intro
+  // chorus at 12.70 s, sung from 16.5). Of the two, the one whose copies all sound alike is kept: the copy least like the
+  // others (log-mel, `copiesAlike`) clearly more alike than the other's (WANNA TRY: 0.53 against 0.33, the intro's music).
+  let start = fit.start, worst = -Infinity;
+  for (const alt of [fit.start - P, fit.start + P]) {
+    if (alt < lo - 1e-6 || alt > hi + 1e-6 || alt + rep.times * P > end + 0.5) continue;
+    if (worst === -Infinity) worst = Math.min(...(await copiesAlike(buf, fit.start, P, rep.times)));
+    const theirs = Math.min(...(await copiesAlike(buf, alt, P, rep.times)));
+    if (theirs > worst + 0.1) { console.info(`[align] the copies moved one period (${(alt - fit.start).toFixed(2)} s): they sound alike (${(theirs * 100).toFixed(0)} % against ${(worst * 100).toFixed(0)} %)`); start = alt; worst = theirs; }
+  }
   const out = words.slice();
   const times: number[] = [];
   for (let k = 0; k < rep.times; k++) {
     unit.forEach((_, wi) => {
-      const rel = isNaN(fit.wordStart[wi]) ? (wi > 0 ? times[times.length - 1] - (fit.start + k * P) + 0.15 : 0) : fit.wordStart[wi];
-      times.push(fit.start + k * P + rel);
+      const rel = isNaN(fit.wordStart[wi]) ? (wi > 0 ? times[times.length - 1] - (start + k * P) + 0.15 : 0) : fit.wordStart[wi];
+      times.push(start + k * P + rel);
     });
   }
   const before = first > 0 ? words[lineOf[first - 1][0]].s : -Infinity;
@@ -427,5 +438,27 @@ function placeCopies(words: LyricWord[], lineOf: number[][], rep: { from: number
     out[i] = { ...words[i], s: sNow, e: lineEnd ? Math.max(sNow + 0.1, Math.min(next - 0.04, sNow + 1.2)) : Math.max(sNow + 0.05, next - 0.02), doubt: undefined };
   });
   console.info(`[align] ${rep.times} copies of ${rep.unit} lines placed one period apart (${P.toFixed(2)} s, the sound alike at ${(score * 100).toFixed(0)} %), from ${times[0].toFixed(2)} s`);
+  return out;
+}
+
+/** How much each copy sounds like the others (cosine of the log-mel frames, the copy against the mean of the others). */
+async function copiesAlike(buf: AudioBuffer, start: number, P: number, times: number): Promise<number[]> {
+  const fr = melFrames(await prepareAudio(buf, start, start + times * P));
+  const per = Math.floor(P / 0.02), out: number[] = [];
+  for (let k = 0; k < times; k++) {
+    let sim = 0, n = 0;
+    for (let f = 0; f < per; f++) {
+      const a = fr[k * per + f];
+      if (!a) continue;
+      const mean = new Float32Array(a.length);
+      let c = 0;
+      for (let q = 0; q < times; q++) { const b = fr[q * per + f]; if (q === k || !b) continue; for (let d = 0; d < a.length; d++) mean[d] += b[d]; c++; }
+      if (!c) continue;
+      let ab = 0, aa = 0, bb = 0;
+      for (let d = 0; d < a.length; d++) { const x = a[d], y = mean[d] / c; ab += x * y; aa += x * x; bb += y * y; }
+      sim += ab / Math.sqrt(aa * bb + 1e-9); n++;
+    }
+    out.push(n ? sim / n : 0);
+  }
   return out;
 }
