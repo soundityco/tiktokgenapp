@@ -566,7 +566,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyrics-track .cue:not(.video-clip):active { cursor: grabbing; }
 /* A line's padlock, on its clip's right (before its end handle): on hover, always once locked (kept when re-placing). */
 .lyric-track .cue .cue-lock { position: absolute; top: 50%; right: 9px; z-index: 2; display: inline-grid; place-items: center; width: 16px; height: 16px; margin-top: -8px;
-  border-radius: 4px; color: var(--muted); background: color-mix(in srgb, var(--bg) 70%, transparent); opacity: 0; cursor: pointer; pointer-events: auto; transition: opacity .15s; }
+  border-radius: 4px; color: var(--muted); background: color-mix(in srgb, var(--clip, var(--lyrics)) 30%, var(--bg)); opacity: 0; cursor: pointer; pointer-events: auto; transition: opacity .15s; }
 .lyric-track .cue:hover .cue-lock { opacity: .85; }
 .lyric-track .cue .cue-lock:hover { opacity: 1; color: var(--text); }
 .lyric-track .cue .cue-lock.on { opacity: 1; color: var(--clip, var(--lyrics)); }
