@@ -569,7 +569,12 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
   border-radius: 4px; color: var(--muted); background: color-mix(in srgb, var(--clip, var(--lyrics)) 30%, var(--bg)); opacity: 0; cursor: pointer; pointer-events: auto; transition: opacity .15s; }
 .lyric-track .cue:hover .cue-lock { opacity: .85; }
 .lyric-track .cue .cue-lock:hover { opacity: 1; color: var(--text); }
-.lyric-track .cue .cue-lock.on { opacity: 1; color: var(--clip, var(--lyrics)); }
+.lyric-track .cue .cue-lock.on { color: var(--clip, var(--lyrics)); }
+/* Locked: the clip's own icon is a padlock (no button in the way, readable at any zoom); the button only on hover, and
+   only on a clip wide enough for it (zoomed out: the icon and the text's start, as before). */
+.lyrics-track .cue { container: lyric-cue / inline-size; }
+@container lyric-cue (max-width: 72px) { .lyric-track .cue .cue-lock { display: none; } }
+.lyric-track .cue .cue-ico.locked { color: var(--clip, var(--lyrics)); }
 /* A text's or a hook's own handles, inside the clip (as a video clip's): its start on its coloured edge, its end a bar
    shown on hover; each clip its own, even where two touch. */
 .lyric-track .cue .cue-grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 1; touch-action: none; pointer-events: auto; }

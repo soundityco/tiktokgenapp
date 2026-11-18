@@ -5808,6 +5808,8 @@ export default function VideoStudio({
   /** A clip's own handles, inside it (as a video clip's): its start and its end, each its own even where two clips
    *  touch (one handle for both moved the next line when the end of this one was meant). Shown on hover. */
   /** A line's padlock, on its clip (shown on hover, always once locked): kept as it is when the lyrics are placed again. */
+  /** A line locked (all its words): its icon shows a padlock instead of the T. */
+  const lockedCue = (c: Cue) => c.words.length > 0 && c.words.every((x) => x.lock);
   const cueLockEl = (c: Cue) => {
     const on = c.words.length > 0 && c.words.every((x) => x.lock);
     return (
@@ -6637,7 +6639,7 @@ export default function VideoStudio({
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
                     <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={"song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
-                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}{mode !== "word" && grips(moveSongLine(i), moveSongLineEnd(i))}{mode !== "word" && cueLockEl(c)}</span>
+                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className={"cue-ico" + (lockedCue(c) ? " locked" : "")} aria-hidden><Icon name={lockedCue(c) ? "lock" : "type"} size={11} /></span>{c.text.replace(/\n/g, " ")}{mode !== "word" && grips(moveSongLine(i), moveSongLineEnd(i))}{mode !== "word" && cueLockEl(c)}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
@@ -6652,7 +6654,7 @@ export default function VideoStudio({
                       data-a={c.start} data-b={c.end}
                       data-at={Math.max(settings.crop.start, c.start)}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
-                      <span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}
+                      <span className={"cue-ico" + (lockedCue(c) ? " locked" : "")} aria-hidden><Icon name={lockedCue(c) ? "lock" : "type"} size={11} /></span>{c.text.replace(/\n/g, " ")}
                       {mode !== "word" && grips(moveLine(i), moveLineEnd(i))}
                       {mode !== "word" && cueLockEl(c)}
                     </button>
