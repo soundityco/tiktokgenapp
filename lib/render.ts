@@ -281,14 +281,22 @@ export function textOverflow(cfg: SlideCfg, text: string): boolean {
  * of it already sung when `sweep` (it fills left to right), else whole as soon as it starts. Words: their start and end.
  */
 export function litWords(words: { s: number; e: number }[], at: number, sweep: boolean): number {
+  // A word lit right when it is sung reads late (the eye wants it a hair before, as karaoke and Apple Music do): lit
+  // LIT_LEAD early. Measured: the aligned starts sit on the voice's attacks (median 0 / -10 ms on 375 words of two songs
+  // against their isolated vocals), so the lag seen was the reading, not the timing. Filling: over the word, 0.5 s at most
+  // (a held word filled to its end looked slow).
+  const t = at + LIT_LEAD;
   let n = 0;
   for (const w of words) {
-    if (at < w.s) break;
-    n += !sweep || at >= w.e ? 1 : clamp((at - w.s) / Math.max(0.05, w.e - w.s), 0, 1);
-    if (sweep && at < w.e) break;
+    if (t < w.s) break;
+    const fill = Math.min(LIT_FILL, Math.max(0.05, w.e - w.s));
+    n += !sweep || t >= w.s + fill ? 1 : clamp((t - w.s) / fill, 0, 1);
+    if (sweep && t < w.s + fill) break;
   }
   return n;
 }
+/** How early a word lights (s), and the longest a word takes to fill (s). */
+export const LIT_LEAD = 0.12, LIT_FILL = 0.5;
 
 export function drawStyledText(
   ctx: CanvasRenderingContext2D,
