@@ -393,10 +393,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
    audio: shown only. */
 .lyric-track .cue.video-clip { --vc: var(--cam, var(--video)); display: flex; align-items: center; gap: 6px; border-left-color: var(--vc); cursor: grab; touch-action: none;
   background: color-mix(in srgb, var(--vc) 16%, var(--bg)); }
-.lyric-track .cue.video-clip.on { background: color-mix(in srgb, var(--vc) 24%, var(--bg)); border-left-color: var(--vc); }
-/* The video set in the right column (clicked): lit more than the others, as a clicked text (no outline). */
-.lyric-track .cue.video-clip.sel { background: color-mix(in srgb, var(--vc) 34%, var(--bg)); color: var(--text); }
-.lyric-track .cue.video-clip.sel.on { background: color-mix(in srgb, var(--vc) 40%, var(--bg)); }
+.lyric-track .cue.video-clip.on { border-left-color: var(--vc); background: color-mix(in srgb, var(--vc) 16%, var(--bg)); } /* (its own tint kept under the playhead: lit only when clicked, .sel) */
+/* The video clicked (set in the right column): lit as a clicked text (no outline; see .cue.sel). */
+.lyric-track .cue.video-clip.sel { background: color-mix(in srgb, var(--vc) 30%, var(--bg)); color: var(--text); }
 
 /* Its left side stays on the left edge of the view while its start is past it (paintTracks): its start edge is not
    there then, so not draggable. Its name glows around the playhead, as a text's (--hx in px, from the name's left). */
@@ -2948,7 +2947,10 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
    lyrics in gold, the hooks in blue); the text stays white. */
 .lyrics-track { --clip: var(--lyrics); }
 .lyrics-track .cue:not(.outside), .hook-track .cue { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 16%, var(--bg)); color: var(--text); }
-.lyrics-track .cue.on, .hook-track .cue.on { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 24%, var(--bg)); }
+.lyrics-track .cue.on, .hook-track .cue.on { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 16%, var(--bg)); }
+/* The clip clicked, of any kind (one at a time on the whole timeline): lit more than the others. Playing (.on) only
+   makes its text glow under the playhead. */
+.lyrics-track .cue.sel, .hook-track .cue.sel { background: color-mix(in srgb, var(--clip) 30%, var(--bg)); }
 .lyric-track .cue .cue-ico { display: inline-flex; vertical-align: -1px; margin-right: 5px; color: var(--clip); }
 .lyric-track .cue.video-clip .cue-ico, .lyric-track .cue.cam-shot .cue-ico { margin-right: 0; color: var(--vc, var(--cam)); }
 .lyric-track .cue .cue-ico svg { display: block; }

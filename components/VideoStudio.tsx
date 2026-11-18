@@ -3036,7 +3036,7 @@ export default function VideoStudio({
    * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
    * a click elsewhere puts the playhead there. `onCue`: also called for a click on a caption.
    */
-  const scrubRef = useRef<{ px: number; at: number | null; moved: boolean } | null>(null);
+  const scrubRef = useRef<{ px: number; at: number | null; pick: string | null; moved: boolean } | null>(null);
   const scrub = (onCue?: () => void) => {
     const timeOf = (el: HTMLElement, x: number) => {
       const r = el.getBoundingClientRect();
@@ -3050,7 +3050,7 @@ export default function VideoStudio({
         stop();
         e.currentTarget.setPointerCapture(e.pointerId);
         const cue = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
-        scrubRef.current = { px: e.clientX, at: cue ? Number(cue.dataset.at) : null, moved: false };
+        scrubRef.current = { px: e.clientX, at: cue ? Number(cue.dataset.at) : null, pick: cue?.dataset.pick ?? null, moved: false };
       },
       onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
         const d = scrubRef.current;
@@ -3063,8 +3063,8 @@ export default function VideoStudio({
         const d = scrubRef.current;
         scrubRef.current = null;
         if (!d || d.moved) return;
-        if (d.at !== null) { setHead(round2(d.at)); onCue?.(); }
-        else setHead(timeOf(e.currentTarget, e.clientX));
+        if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); onCue?.(); }
+        else { setHead(timeOf(e.currentTarget, e.clientX)); setPick(null); }
       },
       onPointerCancel: () => { scrubRef.current = null; },
     };
@@ -4219,6 +4219,8 @@ export default function VideoStudio({
   // The video over it, picked on the preview or its track: the right column sets its take (colour, framing…).
   // (the take of the one picked; none: the column sets the video under them)
   const [overLook, setOverLook] = useState<string | null>(null);
+  /** The clip clicked on the timeline, one for all kinds ("text:<line>", "hook:<id>", "video"): lit, the others not. */
+  const [pick, setPick] = useState<string | null>(null);
   const ovSel = overlayOf(settings, overLook);
   const ovTake = ovSel ? clips.find((c) => c.id === ovSel.clip) : undefined;
   useEffect(() => { if (pinCam) setOverLook(null); }, [pinCam]);
@@ -4834,7 +4836,7 @@ export default function VideoStudio({
       // A camera whose file is not on this device (its shots stay black: never another camera's picture instead).
       const missing = ((cam !== null && cam > 0) || isOver) && angleRev > 0 && !anglesRef.current.has(c.id);
       const name = c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c);
-      const toggle = () => { stop(); foldTo(open ? null : c.id); if (cam !== null) setPinCam(cam === 0 ? "main" : c.id); };
+      const toggle = () => { stop(); foldTo(open ? null : c.id); if (cam !== null) { setPinCam(cam === 0 ? "main" : c.id); setPick("video"); } };
       const sync = job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
         : missing ? <span className="xs warn-text">{t("File not on this device")}</span>
         : job?.err ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
@@ -5000,7 +5002,7 @@ export default function VideoStudio({
       const d = clipDrag.current;
       clipDrag.current = null;
       // A click: the playhead there, and the right column (and the waveform's band) on this video.
-      if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(null); setPinCam("main"); }
+      if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(null); setPinCam("main"); setPick("video"); }
     };
     return (<>
         <div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
@@ -5029,7 +5031,7 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a, b) && (
-              <div className={"cue video-clip cam-0" + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (!camTake ? " sel" : "")}
+              <div className={"cue video-clip cam-0" + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake ? " sel" : "")}
                 style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
@@ -5381,7 +5383,7 @@ export default function VideoStudio({
       const d = ovDrag.current;
       ovDrag.current = null;
       // A click: the playhead there, and the right column on this video.
-      if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(o.clip); }
+      if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(o.clip); setPick("video"); }
     };
     return (<>
         <div key={o.clip} className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
@@ -5409,7 +5411,7 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a0, b0) && (
-              <div className={"cue video-clip over-clip cam-" + no + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
+              <div className={"cue video-clip over-clip cam-" + no + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (pick === "video" && picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
@@ -5490,7 +5492,7 @@ export default function VideoStudio({
               const a = x.cam > 0 ? clips.find((c) => c.id === angles[x.cam - 1]) : clip;
               // Its cut (the one that starts it, in the segment): its cross takes it away, the shot joins the one on its left.
               const own = x.cut >= 0 && Math.abs(sortedCuts[x.cut].at - x.from) < 1e-3 ? sortedCuts[x.cut] : null;
-              const go = () => { stop(); setPinCam(null); setHead(round2(x.from + 0.01)); };
+              const go = () => { stop(); setPinCam(null); setPick("video"); setHead(round2(x.from + 0.01)); };
               return (
                 <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from} data-a={x.from} data-b={x.to}
                   // Pulled up (as in CapCut): this camera leaves the cuts and goes over the video, on its own track.
@@ -5679,29 +5681,40 @@ export default function VideoStudio({
     const c = settingsRef.current.crop, h = dragHead.current;
     if (h >= c.start && h <= c.start + c.duration) setHead(inSeg(t));
   };
+  // The drag follows the window, not the handle: the handle grabbed can go while it moves (a line's end brought onto
+  // the next line: that border is the next line's start handle from then on), and the moves then reached the handle
+  // under the pointer, which moved the next line and the playhead. The one grabbed keeps it until it is let go.
   const edgeDrag = (move: (at: number, free: boolean) => void, wholeSong = false, magnetToo = false) => ({
     onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
       if (e.button === 1) return;
-      e.stopPropagation(); stop();
+      e.stopPropagation(); e.preventDefault(); stop();
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget.parentElement!).getBoundingClientRect(); // the track (its content may be sliding)
       edgeRef.current = { left: r.left, width: r.width };
       dragHead.current = headRef.current;
+      const onMove = (ev: PointerEvent) => {
+        const d = edgeRef.current;
+        if (!d) return;
+        const cfg = settingsRef.current;
+        const w = viewRef.current ?? twRef.current;
+        // (a line outside the segment: anywhere in the song)
+        const lo = wholeSong ? 0 : cfg.crop.start, hi = wholeSong ? audioBuf?.duration ?? Infinity : cfg.crop.start + Math.max(0.1, cfg.crop.duration);
+        let at = round2(clamp(w.s + clamp((ev.clientX - d.left) / d.width, 0, 1) * w.d, lo, hi));
+        const m = wholeSong && !magnetToo ? null : magnet(ev, at, d.width / w.d);
+        if (m !== null) at = m;
+        move(at, ev.altKey);
+      };
+      const done = (save: boolean) => () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", cancel);
+        if (edgeRef.current) { edgeRef.current = null; if (save) onSaveNow(); }
+      };
+      const up = done(true), cancel = done(false);
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", cancel);
     },
-    onPointerMove: (e: React.PointerEvent<HTMLSpanElement>) => {
-      const d = edgeRef.current;
-      if (!d) return;
-      const cfg = settingsRef.current;
-      const w = viewRef.current ?? twRef.current;
-      // (a line outside the segment: anywhere in the song)
-      const lo = wholeSong ? 0 : cfg.crop.start, hi = wholeSong ? audioBuf?.duration ?? Infinity : cfg.crop.start + Math.max(0.1, cfg.crop.duration);
-      let at = round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, lo, hi));
-      const m = wholeSong && !magnetToo ? null : magnet(e, at, d.width / w.d);
-      if (m !== null) at = m;
-      move(at, e.altKey);
-    },
-    onPointerUp: () => { if (edgeRef.current) { edgeRef.current = null; onSaveNow(); } },
-    onPointerCancel: () => { edgeRef.current = null; },
   });
   const moveLine = (i: number) => edgeDrag((at, free) => {
     const out = moveCueStart(project.lyricWords ?? [], cues, i, at, free);
@@ -6471,7 +6484,7 @@ export default function VideoStudio({
                     <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                     {hooks.map((h, i) => onTrack(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)) && (
-                      <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
+                      <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "") + (pick === "hook:" + h.id ? " sel" : "")} data-pick={"hook:" + h.id}
                         data-text={h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                         style={{
                           ...place(settings.crop.start + h.from), width: wFull(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)),
@@ -6519,7 +6532,7 @@ export default function VideoStudio({
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
-                    <button key={i} className={"cue" + (c === current ? " on" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
+                    <button key={i} className={"cue" + (c === current ? " on" : "") + (pick === "text:" + (keyOf(c) ?? i) ? " sel" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} data-pick={"text:" + (keyOf(c) ?? i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
                       data-text={c.text.replace(/\n/g, " ")}
                       // (a line across the segment's edge drawn whole, one clip: its end handle where it really ends)
                       style={{
