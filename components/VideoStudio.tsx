@@ -3096,8 +3096,9 @@ export default function VideoStudio({
           // (its start, else its end, to the segment's start or the playhead within 8 px; ⌘: free)
           const pps = width / w.d, ms = magnet(e, c.start + delta, pps), me = ms === null ? magnet(e, c.end + delta, pps) : null;
           if (ms !== null) delta = ms - c.start; else if (me !== null) delta = me - c.end;
-          const out = moveCueBy(words, cs, i, delta);
-          if (out) { setTab("lyrics"); onProject((p) => ({ ...p, lyricWords: out })); }
+          // (back where it started: the start again, never the last move kept)
+          const out = moveCueBy(words, cs, i, delta) ?? words;
+          setTab("lyrics"); onProject((p) => ({ ...p, lyricWords: out }));
           return;
         }
         setHead(timeOf(e.currentTarget, e.clientX));
@@ -5833,8 +5834,10 @@ export default function VideoStudio({
   const moveLine = (i: number) => edgeDrag((at, free) => {
     const c = cues[i], prev = cues[i - 1];
     if (prev && lockedCue(prev)) at = Math.max(at, prev.end); // (a locked line before: it stops there)
-    const out = moveCueStart(project.lyricWords ?? [], cues, i, at, free);
-    if (!out || !c) return;
+    // (every move is from the gesture's start: back where it was, "nothing moved" is the start again, not the last move
+    // kept — the line stayed a hair off a locked one it was brought back against)
+    if (!c) return;
+    const out = moveCueStart(project.lyricWords ?? [], cues, i, at, free) ?? project.lyricWords ?? [];
     setTab("lyrics");
     setHead(round2(clamp(at, prev ? prev.start + 0.2 : 0, c.end - 0.2)));
     onProject((p) => ({ ...p, lyricWords: out }));
@@ -5844,21 +5847,21 @@ export default function VideoStudio({
   const moveSongLine = (i: number) => edgeDrag((at, free) => {
     const c = songCues[i], prev = songCues[i - 1];
     if (prev && lockedCue(prev)) at = Math.max(at, prev.end);
-    const out = moveCueStart(project.lyricWords ?? [], songCues, i, at, free);
+    const out = c ? moveCueStart(project.lyricWords ?? [], songCues, i, at, free) ?? project.lyricWords ?? [] : null;
     if (out && c) { setHead(round2(clamp(at, prev ? prev.start + 0.2 : 0, c.end - 0.2))); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   const moveSongLineEnd = (i: number) => edgeDrag((at) => {
     const c = songCues[i], next = songCues[i + 1];
     if (next && lockedCue(next)) at = Math.min(at, next.start);
-    const out = moveCueEnd(project.lyricWords ?? [], songCues, i, at);
+    const out = c ? moveCueEnd(project.lyricWords ?? [], songCues, i, at) ?? project.lyricWords ?? [] : null;
     if (out && c) { setHead(round2(clamp(at, c.start + 0.2, next ? next.end - 0.2 : Infinity))); onProject((p) => ({ ...p, lyricWords: out })); }
   }, true);
   /** A line's end dragged (one followed by a gap, or the last: a glued end is the next line's start handle). */
   const moveLineEnd = (i: number) => edgeDrag((at) => {
     const c = cues[i], next = cues[i + 1];
     if (next && lockedCue(next)) at = Math.min(at, next.start); // (a locked line after: it stops there)
-    const out = moveCueEnd(project.lyricWords ?? [], cues, i, at);
-    if (!out || !c) return;
+    if (!c) return;
+    const out = moveCueEnd(project.lyricWords ?? [], cues, i, at) ?? project.lyricWords ?? [];
     setTab("lyrics");
     setHead(round2(clamp(at, c.start + 0.2, next ? next.end - 0.2 : Infinity))); // (on the edge pulled, exactly: as a hook's)
     onProject((p) => ({ ...p, lyricWords: out }));
