@@ -74,6 +74,31 @@ describe("a locked line (syllables)", () => {
   });
 });
 
+describe("Andy's hook « Don't you wanna try? » and « Wanna try » (unlocked to fix)", () => {
+  it("no word drags nor two start together; « Wanna try » takes its locked twin's rhythm", async () => {
+    const { inLines } = await import("@/lib/lyricsPipeline");
+    const { FA_VOCAB } = await import("@/lib/forcedAlign");
+    const V = Math.max(...Object.values(FA_VOCAB)) + 1, T = 4000;
+    const em = { frames: new Float32Array(T * V).fill(Math.log(1 / V)), T, V }; // hardly heard
+    const ws: LyricWord[] = [
+      { w: "Don’t", line: 22, s: 60.02, e: 60.898, manual: true }, { w: "you", line: 22, s: 60.898, e: 60.969, manual: true },
+      { w: "wanna", line: 22, s: 60.945, e: 61.107, manual: true }, { w: "try?", line: 22, s: 61.107, e: 61.25, until: 61.55, manual: true },
+      { w: "Wanna", line: 23, s: 62.36, e: 62.758, manual: true, lock: true }, { w: "try", line: 23, s: 62.758, e: 62.89, until: 63.079, manual: true, lock: true },
+      { w: "Wanna", line: 24, s: 63.156, e: 63.206, manual: true }, { w: "try", line: 24, s: 63.166, e: 63.216, until: 64.65, manual: true },
+      { w: "Tout", line: 25, s: 65.58, e: 65.68, manual: true, lock: true },
+    ];
+    const out = inLines(ws, em, true);
+    const hook = out.slice(0, 4).map((x) => x.s);
+    expect(hook[0]).toBe(60.02);
+    hook.slice(1).forEach((v, i) => expect(v - hook[i]).toBeGreaterThan(0.15)); // none together, « Don't » no longer dragging
+    expect(hook[1] - hook[0]).toBeLessThan(0.6);
+    expect(out[6].s).toBe(63.156);
+    expect(out[7].s - out[6].s).toBeGreaterThan(0.3); // « try » after « Wanna », as in the line before
+    expect(out.slice(4, 6).map((x) => x.s)).toEqual([62.36, 62.758]); // the locked one untouched
+    expect(out[2].sy).toEqual([0, 0.5]); // « wan » then « na », lit one after the other
+  });
+});
+
 describe("a word said again in a line (even rhythm)", () => {
   it("evens out « Non, non, non, non » with the first two eaten together", async () => {
     const { evenRepeats } = await import("@/lib/lyricsPipeline");

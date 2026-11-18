@@ -2,6 +2,7 @@ import type { LyricWord } from "./types";
 import { type Emissions, alignDevice, alignEmissions } from "./alignAI";
 import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench, wordsInSpan } from "./forcedAlign";
 import { findRepeats, foldedFit, melFrames, repeatPeriodIn } from "./repeatBlocks";
+import { syllableSpans } from "./syllables";
 import { alignSong, cleanHeard, norm, similarity, splitWords, syllables, withoutLost, wordsFromSegments } from "./lyricsAlign";
 import { mergeHeard, noSpeech, relayWeakLines } from "./lyricsRelay";
 import { type AsrModel, type AsrStep, prepareAudio, transcribe } from "./transcribe";
@@ -525,8 +526,9 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
       const k = own / rl;
       fixed = line.map((x, j) => ({ ...x, s: Math.round((from + (ref[j].s - s0) * k) * 1000) / 1000, e: Math.round((from + (ref[j].e - s0) * k) * 1000) / 1000, ...(ref[j].sy ? { sy: ref[j].sy } : {}) }));
     } else {
-      // hardly heard and retouched by hand: the artist's placing beats a guess; else only when its words do not look sung
-      if (line.some((x) => x.manual) || !looksOff(line)) continue;
+      // only when its words do not look sung (a word dragging, words piled up); retouched by hand or not: what the artist
+      // wants kept is locked, what is left unlocked is to fix
+      if (!looksOff(line)) continue;
       fixed = bySyllables(line, from, from + (Math.min(d.to, line[line.length - 1].until ?? d.to) - from));
     }
     fixed.forEach((x, j) => { out[d.a + j] = x; });
@@ -623,17 +625,17 @@ export function unpileLines(words: LyricWord[], only?: Set<number>): LyricWord[]
 const HEARD = 0.15;
 
 /** A line's words that do not look sung: one dragging over half the line with under a third of its syllables, or two
- *  piled on the same instant. */
+ *  starting less than 0.08 s apart (nobody sings two words in 80 ms; "you" and "wanna" 47 ms apart in WANNA TRY's hook). */
 function looksOff(line: LyricWord[]): boolean {
   if (line.length < 2) return false;
   const S = line[0].s, E = Math.max(line[line.length - 1].e, S + 0.05), total = line.reduce((n, x) => n + syllables(x.w), 0);
   let piled = 0;
   for (let i = 0; i < line.length; i++) {
     const end = i + 1 < line.length ? line[i + 1].s : line[i].e;
-    if (i + 1 < line.length && end - line[i].s < 0.04) piled++;
+    if (i + 1 < line.length && end - line[i].s < 0.08) piled++;
     if ((end - line[i].s) / (E - S) > 0.5 && syllables(line[i].w) / total < 0.35) return true;
   }
-  return piled >= 2;
+  return piled >= 1;
 }
 
 /** A line's words sharing it by syllables, from its start, at a sung pace (0.3 s a syllable at most), within `end`. */
@@ -645,7 +647,8 @@ function bySyllables(line: LyricWord[], from: number, end: number): LyricWord[] 
     const s = from + ((E - from) * at) / total;
     at += syl[i];
     const e = from + ((E - from) * at) / total;
-    const { sy: _sy, ...rest } = x; // (its syllables' times were heard elsewhere: none now)
-    return { ...rest, s: Math.round(s * 1000) / 1000, e: Math.round(Math.max(s + 0.05, e) * 1000) / 1000 };
+    // (its written syllables evenly inside it: lit one after the other, an estimate as the words' times)
+    const { sy: _sy, ...rest } = x, n = syllableSpans(x.w).length;
+    return { ...rest, s: Math.round(s * 1000) / 1000, e: Math.round(Math.max(s + 0.05, e) * 1000) / 1000, ...(n > 1 ? { sy: Array.from({ length: n }, (_, k) => Math.round((k / n) * 1000) / 1000) } : {}) };
   });
 }
