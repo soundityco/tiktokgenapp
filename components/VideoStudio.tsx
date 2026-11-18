@@ -1451,22 +1451,33 @@ export default function VideoStudio({
   // ---- The working copy for the other devices: made by itself once the take is synced ----
   // The passage used (+2 s), as rich as the take (lib/convert copyPlanFor), on the Drive; made again when the passage
   // moves out of it; 15 s after the last change (not while the sync is being set). Never from a copy.
-  const makeCopy = async (take?: { c: VideoSetup; blob: Blob; dur: number; off?: number }) => {
+  /**
+   * The part of a camera file a working copy holds: what of it falls on the song where it is placed (the timeline is the
+   * song: nothing past it is ever seen), its part kept on its track (`span`, trimmed); a little more on each side. A video
+   * longer than the song: the song's length of it; shorter: all of it; never synced, a 10 min file: still only what lies
+   * on the song where it was put (moved, its copy is made again).
+   */
+  const copyNeed = (off: number, span: [number, number], dur: number): [number, number] => {
+    const song = audioBuf?.duration ?? Infinity;
+    return [Math.max(0, span[0], -off), Math.min(dur, span[1], song - off)];
+  };
+  const copyRange = (off: number, span: [number, number], dur: number): [number, number] => {
+    const [a, b] = copyNeed(off, span, dur);
+    return [Math.max(0, a - 0.5), Math.min(dur, b + 0.5)];
+  };
+  /** A copy holds what it must (within 0.1 s: a sync nudged a hair needs no new copy). */
+  const copyHolds = (cp: { from: number; to: number } | undefined, need: [number, number]) => !!cp && cp.from <= need[0] + 0.1 && cp.to >= need[1] - 0.1;
+  const makeCopy = async (take?: { c: VideoSetup; blob: Blob; dur: number; off?: number; span?: [number, number] }) => {
     const blob = take ? take.blob : videoBlob;
     if (!blob || (!take && onCopy) || copyAc.current) return;
     const cur = settingsRef.current;
     const clipId = take ? take.c.id : clip.id;
     const videoDur = take ? take.dur : videoDurRef.current;
-    // A take of the multicam: the project's passage in its own time.
-    // (the video over it: where it is placed on its track)
-    let segS = cur.crop.start - (take ? take.off ?? take.c.offset : cur.offset), segE = segS + cur.crop.duration;
-    // The passages of every version, when they sit close enough: switching versions then needs no new copy.
-    for (const v of take ? [] : cur.versions ?? []) {
-      if (!v.v.crop || v.v.offset === undefined) continue;
-      const s0 = v.v.crop.start - v.v.offset, e0 = s0 + v.v.crop.duration;
-      if (Math.max(segE, e0) - Math.min(segS, s0) <= 180) { segS = Math.min(segS, s0); segE = Math.max(segE, e0); }
-    }
-    const from = Math.max(0, segS - 2), to = Math.min(videoDur, segE + 2);
+    // What of it falls on the song where it is placed (a camera of the multicam: its own sync; the video over it: its
+    // place on its track; camera 1: the project's), its part kept on its track.
+    const [from, to] = take
+      ? copyRange(take.off ?? take.c.offset, take.span ?? [0, videoDur], videoDur)
+      : copyRange(cur.offset, clipSpan(cur, videoDur), videoDur);
     const key = `${clipId}|${blob.size}|${from.toFixed(1)}|${to.toFixed(1)}`;
     if (to <= from || copyFailed.current === key) return;
     const ac = new AbortController();
@@ -1533,38 +1544,37 @@ export default function VideoStudio({
   useEffect(() => {
     // (also a video never synced, placed by hand on the video track: its copy holds the passage shown)
     if (!videoBlob || onCopy || !driveWrite || copyJob || !videoDur) return;
-    const segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
-    if (segE <= 0 || segS >= videoDur) return;
+    // (what of the file falls on the song where it is placed: the copy holds it all)
+    const need = copyNeed(settings.offset, clipSpan(settings, videoDur), videoDur);
+    if (need[1] - need[0] < 0.5) return;
     const cp = settings.drive?.copy;
-    if (cp && cp.of === videoBlob.size && cp.from <= Math.max(0, segS - 0.3) + 1e-3 && cp.to >= Math.min(videoDur, segE + 0.3) - 1e-3) return;
+    if (cp && cp.of === videoBlob.size && copyHolds(cp, need)) return;
     const DELAY = 15_000;
     setCopyDueAt(Date.now() + DELAY);
     dueTimer.current = window.setTimeout(() => { dueTimer.current = null; setCopyDueAt(null); void makeCopy(); }, DELAY);
     return () => { if (dueTimer.current) clearTimeout(dueTimer.current); dueTimer.current = null; setCopyDueAt(null); };
-  }, [videoBlob, onCopy, driveWrite, copyJob, settings.score, settings.offset, settings.crop.start, settings.crop.duration, settings.drive?.copy, videoDur]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [videoBlob, onCopy, driveWrite, copyJob, settings.score, settings.offset, settings.clipIn, settings.clipOut, settings.drive?.copy, videoDur, audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
   // The project's other cameras: each gets its Drive working copy too (one after the other, after this video's own),
   // so another device opens the multicam. 15 s after the passage last moved, never while playing.
   useEffect(() => {
     if (!driveWrite || copyJob || copyDueAt || playing) return;
-    const segS0 = settings.crop.start, segE0 = segS0 + settings.crop.duration;
-    // (and the video over it, placed by hand on its own track: its copy holds the part the segment shows)
+    // (and the videos over it, placed on their own tracks: each copy holds what of it falls on the song there)
     const ovs = overlaysOf(settings);
     const next = [...(settings.angles ?? []), ...ovs.map((o) => o.clip)].map((id) => [clips.find((c) => c.id === id), anglesRef.current.get(id)] as const).find(([c, a]) => {
       const ov = c ? ovs.find((o) => o.clip === c.id) : undefined;
       if (!c || !a || a.fromCopy || (c.score === undefined && !ov)) return false;
       const dur = a.el.duration;
       if (!Number.isFinite(dur)) return false;
-      const off = ov ? ov.offset : c.offset;
-      const s0 = segS0 - off, e0 = segE0 - off, cp = c.drive?.copy;
-      if (e0 <= 0 || s0 >= dur) return false;
-      return !(cp && cp.of === a.blob.size && cp.from <= Math.max(0, s0 - 0.3) + 1e-3 && cp.to >= Math.min(dur, e0 + 0.3) - 1e-3);
+      const off = ov ? ov.offset : c.offset, need = copyNeed(off, ov ? clipSpan(ov, dur) : [0, dur], dur), cp = c.drive?.copy;
+      if (need[1] - need[0] < 0.5) return false;
+      return !(cp && cp.of === a.blob.size && copyHolds(cp, need));
     });
     if (!next) return;
     const [c, a] = next;
-    const nov = ovs.find((o) => o.clip === c!.id);
-    const id = window.setTimeout(() => void makeCopy({ c: c!, blob: a!.blob, dur: a!.el.duration, off: nov ? nov.offset : undefined }), 15_000);
+    const nov = ovs.find((o) => o.clip === c!.id), dur = a!.el.duration;
+    const id = window.setTimeout(() => void makeCopy({ c: c!, blob: a!.blob, dur, off: nov ? nov.offset : undefined, span: nov ? clipSpan(nov, dur) : undefined }), 15_000);
     return () => clearTimeout(id);
-  }, [driveWrite, copyJob, copyDueAt, playing, angleRev, settings.crop.start, settings.crop.duration, anglesKey, overlaysOf(settings).map((o) => o.offset).join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [driveWrite, copyJob, copyDueAt, playing, angleRev, anglesKey, audioBuf, overlaysOf(settings).map((o) => `${o.offset}|${o.clipIn}|${o.clipOut}`).join()]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
