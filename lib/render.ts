@@ -291,9 +291,12 @@ export function litWords(words: { s: number; e: number; w?: string; sy?: number[
   let n = 0;
   for (const w of words) {
     if (t < w.s) break;
-    const syl = w.sy && w.w ? syllableSpans(w.w) : null;
-    if (syl && w.sy && syl.length === w.sy.length && t < w.e) {
-      const len = w.w!.length, dur = Math.max(0.05, w.e - w.s), times = w.sy.map((f) => w.s + f * dur);
+    // (a word with no syllable heard — a line the model hardly hears, or set by hand —: its syllables evenly over it, so
+    // "wanna" still lights "wan" then "na", never at once)
+    const syl = w.w ? syllableSpans(w.w) : null;
+    const fr = w.sy && syl && w.sy.length === syl.length ? w.sy : syl && syl.length > 1 ? syl.map((_, k) => k / syl.length) : null;
+    if (syl && fr && t < w.e) {
+      const len = w.w!.length, dur = Math.max(0.05, w.e - w.s), times = fr.map((f) => w.s + f * dur);
       let k = 0;
       while (k + 1 < times.length && t >= times[k + 1]) k++;
       const [a, b] = syl[k];

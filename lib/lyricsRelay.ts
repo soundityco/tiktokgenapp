@@ -47,7 +47,8 @@ export function relayWeakLines(words: LyricWord[], heardWords: LyricWord[], dura
     let j = i;
     while (j < lines.length && lines[j].weak) j++;
     const run = lines.slice(i, j);
-    if (run.some((l) => l.doubt)) {
+    // (a run piled up somewhere, or long — 4 lines or more hardly heard: lines at a plausible pace in the wrong place)
+    if (run.some((l) => l.doubt) || run.length >= 4) {
       const lo = i > 0 ? words[lines[i - 1].idx[lines[i - 1].idx.length - 1]].e : 0;
       const hi = j < lines.length ? words[lines[j].idx[0]].s : duration;
       // (a word heard before the line before ends is that line's, not the passage's)

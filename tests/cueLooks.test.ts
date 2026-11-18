@@ -254,6 +254,8 @@ describe("a word lit syllable by syllable (its syllables heard)", () => {
     expect(litWords(ws, 1.2 - L, false)).toBeCloseTo(3 / 7, 5); // « vou »
     expect(litWords(ws, 1.6 - L, false)).toBe(1); // « vou » + « loir »
     expect(litWords(ws, 1.05 - L, true)).toBeLessThan(3 / 7); // filling « vou »
+    // no syllable heard: evenly (« wan » then « na »)
+    expect(litWords([{ w: "wanna", s: 1, e: 2 }], 1.2 - L, false)).toBeCloseTo(3 / 5, 5);
   });
 });
 
