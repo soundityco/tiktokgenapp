@@ -71,7 +71,12 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   };
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
   // there, are heard again by the speech model, and its times are used for those lines (lib/lyricsRelay).
-  if (!forced.some((x) => x.weak && x.doubt)) { console.info("[align] no passage hard to hear: no relay"); overall(1); return finish(forced); }
+  // (a weak run of 4 lines or more is heard again even when nothing piles up in it: a singer the model follows badly all
+  // along places its lines at a plausible pace, but in the wrong place — Embers, its first verse 28 s early)
+  const longWeak = (ws: LyricWord[]) => new Set(ws.map((w) => w.line)).size >= 4;
+  const weakRuns: LyricWord[][] = [];
+  for (let i = 0, cur: LyricWord[] = []; i <= forced.length; i++) { const x = forced[i]; if (x?.weak) { cur.push(x); continue; } if (cur.length) weakRuns.push(cur); cur = []; }
+  if (!forced.some((x) => x.weak && x.doubt) && !weakRuns.some(longWeak)) { console.info("[align] no passage hard to hear: no relay"); overall(1); return finish(forced); }
   overall(0.55);
   // The passages to hear again: the runs of weak lines that hold a line piled up (doubt), not every weak line of the
   // song (a weak line nothing piles on keeps its place: hearing all between them was minutes for nothing).
@@ -79,7 +84,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   for (let i = 0, cur: LyricWord[] = []; i <= forced.length; i++) {
     const x = forced[i];
     if (x?.weak) { cur.push(x); continue; }
-    if (cur.some((w) => w.doubt)) runs.push(cur);
+    if (cur.some((w) => w.doubt) || longWeak(cur)) runs.push(cur);
     cur = [];
   }
   const weak = runs.flat();
