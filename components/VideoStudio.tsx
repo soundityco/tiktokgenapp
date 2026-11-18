@@ -7145,7 +7145,9 @@ export default function VideoStudio({
           {!dockSlot && audioBuf && <div className="board-player">{playerEl}</div>}
         </main>
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
-        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "")} ref={rightColRef}>
+        {/* (the clip selected on the timeline decides what the column shows, as in an editor: a text or a hook, its text
+            settings; a video clip, the video's — nothing selected, all) */}
+        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + (pick === "video" ? " focus-video" : pick?.startsWith("text:") || pick?.startsWith("hook:") ? " focus-text" : "")} ref={rightColRef}>
           <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} tone="video" />
           {/* Multicam: whose look the column sets (the camera on the preview). */}
           {((settings.angles ?? []).some(Boolean) || overlaysOf(settings).length > 0) && (() => {

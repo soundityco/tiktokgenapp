@@ -2917,3 +2917,11 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* A synced video over another: its padlock on the clip (locked: it only changes rows; click: unlocked, or put back). */
 .video-clip .clip-lock { display: inline-grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; opacity: .75; cursor: pointer; }
 .video-clip .clip-lock:hover { opacity: 1; }
+
+/* Computer: the right column follows the clip selected on the timeline (as in an editor): a lyrics line or a hook, the
+   text settings only; a video clip, the video's only (which camera, framing, colour, export). Nothing selected: all.
+   (The phone's Style page has its own parts.) */
+@media (min-width: 1001px) {
+  .video-col-r.focus-video .sheet-text { display: none; }
+  .video-col-r.focus-text .look-of, .video-col-r.focus-text [data-sec="video-render"], .video-col-r.focus-text #video-color { display: none; }
+}
