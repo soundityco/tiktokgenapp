@@ -3315,7 +3315,6 @@ export default function VideoStudio({
     // The band shows the video set in the right column (camera 1, a camera of the multicam, the one over it), in its colour.
     const bandSel = bandOf();
     const vid = css.getPropertyValue(["--accent", "--video", "--music", "--lyrics"][bandSel.cam] ?? "--video").trim() || "#a184ff";
-    const mus = css.getPropertyValue("--music").trim() || "#4fffb0";
     g.fillStyle = "#16161c";
     g.fillRect(0, 0, W, H);
     const v = vw ?? { s: 0, d: dur };
@@ -3332,12 +3331,6 @@ export default function VideoStudio({
       g.fillRect(v0, 0, Math.max(0, v1 - v0), H);
       g.globalAlpha = 1;
       g.fillRect(v0, 0, Math.max(0, v1 - v0), 15);
-      if (bandSel.cam === 0 && settings.musicStart != null && settings.musicEnd != null) {
-        const m0 = clamp(X(settings.offset + settings.musicStart), 0, W);
-        const m1 = clamp(X(settings.offset + settings.musicEnd), 0, W);
-        g.fillStyle = mus;
-        g.fillRect(m0, H - 4, Math.max(0, m1 - m0), 4);
-      }
     }
     g.fillStyle = accent; // the segment: a faint ground of the accent
     g.globalAlpha = 0.09;
@@ -3355,8 +3348,7 @@ export default function VideoStudio({
     // (on the screen's pixel grid: not zoomed, the playhead moves less than a pixel a frame, and drawn between pixels
     // it blurred and sharpened in turn, which read as stutter)
     const hx = Math.round(X(at) * dpr) / dpr, trail = 70;
-    // Between the violet band (top, 15 px) and the green strip (bottom, 4 px) when there is a camera video, never
-    // under them; else centred on the whole height.
+    // Under the video's band (top, 15 px) when there is a camera video, never under it; else centred on the whole height.
     const band = videoBlob && videoDur > 0;
     const top = band ? 17 : 9, room = H - top - (band ? 6 : 9), mid = top + room / 2, half = room / 2;
     const xs: number[] = [], ups: number[] = [], downs: number[] = [];
@@ -3431,7 +3423,7 @@ export default function VideoStudio({
   };
   const paintWaveRef = useRef(paintWave);
   paintWaveRef.current = paintWave;
-  useEffect(() => { paintWaveRef.current(viewRef.current, headRef.current); }, [peaks, settings.crop, settings.offset, settings.clipIn, settings.clipOut, settings.musicStart, settings.musicEnd, settings.linked, settings.takes, head, view, audioBuf, videoBlob, videoDur, waveBox, peakMax]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { paintWaveRef.current(viewRef.current, headRef.current); }, [peaks, settings.crop, settings.offset, settings.clipIn, settings.clipOut, settings.linked, settings.takes, head, view, audioBuf, videoBlob, videoDur, waveBox, peakMax]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- lyrics timing ----
 
