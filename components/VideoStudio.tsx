@@ -646,7 +646,7 @@ export default function VideoStudio({
   // (outside the segment, the playhead free while unlocked: the song's line there, on the preview only, never exported)
   activeRef.current = (time: number) => {
     const c = settingsRef.current.crop;
-    if (time < c.start || time > c.start + c.duration) return songCues.length ? activeCue(songCues, time) : null;
+    if (time < c.start || time > c.start + c.duration) return songCues.find((x) => time >= x.start && time < x.end) ?? null;
     return cues.length ? activeCue(cues, time) : null;
   };
 
@@ -1009,8 +1009,11 @@ export default function VideoStudio({
     g.fillRect(0, 0, W, H);
     // The video under the others hidden (its eye): black there (the ones over it, the bars and the texts stay).
     if (cfg.videoHidden) pic = null;
-    // Preview, before the video is ready (a big camera file takes a while to open): its last picture.
-    if (preview && !pic && !cfg.videoHidden && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
+    // Preview, before the video is ready (a big camera file takes a while to open): its last picture; only where the
+    // video is (past its end, or before it, black: never its last picture held there).
+    const vEl = videoRef.current, [vci, vco] = clipSpan(cfg, vEl && Number.isFinite(vEl.duration) ? vEl.duration : Infinity);
+    const inVideo = time >= cfg.offset + vci - 0.01 && time <= cfg.offset + vco + 0.01;
+    if (preview && !pic && !cfg.videoHidden && inVideo && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
       pic = desqueeze(pic, angle ? angle.desqueeze : cfg.desqueeze);
@@ -1086,13 +1089,13 @@ export default function VideoStudio({
     drawMatte(g, W, H, matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
-    // Outside the segment (the preview only, the playhead free while unlocked): the song's lyrics there, no hook (the
-    // hooks belong to the post's segment).
+    // Outside the segment (the preview, the loop off): what is under the playhead there, as in an editing app (the song's
+    // line for its own time only, a hook that runs there).
     const segEnd = cfg.crop.start + cfg.crop.duration, outside = !!preview && (time < cfg.crop.start || time > segEnd + 0.05);
     const at = outside ? time : Math.min(time, segEnd - 0.5 / exportSettings(cfg.source?.fps, exportPrefsRef.current).fps);
     const cue = cfg.captions ? activeRef.current(at) : null;
     const caption = cue ? drawStyledText(g, cue.text, cueStyleRef.current(cue), W, H) : null;
-    const hook = cfg.showHooks === false || outside ? undefined : hookAt(cfg, at);
+    const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
     return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
   }, []);
   const captionBox = useRef<TextBox | null>(null);
@@ -4903,7 +4906,7 @@ export default function VideoStudio({
     const trimmed = ci > 0.01 || co < len - 0.01;
     const vol = clamp(settings.clipVolume ?? 0, 0, 1);
     const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
-      if (e.button !== 0 || (locked && mode !== "move")) return;
+      if (e.button !== 0) return; // (trimmed even locked: the sync stays, only a part of the video is kept)
       e.stopPropagation(); stop();
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
@@ -4988,13 +4991,13 @@ export default function VideoStudio({
                 style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
-                {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
+                <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name">
                   <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">1</b>
                   {locked && <Icon name="lock" size={11} />}
                   <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
                 </span>
-                {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
+                <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
             {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
@@ -5285,7 +5288,7 @@ export default function VideoStudio({
     const setO = (patch: Partial<VideoOverlay>) => patchOverlay(o.clip, patch);
     const inSeg = (t: number) => round2(clamp(t, settings.crop.start, end - 0.05));
     const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
-      if (e.button !== 0 || (locked && mode !== "move")) return;
+      if (e.button !== 0) return; // (trimmed even locked: the sync stays, only a part of the video is kept)
       e.stopPropagation(); stop();
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
@@ -5363,13 +5366,13 @@ export default function VideoStudio({
               <div className={"cue video-clip over-clip cam-" + no + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
-                {!locked && <span className="clip-edge in" onPointerDown={down("in")} />}
+                <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{no + 1}</b>
                   {synced && <button className="clip-lock" aria-label={locked ? t("Unlock: slide it freely") : t("Lock it back on its synced place")}
                     title={locked ? t("Locked to the audio (synced): click to unlock and slide it freely.") : t("Click to put it back where its sync places it, locked.")}
                     onPointerDown={(e) => e.stopPropagation()} onClick={toggleLock}><Icon name={locked ? "lock" : "unlock"} size={11} /></button>}
                   <span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
-                {!locked && <span className="clip-edge out" onPointerDown={down("out")} />}
+                <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
             {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + no} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
@@ -5823,7 +5826,7 @@ export default function VideoStudio({
   /** The edited text put in the words; with `cutAt` (characters), the caption is also cut there in two. */
   const saveCue = (cutAt?: number) => {
     const ed = editCue;
-    const c = ed && cues[ed.i];
+    const c = ed && songCues[ed.i];
     if (!ed || !c) { setEditCue(null); return; }
     const all = project.lyricWords ?? [];
     const text = ed.text.trim().replace(/\s+/g, " ");
@@ -5842,14 +5845,16 @@ export default function VideoStudio({
     if (out !== all) { onProject((p) => ({ ...p, lyricWords: out })); onSaveNow(); }
   };
 
+  // (the list holds every line of the song, the segment's and the others: `songCues`)
   const retime = (i: number, what: "start" | "end", dir: 1 | -1) => {
-    const c = cues[i];
+    const c = songCues[i];
     // Word by word: that mode's own timing (the phrases never move from it).
-    const out = c && (mode === "word" ? retimeWordCue : retimeCue)(project.lyricWords ?? [], cues, i, what, dir * 0.1);
+    const out = c && (mode === "word" ? retimeWordCue : retimeCue)(project.lyricWords ?? [], songCues, i, what, dir * 0.1);
     if (!out) return;
     stop();
-    // The preview shows the edge that moved.
-    setHead(round2(what === "start" ? Math.max(settings.crop.start, c.start + dir * 0.1) : Math.max(c.start, c.end + dir * 0.1 - 0.3)));
+    // The preview shows the edge that moved (where the playhead may go).
+    const [lo, hi] = headRange();
+    setHead(round2(clamp(what === "start" ? c.start + dir * 0.1 : Math.max(c.start, c.end + dir * 0.1 - 0.3), lo, hi)));
     onProject((p) => ({ ...p, lyricWords: out }));
   };
 
@@ -6452,6 +6457,15 @@ export default function VideoStudio({
                   <div className="track-content">
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
+                  {/* (a line across the segment's edge: its part outside it too, where it still plays) */}
+                  {songCues.map((c, i) => {
+                    const a = c.start < settings.crop.start && c.end > settings.crop.start ? [c.start, settings.crop.start] : null;
+                    const z = c.start < end && c.end > end ? [end, c.end] : null;
+                    return [a, z].map((part, k) => part && onTrack(part[0], part[1]) && (
+                      <span key={"p" + i + k} className="cue outside" data-a={part[0]} data-b={part[1]} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
+                        style={{ ...place(part[0]), width: wFull(part[0], part[1]) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}</span>
+                    ));
+                  })}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
                     <span key={"o" + i} className="cue outside" data-a={c.start} data-b={c.end} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
                       style={{ ...place(c.start), width: wFull(c.start, c.end) }}><span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>{c.text.replace(/\n/g, " ")}</span>
@@ -6674,14 +6688,14 @@ export default function VideoStudio({
 
           {tab === "lyrics" && (
             <div className="tab-body">
-              {cues.length > 0 && (
+              {songCues.length > 0 && (
                 <div className="stack" style={{ gap: 4 }}>
                   <div className="cue-row cue-legend muted xs">
                     <span>{t("Starts")}</span><span className="grow row" style={{ gap: 6 }}>{t("Line")} <Hint text={t("Fine-tune each line by 0.1 s. Your retouches are kept when you edit the lyrics or sync again.")} /></span><span>{t("Ends")}</span>
                   </div>
                   <div className="lyric-timing">
-                    {cues.map((c, i) => (
-                      <div key={i} className={"cue-row" + (c === current ? " on" : "")}>
+                    {songCues.map((c, i) => (
+                      <div key={i} className={"cue-row" + (current && c.start === current.start ? " on" : "")}>
                         <span className="nudge">
                           <button className="btn sm quiet" aria-label={t("Earlier")} title={t("Show this line earlier (−0.1 s)")} onClick={() => retime(i, "start", -1)}>−</button>
                           <span className="mono xs">{fmtTime(c.start)}</span>
@@ -6697,11 +6711,11 @@ export default function VideoStudio({
                                 onMouseDown={(e) => e.preventDefault()} onClick={() => saveCue(cueInput.current?.selectionStart ?? undefined)}>{t("Cut here")}</button>
                             )}
                             {/* The next line joined to this one (to move a cut: join, then "Cut here" where it should be). */}
-                            {mode === "phrase" && cues[i + 1] && (
+                            {mode === "phrase" && songCues[i + 1] && (
                               <button className="btn sm" title={t("Join the next line to this one, its timing kept: then cut it where you want")}
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => {
-                                  const next = cues[i + 1];
+                                  const next = songCues[i + 1];
                                   onProject((p) => ({ ...p, lyricWords: joinCue(p.lyricWords ?? [], c, next) }));
                                   setEditCue({ i, text: `${editCue.text} ${next.text.replace(/\n/g, " ")}`.trim() });
                                   onSaveNow();
@@ -6710,7 +6724,7 @@ export default function VideoStudio({
                             <button className="btn sm primary" onMouseDown={(e) => e.preventDefault()} onClick={() => saveCue()}>{t("OK")}</button>
                           </span>
                         ) : (<>
-                          <button className="cue-text truncate xs" onClick={() => { stop(); setHead(round2(Math.max(settings.crop.start, c.start))); }}>
+                          <button className="cue-text truncate xs" onClick={() => { stop(); const [lo, hi] = headRange(); setHead(round2(clamp(c.start, lo, hi))); }}>
                             {c.text.replace(/\n/g, " ⏎ ")}
                           </button>
                           {c.words.some((x) => x.doubt) && !c.words.some((x) => x.manual) && (
