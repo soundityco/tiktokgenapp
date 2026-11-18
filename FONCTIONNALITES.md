@@ -89,7 +89,7 @@ dans ton Google Drive.
 
 ## Studio vidéo
 
-- **Plusieurs vidéos par release**, chacune avec son fichier caméra ; « + » en crée une avec les mêmes réglages, « Dupliquer » réutilise le même fichier. — En ligne
+- **Plusieurs vidéos par release**, chacune avec son fichier caméra ; « + » en crée une de zéro (le même morceau et les mêmes paroles, sans vidéo ni hook ; numérotée Vidéo 1, 2, 3… dans chaque release), « Dupliquer » refait la même vidéo (même fichier, mêmes réglages). — En ligne
 - **Synchro automatique** de la prise sur l'audio officiel, même filmée avec le son du téléphone, une voix seule au casque, ou le passage filmé plusieurs fois (chaque prise est retrouvée). — En ligne
 - **Fichiers caméra pro** : log (S-Log3, Apple Log…), HDR, 10 bits, ProRes, objectif anamorphique. — En ligne
 - **Copie de travail sur le Drive** : la vidéo s'ouvre sur un autre appareil sans le fichier caméra ; l'appareil qui a l'original exporte depuis l'original. — En ligne

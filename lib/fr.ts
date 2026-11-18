@@ -1404,4 +1404,5 @@ export const FR: Record<string, string> = {
   "In the Drive's bin: {n} files from RAW ({size}), still counted until Google empties it (30 days).": "Dans la corbeille du Drive : {n} fichiers de RAW ({size}), toujours comptés jusqu'à ce que Google la vide (30 jours).",
   "Delete them for good": "Les supprimer définitivement",
   "Outside the RAW by aurare folder: {n} files made by the app ({size}), left where they are.": "Hors du dossier RAW by aurare : {n} fichiers créés par l'app ({size}), laissés où ils sont.",
+  "New video from scratch: the same song and lyrics, no video nor hook yet": "Nouvelle vidéo de zéro : le même morceau et les mêmes paroles, sans vidéo ni hook",
 };

@@ -2125,7 +2125,8 @@ export default function VideoStudio({
   };
 
   /** "Video 3": the next free number (after a deletion, clips.length + 1 could repeat a name). */
-  const nextClipName = () => `Video ${Math.max(clips.length, ...clips.map((c) => Number(/^Video (\d+)$/.exec(c.name)?.[1] ?? 0))) + 1}`;
+  // (this release's videos only: the takes imported are stored as videos too, and made "Video 7" of the second one)
+  const nextClipName = () => `Video ${Math.max(projects.length, ...projects.map((c) => Number(/^Video (\d+)$/.exec(c.name)?.[1] ?? 0))) + 1}`;
   /** The same video again: same camera file (read, not copied), sync and every version. To try other choices without
    *  touching this one; its Drive working copy is made for it (one per video: each one's passage). */
   const duplicateClip = () => {
@@ -2148,39 +2149,37 @@ export default function VideoStudio({
     onSaveNow();
     onToast?.(t("Video duplicated: change anything on it, the first one stays as it was"));
   };
-  /** New clip on the same release: same song and segment, fresh camera take. */
+  /**
+   * A new video on the release, from scratch: the release's song (the same version of the audio) and its lyrics (shared,
+   * locked lines kept), the lyrics' look and the segment; no camera file, no takes, no hooks, no videos over it, no
+   * grade. ("Duplicate" in the ⋯ menu is the same video again.)
+   */
   const addVideo = async () => {
     syncRef.current?.abort();
     stop();
     const id = uid();
     const name = nextClipName();
-    const copied = !!audioBlob; // the audio is the project's: the new video uses it as is
     const cur = settingsRef.current;
     onProject((p) => ({
       ...p,
       videos: [
         ...clipsOf(p),
         {
-          ...cur,
+          ...defaultVideo(),
           id,
           name,
-          audioName: copied ? cur.audioName : undefined,
-          // The camera file is the new video's own: nothing of the previous one (its details, its Drive copy).
-          videoName: undefined,
-          videoSize: undefined,
-          source: undefined,
-          drive: undefined,
-          offset: 0,
-          score: undefined,
-          musicStart: undefined,
-          musicEnd: undefined,
-          anchors: undefined,
-          takes: undefined,
-          linked: false,
-          // A new project: its own take only (the cameras and cuts of the open one are its own edit).
-          angles: undefined,
-          cuts: undefined,
-          takeOnly: undefined,
+          audioId: cur.audioId,
+          audioName: audioBlob ? cur.audioName : undefined,
+          crop: cur.crop,
+          format: cur.format,
+          // the lyrics as they look on the others
+          captions: cur.captions,
+          captionMode: cur.captionMode,
+          captionStyle: cur.captionStyle,
+          lineChars: cur.lineChars,
+          wordTiming: cur.wordTiming,
+          litDim: cur.litDim,
+          litSweep: cur.litSweep,
         },
       ],
       videoId: id,
@@ -6312,7 +6311,7 @@ export default function VideoStudio({
                 : g.items.map((c) => <option key={c.id} value={c.id}>{clipName(c)}</option>))}
             </Select>
           </label>
-          <button className="btn icon h-new" aria-label={t("New video")} title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => void addVideo()}><Icon name="plus" /></button>
+          <button className="btn icon h-new" aria-label={t("New video")} title={t("New video from scratch: the same song and lyrics, no video nor hook yet")} onClick={() => void addVideo()}><Icon name="plus" /></button>
           <div className="slot h-new"><Menu trigger={(_, toggle) => <button className="btn icon quiet" aria-label={t("Video menu")} onClick={toggle}><Icon name="more" /></button>}>
             {(closeMenu) => (<>
               <button onClick={() => { closeMenu(); setClipDialog("rename"); }}>{t("Rename")}</button>
@@ -6347,7 +6346,7 @@ export default function VideoStudio({
                 );
               })])}
               <div className="sep" />
-              <button className="ver-new" title={t("New video: same audio, lyrics and settings, another camera take")} onClick={() => { close(); void addVideo(); }}>
+              <button className="ver-new" title={t("New video from scratch: the same song and lyrics, no video nor hook yet")} onClick={() => { close(); void addVideo(); }}>
                 <Icon name="plus" size={12} />{t("New video")}
               </button>
               <button className="ver-new" title={t("Same camera file, sync and versions: to change anything on a copy")} onClick={() => { close(); duplicateClip(); }}>
