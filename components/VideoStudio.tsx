@@ -590,6 +590,36 @@ export default function VideoStudio({
     if (!ctxRef.current) ctxRef.current = new AudioContext();
     return ctxRef.current;
   }, []);
+  /**
+   * The sound under the playhead while it is dragged, paused (as DaVinci): a short grain of the song there, at most every
+   * 50 ms, faded in and out (no clicks); a grain is cut by the next one. Silent while playing (the song plays) and
+   * when the playhead does not move.
+   */
+  const scrubGrain = useRef<{ src: AudioBufferSourceNode; gain: GainNode } | null>(null);
+  const scrubAt = useRef({ t: -1, ms: 0 });
+  const scrubSound = (t: number) => {
+    if (!audioBuf || sourceRef.current) return;
+    const now = performance.now(), last = scrubAt.current;
+    if (now - last.ms < 50 || Math.abs(t - last.t) < 0.005) return;
+    scrubAt.current = { t, ms: now };
+    try {
+      const ctx = getCtx();
+      if (ctx.state === "suspended") void ctx.resume();
+      const g = scrubGrain.current;
+      if (g) { try { g.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.008); g.src.stop(ctx.currentTime + 0.04); } catch { /* ended */ } }
+      const GRAIN = 0.09, from = clamp(t, 0, Math.max(0, audioBuf.duration - GRAIN));
+      const src = ctx.createBufferSource(), gain = ctx.createGain();
+      src.buffer = audioBuf;
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.01);
+      gain.gain.setValueAtTime(0.8, ctx.currentTime + GRAIN - 0.02);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + GRAIN);
+      src.connect(gain); gain.connect(ctx.destination);
+      src.start(0, from, GRAIN);
+      scrubGrain.current = { src, gain };
+      src.onended = () => { if (scrubGrain.current?.src === src) scrubGrain.current = null; };
+    } catch { /* no audio output */ }
+  };
 
   const setV = useCallback((patch: Partial<Omit<VideoSetup, "id" | "name">>) => {
     onProject((p) => {
@@ -3100,7 +3130,9 @@ export default function VideoStudio({
           setTab("lyrics"); onProject((p) => ({ ...p, lyricWords: out }));
           return;
         }
-        setHead(timeOf(e.currentTarget, e.clientX));
+        const t = timeOf(e.currentTarget, e.clientX);
+        setHead(t);
+        scrubSound(t);
       },
       onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
         const d = scrubRef.current;
@@ -3134,7 +3166,7 @@ export default function VideoStudio({
     const dur = audioBuf.duration;
     const f = wavePos(e);
     if (d.mode === "none") return;
-    if (d.mode === "head") { setHead(headAt(f)); return; }
+    if (d.mode === "head") { const t = headAt(f); setHead(t); scrubSound(t); return; }
     if (d.mode === "press") {
       if (Math.abs(e.clientX - d.px) < 4) return;
       d.mode = "move"; // it is a drag: the segment moves
