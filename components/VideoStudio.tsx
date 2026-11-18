@@ -4438,6 +4438,9 @@ export default function VideoStudio({
   /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
   const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
+  // A hook's edges (seconds from the segment's start): anywhere in the song, before the segment as after it (the post
+  // shows what of it falls in the segment; the preview, outside it, the rest).
+  const hookMin = -settings.crop.start, hookMax = Math.max(segLen, (audioBuf?.duration ?? end) - settings.crop.start);
   // The tracks under the waveform (lyrics, hooks, shots) show what it shows, at the same scale: zoomed in, their lines,
   // edges and cuts can be worked on in detail.
   // Exactly the waveform's view (zoomed or the whole track), at its scale: what is above is above, the segment marked.
@@ -4487,22 +4490,19 @@ export default function VideoStudio({
     els.heads.forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
     // The one playhead across the frame: where the tracks' playheads are (their slide, then their place).
     if (tlHeadRef.current) tlHeadRef.current.style.transform = `translate3d(${els.headOff + dx + hx}px,0,0)`;
-    // On each track the clip that has reached the left edge of what is on screen sticks to it, whole (its text read in
-    // full), played or not, until the next one, coming from the right, meets its end and pushes it off the edge (as the
-    // sticky headers of a list: a long text never shows past the next one under it). The others sit at their time.
-    const stuckAt = new Map<HTMLElement, number>(), pushedAt = new Map<string, number>();
+    // On each track the clip the playhead is on, once its start has gone past the left edge of what is on screen, keeps
+    // its left side (its edge, its name) on that edge and ends at its own end, as a video clip; as soon as the playhead
+    // has left it, it scrolls away with the others. Never wider than it is: nothing of it shows past its end.
+    const stuckAt = new Map<HTMLElement, number>();
     els.clips.forEach((list) => {
-      let stuck: HTMLElement | null = null, best = -Infinity, after = Infinity;
-      for (const el of list) { const a = Number(el.dataset.a); if (a < live.s && a > best) { best = a; stuck = el; } }
-      for (const el of list) { const a = Number(el.dataset.a); if (a > best && a < after) after = a; }
-      // (its width as time on screen: pushed so that its right side stays on the next one's start, never before its own)
-      const pinned = stuck ? Math.max(best, Math.min(live.s, after - (stuck.offsetWidth / W) * laid.d)) : 0;
       for (const el of list) {
-        const from = el === stuck ? pinned : Number(el.dataset.a);
-        if (el === stuck) pushedAt.set(el.dataset.a ?? "", pinned);
+        const a = Number(el.dataset.a), b = Number(el.dataset.b);
+        const from = a < live.s && b > live.s && at >= a && at < b ? live.s : a;
         stuckAt.set(el, from);
-        el.style.transform = `translate3d(${xOf(from)}px,0,0)`;
-        el.style.zIndex = el === stuck ? "0" : "1"; // the stuck one under: the next slides in over it
+        const x0 = xOf(from);
+        el.style.transform = `translate3d(${x0}px,0,0)`;
+        el.style.width = `${Math.max(3, xOf(b) - x0)}px`;
+        el.classList.toggle("stuck", from > a);
       }
     });
     // A video clip (long: never moved whole, it would show past its end): once its start has gone past the left edge of
@@ -4518,10 +4518,10 @@ export default function VideoStudio({
       if (name && el.classList.contains("on")) name.style.setProperty("--hx", `${hxPx - x0 - nameAt}px`);
     });
     // The playing clip's bar: at its start, or on the left edge once its start has gone past it; its text glows under the playhead.
-    els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(pushedAt.get(el.dataset.a ?? "") ?? Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
+    els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
     els.playing.forEach((el) => {
       const a = Number(el.dataset.a), b = Number(el.dataset.b), from = stuckAt.get(el) ?? a;
-      el.style.setProperty("--hx", `${b > a ? clamp((at - from) / (b - a), 0, 1) * 100 : 0}%`);
+      el.style.setProperty("--hx", `${b > from ? clamp((at - from) / (b - from), 0, 1) * 100 : 0}%`);
     });
   };
   // (the tracks laid out again: their slide put back to what is on screen, before it is seen)
@@ -5672,7 +5672,7 @@ export default function VideoStudio({
     const c = settingsRef.current.crop, h = dragHead.current;
     if (h >= c.start && h <= c.start + c.duration) setHead(inSeg(t));
   };
-  const edgeDrag = (move: (at: number, free: boolean) => void, wholeSong = false) => ({
+  const edgeDrag = (move: (at: number, free: boolean) => void, wholeSong = false, magnetToo = false) => ({
     onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
       if (e.button === 1) return;
       e.stopPropagation(); stop();
@@ -5689,7 +5689,7 @@ export default function VideoStudio({
       // (a line outside the segment: anywhere in the song)
       const lo = wholeSong ? 0 : cfg.crop.start, hi = wholeSong ? audioBuf?.duration ?? Infinity : cfg.crop.start + Math.max(0.1, cfg.crop.duration);
       let at = round2(clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, lo, hi));
-      const m = wholeSong ? null : magnet(e, at, d.width / w.d);
+      const m = wholeSong && !magnetToo ? null : magnet(e, at, d.width / w.d);
       if (m !== null) at = m;
       move(at, e.altKey);
     },
@@ -5726,20 +5726,20 @@ export default function VideoStudio({
     const h = hooks.find((x) => x.id === id);
     if (!h) return;
     const next = hooks.filter((x) => x.id !== id && x.from > h.from).sort((a, b) => a.from - b.from)[0];
-    const to = round2(clamp(at - settings.crop.start, h.from + 0.2, next ? (next.to ?? segLen) - 0.2 : segLen));
+    const to = round2(clamp(at - settings.crop.start, h.from + 0.2, next ? (next.to ?? segLen) - 0.2 : hookMax));
     setTab("hook");
     setHead(round2(settings.crop.start + Math.max(h.from, to - 0.3)));
     setHooks(hooks.map((x) => (x.id === id ? { ...x, to } : next && x.id === next.id && to > next.from ? { ...x, from: to } : x)));
-  });
+  }, true, true);
   const moveHook = (id: string) => edgeDrag((at, free) => {
     const h = hooks.find((x) => x.id === id);
     if (!h) return;
     const prev = hooks.filter((x) => x.id !== id && x.from < h.from).sort((a, b) => b.from - a.from)[0];
-    const from = round2(clamp(at - settings.crop.start, prev ? prev.from + 0.2 : 0, (h.to ?? segLen) - 0.2));
+    const from = round2(clamp(at - settings.crop.start, prev ? prev.from + 0.2 : hookMin, (h.to ?? segLen) - 0.2));
     setTab("hook");
     setHead(round2(settings.crop.start + from));
     setHooks(hooks.map((x) => (x.id === id ? { ...x, from } : !free && prev && x.id === prev.id ? { ...x, to: from } : x)));
-  });
+  }, true, true);
   const editHook = (id: string, patch: Partial<VideoHook>) => setHooks(hooks.map((h) => (h.id === id ? { ...h, ...patch } : h)));
   // ---- hook lists: the same as the carousel's; by default the one of the first slide of the release ----
   const slide1Pool = (() => {
@@ -5792,13 +5792,14 @@ export default function VideoStudio({
     onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.hooks?.length ? { ...c, hooks: followLists(c.hooks, hookPools) } : c)) }));
   }, [listsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Move one edge of a hook by `d` seconds, inside the segment and never shorter than 0.3 s. */
+  /** Move one edge of a hook by `d` seconds, anywhere in the song (only the segment's part is in the post), never
+   *  shorter than 0.3 s. */
   const nudgeHook = (h: VideoHook, edge: "from" | "to", d: number) => {
     const to = h.to ?? segLen;
-    if (edge === "from") editHook(h.id, { from: round2(clamp(h.from + d, 0, to - 0.3)) });
-    else editHook(h.id, { to: round2(clamp(to + d, h.from + 0.3, segLen)) });
+    if (edge === "from") editHook(h.id, { from: round2(clamp(h.from + d, hookMin, to - 0.3)) });
+    else editHook(h.id, { to: round2(clamp(to + d, h.from + 0.3, hookMax)) });
     stop();
-    setHead(round2(settings.crop.start + (edge === "from" ? clamp(h.from + d, 0, to - 0.3) : Math.max(h.from, clamp(to + d, h.from + 0.3, segLen) - 0.3))));
+    setHead(round2(settings.crop.start + (edge === "from" ? clamp(h.from + d, hookMin, to - 0.3) : Math.max(h.from, clamp(to + d, h.from + 0.3, hookMax) - 0.3))));
   };
   const current = activeCue(cues, head);
   // The lyrics panel: the lyrics' style, or the own look of the caption under the playhead ("this word / phrase").
@@ -6462,34 +6463,34 @@ export default function VideoStudio({
                   <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
-                    {hooks.map((h, i) => onTrack(settings.crop.start + h.from, settings.crop.start + Math.min(segLen, h.to ?? segLen)) && (
+                    {hooks.map((h, i) => onTrack(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)) && (
                       <button key={h.id} className={"cue" + (hookAt(settings, head)?.id === h.id ? " on" : "")}
                         data-text={h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                         style={{
-                          ...place(settings.crop.start + clamp(h.from, 0, segLen)), width: wFull(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)),
-                          ...(hookAt(settings, head)?.id === h.id ? { ["--hx" as string]: hxIn(settings.crop.start + clamp(h.from, 0, segLen), settings.crop.start + clamp(h.to ?? segLen, 0, segLen)) } : null),
+                          ...place(settings.crop.start + h.from), width: wFull(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)),
+                          ...(hookAt(settings, head)?.id === h.id ? { ["--hx" as string]: hxIn(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)) } : null),
                         }}
-                        data-a={settings.crop.start + clamp(h.from, 0, segLen)} data-b={settings.crop.start + clamp(h.to ?? segLen, 0, segLen)}
+                        data-a={settings.crop.start + h.from} data-b={settings.crop.start + (h.to ?? segLen)}
                         title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
                         onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
                         <span className="cue-ico" aria-hidden><Icon name="sparkle" size={11} /></span>{h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                       </button>
                     ))}
                     {/* A hook starting at the segment's start (or before) has its handle on the left edge. */}
-                    {hooks.map((h) => h.from < segLen && (h.to ?? segLen) > 0 && onTrack(settings.crop.start + Math.max(0, h.from), settings.crop.start + Math.max(0, h.from)) && (
-                      <span key={"e" + h.id} className={"cam-cut cue-edge" + (settings.crop.start + h.from <= tw.s + 0.01 ? " at-left" : "")} style={{ ...place(settings.crop.start + Math.max(0, h.from)) }}
+                    {hooks.map((h) => onTrack(settings.crop.start + h.from, settings.crop.start + h.from) && (
+                      <span key={"e" + h.id} className={"cam-cut cue-edge" + (settings.crop.start + h.from <= tw.s + 0.01 ? " at-left" : "")} style={{ ...place(settings.crop.start + h.from) }}
                         title={t("Drag to move when it starts (Alt: only this one, a gap allowed)")} {...moveHook(h.id)} />
                     ))}
                     {/* Its end: a hook followed by a gap, or the last one (glued to the next: that one's start handle). */}
                     {hooks.map((h) => {
                       const to = h.to ?? segLen;
                       const glued = hooks.some((x) => x.id !== h.id && Math.abs(x.from - to) < 0.05);
-                      return !glued && to > 0 && onTrack(settings.crop.start + Math.min(segLen, to), settings.crop.start + Math.min(segLen, to)) && (
-                        <span key={"x" + h.id} className={"cam-cut cue-edge end" + (settings.crop.start + to >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(settings.crop.start + Math.min(segLen, to)) }}
+                      return !glued && onTrack(settings.crop.start + to, settings.crop.start + to) && (
+                        <span key={"x" + h.id} className={"cam-cut cue-edge end" + (settings.crop.start + to >= tw.s + tw.d - 0.01 ? " at-right" : "")} style={{ ...place(settings.crop.start + to) }}
                           title={t("Drag to change when it leaves")} {...moveHookEnd(h.id)} />
                       );
                     })}
-                    {(() => { const h = hookAt(settings, head); const a0 = h ? settings.crop.start + Math.max(0, h.from) : 0, b0 = h ? settings.crop.start + Math.min(segLen, h.to ?? segLen) : 0; const at = h ? barAt(a0, b0) : null; return at !== null ? <span className="cue-bar-glow" data-a={a0} data-b={b0} style={place(at)} /> : null; })()}
+                    {(() => { const h = hookAt(settings, head); const a0 = h ? settings.crop.start + h.from : 0, b0 = h ? settings.crop.start + (h.to ?? segLen) : 0; const at = h ? barAt(a0, b0) : null; return at !== null ? <span className="cue-bar-glow" data-a={a0} data-b={b0} style={place(at)} /> : null; })()}
                     <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                     </div>
                   </div>
