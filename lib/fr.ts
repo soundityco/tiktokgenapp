@@ -1400,4 +1400,5 @@ export const FR: Record<string, string> = {
   "Every line is locked: kept as it is when the lyrics are placed again. Click to unlock them all.": "Toutes les lignes sont verrouillées : gardées telles quelles quand les paroles sont recalées. Clic pour tout déverrouiller.",
   "Some lines are locked. Click to lock them all.": "Certaines lignes sont verrouillées. Clic pour toutes les verrouiller.",
   "Lock every line: kept as they are when the lyrics are placed again": "Verrouiller toutes les lignes : gardées telles quelles quand les paroles sont recalées",
+  "Locked: kept as it is (not moved by hand nor when the lyrics are placed again). Click to unlock.": "Verrouillée : gardée telle quelle (ni déplacée à la main, ni recalée). Clic pour déverrouiller.",
 };

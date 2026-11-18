@@ -68,6 +68,28 @@ describe("locked lines (padlock)", () => {
     expect(out.map((x) => x.s)).toEqual([1, 1.5, 3.4]);
     expect(out[0].lock).toBe(true);
   });
+  it("a locked line keeps its times when the text is edited (re-placed on what was heard)", async () => {
+    const { keepManual } = await import("@/lib/lyricsAlign");
+    const prev: LyricWord[] = [{ w: "one", s: 1, e: 1.4, line: 0, lock: true }, { w: "two", s: 3, e: 3.5, line: 1 }];
+    const next: LyricWord[] = [{ w: "one", s: 1.6, e: 2, line: 0 }, { w: "two", s: 3.2, e: 3.6, line: 1 }];
+    const out = keepManual(prev, next);
+    expect(out[0]).toMatchObject({ s: 1, e: 1.4, lock: true });
+    expect(out[1].s).toBe(3.2);
+  });
+  it("the lines placed again never go over a locked line nor past it (the text's order)", async () => {
+    const { keepLocked } = await import("@/lib/lyricsAlign");
+    const prev: LyricWord[] = [
+      { w: "a", s: 1, e: 1.5, line: 0 }, { w: "locked", s: 5, e: 6, line: 1, lock: true }, { w: "c", s: 7, e: 7.5, line: 2 },
+    ];
+    // the new placing puts line 0 over the locked line, line 2 before it
+    const next: LyricWord[] = [{ w: "a", s: 5.5, e: 6.5, line: 0 }, { w: "locked", s: 2, e: 3, line: 1 }, { w: "c", s: 4, e: 4.5, line: 2 }];
+    const out = keepLocked(prev, next);
+    const at = (w: string) => out.find((x) => x.w === w)!;
+    expect(at("locked").s).toBe(5);
+    expect(at("a").e).toBeLessThanOrEqual(4.98 + 1e-9);
+    expect(at("c").s).toBeGreaterThanOrEqual(6.02 - 1e-9);
+    expect(at("a").e - at("a").s).toBeCloseTo(1, 5);
+  });
 });
 
 describe("a line the model hardly hears (inLines)", () => {

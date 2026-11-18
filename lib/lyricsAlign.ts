@@ -635,7 +635,7 @@ export function moveCueBy(all: LyricWord[], cues: Cue[], i: number, delta: numbe
   let out = shiftCue(all, c, d);
   const last = c.words[c.words.length - 1];
   out = out.map((x, k) => (all[k] === last ? { ...x, until: r3(c.end + d) } : x));
-  if (prev?.words.length) {
+  if (prev?.words.length && !prev.words.some((x) => x.lock)) {
     const pl = prev.words[prev.words.length - 1];
     if (pl.until === undefined) out = out.map((x) => (x === pl ? { ...x, until: r3(prev.end), manual: true } : x));
   }
@@ -808,7 +808,7 @@ export const hasWordTiming = (words: LyricWord[] | undefined): boolean => !!word
  * in the text, or a line added or removed, leaves the other retouches where they were.
  */
 export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
-  if (!prev.some((x) => x.manual || x.ws !== undefined || x.wu !== undefined) || !next.length) return next;
+  if (!prev.some((x) => x.manual || x.lock || x.ws !== undefined || x.wu !== undefined) || !next.length) return next;
   const a = [...prev].sort((x, y) => x.s - y.s), b = [...next].sort((x, y) => x.s - y.s);
   const ka = a.map((x) => norm(x.w)), kb = b.map((x) => norm(x.w));
   const n = a.length, m = b.length;
@@ -827,7 +827,7 @@ export function keepManual(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
       // word's new line plus the cut's fraction. A word joined to the line before stays joined (glue): it takes the line
       // of the word before it, as joinCue gave it.
       const cutLine = o.split && o.line !== undefined && b[j].line !== undefined ? b[j].line! + (o.line - Math.floor(o.line)) : o.line;
-      if (o.manual) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true, ...(o.lock ? { lock: true } : {}),
+      if (o.manual || o.lock) out[j] = { ...b[j], s: o.s, e: o.e, ...(o.until === undefined ? {} : { until: o.until }), manual: true, ...(o.lock ? { lock: true } : {}),
         ...(o.split ? { line: cutLine, split: true } : {}),
         ...(o.glue ? { glue: true, line: j > 0 ? out[j - 1].line : b[j].line } : {}) };
       // The word-by-word retouches stay too.
@@ -865,7 +865,42 @@ export const lockedLines = (words: LyricWord[] | undefined): Set<number> => new 
  */
 export function keepLocked(prev: LyricWord[], next: LyricWord[]): LyricWord[] {
   if (!prev.some((x) => x.lock)) return next;
-  return keepManual(prev.map((x) => (x.lock ? { ...x, manual: true as const } : { ...x, manual: undefined, ws: undefined, we: undefined, wu: undefined })), next);
+  return fitBetweenLocked(keepManual(prev.map((x) => (x.lock ? { ...x, manual: true as const } : { ...x, manual: undefined, ws: undefined, we: undefined, wu: undefined })), next));
+}
+
+/**
+ * The lines placed again never go over a locked line, nor past it against the text's order: each run of free lines
+ * between two locked ones (in the text) stays in the room between them — moved there whole when it fits, else drawn
+ * into it, its rhythm kept. The locked lines do not move.
+ */
+export function fitBetweenLocked(words: LyricWord[]): LyricWord[] {
+  const byLine = new Map<number, number[]>();
+  words.forEach((x, i) => { const l = x.line ?? -1; (byLine.get(l) ?? byLine.set(l, []).get(l)!).push(i); });
+  const order = [...byLine.keys()].sort((a, b) => a - b);
+  const locked = (l: number) => byLine.get(l)!.every((i) => words[i].lock);
+  const endOf = (l: number) => Math.max(...byLine.get(l)!.map((i) => words[i].until ?? words[i].e));
+  const startOf = (l: number) => Math.min(...byLine.get(l)!.map((i) => words[i].s));
+  const out = words.slice();
+  for (let k = 0; k < order.length;) {
+    if (locked(order[k])) { k++; continue; }
+    let j = k;
+    while (j < order.length && !locked(order[j])) j++;
+    const run = order.slice(k, j).flatMap((l) => byLine.get(l)!);
+    const lo = k > 0 ? endOf(order[k - 1]) + 0.02 : 0, hi = j < order.length ? startOf(order[j]) - 0.02 : Infinity;
+    const a = Math.min(...run.map((i) => words[i].s)), b = Math.max(...run.map((i) => words[i].until ?? words[i].e));
+    k = j;
+    if (a >= lo && b <= hi) continue;
+    // where it goes: moved whole into the room if it fits, else drawn into it
+    const len = b - a, room = hi - lo;
+    const map = len <= room
+      ? ((t: number) => t + (a < lo ? lo - a : hi - b))
+      : ((t: number) => lo + ((t - a) / Math.max(0.01, len)) * room);
+    for (const i of run) {
+      const x = words[i];
+      out[i] = { ...x, s: r3(map(x.s)), e: r3(Math.max(map(x.s) + 0.03, map(x.e))), ...(x.until === undefined ? {} : { until: r3(map(x.until)) }) };
+    }
+  }
+  return out.sort((x, y) => x.s - y.s);
 }
 
 export function activeCue(cues: Cue[], time: number): Cue | null {
