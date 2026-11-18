@@ -4490,14 +4490,14 @@ export default function VideoStudio({
     els.heads.forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
     // The one playhead across the frame: where the tracks' playheads are (their slide, then their place).
     if (tlHeadRef.current) tlHeadRef.current.style.transform = `translate3d(${els.headOff + dx + hx}px,0,0)`;
-    // On each track the clip the playhead is on, once its start has gone past the left edge of what is on screen, keeps
-    // its left side (its edge, its name) on that edge and ends at its own end, as a video clip; as soon as the playhead
-    // has left it, it scrolls away with the others. Never wider than it is: nothing of it shows past its end.
+    // On each track a clip whose start has gone past the left edge of what is on screen keeps its left side (its edge,
+    // its text) on that edge and ends at its own end, as a video clip, until that end leaves too: its text goes out with
+    // it, never before. Never wider than it is: nothing of it shows past its end.
     const stuckAt = new Map<HTMLElement, number>();
     els.clips.forEach((list) => {
       for (const el of list) {
         const a = Number(el.dataset.a), b = Number(el.dataset.b);
-        const from = a < live.s && b > live.s && at >= a && at < b ? live.s : a;
+        const from = a < live.s && b > live.s ? live.s : a;
         stuckAt.set(el, from);
         const x0 = xOf(from);
         el.style.transform = `translate3d(${x0}px,0,0)`;
