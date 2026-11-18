@@ -2345,7 +2345,7 @@ details.sec:first-of-type { background-image: none; }
   /* The segment's length: a plain control like the version and sync buttons (no filled field). */
 }
 /* Phone: the lock first, then the passage and its length. */
-@media (max-width: 1000px) { .app:has(.dock-player:not(:empty)) .transport .tr-lock { order: -2; } }
+@media (max-width: 1000px) { .app:has(.dock-player:not(:empty)) .transport .tr-lock, .app:has(.dock-player:not(:empty)) .transport .tr-loop { order: -2; } }
 /* Phone: the zoom's −, + and Fit like the version and sync buttons (32 px, the same border, no fill). */
 @media (max-width: 1000px) {
 
@@ -2354,11 +2354,12 @@ details.sec:first-of-type { background-image: none; }
    (length, lock, sync, version, new version, zoom). The play button and a primary action keep their look. */
 .video-side .transport .seg-len,
 .video-side .transport .tr-lock,
+.video-side .transport .tr-loop,
 .video-side .transport .menu-wrap > .btn:not(.primary),
 .seg-versions .ver-pick,
 .seg-versions .wave-zoom .btn { height: var(--h-sm); min-height: var(--h-sm); padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); }
-.video-side .transport .tr-lock, .seg-versions .wave-zoom .btn.icon { width: var(--h-sm); padding: 0; justify-content: center; }
-.video-side .transport .tr-lock.on { border-color: var(--text); color: var(--text); }
+.video-side .transport .tr-lock, .video-side .transport .tr-loop, .seg-versions .wave-zoom .btn.icon { width: var(--h-sm); padding: 0; justify-content: center; }
+.video-side .transport .tr-lock.on, .video-side .transport .tr-loop.on { border-color: var(--text); color: var(--text); }
 
 /* The takes: the same format as the segment's other controls (32 px, thin border, no fill); the one used, outlined white. */
 
@@ -2375,7 +2376,7 @@ details.sec:first-of-type { background-image: none; }
 /* Takes, everywhere: "Takes" then "Take 1 0:04–0:34"… on one line (the full detail stays in each one's tooltip). */
 
 /* The segment's tools, everywhere: lock, length, then the passage. */
-.video-side .transport .tr-lock { order: -2; }
+.video-side .transport .tr-lock, .video-side .transport .tr-loop { order: -2; }
 .video-side .transport .seg-len { order: -1; }
 /* The take selector, before the version's: its "i" right beside it. */
 .take-slot { display: inline-flex; align-items: center; gap: 4px; flex: none; }
@@ -2401,9 +2402,9 @@ details.sec:first-of-type { background-image: none; }
   .video-side .timeline > .transport { margin-top: 0; }
 }
 /* The lock and the zoom's −, + and Fit: one format wherever they are (32 px, thin border, no fill). */
-.video-side .tr-lock, .video-side .wave-zoom .btn { height: var(--h-sm); min-height: var(--h-sm); padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); border-radius: var(--r); }
-.video-side .tr-lock, .video-side .wave-zoom .btn.icon { width: var(--h-sm); padding: 0; justify-content: center; }
-.video-side .tr-lock.on { border-color: var(--text); color: var(--text); }
+.video-side .tr-lock, .video-side .tr-loop, .video-side .wave-zoom .btn { height: var(--h-sm); min-height: var(--h-sm); padding: 0 10px; font-size: 12px; background: none; border: 1px solid var(--line-2); border-radius: var(--r); }
+.video-side .tr-lock, .video-side .tr-loop, .video-side .wave-zoom .btn.icon { width: var(--h-sm); padding: 0; justify-content: center; }
+.video-side .tr-lock.on, .video-side .tr-loop.on { border-color: var(--text); color: var(--text); }
 .video-side .wave-zoom .btn:disabled { opacity: .4; }
 /* "New version", the last line of the versions' list. */
 .menu .ver-new { color: var(--text); }
@@ -2413,7 +2414,7 @@ details.sec:first-of-type { background-image: none; }
 @media (min-width: 1001px) {
   .video-side .timeline > .transport { order: 2; margin-top: 0; }
   .video-side .timeline > .seg-versions { order: 6; margin-top: 12px; }
-  .video-side .transport .tr-lock { order: -5; }
+  .video-side .transport .tr-lock, .video-side .transport .tr-loop { order: -5; }
   .video-side .transport .tr-sync { order: -4; }
   .video-side .transport .seg-len { order: -3; }
   .video-side .transport .tr-range, .video-side .transport .tr-time { order: -2; }

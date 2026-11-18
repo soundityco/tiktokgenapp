@@ -56,6 +56,7 @@ const P: Record<string, string> = {
   type: "M5 6.5V4.5h14v2M12 4.5v15M9 19.5h6",
   // Same frame as "film" (the two studios side by side): a photo, a sun and a hill.
   image: "M4 5h16v14H4zM4 16l4.5-4.5 4 4 3-3L20 17M10.5 9.5a1.5 1.5 0 1 1-3 0a1.5 1.5 0 1 1 3 0z",
+  loop: "M17 2l4 4-4 4M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 01-3 3H3",
   lock: "M7 10V7a5 5 0 0110 0v3M5 10h14v10H5zM12 14v3",
   unlock: "M7 10V7a5 5 0 019.4-2.4M5 10h14v10H5zM12 14v3",
   undo: "M8 7L3 12l5 5M3 12h9a6 6 0 016 6",

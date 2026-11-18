@@ -611,6 +611,15 @@ export default function VideoStudio({
     () => buildCues(project.lyricWords ?? [], "phrase", { lineChars, wordTiming: settings.wordTiming }),
     [project.lyricWords, lineChars, settings.wordTiming]
   );
+  /**
+   * The loop (as in Ableton), apart from the padlock (the sync): on, playing stays in the segment and starts it again at
+   * its end, the playhead in it; off, it plays on past the segment to the song's end, the playhead anywhere. Kept in
+   * this browser (a way of working, not a choice of the post).
+   */
+  const [loopSeg, setLoopSegRaw] = useState(() => { try { return localStorage.getItem("tktgen-video-loop") !== "0"; } catch { return true; } });
+  const loopRef = useRef(loopSeg);
+  loopRef.current = loopSeg;
+  const setLoopSeg = (on: boolean) => { setLoopSegRaw(on); loopRef.current = on; try { localStorage.setItem("tktgen-video-loop", on ? "1" : "0"); } catch { /* private mode */ } };
   /** While playing, as Musixmatch: the line the last arrow placed (null: none yet since playing started). */
   const tapCursor = useRef<number | null>(null);
   const lyricWordsRef = useRef(project.lyricWords);
@@ -2237,7 +2246,8 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     let until = Math.min(audioBuf.duration, cfg.crop.start + cfg.crop.duration);
     // Unlocked, the playhead outside the segment: played from there to the song's end (else the segment, as always).
-    const outside = !cfg.linked && (head < cfg.crop.start || head >= until - 0.15) && head < audioBuf.duration - 0.2;
+    // The loop off: from the playhead (anywhere) to the song's end, through the segment and past it.
+    const outside = !loopRef.current && head < audioBuf.duration - 0.2;
     if (outside) until = audioBuf.duration;
     let from = outside ? head : head >= until - 0.15 || head < cfg.crop.start ? cfg.crop.start : head;
     playStartRef.current = from;
@@ -2288,6 +2298,8 @@ export default function VideoStudio({
     setPlaying(true);
     const tick = () => {
       const now = from + (ctx.currentTime - originRef.current);
+      // (the loop on: the segment again from its start, until paused)
+      if (now >= until && loopRef.current && !outside) { stop(); const s0 = settingsRef.current.crop.start; headRef.current = s0; setHead(s0); window.setTimeout(() => void playRef.current(), 30); return; }
       if (now >= until) { stop(); const back = playReturnRef.current ? from0 : until; headRef.current = back; setHead(back); return; }
       // The playhead and the lyrics follow what is heard (the sound sent, minus the output's delay).
       // (until the sound reaches the speakers the playhead waits where it was, never stepping back first)
@@ -2754,6 +2766,14 @@ export default function VideoStudio({
       <Icon name={linked ? "lock" : "unlock"} size={13} />
     </button>
   ) : null;
+  /** The loop (next to the padlock): playing kept in the segment, or on past it. */
+  const loopEl = (where = "") => audioBuf ? (
+    <button className={"btn sm icon tr-loop " + where + (loopSeg ? " on" : "")} aria-pressed={loopSeg} onClick={() => setLoopSeg(!loopSeg)}
+      aria-label={loopSeg ? t("Loop on the segment") : t("Play on past the segment")}
+      title={loopSeg ? t("Loop on the segment: playing stays in it and starts it again. Click to play on past it (the playhead anywhere).") : t("Playing goes on past the segment, the playhead anywhere in the song. Click to loop on the segment.")}>
+      <Icon name="loop" size={13} />
+    </button>
+  ) : null;
   /** The studio's options (draws, preview, export format): in the head on a computer, under the picture on a phone. */
   /** Zoom of the waveform, for precise edges: also a pinch, or ctrl + wheel on a computer. */
   const zoomEl = (where = "") => (
@@ -2842,12 +2862,22 @@ export default function VideoStudio({
     return () => window.removeEventListener("keydown", k, true);
   }); // (every render: the handlers read the current lines)
 
+  /** The padlock (the sync only): every synced video of the project locked or unlocked at once (the one under them, the
+   *  cameras, the ones over it, these put back on their synced place). */
   const toggleLink = () => {
     const cur = settingsRef.current;
-    if (cur.linked) { setV({ linked: false }); return; }
+    const takes = [...(cur.angles ?? []).filter(Boolean), ...overlaysOf(cur).map((o) => o.clip)]
+      .map((id) => clips.find((c) => c.id === id)).filter((c): c is VideoSetup => !!c && c.score !== undefined);
+    if (cur.linked) {
+      setV({ linked: false });
+      for (const c of takes) patchTake(c.id, { linked: false });
+      return;
+    }
     const range = linkRangeOf(cur);
     const crop = range ? fitCrop(cur.crop.start, cur.crop.duration, range) : cur.crop;
-    setV({ linked: true, crop });
+    const ovs = overlaysOf(cur).map((o) => { const c = takes.find((x) => x.id === o.clip); return c ? { ...o, offset: c.offset } : o; });
+    setV({ linked: true, crop, ...withOverlays(ovs) });
+    for (const c of takes) patchTake(c.id, { linked: true });
     setHead(crop.start);
   };
   const linked = !!settings.linked && !!linkRangeOf(settings);
@@ -2973,12 +3003,12 @@ export default function VideoStudio({
     const seg = { ...base, start: cfg.crop.start, duration: cfg.crop.duration };
     const end = cfg.crop.start + cfg.crop.duration;
     // The playhead first (a thin line inside the segment), then the edges (each one crops its side), then the segment.
-    if (near(head) && (!cfg.linked || (head > cfg.crop.start + 0.05 && head < end - 0.05))) dragWave.current = { mode: "head", ...seg };
+    if (near(head) && (!loopRef.current || (head > cfg.crop.start + 0.05 && head < end - 0.05))) dragWave.current = { mode: "head", ...seg };
     else if (near(cfg.crop.start, 9) && (!near(end, 9) || Math.abs(e.clientX - xOf(cfg.crop.start)) <= Math.abs(e.clientX - xOf(end)))) dragWave.current = { mode: "start", ...seg };
     else if (near(end, 9)) dragWave.current = { mode: "end", ...seg };
     else if (t > cfg.crop.start && t < end) dragWave.current = { mode: "press", ...seg };
     // Unlocked: outside the segment, the playhead goes there (and follows the drag).
-    else if (!cfg.linked) { setHead(headAt(f)); dragWave.current = { mode: "head", ...seg }; }
+    else if (!loopRef.current) { setHead(headAt(f)); dragWave.current = { mode: "head", ...seg }; }
     else dragWave.current = { mode: viewRef.current ? "pan" : "none", ...seg };
   };  /**
    * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
@@ -2990,7 +3020,7 @@ export default function VideoStudio({
       const r = el.getBoundingClientRect();
       const cfg = settingsRef.current;
       const w = viewRef.current ?? twRef.current; // what is on screen (live while playing)
-      const [lo, hi] = cfg.linked ? [cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration - 0.05)] : headRange();
+      const [lo, hi] = loopRef.current ? [cfg.crop.start, cfg.crop.start + Math.max(0.1, cfg.crop.duration - 0.05)] : headRange();
       return round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, lo, hi));
     };
     return {
@@ -3029,7 +3059,7 @@ export default function VideoStudio({
    */
   const headRange = (): [number, number] => {
     const cfg = settingsRef.current;
-    return cfg.linked ? [cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05] : [0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - 0.05)];
+    return loopRef.current ? [cfg.crop.start, cfg.crop.start + cfg.crop.duration - 0.05] : [0, Math.max(0, (audioBuf?.duration ?? cfg.crop.start + cfg.crop.duration) - 0.05)];
   };
   const waveMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, e.clientX);
@@ -6322,7 +6352,7 @@ export default function VideoStudio({
                       <option value="custom">{settings.crop.duration.toFixed(1).replace(".", lang === "fr" ? "," : ".")} s</option>
                     )}
                   </Select>
-                  {!phone && lockEl()}
+                  {!phone && lockEl()}{!phone && loopEl()}
                   <span className="grow" />
                   <span className="tr-sync">
                   {!syncBusy && !genBusy && firstSync ? (
@@ -6369,7 +6399,7 @@ export default function VideoStudio({
                 {/* Phone: the lock and the zoom above the tracks they act on (on a computer: in the segment's row). */}
                 {phone && (
                   <div className="row seg-tools">
-                    {lockEl()}
+                    {lockEl()}{loopEl()}
                     <span className="grow" />
                     {zoomEl()}
                   </div>
