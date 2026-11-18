@@ -74,6 +74,22 @@ describe("a locked line (syllables)", () => {
   });
 });
 
+describe("a word said again in a line (even rhythm)", () => {
+  it("evens out « Non, non, non, non » with the first two eaten together", async () => {
+    const { evenRepeats } = await import("@/lib/lyricsPipeline");
+    const line: LyricWord[] = [
+      { w: "Non,", line: 1, s: 17.52, e: 17.61 }, { w: "non,", line: 1, s: 17.61, e: 17.99 },
+      { w: "non,", line: 1, s: 18.04, e: 18.19 }, { w: "non", line: 1, s: 18.25, e: 18.41 },
+    ];
+    const out = evenRepeats(line, 17.4)!;
+    const gaps = out.slice(1).map((x, i) => x.s - out[i].s);
+    gaps.forEach((g) => expect(g).toBeCloseTo((18.25 - 17.52) / 3, 2)); // even, from its start to its last word
+    expect(out[0].s).toBe(17.52);
+    expect(out[3].s).toBe(18.25);
+    expect(evenRepeats([{ w: "tout", s: 1, e: 1.2 }, { w: "mais", s: 1.2, e: 1.4 }, { w: "pas", s: 1.4, e: 1.6 }], 0)).toBeNull();
+  });
+});
+
 describe("Andy's intro « Non, non, non, non » (two words eaten together)", () => {
   it("takes the rhythm of the same line locked in the final chorus, its start and end kept", async () => {
     const { inLines } = await import("@/lib/lyricsPipeline");

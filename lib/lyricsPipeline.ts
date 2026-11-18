@@ -531,7 +531,50 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
     }
     fixed.forEach((x, j) => { out[d.a + j] = x; });
   }
+  // A word said again and again in a line ("non, non, non, non", "oh oh oh") is sung in an even rhythm: the model cannot
+  // tell such words apart (it hears "non", not which one), so the words it found best set the step for all of them.
+  for (const d of done) {
+    if (d.locked || (only && !only.has(words[d.a].line ?? -1))) continue;
+    const even = evenRepeats(out.slice(d.a, d.b), d.a > 0 ? out[d.a - 1].e : 0);
+    if (even) even.forEach((x, j) => { out[d.a + j] = x; });
+  }
   return unpileLines(out, only);
+}
+
+/**
+ * A run of 3 or more same words in a line, sung in an even rhythm. Opening the line: its first and last words stay
+ * (the line's start is often set by hand) and the others are spread evenly between them. Inside the line: the step
+ * between its last two words (the model often finds the end of such a run and loses its start: two eaten together), or
+ * the median of its steps that look sung, is taken for all of them, the run's last word staying. Never before `after` (the end of what comes before). Null: no run
+ * to settle.
+ */
+export function evenRepeats(line: LyricWord[], after: number): LyricWord[] | null {
+  let out: LyricWord[] | null = null;
+  for (let i = 0; i < line.length;) {
+    let j = i;
+    while (j + 1 < line.length && norm(line[j + 1].w) === norm(line[i].w) && norm(line[i].w)) j++;
+    const n = j - i + 1;
+    if (n >= 3) {
+      const run = line.slice(i, j + 1), gaps = run.slice(1).map((x, k) => x.s - run[k].s);
+      const sung = gaps.filter((g) => g >= 0.12).sort((x, y) => x - y);
+      const lastGap = gaps[gaps.length - 1];
+      const step = lastGap >= 0.12 ? lastGap : sung.length ? sung[Math.floor(sung.length / 2)] : 0;
+      const last = run[n - 1].s;
+      // (opening the line: its start stays where it is — set by hand often — and the run is even up to its last word)
+      const first = i === 0 ? run[0].s : Math.max(after + 0.01, last - (n - 1) * step);
+      const st = n > 1 ? (last - first) / (n - 1) : 0;
+      if (step > 0 && gaps.some((g) => Math.abs(g - st) > 0.03)) {
+        out ??= line.slice();
+        run.forEach((x, k) => {
+          const s = Math.round((first + k * st) * 1000) / 1000;
+          const e = k + 1 < n ? Math.round((first + (k + 1) * st - 0.02) * 1000) / 1000 : x.e;
+          out![i + k] = { ...x, s, e: Math.max(s + 0.05, e) };
+        });
+      }
+    }
+    i = j + 1;
+  }
+  return out;
 }
 
 /**
