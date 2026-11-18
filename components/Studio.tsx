@@ -72,7 +72,9 @@ type Overlay =
   | { k: "confirm"; title: string; message: string; label: string; run: () => void };
 
 
-export default function Studio({ userName }: { userName: string }) {
+export default function Studio({ userName, userImage }: { userName: string; userImage?: string }) {
+  // The Google account's photo on the account button (its initial when there is none, or when it does not load).
+  const [noPhoto, setNoPhoto] = useState(false);
   const { t, lang, setLang } = useT();
   const [ws, setWs] = useState<Workspace | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -1882,7 +1884,7 @@ export default function Studio({ userName }: { userName: string }) {
         </span>}
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
-        <div className="top-settings"><Menu trigger={(open, toggle) => <button className={"me" + (open ? " open" : "")} aria-label={t("Settings and account")} title={userName} onClick={toggle}>{(userName || "?").trim().charAt(0).toUpperCase()}</button>}>
+        <div className="top-settings"><Menu trigger={(open, toggle) => <button className={"me" + (open ? " open" : "")} aria-label={t("Settings and account")} title={userName} onClick={toggle}>{userImage && !noPhoto ? <img className="me-photo" src={userImage} alt="" referrerPolicy="no-referrer" onError={() => setNoPhoto(true)} /> : (userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}
         </Menu></div>
         <input ref={restoreInput} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) restore(f); e.target.value = ""; }} />

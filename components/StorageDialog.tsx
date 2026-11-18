@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n";
-import { deleteDriveFile, driveQuota, listAppFolder, type AppFile } from "@/lib/drive";
+import { deleteDriveFile, driveQuota, listAppFolder, listAppVisible, type AppFile } from "@/lib/drive";
 import { Modal } from "./ui";
 
 type Kind = "copy" | "original" | "audio" | "photo" | "lut" | "other";
@@ -32,13 +32,22 @@ export default function StorageDialog({ usedCopies, onClose }: {
 }) {
   const { t } = useT();
   const [quota, setQuota] = useState<{ used: number; limit: number | null } | null>(null);
+  // What RAW put in the Drive's bin (still counted until Google empties it, 30 days), and its files left outside its
+  // folder (an old flat Rollout file, a folder moved by hand).
+  const [bin, setBin] = useState<AppFile[]>([]);
+  const [elsewhere, setElsewhere] = useState<AppFile[]>([]);
+  const [emptying, setEmptying] = useState(false);
   const [files, setFiles] = useState<AppFile[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [cleaning, setCleaning] = useState(false);
   const load = () => {
     setErr(null);
-    void Promise.all([driveQuota(), listAppFolder()])
-      .then(([q, f]) => { setQuota(q); setFiles(f); })
+    void Promise.all([driveQuota(), listAppFolder(), listAppVisible(true).catch(() => []), listAppVisible(false).catch(() => [])])
+      .then(([q, f, bin, all]) => {
+        setQuota(q); setFiles(f); setBin(bin);
+        const inTree = new Set(f.map((x) => x.id));
+        setElsewhere(all.filter((x) => !inTree.has(x.id)));
+      })
       .catch((e) => { console.warn("[storage]", e); setErr(t("Your Drive could not be read. Reconnect Google and try again.")); });
   };
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -59,6 +68,13 @@ export default function StorageDialog({ usedCopies, onClose }: {
   const limit = quota?.limit ?? null;
   const pct = (b: number) => (limit ? `${Math.min(100, (b / limit) * 100)}%` : "0%");
 
+  const binSize = bin.reduce((n, f) => n + f.size, 0), outSize = elsewhere.reduce((n, f) => n + f.size, 0);
+  const emptyBin = async () => {
+    setEmptying(true);
+    for (const f of bin) await deleteDriveFile(f.id);
+    setEmptying(false);
+    load();
+  };
   const clean = async () => {
     setCleaning(true);
     for (const f of orphans) await deleteDriveFile(f.id);
@@ -102,6 +118,16 @@ export default function StorageDialog({ usedCopies, onClose }: {
             })}
             {!files.length && <p className="muted xs">{t("Nothing yet.")}</p>}
           </div>
+          {/* Counted on the Drive too: what RAW sent to the bin (old audios, twins…) and its files outside its folder. */}
+          {bin.length > 0 && (
+            <div className="notice xs row" style={{ justifyContent: "space-between", gap: "var(--s2)" }}>
+              <span>{t("In the Drive's bin: {n} files from RAW ({size}), still counted until Google empties it (30 days).", { n: bin.length, size: fmt(binSize) })}</span>
+              <button className="btn sm" disabled={emptying} onClick={() => void emptyBin()}>{emptying ? t("Deleting…") : t("Delete them for good")}</button>
+            </div>
+          )}
+          {elsewhere.length > 0 && (
+            <p className="muted xs">{t("Outside the RAW by aurare folder: {n} files made by the app ({size}), left where they are.", { n: elsewhere.length, size: fmt(outSize) })}</p>
+          )}
           {orphans.length > 0 && (
             <div className="notice warn xs row" style={{ justifyContent: "space-between", gap: "var(--s2)" }}>
               <span>{t("{n} video copies are no longer used by any video ({size}).", { n: orphans.length, size: fmt(orphanSize) })}</span>

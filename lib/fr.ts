@@ -1401,4 +1401,7 @@ export const FR: Record<string, string> = {
   "Some lines are locked. Click to lock them all.": "Certaines lignes sont verrouillées. Clic pour toutes les verrouiller.",
   "Lock every line: kept as they are when the lyrics are placed again": "Verrouiller toutes les lignes : gardées telles quelles quand les paroles sont recalées",
   "Locked: kept as it is (not moved by hand nor when the lyrics are placed again). Click to unlock.": "Verrouillée : gardée telle quelle (ni déplacée à la main, ni recalée). Clic pour déverrouiller.",
+  "In the Drive's bin: {n} files from RAW ({size}), still counted until Google empties it (30 days).": "Dans la corbeille du Drive : {n} fichiers de RAW ({size}), toujours comptés jusqu'à ce que Google la vide (30 jours).",
+  "Delete them for good": "Les supprimer définitivement",
+  "Outside the RAW by aurare folder: {n} files made by the app ({size}), left where they are.": "Hors du dossier RAW by aurare : {n} fichiers créés par l'app ({size}), laissés où ils sont.",
 };

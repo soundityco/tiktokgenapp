@@ -540,6 +540,25 @@ export async function listAppFolder(): Promise<AppFile[]> {
   return out;
 }
 
+/**
+ * Every file the app can see on the Drive (with the drive.file scope: only those it made), in the bin or not, wherever
+ * they are: what the Storage page compares with the RAW folder (files left outside it, files waiting in the bin).
+ */
+export async function listAppVisible(trashed: boolean): Promise<AppFile[]> {
+  const out: AppFile[] = [];
+  let page: string | undefined;
+  do {
+    const params = new URLSearchParams({ q: `trashed = ${trashed} and mimeType != 'application/vnd.google-apps.folder'`, fields: "nextPageToken, files(id,name,mimeType,size,appProperties)", pageSize: "1000", spaces: "drive" });
+    if (page) params.set("pageToken", page);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${await getToken()}` } });
+    if (!r.ok) throw new Error(`list ${r.status}`);
+    const j = await r.json();
+    for (const f of j.files ?? []) out.push({ id: f.id, name: f.name ?? "", mimeType: f.mimeType ?? "", size: Number(f.size ?? 0), appProperties: f.appProperties });
+    page = j.nextPageToken;
+  } while (page && out.length < 20000);
+  return out;
+}
+
 /** Delete a file the app made (a copy replaced or of a video removed). Never throws. */
 export async function deleteDriveFile(id: string): Promise<void> {
   if (isDemo()) return;
