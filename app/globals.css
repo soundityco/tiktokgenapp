@@ -394,6 +394,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue.video-clip { --vc: var(--cam, var(--video)); display: flex; align-items: center; gap: 6px; border-left-color: var(--vc); cursor: grab; touch-action: none;
   background: color-mix(in srgb, var(--vc) 16%, var(--bg)); }
 .lyric-track .cue.video-clip.on { background: color-mix(in srgb, var(--vc) 24%, var(--bg)); border-left-color: var(--vc); }
+/* The video set in the right column (clicked): lit more than the others, as a clicked text (no outline). */
+.lyric-track .cue.video-clip.sel { background: color-mix(in srgb, var(--vc) 34%, var(--bg)); color: var(--text); }
+.lyric-track .cue.video-clip.sel.on { background: color-mix(in srgb, var(--vc) 40%, var(--bg)); }
 
 /* Its left side stays on the left edge of the view while its start is past it (paintTracks): its start edge is not
    there then, so not draggable. Its name glows around the playhead, as a text's (--hx in px, from the name's left). */
