@@ -91,6 +91,8 @@ dans ton Google Drive.
 
 ## Studio vidéo
 
+- **Importer plusieurs vidéos d'un coup** : jusqu'à 4 pistes (la première en vidéo 1) ; au-delà, un message dit lesquelles attendent dans les prises de la release. — En test
+- **Chercher un hook ou un texte** dans le sélecteur de sa liste : un champ où taper un mot. — En test
 - **Plusieurs vidéos par release**, chacune avec son fichier caméra ; « + » en crée une de zéro (le même morceau et les mêmes paroles, sans vidéo ni hook ; numérotée Vidéo 1, 2, 3… dans chaque release), « Dupliquer » refait la même vidéo (même fichier, mêmes réglages). — En ligne
 - **Synchro automatique** de la prise sur l'audio officiel, même filmée avec le son du téléphone, une voix seule au casque, ou le passage filmé plusieurs fois (chaque prise est retrouvée). — En ligne
 - **Fichiers caméra pro** : log (S-Log3, Apple Log…), HDR, 10 bits, ProRes, objectif anamorphique. — En ligne

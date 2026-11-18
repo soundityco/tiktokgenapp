@@ -6,7 +6,7 @@ import { placeByAlignment, placeExact } from "@/lib/lyricsPipeline";
 import { hasGpu } from "@/lib/transcribe";
 
 type Line = { text: string; start: number; end: number; doubt: boolean };
-declare global { interface Window { __lyricsResult?: { lines: Line[]; words?: { w: string; s: number; e: number; line?: number; sy?: number[] }[]; ms: number } | { error: string } } }
+declare global { interface Window { __lyricsResult?: { lines: Line[]; words?: { w: string; s: number; e: number; line?: number; sy?: number[]; conf?: number; doubt?: boolean }[]; ms: number } | { error: string } } }
 
 /**
  * Dev bench (app/dev/lyrics): an audio file and its lyrics placed by the very code of the video studio
@@ -37,7 +37,7 @@ export default function LyricsBench() {
       setLines(out);
       const ms = Math.round(performance.now() - t0);
       setLog(`done in ${(ms / 1000).toFixed(1)} s`);
-      window.__lyricsResult = { lines: out, words: words.map((w) => ({ w: w.w, s: w.s, e: w.e, line: w.line, sy: w.sy })), ms };
+      window.__lyricsResult = { lines: out, words: words.map((w) => ({ w: w.w, s: w.s, e: w.e, line: w.line, sy: w.sy, conf: heard.find((h) => h.line === w.line)?.conf, doubt: heard.some((h) => h.line === w.line && h.doubt) })), ms };
     } catch (e) {
       window.__lyricsResult = { error: String(e) };
       setLog(String(e));

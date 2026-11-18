@@ -1408,4 +1408,8 @@ export const FR: Record<string, string> = {
   "Re-place every line": "Recaler toutes les lignes",
   "Fit the words in their lines": "Ajuster les mots dans leurs lignes",
   "Re-place every line?": "Recaler toutes les lignes ?",
+  "1 video was not added: {n} videos at most in a project (it waits in the release's other takes).": "1 vidéo n'a pas été ajoutée : {n} vidéos au plus dans un projet (elle attend dans les autres prises de la release).",
+  "{k} videos were not added: {n} videos at most in a project (they wait in the release's other takes).": "{k} vidéos n'ont pas été ajoutées : {n} vidéos au plus dans un projet (elles attendent dans les autres prises de la release).",
+  "Search a word…": "Chercher un mot…",
+  "Nothing found.": "Rien trouvé.",
 };

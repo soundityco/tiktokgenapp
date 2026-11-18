@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useT } from "@/lib/i18n";
-import { SourceButton, sourceSub, tagSummary, TagChips } from "./SourcePick";
+import { SourceButton, sourceSub, tagSummary, TagChips, TextPickList } from "./SourcePick";
 import Icon from "./Icon";
 import { ContextMenu, Hint, Menu, Switch, Wheel } from "./ui";
 import { TextQuickMenu } from "./TextControls";
@@ -491,16 +491,7 @@ export default function SlideCard(p: Props) {
                 )}
                 {/* Which one: the list's texts (the tags' ones), the slide's ticked (the menu opens on it). */}
                 {!p.locked && cfg.textSource.kind === "pool" && listItems.length > 0 && (
-                  <div className="pick-sec">
-                    <span className="pick-k">{t("Texts")} <span className="pick-n">{listItems.length}</span></span>
-                    <div className="pick-list">
-                      {[...listItems].sort(compareTexts).map((x, k) => (
-                        <button key={k} className={"pick-line" + (x === text ? " on" : "")} onClick={() => { close(); p.onText(x); }}>
-                          <span className="dd-check" aria-hidden>{x === text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <TextPickList label={t("Texts")} items={listItems} all={allItems} current={text} onPick={(x) => { close(); p.onText(x); }} />
                 )}
               </div>
             )}

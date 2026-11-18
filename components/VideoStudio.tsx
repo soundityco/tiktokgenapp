@@ -39,7 +39,7 @@ import Icon from "./Icon";
 import PostCaption from "./PostCaption";
 import ShareDialog, { useHandheld } from "./ShareDialog";
 import { linkLyrics, mergeSong, refreshLyricSlides, songOf, sungOf } from "@/lib/lyricsSections";
-import { SourceButton, sourceSub, tagSummary, TagChips } from "./SourcePick";
+import { SourceButton, sourceSub, tagSummary, TagChips, TextPickList } from "./SourcePick";
 import { ConfirmDialog, ContextMenu, Hint, MatteSelect, Menu, Modal, PromptDialog, Range, Section, Select, Switch } from "./ui";
 import { createPortal } from "react-dom";
 import { FullView } from "./FullView";
@@ -2272,9 +2272,24 @@ export default function VideoStudio({
   };
 
 
-  const onDropFile = (f: File | undefined) => {
+  const isVideoFile = (f: File) => f.type.startsWith("video/") || /\.(mp4|mov|webm|m4v|avi|mxf)$/i.test(f.name);
+  /**
+   * Several videos chosen at once (the file picker or a drop): the first is this video's own when it has none yet, the
+   * others go on their own tracks over it (`importTakes`), 4 videos at most in a project — the ones past it are said
+   * and wait in the release's other takes.
+   */
+  const pickVideos = async (files: File[]) => {
+    const vids = files.filter(isVideoFile);
+    if (!vids.length) return;
+    const hasOwn = !!settingsRef.current.videoName || !!videoBlob;
+    if (!hasOwn) await pickVideo(vids[0]);
+    const rest = hasOwn ? vids : vids.slice(1);
+    if (rest.length) await importTakes(rest);
+  };
+  const onDropFile = (files: File[]) => {
+    const f = files[0];
     if (!f) return;
-    if (f.type.startsWith("video/") || /\.(mp4|mov|webm|m4v|avi)$/i.test(f.name)) void pickVideo(f);
+    if (files.some(isVideoFile)) void pickVideos(files);
     else if (f.type.startsWith("audio/") || /\.(mp3|wav|m4a|aac|ogg|flac|aiff)$/i.test(f.name)) void pickAudio(f);
   };
 
@@ -4735,7 +4750,11 @@ export default function VideoStudio({
     const join = made.slice(0, Math.max(0, MAX_CAMS - videosIn(now))).map((m) => m.c);
     onProject((p) => ({ ...p, videos: [...clipsOf(p), ...made.map((m) => m.c)] }));
     if (join.length) setV(withOverlays([...overlaysOf(now), ...join.map((c) => ({ ...overlayFor(c), offset: round2(now.crop.start) }))]));
-    if (made.length > join.length) onToast?.(t("Up to {n} videos in a project: the others wait in the release's other takes.", { n: MAX_CAMS }));
+    if (made.length > join.length) {
+      const left = made.length - join.length;
+      onToast?.(left === 1 ? t("1 video was not added: {n} videos at most in a project (it waits in the release's other takes).", { n: MAX_CAMS })
+        : t("{k} videos were not added: {n} videos at most in a project (they wait in the release's other takes).", { k: left, n: MAX_CAMS }));
+    }
     onSaveNow();
     void askPersistentStorage();
     for (const m of made) {
@@ -6188,7 +6207,7 @@ export default function VideoStudio({
   );
 
   return (
-    <div className="video-shell" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(e.dataTransfer.files[0]); }}>
+    <div className="video-shell" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(Array.from(e.dataTransfer.files)); }}>
         {/* Left: the library. The release's files (audio, lyrics, this video's camera take), then the text lists
             shared with the carousel (hooks, captions). */}
         <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")}>
@@ -6197,7 +6216,7 @@ export default function VideoStudio({
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
             <input id="audio-file" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
             <input id="audio-replace" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void replaceAudio(f); e.target.value = ""; }} />
-            <input id="video-file" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickVideo(f); e.target.value = ""; }} />
+            <input id="video-file" type="file" accept="video/*" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length === 1) void pickVideo(fs[0]); else if (fs.length) void pickVideos(fs); e.target.value = ""; }} />
             <input id="video-original" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickOriginal(f); e.target.value = ""; }} />
             {/* The release holds the audio (shared by all its videos); this video holds its camera file and its framing. */}
             <div className="tree-head" title={t("The audio and the lyrics belong to the release: every video of it uses them.")}>
@@ -7064,16 +7083,8 @@ export default function VideoStudio({
                             </div>
                             {/* Which one: the list's hooks (the tags' ones), this one ticked (the menu opens on it). */}
                             {src.items.length > 0 && (
-                              <div className="pick-sec">
-                                <span className="pick-k">{t("Hooks")} <span className="pick-n">{src.items.length}</span></span>
-                                <div className="pick-list">
-                                  {[...src.items].sort(compareTexts).map((x, k) => (
-                                    <button key={k} className={"pick-line" + (x === h.text ? " on" : "")} onClick={() => { close(); editHook(h.id, fromList(h, x)); }}>
-                                      <span className="dd-check" aria-hidden>{x === h.text ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
+                              <TextPickList label={t("Hooks")} items={src.items} all={src.pool ? textItems(src.pool) : src.items} current={h.text}
+                                onPick={(x) => { close(); editHook(h.id, fromList(h, x)); }} />
                             )}
                           </div>
                         )}

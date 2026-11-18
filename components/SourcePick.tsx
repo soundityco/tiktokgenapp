@@ -1,5 +1,6 @@
 "use client";
-import { byTagName, tagStep } from "@/lib/generate";
+import { useState } from "react";
+import { byTagName, compareTexts, tagStep } from "@/lib/generate";
 import { useT } from "@/lib/i18n";
 import { themeLabel } from "@/lib/themes";
 import Icon from "./Icon";
@@ -51,5 +52,34 @@ export function SourceButton({ name, sub, open, onClick, label }: { name: string
       <span className="truncate">{name}{sub ? <span className="src-sub"> · {sub}</span> : null}</span>
       <Icon name="chevron" size={13} />
     </button>
+  );
+}
+
+/**
+ * The texts to pick one from (a slide's, a hook's), with a search field: typed words find a text anywhere in its list,
+ * past the tags ticked (what one has in mind, out at once). Accents and case do not matter.
+ */
+export function TextPickList({ label, items, all, current, onPick }: {
+  label: string; items: string[]; all: string[]; current: string; onPick: (x: string) => void;
+}) {
+  const { t } = useT();
+  const [q, setQ] = useState("");
+  const flat = (x: string) => x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const words = flat(q).split(/\s+/).filter(Boolean);
+  const shown = words.length ? [...new Set(all)].filter((x) => words.every((w) => flat(x).includes(w))) : items;
+  return (
+    <div className="pick-sec">
+      <span className="pick-k">{label} <span className="pick-n">{shown.length}</span></span>
+      <input className="input sm pick-search" type="search" value={q} onChange={(e) => setQ(e.target.value)}
+        placeholder={t("Search a word…")} aria-label={t("Search a word…")} />
+      <div className="pick-list">
+        {[...shown].sort(compareTexts).map((x, k) => (
+          <button key={k} className={"pick-line" + (x === current ? " on" : "")} onClick={() => onPick(x)}>
+            <span className="dd-check" aria-hidden>{x === current ? "✓" : ""}</span><span>{x.replace(/\|/g, " ")}</span>
+          </button>
+        ))}
+        {!shown.length && <p className="muted xs">{t("Nothing found.")}</p>}
+      </div>
+    </div>
   );
 }

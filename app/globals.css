@@ -2520,6 +2520,7 @@ details.sec:first-of-type { background-image: none; }
 .variants .variant { align-items: flex-start; }
 .variants .variant input { margin-top: 3px; }
 .variants .variant .stack { gap: 2px; }
+.pick-search { width: 100%; margin: 4px 0 6px; }
 .pick-list { display: flex; flex-direction: column; gap: 1px; max-height: 280px; overflow-y: auto; } /* a column, not a grid: the grid squeezed the long lines onto each other */
 .pick-chips + .pick-list { border-top: 1px solid var(--line); padding-top: 4px; }
 .menu .pick-list .pick-line { flex: none; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: start; gap: 6px; height: auto; min-height: 32px;
