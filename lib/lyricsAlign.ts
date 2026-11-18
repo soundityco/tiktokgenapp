@@ -588,7 +588,12 @@ function splitLong(ws: LyricWord[], maxChars: number, maxDur: number): LyricWord
 export function buildCues(words: LyricWord[], mode: "phrase" | "word", opts: CueOptions = {}): Cue[] {
   const lineChars = Math.max(8, opts.lineChars ?? 22);
   const from = opts.from ?? -Infinity, to = opts.to ?? Infinity;
-  const ws = words.filter((x) => x.e > from && x.s < to).sort((a, b) => a.s - b.s);
+  // A phrase across the segment's edge is kept whole (all the words of a lyrics line one of whose words is in the
+  // segment): cut to the edge, the line was trimmed on the track while the segment was dragged over it, and the part
+  // outside vanished (the lines outside are only those wholly out). Word by word: each word as it is.
+  const inside = (x: LyricWord) => x.e > from && x.s < to;
+  const lines = mode === "word" ? null : new Set(words.filter((x) => inside(x) && x.line !== undefined).map((x) => x.line));
+  const ws = words.filter((x) => inside(x) || (lines !== null && x.line !== undefined && lines.has(x.line))).sort((a, b) => a.s - b.s);
   if (!ws.length) return [];
 
   let groups: LyricWord[][];

@@ -273,6 +273,16 @@ describe("a phrase lit word by word (the lit captions)", () => {
   });
 });
 
+describe("a line across the segment's edge", () => {
+  it("is kept whole in the segment's lyrics (never trimmed to the edge)", () => {
+    const ws: LyricWord[] = [{ w: "one", s: 9, e: 9.5, line: 0 }, { w: "two", s: 9.6, e: 10.4, line: 0 }, { w: "three", s: 10.5, e: 11, line: 0 }];
+    const cs = buildCues(ws, "phrase", { from: 10, to: 20 });
+    expect(cs).toHaveLength(1);
+    expect(cs[0].start).toBe(9);
+    expect(cs[0].words).toHaveLength(3);
+  });
+});
+
 describe("a line dragged whole", () => {
   it("keeps its length, stays between its neighbours, and the line before keeps its end", async () => {
     const { moveCueBy } = await import("@/lib/lyricsAlign");
