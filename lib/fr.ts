@@ -1373,4 +1373,9 @@ export const FR: Record<string, string> = {
   "Your LUT, your grain, your fonts: the same style on every post of the release.": "Ta LUT, ton grain, tes polices : le même style sur chaque post de la sortie.",
   "Your photos, your hooks, your lyrics: one click and a new carousel is ready, never the same twice.": "Tes photos, tes hooks, tes paroles : un clic et un nouveau carrousel est prêt, jamais deux fois le même.",
   "Carousels": "Carrousels",
+  "Phrase, lit word by word": "Phrase, allumée mot à mot",
+  "Words lighting": "Les mots s'allument",
+  "At once": "D'un coup",
+  "Filling": "En se remplissant",
+  "Words not sung yet": "Mots pas encore chantés",
 };

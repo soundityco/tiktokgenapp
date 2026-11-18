@@ -438,8 +438,13 @@ export interface VideoSettings {
   activeVersion?: string;
   /** Burn the timed lyrics on the video. */
   captions: boolean;
-  /** How the generated lyrics are cut into captions: one word at a time or one phrase at a time. */
-  captionMode?: "phrase" | "word";
+  /** How the generated lyrics are cut into captions: one phrase at a time, one word at a time, or the phrase shown
+   *  whole with its words lighting as they are sung ("lit", as TikTok / Apple Music). */
+  captionMode?: "phrase" | "word" | "lit";
+  /** "lit": how bright the words not sung yet are (0-100 %, 35 by default). */
+  litDim?: number;
+  /** "lit": each word fills from left to right while it is sung (as Apple Music), else it lights at once (TikTok). */
+  litSweep?: boolean;
   /** Word by word: each word at the time the model heard it, or spread over its phrase by syllables (lib/lyricsAlign). */
   wordTiming?: "ai" | "even";
   /** Longest line of a caption, in characters (smart line breaks happen before it is exceeded). */

@@ -276,12 +276,29 @@ export function textOverflow(cfg: SlideCfg, text: string): boolean {
 }
 
 /** Draw text with a text style on any canvas (slides, but also video captions). */
+/**
+ * How much of a phrase is sung at `at` (the "lit" captions): the words started, the one being sung counted for the part
+ * of it already sung when `sweep` (it fills left to right), else whole as soon as it starts. Words: their start and end.
+ */
+export function litWords(words: { s: number; e: number }[], at: number, sweep: boolean): number {
+  let n = 0;
+  for (const w of words) {
+    if (at < w.s) break;
+    n += !sweep || at >= w.e ? 1 : clamp((at - w.s) / Math.max(0.05, w.e - w.s), 0, 1);
+    if (sweep && at < w.e) break;
+  }
+  return n;
+}
+
 export function drawStyledText(
   ctx: CanvasRenderingContext2D,
   text: string,
   st: TextStyle,
   W: number,
-  H: number
+  H: number,
+  /** The phrase shown whole, its words lighting in turn: how many are sung (a fraction: the one being sung, its part),
+   *  and how bright the others stay (0-1). */
+  lit?: { words: number; dim: number }
 ): TextBox | null {
   if (!text.trim()) return null;
   const L = layout(ctx, text, st, W, H);
@@ -293,12 +310,19 @@ export function drawStyledText(
   const cx = (st.x / 100) * W, cy = (st.y / 100) * H;
   const left = cx - bw / 2, top = cy - L.height / 2;
   const box = { x: left, y: top, w: bw, h: L.height };
+  const stroke = st.stroke ?? 20;
+  // Each line where it goes (an empty line: a gap).
+  const placed: { line: string; lx: number; ly: number }[] = [];
   let y = top;
   L.lines.forEach((line, i) => {
     if (!line) { y += L.gap; return; }
     const lw = widths[i];
     const lx = st.align === "left" ? left : st.align === "right" ? left + bw - lw : cx - lw / 2;
-    const ly = y + L.lh / 2;
+    placed.push({ line, lx, ly: y + L.lh / 2 });
+    y += L.lh;
+  });
+  const paint = ({ line, lx, ly }: { line: string; lx: number; ly: number }) => {
+    const lw = textW(ctx, line);
     if (st.look === "box") {
       const padX = L.size * (st.padX ?? 30) / 100, inset = L.size * 0.08 - L.size * (st.padY ?? 0) / 100;
       ctx.fillStyle = st.accent;
@@ -308,7 +332,6 @@ export function drawStyledText(
     }
     ctx.textAlign = "left";
     // The stroke is centred on the edge of the letters and the fill covers its inner half: only the outside shows.
-    const stroke = st.stroke ?? 20;
     if (st.look === "outline" && stroke > 0) {
       ctx.strokeStyle = st.accent;
       ctx.lineWidth = Math.max(2, L.size * stroke / 100);
@@ -326,8 +349,40 @@ export function drawStyledText(
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    y += L.lh;
-  });
+  };
+  if (!lit) placed.forEach(paint);
+  else {
+    // The whole phrase, dimmed; then each line again, whole look, up to where it is sung (a clip on the line).
+    ctx.save();
+    ctx.globalAlpha *= clamp(lit.dim, 0, 1);
+    placed.forEach(paint);
+    ctx.restore();
+    const reach = L.size * 2 + (st.look === "box" ? L.size * (st.padX ?? 30) / 100 : 0);
+    let before = 0; // the words of the lines above
+    for (const p of placed) {
+      // its words (start and end in the line)
+      const spans: [number, number][] = [];
+      for (const m of p.line.matchAll(/\S+/g)) spans.push([m.index!, m.index! + m[0].length]);
+      let upTo = -Infinity;
+      for (let j = 0; j < spans.length; j++) {
+        const done = lit.words - (before + j);
+        if (done <= 0) break;
+        const [a, b] = spans[j];
+        if (done >= 1) { upTo = textW(ctx, p.line.slice(0, b)); continue; }
+        upTo = (a ? textW(ctx, p.line.slice(0, a)) : 0) + done * textW(ctx, p.line.slice(a, b));
+      }
+      before += spans.length;
+      if (upTo === -Infinity) continue;
+      // (a word sung whole: its outline and the end of its box too, up to the next word)
+      const end = upTo >= textW(ctx, p.line) - 0.5 ? reach : Math.min(textW(ctx, " ") * 0.6, L.size * stroke / 200);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(p.lx - reach, p.ly - L.lh, upTo + reach + Math.max(0, end), L.lh * 2);
+      ctx.clip();
+      paint(p);
+      ctx.restore();
+    }
+  }
   if (nativeTracking(ctx)) (ctx as Ctx2D).letterSpacing = "0px";
   tracking = 0;
   return box;

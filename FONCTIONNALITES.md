@@ -72,6 +72,7 @@ dans ton Google Drive.
 - **Remplacer le fichier d'une prise** (menu ⋯ de sa ligne) : un autre fichier à sa place (un montage avec le morceau dessous…), synchronisé aussitôt ; rien de l'ancien fichier ne reste. — En test
 - **Vidéo par-dessus verrouillée une fois synchronisée** (cadenas sur le clip pour la libérer) : elle ne glisse plus de côté, mais change toujours de ligne. — En test
 - **Aimants** : un clip (paroles, hook, vidéo) glissé près du début du segment ou de la tête de lecture s'y colle ; ⌘ pour le placer librement ; glisser un clip ne déplace plus la tête. — En test
+- **Paroles « Phrase, allumée mot à mot »** : la phrase entière à l'écran, ses mots s'allument quand ils sont chantés (d'un coup comme TikTok, ou en se remplissant comme Apple Music), les autres estompés (réglable) ; à côté de « Phrase par phrase » et « Mot à mot ». — En test
 - **Paroles hors du segment** : boucle activée, grisées ; boucle coupée, toute la timeline se lit comme le segment (en couleur, allumées quand la tête passe dessus), sans entrer dans le post. — En test
 - **Déplacer une ligne de paroles** : on la glisse par son corps sur la timeline, comme un clip de montage ; elle garde sa durée et reste entre ses voisines. — En test
 - **Poignées des clips** : chaque texte et chaque hook a sa poignée de début et de fin, dans le clip, visible au survol (comme les vidéos), même collé au suivant ; la tête de lecture suit le bord tiré et s'arrête avec lui à la durée minimale. — En test

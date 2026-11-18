@@ -13,7 +13,7 @@ import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, t
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
 import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
-import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, TextBox, visibleRegion, zoomPic } from "@/lib/render";
+import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, litWords, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { PROBE_VERSION, probeVideo } from "@/lib/probe";
 import { compareTexts, followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
@@ -105,7 +105,7 @@ const LYRICS_ALIGN_V = 3;
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 /** The part of the camera file shown (seconds in the file, `len` its length): trimmed on the video track, else all. */
@@ -599,7 +599,8 @@ export default function VideoStudio({
     [project.slides, project.selectedSlide]
   );
   const captionStyle: TextStyle = settings.captionStyle ?? slideStyle;
-  const mode = settings.captionMode ?? "phrase";
+  // ("lit": the phrases, each shown whole, its words lighting as sung: cut as phrases, drawn by drawStyledText's `lit`)
+  const mode: "phrase" | "word" = settings.captionMode === "word" ? "word" : "phrase";
   const lineChars = settings.lineChars ?? 22;
   const cues = useMemo(
     () => buildCues(project.lyricWords ?? [], mode, { lineChars, from: settings.crop.start, to: settings.crop.start + settings.crop.duration, wordTiming: settings.wordTiming }),
@@ -1099,7 +1100,8 @@ export default function VideoStudio({
     const segEnd = cfg.crop.start + cfg.crop.duration, outside = !!preview && (time < cfg.crop.start || time > segEnd + 0.05);
     const at = outside ? time : Math.min(time, segEnd - 0.5 / exportSettings(cfg.source?.fps, exportPrefsRef.current).fps);
     const cue = cfg.captions ? activeRef.current(at) : null;
-    const caption = cue ? drawStyledText(g, cue.text, cueStyleRef.current(cue), W, H) : null;
+    const lit = cue && cfg.captionMode === "lit" ? { words: litWords(cue.words, at, !!cfg.litSweep), dim: (cfg.litDim ?? 35) / 100 } : undefined;
+    const caption = cue ? drawStyledText(g, cue.text, cueStyleRef.current(cue), W, H, lit) : null;
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
     return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
   }, []);
@@ -7140,9 +7142,21 @@ export default function VideoStudio({
               </Section>
               <Section id="lyrics-style-display" title={t("Display")}>
                 <div className="row">
-                  <button className={"btn sm" + (mode === "phrase" ? " on" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
+                  <button className={"btn sm" + (settings.captionMode !== "word" && settings.captionMode !== "lit" ? " on" : "")} onClick={() => setV({ captionMode: "phrase" })}>{t("Phrase by phrase")}</button>
+                  <button className={"btn sm" + (settings.captionMode === "lit" ? " on" : "")} onClick={() => setV({ captionMode: "lit" })}>{t("Phrase, lit word by word")}</button>
                   <button className={"btn sm" + (mode === "word" ? " on" : "")} onClick={() => setV({ captionMode: "word" })}>{t("Word by word")}</button>
                 </div>
+                {/* The phrase shown whole, its words lighting as they are sung (TikTok), or filling (Apple Music). */}
+                {settings.captionMode === "lit" && (<>
+                  <div className="field">{t("Words lighting")}
+                    <div className="row" style={{ gap: 6 }}>
+                      <button className={"btn sm" + (!settings.litSweep ? " on" : "")} onClick={() => setV({ litSweep: undefined })}>{t("At once")}</button>
+                      <button className={"btn sm" + (settings.litSweep ? " on" : "")} onClick={() => setV({ litSweep: true })}>{t("Filling")}</button>
+                    </div>
+                  </div>
+                  <Range label={t("Words not sung yet")} value={settings.litDim ?? 35} display={`${settings.litDim ?? 35} %`} min={0} max={90}
+                    onChange={(v) => setV({ litDim: v })} />
+                </>)}
                 {mode === "phrase" && (
                   <Range label={t("Line length")} value={lineChars} display={t("{n} characters", { n: lineChars })} min={10} max={40}
                     onChange={(v) => setV({ lineChars: v })} />

@@ -56,6 +56,19 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("a phrase lit word by word (the lit captions)", () => {
+  it("counts the words sung: whole at once, or the one being sung for its part when filling", async () => {
+    const { litWords } = await import("@/lib/render");
+    const ws = [{ s: 1, e: 1.5 }, { s: 1.6, e: 2.6 }, { s: 3, e: 3.4 }];
+    expect(litWords(ws, 0.5, false)).toBe(0);
+    expect(litWords(ws, 1.2, false)).toBe(1);
+    expect(litWords(ws, 1.7, false)).toBe(2);
+    expect(litWords(ws, 2.1, true)).toBeCloseTo(1.5, 5);
+    expect(litWords(ws, 2.8, true)).toBe(2);
+    expect(litWords(ws, 9, true)).toBe(3);
+  });
+});
+
 describe("a line dragged whole", () => {
   it("keeps its length, stays between its neighbours, and the line before keeps its end", async () => {
     const { moveCueBy } = await import("@/lib/lyricsAlign");
