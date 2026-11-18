@@ -2888,6 +2888,10 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* A video track hidden (its eye): its clips dimmed, the eye crossed out. */
 .lyric-track.is-hidden .cue { opacity: .4; }
 .lyric-track .track-tools .track-eye.off { color: var(--muted); }
+/* The lyrics track's padlock: every line locked (gold), some (open, a yellow dot), none (open). */
+.lyric-track .track-tools .track-lock.on { color: var(--lyrics); }
+.lyric-track .track-tools .track-lock { position: relative; }
+.lyric-track .track-tools .track-lock.some::after { content: ""; position: absolute; top: 5px; right: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
 
 /* The song's lines outside the segment: readable (the lyrics' gold, softer), their edges moved as the others', never in
    the post (only the segment's are). */

@@ -3672,6 +3672,13 @@ export default function VideoStudio({
     onProject((p) => ({ ...p, lyricWords: words }));
     onSaveNow();
   };
+  /** Every line locked (or unlocked) at once: the padlock at the lyrics track's end. */
+  const toggleAllLocks = (on: boolean) => {
+    const words = (project.lyricWords ?? []).map((x) => (on ? { ...x, lock: true as const } : (({ lock: _l, ...rest }) => rest)(x)));
+    lyricWordsRef.current = words;
+    onProject((p) => ({ ...p, lyricWords: words }));
+    onSaveNow();
+  };
   const syncLyrics = async () => {
     let next = project;
     if (writtenSrc === "song" && !lyricsLinked && paste.trim() !== (project.songLyrics ?? "").trim()) {
@@ -6611,6 +6618,20 @@ export default function VideoStudio({
                   </div>
                 </>)}
                 <div ref={trackRef} className={"lyric-track lyrics-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
+                  {/* At the track's end: every line locked or unlocked at once (all: closed; some: open with a dot). */}
+                  {(project.lyricWords?.length ?? 0) > 0 && mode !== "word" && (() => {
+                    const ws = project.lyricWords!, n = ws.filter((x) => x.lock).length, all = n === ws.length;
+                    return (
+                      <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
+                        <button className={"btn icon sm quiet track-lock" + (all ? " on" : n ? " some" : "")} aria-pressed={all}
+                          aria-label={all ? t("Unlock every line") : t("Lock every line")}
+                          title={all ? t("Every line is locked: kept as it is when the lyrics are placed again. Click to unlock them all.") : n ? t("Some lines are locked. Click to lock them all.") : t("Lock every line: kept as they are when the lyrics are placed again")}
+                          onClick={() => toggleAllLocks(!all)}>
+                          <Icon name={all ? "lock" : "unlock"} size={14} />
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <div className="track-content">
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
