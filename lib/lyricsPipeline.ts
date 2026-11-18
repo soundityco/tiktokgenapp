@@ -508,9 +508,10 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
   for (const d of done) {
     if (d.heard || d.words || (only && !only.has(words[d.a].line ?? -1))) continue;
     const line = words.slice(d.a, d.b);
-    if (line.some((x) => x.lock) || !looksOff(line)) continue;
+    // (hardly heard and retouched by hand: the artist's placing beats a guess)
+    if (line.some((x) => x.lock || x.manual) || !looksOff(line)) continue;
     const from = line[0].s, room = Math.min(d.to, line[line.length - 1].until ?? d.to) - from;
-    const twin = done.find((o) => o !== d && o.heard && o.b - o.a === line.length && textOf(out.slice(o.a, o.b)) === textOf(line));
+    const twin = done.find((o) => o !== d && o.heard && o.words !== null && o.b - o.a === line.length && textOf(out.slice(o.a, o.b)) === textOf(line));
     let fixed: LyricWord[];
     if (twin) {
       const ref = out.slice(twin.a, twin.b), s0 = ref[0].s, len = Math.max(0.05, ref[ref.length - 1].e - s0);

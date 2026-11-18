@@ -1405,4 +1405,8 @@ export const FR: Record<string, string> = {
   "Delete them for good": "Les supprimer définitivement",
   "Outside the RAW by aurare folder: {n} files made by the app ({size}), left where they are.": "Hors du dossier RAW by aurare : {n} fichiers créés par l'app ({size}), laissés où ils sont.",
   "New video from scratch: the same song and lyrics, no video nor hook yet": "Nouvelle vidéo de zéro : le même morceau et les mêmes paroles, sans vidéo ni hook",
+  "Copies the lyrics' timing (each word's start and end) to send for a check": "Copie les temps des paroles (début et fin de chaque mot) pour les envoyer à vérifier",
+  "Copy the lyrics timing": "Copier les temps des paroles",
+  "The lyrics timing is copied: paste it where you need it.": "Les temps des paroles sont copiés : colle-les où tu veux.",
+  "Could not copy (the browser refused).": "Copie impossible (le navigateur a refusé).",
 };

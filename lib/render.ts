@@ -396,12 +396,13 @@ export function drawStyledText(
       // its words (start and end in the line)
       const spans: [number, number][] = [];
       for (const m of p.line.matchAll(/[^ \t]+/g)) spans.push([m.index!, m.index! + m[0].length]); // (« revoir ? »: one word)
-      let upTo = -Infinity;
+      let upTo = -Infinity, partial = false;
       for (let j = 0; j < spans.length; j++) {
         const done = lit.words - (before + j);
         if (done <= 0) break;
         const [a, b] = spans[j];
-        if (done >= 1) { upTo = textW(ctx, p.line.slice(0, b)); continue; }
+        if (done >= 1) { upTo = textW(ctx, p.line.slice(0, b)); partial = false; continue; }
+        partial = true;
         // (the part of the word lit, in letters: a syllable, or the filling — interpolated inside the letter it reaches)
         const chars = done * (b - a), i = Math.floor(chars);
         upTo = textW(ctx, p.line.slice(0, a + i)) + (chars - i) * (a + i < b ? textW(ctx, p.line.slice(a + i, a + i + 1)) : 0);
@@ -409,7 +410,8 @@ export function drawStyledText(
       before += spans.length;
       if (upTo === -Infinity) continue;
       // (a word sung whole: its outline and the end of its box too, up to the next word)
-      const end = upTo >= textW(ctx, p.line) - 0.5 ? reach : Math.min(textW(ctx, " ") * 0.6, L.size * stroke / 200);
+      // (inside a word — a syllable, a filling —: cut right at its last letter, never a bit of the next one)
+      const end = partial ? 0 : upTo >= textW(ctx, p.line) - 0.5 ? reach : Math.min(textW(ctx, " ") * 0.6, L.size * stroke / 200);
       ctx.save();
       ctx.beginPath();
       ctx.rect(p.lx - reach, p.ly - L.lh, upTo + reach + Math.max(0, end), L.lh * 2);

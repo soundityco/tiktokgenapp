@@ -3706,6 +3706,14 @@ export default function VideoStudio({
     onProject((p) => ({ ...p, lyricWords: words }));
     onSaveNow();
   };
+  /** The lyrics' timing as text (each word: its line, start, end, retouched / locked), to paste for a check. */
+  const copyTimings = async () => {
+    const words = (project.lyricWords ?? []).map((x) => ({ w: x.w, l: x.line, s: x.s, e: x.e, ...(x.until !== undefined ? { u: x.until } : {}), ...(x.manual ? { m: 1 } : {}), ...(x.lock ? { k: 1 } : {}), ...(x.sy ? { sy: x.sy } : {}) }));
+    try {
+      await navigator.clipboard.writeText(JSON.stringify({ audio: project.audioName, words }));
+      setNote(t("The lyrics timing is copied: paste it where you need it."));
+    } catch { setErr(t("Could not copy (the browser refused).")); }
+  };
   /** Every line locked (or unlocked) at once: the padlock at the lyrics track's end. */
   const toggleAllLocks = (on: boolean) => {
     const words = (project.lyricWords ?? []).map((x) => (on ? { ...x, lock: true as const } : (({ lock: _l, ...rest }) => rest)(x)));
@@ -6605,6 +6613,11 @@ export default function VideoStudio({
                           {/* One action, always from scratch (it was two, the second shown only once the first was done). */}
                           <Icon name="type" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}{hasLyrics && !placed && <span className="tab-dot" />}
                         </button>
+                        {placed && (
+                          <button onClick={() => { closeMenu(); void copyTimings(); }} title={t("Copies the lyrics' timing (each word's start and end) to send for a check")}>
+                            <Icon name="copy" size={14} />{t("Copy the lyrics timing")}
+                          </button>
+                        )}
                         {placed && (
                           <button onClick={() => { closeMenu(); void refitWords(); }} title={t("Each line stays where it is; its words are placed again on the voice inside it.")}>
                             <Icon name="sparkle" size={14} />{t("Re-place the words in their lines")}
