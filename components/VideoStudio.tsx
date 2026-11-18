@@ -1123,7 +1123,25 @@ export default function VideoStudio({
         g.beginPath();
         g.roundRect(x, y, w, h, r);
         g.clip();
-        drawPictureAt(g, op.src, op.w, op.h, x, y, w / op.w, op.part);
+        // Its own framing inside its frame (its zoom and place, as the video under it in the post), its progressive
+        // zoom and its black bars: the same settings as any video, drawn in its box (its own only: never the post's).
+        const oa = over.a, push = oa.push && oa.push > 1 ? oa.push : 1;
+        const k = push > 1 ? 1 + (push - 1) * clamp((time - cfg.crop.start) / Math.max(0.1, cfg.crop.duration), 0, 1) : 1;
+        const inside = !!oa.pushIn && k > 1;
+        let f = picOf(oa.frame ?? DEFAULT_VIDEO.frame, oa.matte || undefined);
+        if (k > 1 && !inside) f = zoomPic(f, f.zoom * k);
+        g.translate(x, y);
+        drawFramed(g, op.src, op.w, op.h, f, w, h, op.part);
+        if (inside) {
+          const fa = framedAt(f, op.w, op.h, w, h), pw = op.w * fa.s, ph = op.h * fa.s;
+          g.save();
+          g.beginPath();
+          g.rect(Math.max(0, fa.x), Math.max(0, fa.y), Math.min(w, fa.x + pw) - Math.max(0, fa.x), Math.min(h, fa.y + ph) - Math.max(0, fa.y));
+          g.clip();
+          drawPictureAt(g, op.src, op.w, op.h, fa.x + (pw * (1 - k)) / 2, fa.y + (ph * (1 - k)) / 2, fa.s * k, op.part);
+          g.restore();
+        }
+        if (oa.matte) drawMatte(g, w, h, oa.matte);
         g.restore();
         boxes.push({ id: o.clip, box: { x, y, w, h } as TextBox });
       }
@@ -4382,9 +4400,11 @@ export default function VideoStudio({
   const frame = (camTake ? camTake.frame : settings.frame) ?? DEFAULT_VIDEO.frame;
   const desq = camTake ? camTake.desqueeze : settings.desqueeze;
   // The camera's own bars and progressive zoom (written in its take), else the project's (camera 1's).
-  const lookMatte = (camTake ? ownOr(camTake.matte, settings.matte) : settings.matte) || undefined;
-  const lookPush = (camTake ? ownOr(camTake.push, settings.push) : settings.push) || undefined;
-  const lookPushIn = camTake ? ownOr(camTake.pushIn, settings.pushIn) : settings.pushIn;
+  // (a camera of the multicam takes the post's when it has none of its own; a video over it has only its own: it is
+  // drawn in its frame, the post's bars and zoom are not its)
+  const lookMatte = (ovTake ? ovTake.matte : camTake ? ownOr(camTake.matte, settings.matte) : settings.matte) || undefined;
+  const lookPush = (ovTake ? ovTake.push : camTake ? ownOr(camTake.push, settings.push) : settings.push) || undefined;
+  const lookPushIn = ovTake ? ovTake.pushIn : camTake ? ownOr(camTake.pushIn, settings.pushIn) : settings.pushIn;
   const setPush = (k: number | undefined) => writeLook({ push: camTake ? k ?? 0 : k });
   const pushIsCustom = pushCustom || (!!lookPush && !PUSH_PRESETS.includes(lookPush));
   const setFrame = (patch: Partial<VideoFrame>) => writeLook({ frame: { ...curFrame(), ...patch } });
@@ -7182,11 +7202,12 @@ export default function VideoStudio({
           </div>
           {/* The video over it: whole, its size is its zoom (×1: as wide as the post), moved on the preview. */}
           {ovTake && ovSel && (
-            <Range label={t("Zoom")} value={ovSel.w / 100} display={`${(ovSel.w / 100).toFixed(2)}×`} min={0.15} max={4} step={0.01}
+            <Range label={t("Size")} value={ovSel.w / 100} display={`${(ovSel.w / 100).toFixed(2)}×`} min={0.15} max={4} step={0.01}
               onChange={(z) => patchOverlay(ovSel.clip, { w: Math.round(z * 1000) / 10 })}
               onReset={() => patchOverlay(ovSel.clip, { w: 42 })} />
           )}
-          {!ovTake && <>
+          {/* Every video has all its settings: the one over it too (drawn in its frame), not only its size. */}
+          {<>
           <div className="row" title={t("An anamorphic lens squeezes the picture across: pick its factor to see it as filmed. It goes with the camera file (all its versions).")}>
             <span className="label">{t("Anamorphic lens")}</span>
             <Select className="input sm grow" aria-label={t("Anamorphic lens")} value={String(desq ?? 1)}
