@@ -151,7 +151,9 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
     if (!low(order[i])) { i++; continue; }
     let j = i, a = 0, n = 0;
     while (j < order.length && low(order[j])) { const [x, y] = sum.get(order[j])!; a += x; n += y; j++; }
-    if (a / n < FA_TUNE.deafRun) for (let k = i; k < j; k++) if (!clear.has(order[k])) weak.add(order[k]);
+    // (a letter heard clearly keeps a line out, as the "t" of a hook's "Don't" — not in a long passage hardly heard, where
+    // one such letter shows up by chance in almost every line: a singer the model follows badly all along)
+    if (a / n < FA_TUNE.deafRun) for (let k = i; k < j; k++) if (j - i >= 4 || !clear.has(order[k])) weak.add(order[k]);
     i = j;
   }
   return words.map((x) => {
