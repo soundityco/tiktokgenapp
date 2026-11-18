@@ -30,6 +30,11 @@ const keyOf = (buf: AudioBuffer) => {
   return `${buf.length}|${buf.sampleRate}|${h}`;
 };
 
+/** The letters of this track if the model already listened to it in this session (no run: null otherwise). */
+export function cachedEmissions(buf: AudioBuffer): Emissions | null {
+  return last?.key === keyOf(buf) ? last.em : null;
+}
+
 /** The letters of the track; rejects with Error("aborted") when the signal fires. */
 export async function alignEmissions(
   buf: AudioBuffer,

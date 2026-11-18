@@ -244,7 +244,7 @@ function layout(ctx: CanvasRenderingContext2D, raw: string, st: TextStyle, W: nu
     for (const para of text.split("\n")) {
       if (!para.trim()) { lines.push(""); continue; } // empty line = gap
       let cur = "";
-      for (const word of para.split(/\s+/).filter(Boolean)) {
+      for (const word of para.split(/[ \t]+/).filter(Boolean)) { // (a no-break space holds: « revoir ? » never wraps alone)
         const test = cur ? cur + " " + word : word;
         if (textW(ctx, test) <= maxW || !cur) {
           cur = test;
@@ -316,7 +316,8 @@ export function drawStyledText(
   const widths = L.lines.map((l) => (l ? textW(ctx, l) : 0));
   const bw = Math.max(...widths, 1);
   const cx = (st.x / 100) * W, cy = (st.y / 100) * H;
-  const left = cx - bw / 2, top = cy - L.height / 2;
+  // (its place is its middle; growing down, its first line's; growing up, its last line's)
+  const left = cx - bw / 2, top = st.grow === "down" ? cy - L.lh / 2 : st.grow === "up" ? cy + L.lh / 2 - L.height : cy - L.height / 2;
   const box = { x: left, y: top, w: bw, h: L.height };
   const stroke = st.stroke ?? 20;
   // Each line where it goes (an empty line: a gap).
@@ -370,7 +371,7 @@ export function drawStyledText(
     for (const p of placed) {
       // its words (start and end in the line)
       const spans: [number, number][] = [];
-      for (const m of p.line.matchAll(/\S+/g)) spans.push([m.index!, m.index! + m[0].length]);
+      for (const m of p.line.matchAll(/[^ \t]+/g)) spans.push([m.index!, m.index! + m[0].length]); // (« revoir ? »: one word)
       let upTo = -Infinity;
       for (let j = 0; j < spans.length; j++) {
         const done = lit.words - (before + j);

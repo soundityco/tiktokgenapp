@@ -59,6 +59,12 @@ export default function CaptionStyle({
             </Select>
           </label>
         </div>
+        {/* A second line: under the first (it stays), over the last, or the whole block centred on its place. */}
+        <label className="field">{t("More lines go")}
+          <Select className="input" value={style.grow ?? "center"} onChange={(e) => onChange({ grow: e.target.value === "center" ? undefined : e.target.value as TextStyle["grow"] })}>
+            <option value="center">{t("Around its place")}</option><option value="down">{t("Downwards (first line fixed)")}</option><option value="up">{t("Upwards (last line fixed)")}</option>
+          </Select>
+        </label>
         <Range label={t("Max text block width")} value={style.width} display={`${style.width}%`} min={20} max={100} onChange={(v) => onChange({ width: v })} onReset={() => onChange({ width: defaults.width })} />
         <Range label={t("Letter spacing")} value={style.tracking ?? 0} display={`${style.tracking ?? 0}%`} min={-10} max={50}
           onChange={(v) => onChange({ tracking: v || undefined })} onReset={() => onChange({ tracking: undefined })} />

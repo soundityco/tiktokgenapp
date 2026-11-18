@@ -1378,4 +1378,12 @@ export const FR: Record<string, string> = {
   "At once": "D'un coup",
   "Filling": "En se remplissant",
   "Words not sung yet": "Mots pas encore chantés",
+  "The words follow the voice in their lines (the lines did not move).": "Les mots suivent la voix dans leurs lignes (les lignes n'ont pas bougé).",
+  "The words could not be placed again: {e}": "Les mots n'ont pas pu être recalés : {e}",
+  "Each line stays where it is; its words are placed again on the voice inside it.": "Chaque ligne reste à sa place ; ses mots sont recalés sur la voix à l'intérieur.",
+  "Re-place the words in their lines": "Recaler les mots dans leurs lignes",
+  "More lines go": "Les lignes s'ajoutent",
+  "Around its place": "Autour de sa place",
+  "Downwards (first line fixed)": "Vers le bas (1re ligne fixe)",
+  "Upwards (last line fixed)": "Vers le haut (dernière ligne fixe)",
 };

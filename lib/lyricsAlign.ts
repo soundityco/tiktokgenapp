@@ -17,7 +17,17 @@ export function norm(s: string): string {
 export function splitWords(text: string): { w: string; line: number }[] {
   const out: { w: string; line: number }[] = [];
   text.split(/\r?\n/).forEach((raw, line) => {
-    for (const w of raw.split(/\s+/)) if (norm(w)) out.push({ w, line });
+    // A sign standing alone (French spacing: "revoir ?", "« oui »", " !") has no letter to place: it goes with the word
+    // before it (or the next one, at the start of a line), joined by a no-break space, so it shows and never wraps
+    // alone. (Dropped, an added "?" never reached the video.)
+    let lead = "";
+    for (const w of raw.split(/\s+/)) {
+      if (!w) continue;
+      if (norm(w)) { out.push({ w: lead + w, line }); lead = ""; continue; }
+      const last = out[out.length - 1];
+      if (last && last.line === line && !lead) last.w += "\u00a0" + w;
+      else lead += w + "\u00a0";
+    }
   });
   return out;
 }
@@ -862,7 +872,7 @@ export function activeCue(cues: Cue[], time: number): Cue | null {
  * times when there are as many, else spread over the caption by syllables. Marked as retouched.
  */
 export function rewriteCue(all: LyricWord[], cue: Cue, text: string): LyricWord[] {
-  const ws = text.split(/\s+/).filter(Boolean);
+  const ws = splitWords(text.replace(/\n/g, " ")).map((x) => x.w); // (a sign alone goes with its word)
   if (!ws.length) return all;
   const old = new Set(cue.words);
   const line = cue.words[0]?.line;

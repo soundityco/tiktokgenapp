@@ -44,6 +44,9 @@ export interface TextStyle {
   width: number; // % of canvas width
   lineHeight: number; // multiplier
   align: "left" | "center" | "right";
+  /** When the text takes more lines: around its place (centred on itself, by default), downwards (its first line stays
+   *  where it is) or upwards (its last line stays). */
+  grow?: "center" | "down" | "up";
   color: string;
   accent: string; // outline / box colour
   x: number; // % centre

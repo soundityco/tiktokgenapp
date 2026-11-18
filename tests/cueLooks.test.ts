@@ -56,6 +56,14 @@ describe("a line tapped (the tap mode)", () => {
   });
 });
 
+describe("signs standing alone in the written lyrics (French spacing)", () => {
+  it("go with their word, joined by a no-break space: never dropped", async () => {
+    const { splitWords } = await import("@/lib/lyricsAlign");
+    expect(splitWords("J'ai eu le malheur de te revoir ?\n« oui » !").map((x) => x.w)).toEqual(
+      ["J'ai", "eu", "le", "malheur", "de", "te", "revoir\u00a0?", "«\u00a0oui\u00a0»\u00a0!"]);
+  });
+});
+
 describe("a phrase lit word by word (the lit captions)", () => {
   it("counts the words sung: whole at once, or the one being sung for its part when filling", async () => {
     const { litWords, LIT_LEAD: L } = await import("@/lib/render");

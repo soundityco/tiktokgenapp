@@ -281,6 +281,34 @@ function strayBounds(starts: Int32Array, N: number, owner: number[], written: { 
 /** How long the last word of a line stays, at most: a held note, not the next line's time. */
 const HOLD = 1.0;
 
+/**
+ * One line's words placed again inside its own span (`from`..`to`, s), on the model's letters there only. Where the line
+ * is is already known (the alignment, the relay, the artist's arrows); inside a short span the letters are easy to
+ * follow, where over the whole song a hard passage got its words piled up or spread evenly (a hook drowned in effects,
+ * a line sung fast then slow). The line keeps its start (its first word starts at `from`) and its end; each word keeps
+ * its other fields (`manual`, `until`…). Null when the span is too short for its letters.
+ */
+export function wordsInSpan(emis: Float32Array, T: number, V: number, line: LyricWord[], from: number, to: number, french = looksFrench(line.map((x) => faNorm(x.w)))): LyricWord[] | null {
+  const f0 = Math.max(0, Math.floor(from / FA_FRAME)), f1 = Math.min(T, Math.ceil(to / FA_FRAME)), n = f1 - f0;
+  const toks: number[] = [], owner: number[] = [];
+  line.forEach((x, wi) => { const w = faNorm(x.w); for (const c of french ? frenchSound(w) : w) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
+  if (line.length < 2 || !toks.length || n < toks.length + 2) return null;
+  // (its first letter at its start, give or take 0.24 s: the line's start is trusted)
+  const lo = new Int32Array(toks.length), hi = new Int32Array(toks.length).fill(n - 1);
+  hi[0] = Math.min(n - 1, 12);
+  const st = ctcStarts(emis.subarray(f0 * V, f1 * V), n, V, toks, { lo, hi });
+  if (!st) return null;
+  const placed = wordsOf(st, toks.length, owner, line.map((x) => ({ w: x.w, line: x.line ?? 0 })));
+  const base = f0 * FA_FRAME;
+  let prev = from;
+  return line.map((x, i) => {
+    const s = i === 0 ? from : Math.max(prev + 0.01, Math.min(to - 0.05, base + placed[i].s));
+    const e = Math.max(s + 0.05, Math.min(to, base + placed[i].e));
+    prev = s;
+    return { ...x, s: Math.round(s * 1000) / 1000, e: Math.round(e * 1000) / 1000 };
+  });
+}
+
 function wordsOf(starts: Int32Array, N: number, owner: number[], written: { w: string; line: number }[]): LyricWord[] {
   const s = new Array<number>(written.length).fill(Infinity);
   const e = new Array<number>(written.length).fill(0);

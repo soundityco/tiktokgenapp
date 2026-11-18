@@ -27,8 +27,9 @@ import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import { stopAlign } from "@/lib/alignAI";
-import { LYRICS_LAP, LYRICS_WIN, placeByAlignment } from "@/lib/lyricsPipeline";
+import { alignEmissions, cachedEmissions, stopAlign } from "@/lib/alignAI";
+import { faNorm, looksFrench } from "@/lib/forcedAlign";
+import { LYRICS_LAP, LYRICS_WIN, inLines, placeByAlignment } from "@/lib/lyricsPipeline";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { VideoOverlay } from "@/lib/types";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -2870,6 +2871,10 @@ export default function VideoStudio({
       const p = cs[i - 1];
       if (p && p.start < at) words = setCueEnd(words, p, Math.max(p.start + 0.1, Math.min(before, at - 0.04)));
     }
+    // Its words follow the voice inside it (the model's letters there, when it listened to this song in this session):
+    // stretched in the old rhythm, a line placed by hand lit its words late or all at once.
+    const em = audioBuf ? cachedEmissions(audioBuf) : null, ln = c.words[0]?.line;
+    if (em && ln !== undefined) words = inLines(words, em, looksFrench(words.map((w) => faNorm(w.w))), new Set([ln]));
     tapCursor.current = i;
     lyricWordsRef.current = words;
     onProject((x) => ({ ...x, lyricWords: words }));
@@ -3346,6 +3351,11 @@ export default function VideoStudio({
     const x1 = X(Math.min(dur, settings.crop.start + settings.crop.duration));
     // Where the camera video exists on the official track.
     const ci = bandSel.ci, co = bandSel.co;
+    // A video running past the view's edge has no rounded corner there (the waveform's corners clipped its band: it
+    // looked as if it started at the view's start).
+    const past = videoBlob && videoDur > 0 && co > ci;
+    c.style.borderTopLeftRadius = c.style.borderBottomLeftRadius = past && X(bandSel.off + ci) < 0 ? "0" : "";
+    c.style.borderTopRightRadius = c.style.borderBottomRightRadius = past && X(bandSel.off + co) > W ? "0" : "";
     if (videoBlob && videoDur > 0 && co > ci) {
       const v0 = clamp(X(bandSel.off + ci), 0, W);
       const v1 = clamp(X(bandSel.off + co), 0, W);
@@ -3816,6 +3826,26 @@ export default function VideoStudio({
     }
   };
 
+  /**
+   * Every line's words placed again inside it, on the voice (`inLines`): the lines stay where they are, retouched ones
+   * too. The model listens to the song once if it has not in this session.
+   */
+  const refitWords = async () => {
+    const words = project.lyricWords;
+    if (!audioBuf || !words?.length || genBusy) return;
+    setGenBusy(true); setGenStep("listen"); setGenDone(0); setErr(null); setNote(null);
+    try {
+      const em = await alignEmissions(audioBuf, { onProgress: (p) => setGenDone(p) });
+      const out = inLines(words, em, looksFrench(words.map((w) => faNorm(w.w))));
+      lyricWordsRef.current = out;
+      onProject((p) => ({ ...p, lyricWords: out }));
+      onSaveNow();
+      setNote(t("The words follow the voice in their lines (the lines did not move)."));
+    } catch (e) {
+      if (String(e).includes("aborted")) return;
+      setErr(t("The words could not be placed again: {e}", { e: String(e) }));
+    } finally { setGenBusy(false); setGenStep(null); setGenDone(0); }
+  };
   const cancelLyrics = () => { genRef.current?.abort(); genRef.current = null; setGenBusy(false); setGenStep(null); };
 
   /** "Clear the timing" asked: what goes is said first (it is shared by the release's videos). */
@@ -6482,6 +6512,11 @@ export default function VideoStudio({
                           {/* One action, always from scratch (it was two, the second shown only once the first was done). */}
                           <Icon name="type" size={14} />{placed ? t("Re-place the lyrics") : t("Sync the lyrics")}{hasLyrics && !placed && <span className="tab-dot" />}
                         </button>
+                        {placed && (
+                          <button onClick={() => { closeMenu(); void refitWords(); }} title={t("Each line stays where it is; its words are placed again on the voice inside it.")}>
+                            <Icon name="sparkle" size={14} />{t("Re-place the words in their lines")}
+                          </button>
+                        )}
                       </>)}
                     </Menu>
                   ) : (

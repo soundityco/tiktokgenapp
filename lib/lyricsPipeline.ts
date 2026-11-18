@@ -1,6 +1,6 @@
 import type { LyricWord } from "./types";
 import { type Emissions, alignDevice, alignEmissions } from "./alignAI";
-import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench } from "./forcedAlign";
+import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench, wordsInSpan } from "./forcedAlign";
 import { findRepeats, foldedFit, melFrames, repeatPeriodIn } from "./repeatBlocks";
 import { alignSong, cleanHeard, norm, similarity, splitWords, withoutLost, wordsFromSegments } from "./lyricsAlign";
 import { mergeHeard, noSpeech, relayWeakLines } from "./lyricsRelay";
@@ -66,7 +66,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   /** The rules that need no speech model: after a cut in the production, lines piled up, a chorus copied and pasted. */
   const finish = async (w: LyricWord[]) => {
     const placed = spreadPacked(afterBreaks(w, silencesOf(buf)));
-    return markUnsure(placed, await applyRepeat(buf, em, placed, french));
+    return inLines(markUnsure(placed, await applyRepeat(buf, em, placed, french)), em, french);
   };
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
   // there, are heard again by the speech model, and its times are used for those lines (lib/lyricsRelay).
@@ -460,5 +460,24 @@ async function copiesAlike(buf: AudioBuffer, start: number, P: number, times: nu
     }
     out.push(n ? sim / n : 0);
   }
+  return out;
+}
+
+/**
+ * Last: each line's words placed again inside the line's own span (up to the next line), on the model's letters there
+ * (`wordsInSpan`). The lines stay where the chain put them; their words follow the voice inside them (piled up or spread
+ * evenly by the relay and the rules before, they lit late or all at once in the "lit" captions).
+ */
+export function inLines(words: LyricWord[], em: Emissions, french: boolean, only?: Set<number>): LyricWord[] {
+  const out = words.slice(), end = em.T * FRAME;
+  const starts: number[] = [];
+  for (let i = 0; i < words.length; i++) if (i === 0 || words[i].line !== words[i - 1].line) starts.push(i);
+  starts.forEach((a, k) => {
+    const b = k + 1 < starts.length ? starts[k + 1] : words.length;
+    if (only && !only.has(words[a].line ?? -1)) return;
+    const to = b < words.length ? words[b].s : Math.min(end, words[b - 1].e + 0.3);
+    const again = wordsInSpan(em.frames, em.T, em.V, words.slice(a, b), words[a].s, to, french);
+    if (again) again.forEach((x, j) => { out[a + j] = x; });
+  });
   return out;
 }
