@@ -1,105 +1,147 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Icon from "@/components/Icon";
 
 /** One pass of the scene (s): it loops. */
 const T = 12;
-/** The song's lines in the scene: when each starts and ends (s), its words even inside it. */
+/** The song's lines: when each starts and ends (s); its words lit in turn inside it. */
 const LINES = [
   { a: 0.6, b: 3.4, text: "we were dancing in the dark" },
   { a: 3.6, b: 6.2, text: "every light was ours" },
   { a: 6.6, b: 9.2, text: "say my name again" },
   { a: 9.4, b: 11.6, text: "one more time" },
 ];
-/** The cameras' shots (the multicam): which plays from when. */
+/** The multicam: which camera from when (camera 1 the base, 2 and 3 on it). */
 const SHOTS = [{ at: 0, cam: 1 }, { at: 4, cam: 2 }, { at: 7.6, cam: 3 }, { at: 10.2, cam: 1 }];
 const HOOK = { a: 0, b: 3.2 };
 
-/** A filled waveform (as the app draws it, Ableton-like): the same every time (a fixed seed), louder in the chorus. */
-function wavePath(w: number, h: number): string {
-  let seed = 7;
+/** The song's sound, made up (the same every time): its lowest and highest point per column, louder on the beat. */
+function envelope(n: number): { lo: number[]; hi: number[] } {
+  let seed = 11;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const n = 220, mid = h / 2, top: string[] = [], bottom: string[] = [];
-  for (let i = 0; i <= n; i++) {
-    const x = (i / n) * w, beat = Math.pow(Math.abs(Math.sin((i / n) * Math.PI * 24)), 3);
-    const swell = 0.35 + 0.65 * Math.min(1, Math.max(0, (i / n - 0.45) * 3)) * 0.6 + 0.25;
-    const v = Math.min(1, (0.18 + 0.55 * beat + 0.27 * rnd()) * swell);
-    top.push(`${x.toFixed(1)},${(mid - v * mid * 0.92).toFixed(1)}`);
-    bottom.unshift(`${x.toFixed(1)},${(mid + v * mid * 0.92 * (0.85 + 0.15 * rnd())).toFixed(1)}`);
+  const lo: number[] = [], hi: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = i / n, beat = Math.pow(Math.abs(Math.sin(x * Math.PI * 26)), 4), drop = x > 0.3 ? 1 : 0.55;
+    const v = Math.min(1, (0.16 + 0.6 * beat + 0.28 * rnd()) * drop);
+    hi.push(v * (0.85 + 0.15 * rnd())); lo.push(-v * (0.85 + 0.15 * rnd()));
   }
-  return `M${top.join("L")}L${bottom.join("L")}Z`;
+  return { lo, hi };
 }
+const ENV = envelope(900);
+const FILM = "M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4";
 
 /**
- * The video studio, drawn and playing (the home page's product shot): the 9:16 preview with the lyrics lighting word
- * by word and the camera changing, the waveform, the hook, the lyrics and three cameras on the timeline, one playhead.
- * Runs only while on screen (and not at all with reduced motion: a still at a chosen moment).
+ * The video studio, playing (the home page's product shot), drawn with the app's own timeline: the same markup and
+ * classes as VideoStudio (tl-stack, lyric-track, cue, video-clip, tl-head) and the same waveform drawing as its
+ * paintWave (filled, the playhead's glow, the video's band with its number), so it is the app's to the pixel. Left,
+ * the 9:16 preview: the lyrics as a phrase, its words lighting in turn, the camera changing with the cuts. Runs only
+ * while on screen; with reduced motion, a still.
  */
-export default function StudioScene({ labels }: { labels: { hook: string; lyrics: string; cam: string; hookText: string; synced: string; placed: string } }) {
+export default function StudioScene({ labels }: { labels: { video: string; hookText: string; synced: string; placed: string; takes: string[] } }) {
   const box = useRef<HTMLDivElement>(null);
-  const [now, setNow] = useState({ line: 0, word: 2, cam: 1, shot: 0, hook: true });
+  const wave = useRef<HTMLCanvasElement>(null);
+  const head = useRef<HTMLSpanElement>(null);
+  const [now, setNow] = useState({ line: 0, word: 2, shot: 0, hook: true, x: 0 });
   const seen = useRef("");
   useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let raf = 0, t0 = performance.now(), on = false;
-    const paint = (t: number) => {
-      el.style.setProperty("--p", String(t / T));
-      const li = LINES.findIndex((l) => t >= l.a && t < l.b);
-      const l = LINES[li];
-      const word = l ? Math.min(l.text.split(" ").length - 1, Math.floor(((t - l.a) / (l.b - l.a)) * l.text.split(" ").length)) : -1;
-      const shot = SHOTS.reduce((k, s, i) => (t >= s.at ? i : k), 0), cam = SHOTS[shot].cam;
-      const hook = t >= HOOK.a && t < HOOK.b;
-      const key = `${li}|${word}|${shot}|${hook}`;
-      if (key !== seen.current) { seen.current = key; setNow({ line: li, word, cam, shot, hook }); }
+    const el = box.current, c = wave.current;
+    if (!el || !c) return;
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue("--accent").trim(), white = css.getPropertyValue("--accent-hi").trim();
+    const film = new Path2D(FILM);
+    const draw = (t: number) => {
+      const W = c.clientWidth, H = c.clientHeight, dpr = window.devicePixelRatio || 1;
+      if (!W) return;
+      if (c.width !== Math.round(W * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+      const g = c.getContext("2d")!;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.fillStyle = "#16161c"; g.fillRect(0, 0, W, H);
+      // the video's band (camera 1, the one set) and its number, the segment's faint ground (here the whole view)
+      g.fillStyle = accent; g.globalAlpha = 0.14; g.fillRect(0, 0, W, H); g.globalAlpha = 1; g.fillRect(0, 0, W, 15);
+      g.fillStyle = g.strokeStyle = "#0c0c0e";
+      g.save(); g.translate(5, 2.5); g.scale(10 / 24, 10 / 24); g.lineWidth = 2.4; g.lineJoin = "round"; g.stroke(film); g.restore();
+      g.font = "600 10px ui-monospace, 'JetBrains Mono', monospace"; g.textBaseline = "middle";
+      g.fillText(`${labels.video.toLocaleUpperCase()} 1`, 19, 8);
+      g.fillStyle = accent; g.globalAlpha = 0.09; g.fillRect(0, 15, W, H - 15); g.globalAlpha = 1;
+      // the filled waveform (one shape), white around the playhead
+      const top = 17, room = H - top - 6, mid = top + room / 2, half = room / 2, n = ENV.hi.length;
+      g.beginPath();
+      for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * W, y = mid - Math.max(0.5, ENV.hi[i] * half); if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+      for (let i = n - 1; i >= 0; i--) g.lineTo((i / (n - 1)) * W, mid + Math.max(0.5, -ENV.lo[i] * half));
+      g.closePath(); g.fillStyle = "#6f6e78"; g.fill();
+      const hx = (t / T) * W, glow = g.createLinearGradient(hx - 70, 0, hx + 70, 0);
+      glow.addColorStop(0, "rgba(255,255,255,0)"); glow.addColorStop(0.5, white); glow.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = glow; g.fill();
     };
-    if (still) { paint(1.9); return; }
-    const tick = (ms: number) => { paint(((ms - t0) / 1000) % T); raf = requestAnimationFrame(tick); };
+    const paint = (t: number) => {
+      draw(t);
+      if (head.current) head.current.style.left = `calc(6px + (100% - 12px) * ${t / T})`;
+      const li = LINES.findIndex((l) => t >= l.a && t < l.b), l = LINES[li];
+      const word = l ? Math.min(l.text.split(" ").length - 1, Math.floor(((t - l.a) / (l.b - l.a)) * l.text.split(" ").length)) : -1;
+      const shot = SHOTS.reduce((k, s, i) => (t >= s.at ? i : k), 0), hook = t >= HOOK.a && t < HOOK.b;
+      const key = `${li}|${word}|${shot}|${hook}|${Math.round(t * 12)}`;
+      if (key !== seen.current) { seen.current = key; setNow({ line: li, word, shot, hook, x: t }); }
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { paint(1.9); return; }
+    let raf = 0, t0 = performance.now(), on = false, at = 0;
+    const tick = (ms: number) => { at = ((ms - t0) / 1000) % T; paint(at); raf = requestAnimationFrame(tick); };
     const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && !on) { on = true; t0 = performance.now() - (Number(el.style.getPropertyValue("--p") || 0) * T * 1000); raf = requestAnimationFrame(tick); }
+      if (e.isIntersecting && !on) { on = true; t0 = performance.now() - at * 1000; raf = requestAnimationFrame(tick); }
       else if (!e.isIntersecting && on) { on = false; cancelAnimationFrame(raf); }
     });
     io.observe(el);
+    paint(0);
     return () => { io.disconnect(); cancelAnimationFrame(raf); };
-  }, []);
+  }, [labels.video]);
+
   const pct = (s: number) => `${(s / T) * 100}%`;
-  const line = LINES[now.line];
+  const clip = (a: number, b: number) => ({ left: pct(a), width: pct(b - a) });
+  const hx = (a: number, b: number) => `${Math.min(1, Math.max(0, (now.x - a) / (b - a))) * 100}%`;
+  const line = LINES[now.line], cam = SHOTS[now.shot].cam;
   return (
     <div className="lp-scene" ref={box} aria-hidden>
-      <div className="lp-scene-bar"><i /><i /><i /><span className="mono">RAW · {labels.cam} {now.cam}</span></div>
-      <div className="lp-scene-body">
-        <div className={`lp-scene-preview cam-${now.cam}`}>
-          <span className="lp-post-ground"><i /><i /><i /></span>
-          <span className="lp-post-grain" />
-          {now.hook && <span className="lp-scene-hook">{labels.hookText}</span>}
-          {line && (
-            <span className="lp-scene-lyric" key={now.line}>
-              {line.text.split(" ").map((w, k) => <span key={k} className={k <= now.word ? "lit" : ""}>{w} </span>)}
+      <div className={`lp-scene-preview cam-${cam}`}>
+        <span className="lp-post-ground"><i /><i /><i /></span>
+        <span className="lp-post-grain" />
+        {now.hook && <span className="lp-scene-hook">{labels.hookText}</span>}
+        {line && (
+          <span className="lp-scene-lyric" key={now.line}>
+            {line.text.split(" ").map((w, k) => <span key={k} className={k <= now.word ? "lit" : ""}>{w} </span>)}
+          </span>
+        )}
+        <span className="lp-scene-cam mono">CAM {cam}</span>
+      </div>
+      <div className="lp-scene-side">
+        <div className="lp-scene-status"><span className="lp-scene-chip">✓ {labels.synced}</span><span className="lp-scene-chip gold">✓ {labels.placed}</span></div>
+        {/* The app's timeline, with its own classes. */}
+        <div className="tl-stack lp-tl">
+          <div className="wave-wrap"><canvas ref={wave} className="wave" /></div>
+          <div className="lyric-track hook-track"><div className="track-content">
+            <span className={"cue" + (now.hook ? " on" : "")} data-text={labels.hookText} style={{ ...clip(HOOK.a, HOOK.b), ["--hx" as string]: hx(HOOK.a, HOOK.b) }}>
+              <span className="cue-ico"><Icon name="sparkle" size={11} /></span>{labels.hookText}
             </span>
-          )}
-          <span className="lp-scene-cam mono">CAM {now.cam}</span>
-        </div>
-        <div className="lp-scene-tl">
-          <div className="lp-scene-status"><span className="lp-scene-chip">✓ {labels.synced}</span><span className="lp-scene-chip gold">✓ {labels.placed}</span></div>
-          <svg className="lp-scene-wave" viewBox="0 0 600 70" preserveAspectRatio="none"><path d={wavePath(600, 70)} /></svg>
-          <div className="lp-scene-row hook">
-            <span className="lp-scene-clip" style={{ left: pct(HOOK.a), width: pct(HOOK.b - HOOK.a) }}>✦ {labels.hookText}</span>
-          </div>
-          <div className="lp-scene-row lyrics">
+          </div></div>
+          <div className="lyric-track lyrics-track"><div className="track-content">
             {LINES.map((l, i) => (
-              <span key={i} className={"lp-scene-clip" + (i === now.line ? " on" : "")} style={{ left: pct(l.a), width: pct(l.b - l.a) }}>T {l.text}</span>
+              <span key={i} className={"cue" + (i === now.line ? " on" : "")} data-text={l.text} style={{ ...clip(l.a, l.b), ["--hx" as string]: hx(l.a, l.b) }}>
+                <span className="cue-ico"><Icon name="type" size={11} /></span>{l.text}
+              </span>
+            ))}
+          </div></div>
+          <div className="video-block">
+            {[3, 2, 1].map((k) => (
+              <div key={k} className="lyric-track video-track"><div className="track-content">
+                {SHOTS.map((s, i) => s.cam === k && (
+                  <span key={i} className={`cue video-clip cam-${k - 1}` + (i === now.shot ? " on" : "")} style={clip(s.at, SHOTS[i + 1]?.at ?? T)}>
+                    <span className="vc-name"><span className="cue-ico"><Icon name="film" size={11} /></span><b className="vc-no">{k}</b>
+                      <span className="truncate">{labels.takes[k - 1]}</span></span>
+                  </span>
+                ))}
+              </div></div>
             ))}
           </div>
-          {[3, 2, 1].map((cam) => (
-            <div key={cam} className={`lp-scene-row video cam-${cam}`}>
-              {SHOTS.map((s, i) => s.cam === cam && (
-                <span key={i} className={"lp-scene-clip" + (i === now.shot ? " on" : "")}
-                  style={{ left: pct(s.at), width: pct((SHOTS[i + 1]?.at ?? T) - s.at) }}>▣ {labels.cam} {cam}</span>
-              ))}
-            </div>
-          ))}
-          <span className="lp-scene-head" />
+          <span className="tl-head" ref={head} />
         </div>
       </div>
     </div>

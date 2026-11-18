@@ -5,15 +5,16 @@ import { auth, signIn } from "@/auth";
 import Icon from "@/components/Icon";
 import Logo from "@/components/Logo";
 import Wordmark from "@/components/Wordmark";
-import PostCard from "@/components/landing/PostCard";
+import CarouselDeck from "@/components/landing/CarouselDeck";
+import StylePicker from "@/components/landing/StylePicker";
 import StudioScene from "@/components/landing/StudioScene";
-import { POSTS, STYLES } from "@/components/landing/posts";
+import { STYLES } from "@/components/landing/posts";
 import "./landing.css";
 import { detectLang, translate } from "@/lib/translate";
 
 /**
- * The home page, signed out: what RAW does for an artist, shown more than told — posts made with it sliding by, the
- * video studio playing, four styles side by side — in plain words; Google sign-in (signed in: straight to the studio).
+ * The home page, signed out: what RAW does for an artist, shown more than told — the video studio playing right under
+ * the headline (the app's own timeline), the styles as a plugin's presets, a carousel to generate — in plain words; Google sign-in (signed in: straight to the studio).
  * The app's own look: serif headlines, mono labels, each studio in its colour, hairlines. The posts are drawn in code
  * until real videos replace them (components/landing/posts.ts).
  */
@@ -36,10 +37,11 @@ export default async function Home() {
         <span className="grow" />
         <a className="lp-nav-link" href="#studio">{t("The studio")}</a>
         <a className="lp-nav-link" href="#styles">{t("Styles")}</a>
+        <a className="lp-nav-link" href="#carousel">{t("Carousels")}</a>
         <form action={google}><button className="btn sm">{t("Sign in")}</button></form>
       </header>
 
-      {/* The headline, centred; under it, posts made with RAW slide by. */}
+      {/* The headline, centred, and the product right under it (as a plugin's page): the video studio playing. */}
       <section className="lp-hero2">
         <span className="label">{t("For artists who release music")}</span>
         <h1 className="display lp-title2">{t("Your music, everywhere.")}<br /><em>{t("Without the all-nighters.")}</em></h1>
@@ -51,37 +53,37 @@ export default async function Home() {
         <p className="lp-fine mono">{t("Your files stay in your own Google Drive.")}</p>
         {dev && <form action={async () => { "use server"; await signIn("dev", { redirectTo: "/studio" }); }}><button className="btn sm">Dev login (local only)</button></form>}
       </section>
-      <div className="lp-strip" aria-hidden>
-        <div className="lp-strip-track">
-          {[...POSTS, ...POSTS].map((p, i) => <PostCard key={i} post={p} size="sm" />)}
+      <section id="studio" className="lp-product">
+        <div className="lp-frame">
+          <StudioScene labels={{ video: t("Video"), hookText: t("new single · friday"), synced: t("3 takes synced to the track"), placed: t("lyrics placed word by word"), takes: [t("Face cam"), t("Wide shot"), t("Phone")] }} />
         </div>
-      </div>
-
-      {/* The product, in front: the video studio playing. */}
-      <section id="studio" className="lp-block lp-studio">
-        <div className="lp-block-head">
-          <span className="lp-kicker"><span className="lp-dot" />{t("Video studio")}</span>
-          <h2 className="display">{t("Film it once.")} <em>{t("RAW does the edit.")}</em></h2>
-          <p className="lp-lead2">{t("Drop your takes: they lock onto your track by themselves. Your lyrics light up word by word, right on time, and you switch cameras like in a real edit.")}</p>
+        <div className="lp-product-notes">
+          {[
+            [t("Film it once."), t("Your takes lock onto your track by themselves, even filmed on three cameras.")],
+            [t("RAW does the edit."), t("Lyrics placed word by word, the hook on top, cuts between cameras like in a real editor.")],
+            [t("Your look."), t("Your LUT, your grain, your fonts: the same style on every post of the release.")],
+          ].map(([h, p]) => <div key={h} className="lp-note"><b>{h}</b><span>{p}</span></div>)}
         </div>
-        <StudioScene labels={{ hook: t("Hook"), lyrics: t("Lyrics"), cam: t("Video"), hookText: t("new single · friday"), synced: t("3 takes synced to the track"), placed: t("lyrics placed word by word") }} />
       </section>
 
-      {/* One look per release: four styles, side by side. */}
+      {/* The styles, as a plugin's presets: one post large, the list beside it. */}
       <section id="styles" className="lp-block">
         <div className="lp-block-head">
-          <span className="lp-kicker"><span className="lp-dot carousel" />{t("Styles")}</span>
+          <span className="lp-kicker"><span className="lp-dot video" />{t("Styles")}</span>
           <h2 className="display">{t("One look")} <em>{t("per release.")}</em></h2>
           <p className="lp-lead2">{t("Fonts, colours, word by word or line by line: set your look once, every post follows it.")}</p>
         </div>
-        <div className="lp-styles">
-          {STYLES.map((s) => (
-            <figure key={s.name} className="lp-style">
-              <PostCard post={s.post} />
-              <figcaption><b>{t(s.name)}</b><span className="mono">{t(s.note)}</span></figcaption>
-            </figure>
-          ))}
+        <StylePicker styles={STYLES.map((s) => ({ post: s.post, name: t(s.name), note: t(s.note) }))} />
+      </section>
+
+      {/* The carousel studio: a deck, and Generate for another one. */}
+      <section id="carousel" className="lp-block">
+        <div className="lp-block-head">
+          <span className="lp-kicker"><span className="lp-dot carousel" />{t("Carousel studio")}</span>
+          <h2 className="display">{t("A carousel a day,")} <em>{t("without the grind.")}</em></h2>
+          <p className="lp-lead2">{t("Your photos, your hooks, your lyrics: one click and a new carousel is ready, never the same twice.")}</p>
         </div>
+        <CarouselDeck label={t("Generate")} />
       </section>
 
       {/* What it changes for an artist, in six lines. */}

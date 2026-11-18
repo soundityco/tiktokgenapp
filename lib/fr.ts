@@ -1365,4 +1365,12 @@ export const FR: Record<string, string> = {
   "Everything lives in a RAW folder of your Google Drive. Your videos never go through our servers.": "Tout vit dans un dossier RAW de ton Google Drive. Tes vidéos ne passent jamais par nos serveurs.",
   "3 takes synced to the track": "3 prises calées sur le son",
   "lyrics placed word by word": "paroles calées mot à mot",
+  "Face cam": "Face cam",
+  "Wide shot": "Plan large",
+  "Your takes lock onto your track by themselves, even filmed on three cameras.": "Tes prises se calent toutes seules sur ton son, même filmées avec trois caméras.",
+  "Lyrics placed word by word, the hook on top, cuts between cameras like in a real editor.": "Les paroles posées mot à mot, le hook par-dessus, les coupes entre caméras comme dans un vrai logiciel de montage.",
+  "Your look.": "Ton style.",
+  "Your LUT, your grain, your fonts: the same style on every post of the release.": "Ta LUT, ton grain, tes polices : le même style sur chaque post de la sortie.",
+  "Your photos, your hooks, your lyrics: one click and a new carousel is ready, never the same twice.": "Tes photos, tes hooks, tes paroles : un clic et un nouveau carrousel est prêt, jamais deux fois le même.",
+  "Carousels": "Carrousels",
 };
