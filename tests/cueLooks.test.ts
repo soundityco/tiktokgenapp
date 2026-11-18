@@ -74,6 +74,30 @@ describe("a locked line (syllables)", () => {
   });
 });
 
+describe("Andy's intro « Non, non, non, non » (two words eaten together)", () => {
+  it("takes the rhythm of the same line locked in the final chorus, its start and end kept", async () => {
+    const { inLines } = await import("@/lib/lyricsPipeline");
+    const { FA_VOCAB } = await import("@/lib/forcedAlign");
+    const V = Math.max(...Object.values(FA_VOCAB)) + 1, T = 4500;
+    const em = { frames: new Float32Array(T * V).fill(Math.log(1 / V)), T, V }; // nothing heard
+    const ws: LyricWord[] = [
+      { w: "Non,", line: 1, s: 17.52, e: 17.61, manual: true }, { w: "non,", line: 1, s: 17.61, e: 17.993, manual: true },
+      { w: "non,", line: 1, s: 18.043, e: 18.194, until: 18.39, manual: true }, { w: "non", line: 1, s: 18.252, e: 18.412, until: 18.47, manual: true },
+      { w: "Tout", line: 2, s: 18.47, e: 18.8, manual: true, lock: true },
+      { w: "Non,", line: 26, s: 66.2, e: 66.44, manual: true, lock: true }, { w: "non,", line: 26, s: 66.48, e: 66.801, manual: true, lock: true },
+      { w: "non,", line: 26, s: 66.841, e: 67.061, manual: true, lock: true }, { w: "non", line: 26, s: 67.101, e: 67.389, manual: true, lock: true },
+      { w: "Tout", line: 27, s: 67.301, e: 67.441, manual: true, lock: true },
+    ];
+    const out = inLines(ws, em, true);
+    const non = out.slice(0, 4).map((x) => x.s);
+    expect(non[0]).toBe(17.52);
+    const gaps = non.slice(1).map((v, i) => v - non[i]);
+    gaps.forEach((g) => expect(g).toBeGreaterThan(0.18)); // no two eaten together
+    expect(out[4].s).toBe(18.47); // the locked line after: untouched
+    expect(out.slice(5).map((x) => x.s)).toEqual([66.2, 66.48, 66.841, 67.101, 67.301]);
+  });
+});
+
 describe("a hardly heard line with a twin heard well (a chorus)", () => {
   it("takes its twin's rhythm", async () => {
     const { inLines } = await import("@/lib/lyricsPipeline");

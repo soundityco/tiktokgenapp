@@ -474,7 +474,7 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
   for (let i = 0; i < words.length; i++) if (i === 0 || words[i].line !== words[i - 1].line) starts.push(i);
   const textOf = (l: LyricWord[]) => l.map((x) => norm(x.w)).join(" ");
   // each line heard again in its span; the hardly heard ones are settled after, with what the heard ones give
-  const done: { a: number; b: number; heard: boolean; words: LyricWord[] | null; to: number }[] = [];
+  const done: { a: number; b: number; heard: boolean; words: LyricWord[] | null; to: number; locked?: boolean }[] = [];
   starts.forEach((a, k) => {
     const b = k + 1 < starts.length ? starts[k + 1] : words.length;
     const line = words.slice(a, b);
@@ -492,7 +492,7 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
           if (sy.slice(1).every((f, q) => f > sy[q] && f > 0.02 && f < 0.97)) out[a + j] = { ...x, sy: [0, ...sy.slice(1).map((f) => Math.round(f * 1000) / 1000)] };
         });
       }
-      done.push({ a, b, heard: true, words: null, to: 0 }); return;
+      done.push({ a, b, heard: true, words: null, to: 0, locked: true }); return;
     }
     if (only && !only.has(words[a].line ?? -1)) { done.push({ a, b, heard: !looksOff(line), words: null, to }); return; }
     // (each line in its own language: an English hook in a French song, read the French way, was hardly heard)
@@ -508,16 +508,27 @@ export function inLines(words: LyricWord[], em: Emissions, french: boolean, only
   for (const d of done) {
     if (d.heard || d.words || (only && !only.has(words[d.a].line ?? -1))) continue;
     const line = words.slice(d.a, d.b);
-    // (hardly heard and retouched by hand: the artist's placing beats a guess)
-    if (line.some((x) => x.lock || x.manual) || !looksOff(line)) continue;
-    const from = line[0].s, room = Math.min(d.to, line[line.length - 1].until ?? d.to) - from;
-    const twin = done.find((o) => o !== d && o.heard && o.words !== null && o.b - o.a === line.length && textOf(out.slice(o.a, o.b)) === textOf(line));
+    if (line.some((x) => x.lock)) continue;
+    const from = line[0].s;
+    // its twin: the same line locked by the artist (checked by ear), else heard well in this pass
+    const same = (o: (typeof done)[number]) => o !== d && o.b - o.a === line.length && textOf(out.slice(o.a, o.b)) === textOf(line);
+    const twin = done.find((o) => o.locked && same(o)) ?? done.find((o) => o.heard && o.words !== null && same(o));
     let fixed: LyricWord[];
     if (twin) {
-      const ref = out.slice(twin.a, twin.b), s0 = ref[0].s, len = Math.max(0.05, ref[ref.length - 1].e - s0);
-      const k = room > 0 && len > room ? room / len : 1; // (squeezed only if its room is shorter)
+      // its words in the twin's rhythm, brought to its own length: its start and its end stay where they are (set by hand
+      // often), its inside follows the twin ("Non, non, non, non" of the intro, two words eaten together, as the final
+      // chorus's, locked)
+      const ref = out.slice(twin.a, twin.b), s0 = ref[0].s, rl = Math.max(0.05, (ref[ref.length - 1].until ?? ref[ref.length - 1].e) - s0);
+      // (its own length when its end was set — `until`, by hand —; else the twin's, within its room)
+      const set = line[line.length - 1].until;
+      const own = Math.max(0.1 * line.length, set !== undefined ? Math.min(d.to, set) - from : Math.min(rl, d.to - from));
+      const k = own / rl;
       fixed = line.map((x, j) => ({ ...x, s: Math.round((from + (ref[j].s - s0) * k) * 1000) / 1000, e: Math.round((from + (ref[j].e - s0) * k) * 1000) / 1000, ...(ref[j].sy ? { sy: ref[j].sy } : {}) }));
-    } else fixed = bySyllables(line, from, from + room);
+    } else {
+      // hardly heard and retouched by hand: the artist's placing beats a guess; else only when its words do not look sung
+      if (line.some((x) => x.manual) || !looksOff(line)) continue;
+      fixed = bySyllables(line, from, from + (Math.min(d.to, line[line.length - 1].until ?? d.to) - from));
+    }
     fixed.forEach((x, j) => { out[d.a + j] = x; });
   }
   return unpileLines(out, only);
