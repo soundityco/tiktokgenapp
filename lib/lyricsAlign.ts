@@ -729,8 +729,9 @@ export function moveCueStart(all: LyricWord[], cues: Cue[], i: number, at: numbe
   let out = all.map((x) => moved.get(x) ?? x);
   // Its end stays where it was.
   out = setCueEnd(out, { ...c, words: c.words.map((x) => moved.get(x) ?? x) }, c.end);
-  // The line before, glued to it: it leaves when this one comes (later or sooner), never a gap made by the drag.
-  if (prev && !free) out = setCueEnd(out, prev, to);
+  // The line before keeps its own end (pinned: an end glued to this start would stretch to follow it), cut short only
+  // when this one now starts over it; never stretched to this one (a gap stays a gap, as in an editor).
+  if (prev && !free) out = setCueEnd(out, prev, Math.min(prev.end, to));
   return out;
 }
 

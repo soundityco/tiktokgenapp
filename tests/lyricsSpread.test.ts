@@ -64,17 +64,21 @@ describe("moveCueStart (a caption's start dragged)", () => {
     { w: "trois", s: 3, e: 3.4, line: 1 }, { w: "quatre", s: 3.4, e: 4, line: 1 },
   ];
   const cues = () => buildCues(words, "phrase");
-  it("later: the line comes later, the one before stays until it (no gap), its end kept", () => {
+  it("later: the line comes later, its end kept; the one before keeps its own end (never stretched to it)", () => {
+    const before = cues()[0].end;
     const out = moveCueStart(words, cues(), 1, 3.3)!;
     const c = buildCues(out, "phrase");
     expect(c[1].start).toBeCloseTo(3.3);
     expect(c[1].end).toBeCloseTo(cues()[1].end);
-    expect(c[0].end).toBeCloseTo(3.3);
+    expect(c[0].end).toBeCloseTo(before);
   });
-  it("earlier: the line before leaves then; Alt: it stays (a gap is allowed)", () => {
+  it("earlier: the line before keeps its end, cut short only when this one starts over it; Alt: it stays", () => {
+    const before = cues()[0].end;
     const c = buildCues(moveCueStart(words, cues(), 1, 2.5)!, "phrase");
     expect(c[1].start).toBeCloseTo(2.5);
-    expect(c[0].end).toBeCloseTo(2.5);
+    expect(c[0].end).toBeCloseTo(Math.min(before, 2.5));
+    const over = buildCues(moveCueStart(words, cues(), 1, 1.8)!, "phrase");
+    expect(over[0].end).toBeCloseTo(1.8);
     const free = buildCues(moveCueStart(words, cues(), 1, 3.6, true)!, "phrase");
     expect(free[0].end).toBeCloseTo(cues()[0].end);
   });
