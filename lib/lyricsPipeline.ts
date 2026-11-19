@@ -66,7 +66,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   const french = looksFrench(splitWords(written).map((x) => faNorm(x.w)));
   /** The rules that need no speech model: after a cut in the production, lines piled up, a chorus copied and pasted. */
   const finish = async (w: LyricWord[]) => {
-    const placed = spreadPacked(afterBreaks(w, silencesOf(buf)));
+    const placed = shiftAliased(spreadPacked(afterBreaks(w, silencesOf(buf))), em);
     return inLines(markUnsure(placed, await applyRepeat(buf, em, placed, french)), em, french);
   };
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
@@ -376,6 +376,45 @@ function realignBetween(words: LyricWord[], lineOf: number[][], placed: { first:
     const again = alignWordsForced(em.frames.subarray(f0 * em.V, f1 * em.V), f1 - f0, em.V, written);
     if (!again || again.length !== all.length) continue;
     r.lines.forEach((i, k) => { const x = again[r.before.length + k]; out[i] = { ...out[i], s: x.s + f0 * FRAME, e: x.e + f0 * FRAME, conf: x.conf, doubt: x.doubt }; });
+  }
+  return out;
+}
+
+/**
+ * A block sung twice or more in a row, word for word (a bridge bringing the intro's lines back twice), can be placed one
+ * copy late: the alignment puts its first copy on the second one's singing (the same letters), the last copy is then
+ * squeezed into what is left before the next line, hardly heard, and an empty span the length of a copy stays before
+ * the block. Measured on August27: the bridge's first copy at 131.1 s (the second is sung at 130.8 s), the second squeezed
+ * before the chorus, 13.5 s empty before it (its first copy sung at 118.2 s). Then each copy takes the place of the one
+ * before it, the first is aligned again in the empty span. Only then: copies of the same words, the last one hardly heard
+ * and squeezed, an empty span before the first of at least 3/4 of a copy.
+ */
+export function shiftAliased(words: LyricWord[], em: Emissions): LyricWord[] {
+  const lineOf: number[][] = [];
+  words.forEach((w, i) => { const l = lineOf[lineOf.length - 1]; if (l && words[l[0]].line === w.line) l.push(i); else lineOf.push([i]); });
+  const reps = findRepeats(lineOf.map((l) => l.map((i) => words[i].w).join(" ")), 2);
+  let out = words;
+  for (const rep of reps) {
+    const copy = (c: number) => lineOf.slice(rep.from + c * rep.unit, rep.from + (c + 1) * rep.unit).flat();
+    const copies = Array.from({ length: rep.times }, (_, c) => copy(c));
+    if (copies.some((c) => c.length !== copies[0].length) || copies.some((c) => c.some((i) => out[i].lock || out[i].manual))) continue;
+    const span = (c: number[]) => out[c[c.length - 1]].e - out[c[0]].s;
+    const conf = (c: number[]) => c.reduce((a, i) => a + (out[i].conf ?? 0), 0) / c.length;
+    const first = copies[0], last = copies[copies.length - 1], L = span(first);
+    const prevLine = rep.from > 0 ? lineOf[rep.from - 1] : null;
+    const prevEnd = prevLine ? out[prevLine[prevLine.length - 1]].e : 0;
+    const gap = out[first[0]].s - prevEnd;
+    if (!(L > 1 && gap >= 0.75 * L && conf(last) < 0.1 && conf(first) >= 0.1 && span(last) < 0.85 * L)) continue;
+    const next = out.slice();
+    // each copy where the one before it was (the same words, one for one)
+    for (let c = copies.length - 1; c >= 1; c--) copies[c].forEach((i, k) => { const from = out[copies[c - 1][k]]; next[i] = { ...next[i], s: from.s, e: from.e, conf: from.conf, doubt: undefined }; });
+    // the first in the empty span before
+    const f0 = Math.max(0, Math.floor(prevEnd / FRAME)), f1 = Math.min(em.T, Math.ceil(out[first[0]].s / FRAME));
+    const again = f1 - f0 >= 10 ? alignWordsForced(em.frames.subarray(f0 * em.V, f1 * em.V), f1 - f0, em.V, first.map((i) => ({ w: out[i].w, line: out[i].line ?? 0 }))) : null;
+    if (!again || again.length !== first.length) continue;
+    first.forEach((i, k) => { next[i] = { ...next[i], s: again[k].s + f0 * FRAME, e: again[k].e + f0 * FRAME, conf: again[k].conf, doubt: again[k].doubt }; });
+    console.debug(`[align] a block sung ${rep.times} times was one copy late: moved back (its first copy now at ${next[first[0]].s.toFixed(1)} s)`);
+    out = next;
   }
   return out;
 }
