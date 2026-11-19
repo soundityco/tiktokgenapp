@@ -7528,8 +7528,23 @@ export default function VideoStudio({
             settings; a video clip, the video's — nothing selected, all) */}
         <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + (pick === "video" ? " focus-video" : pick?.startsWith("text:") || pick?.startsWith("hook:") ? " focus-text" : "")} ref={rightColRef}>
           <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} tone="video" />
+          {/* A text or a hook picked on the timeline (or on the preview): what the column sets, at a glance, as for a video. */}
+          {(pick?.startsWith("text:") || pick?.startsWith("hook:")) && (() => {
+            const hook = pick.startsWith("hook:");
+            const h = hook ? hooks.find((x) => "hook:" + x.id === pick) : undefined;
+            const key = pick.slice(5);
+            const c = hook ? undefined : [...cues, ...songCues].find((x, i) => (keyOf(x) ?? String(i)) === key);
+            const what = (hook ? h?.text : c?.text)?.replace(/\n/g, " ").trim();
+            return (
+              <div className={"look-of text-of " + (hook ? "is-hook" : "is-lyrics")}>
+                <Icon name={hook ? "sparkle" : "type"} size={13} />
+                <span className="xs muted">{t("Settings of")}</span> <b>{hook ? t("Hook") : t("Lyrics")}</b>
+                {what && <span className="take-name">{what}</span>}
+              </div>
+            );
+          })()}
           {/* Multicam: whose look the column sets (the camera on the preview). */}
-          {((settings.angles ?? []).some(Boolean) || overlaysOf(settings).length > 0) && (() => {
+          {((settings.angles ?? []).some(Boolean) || overlaysOf(settings).length > 0 || pick === "video") && (() => {
             const k = camTake && !ovTake ? (settings.angles ?? []).indexOf(camTake.id) + 1 : 0;
             const c = camTake ?? clip;
             return (

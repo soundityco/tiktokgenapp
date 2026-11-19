@@ -507,6 +507,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .clip-strip.folded { display: none; }
 .look-of { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam); border-radius: var(--r); font-size: 13px; min-width: 0; }
 .look-of b { color: var(--cam); }
+.look-of.text-of.is-lyrics { --cam: var(--lyrics); }
+.look-of.text-of.is-hook { --cam: var(--blue); }
+.look-of.text-of > svg { flex: none; color: var(--cam); }
 .look-of .take-name { flex: 1 1 60px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Never squeezed letter by letter: the label, the number and the button keep their width; out of room, the button goes
    on the next line. */
@@ -2964,7 +2967,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
    (The phone's Style page has its own parts.) */
 @media (min-width: 1001px) {
   .video-col-r.focus-video .sheet-text { display: none; }
-  .video-col-r.focus-text .look-of, .video-col-r.focus-text [data-sec="video-render"], .video-col-r.focus-text #video-color { display: none; }
+  .video-col-r.focus-text .look-of:not(.text-of), .video-col-r.focus-text [data-sec="video-render"], .video-col-r.focus-text #video-color, .video-col-r.focus-text #video-export { display: none; }
 }
 /* A phone has no keyboard: the keys shown in the menus go. */
 @media (hover: none) { .menu kbd { display: none; } }
