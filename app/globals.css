@@ -2204,6 +2204,9 @@ details.sec:first-of-type { background-image: none; }
   /* The video's base height on a phone (before any drag on the Style page): 54% of the screen, less on a short one
      (the Style page's control stays above the dock). */
   :root { --pv-video: min(54dvh, 100dvh - 380px); }
+  /* The Style page with the player in the dock (the video studio): the picture starts smaller, else the settings had a
+     45 px strip between the parts' control and the dock (the drag of the grip still makes it any size). */
+  .main[data-studio="video"][data-mobile-tab="style"] { --pv-video: min(36dvh, 100dvh - 540px); }
   /* Create page, video: never smaller than its base size (--pv-video); bigger if the Style page's
      drag made it bigger. Between the two pages the picture glides to its size instead of jumping. */
   .main[data-studio="video"][data-mobile-tab="slides"] .video-grid .cv-wrap:not(.landscape) { width: min(100%, calc(max(var(--pv-video), var(--pv-h, var(--pv-video))) * 9 / 16)); }
