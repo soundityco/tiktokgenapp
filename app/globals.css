@@ -2278,6 +2278,8 @@ details.sec:first-of-type { background-image: none; }
 @media (min-width: 1001px) {
   .board-player { display: block; position: sticky; bottom: 18px; z-index: 20; justify-self: center; width: min(640px, 100%); padding: 7px; border-radius: 17px; border: 1px solid rgba(255,255,255,.09); background: rgba(22,22,28,.72); backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7); box-shadow: 0 18px 50px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07); }
   .board-player .dp { display: flex; align-items: center; gap: 12px; padding: 0 10px 0 0; }
+  .dp .dp-vol { flex: none; width: 34px; height: 34px; color: var(--muted); }
+  .dp .dp-vol:hover { color: var(--text); }
   .board-player .dp-play { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: scale .12s; }
   .board-player .dp-play:active { scale: .94; } .board-player .dp-play:disabled { opacity: .5; }
   .board-player .dp-track { position: relative; flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; touch-action: none; cursor: pointer; }

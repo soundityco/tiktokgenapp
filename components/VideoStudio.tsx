@@ -605,6 +605,16 @@ export default function VideoStudio({
   const mutedRef = useRef(musicMuted);
   mutedRef.current = musicMuted;
   const muteNode = useRef<GainNode | null>(null);
+  /** The studio's listening volume (the player's speaker, 0-1): the song and the videos' sound heard here, never the export. */
+  const [playVol, setPlayVolState] = useState(() => { try { const v = Number(localStorage.getItem("tktgen-play-volume")); return localStorage.getItem("tktgen-play-volume") !== null && v >= 0 && v <= 1 ? v : 1; } catch { return 1; } });
+  const playVolRef = useRef(playVol);
+  playVolRef.current = playVol;
+  const setPlayVol = (v: number) => {
+    const x = clamp(v, 0, 1);
+    setPlayVolState(x); playVolRef.current = x;
+    try { localStorage.setItem("tktgen-play-volume", String(x)); } catch { /* private window */ }
+    const g = muteNode.current; if (g) g.gain.setTargetAtTime(mutedRef.current ? 0 : x, g.context.currentTime, 0.02);
+  };
   const rafRef = useRef(0);
   const originRef = useRef(0);
   const ioRef = useRef(0);
@@ -635,8 +645,8 @@ export default function VideoStudio({
       const src = ctx.createBufferSource(), gain = ctx.createGain();
       src.buffer = audioBuf;
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.01);
-      gain.gain.setValueAtTime(0.8, ctx.currentTime + GRAIN - 0.02);
+      gain.gain.linearRampToValueAtTime(0.8 * playVolRef.current, ctx.currentTime + 0.01);
+      gain.gain.setValueAtTime(0.8 * playVolRef.current, ctx.currentTime + GRAIN - 0.02);
       gain.gain.linearRampToValueAtTime(0, ctx.currentTime + GRAIN);
       src.connect(gain); gain.connect(ctx.destination);
       src.start(0, from, GRAIN);
@@ -979,14 +989,14 @@ export default function VideoStudio({
         if (target > ci - PREROLL && target < co) live.add(a.id);
         const vol = clamp(ov!.volume ?? 0, 0, 1), audible = vol > 0 && target >= ci && target <= co && !isOff(ov!, target);
         if (el.muted === audible) el.muted = !audible;
-        if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
+        if (audible && Math.abs(el.volume - vol * playVolRef.current) > 0.005) el.volume = vol * playVolRef.current;
       }
       // A camera of the multicam: its sound on its own shots, at its volume.
       if (!isOv) {
         const vol = clamp(a.volume ?? 0, 0, 1), k = (cfg.angles ?? []).indexOf(a.id) + 1;
         const audible = vol > 0 && k > 0 && camAt(cfg.cuts, heard) === k && target >= 0;
         if (el.muted === audible) el.muted = !audible;
-        if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
+        if (audible && Math.abs(el.volume - vol * playVolRef.current) > 0.005) el.volume = vol * playVolRef.current;
       }
       const inFile = target > -PREROLL && (!Number.isFinite(el.duration) || target < el.duration);
       if (!live.has(a.id) || !inFile) {
@@ -2444,7 +2454,7 @@ export default function VideoStudio({
     fade.gain.linearRampToValueAtTime(1, ctx.currentTime + FADE);
     src.connect(fade);
     const mute = ctx.createGain();
-    mute.gain.value = mutedRef.current ? 0 : 1;
+    mute.gain.value = mutedRef.current ? 0 : playVolRef.current;
     fade.connect(mute); mute.connect(ctx.destination);
     muteNode.current = mute;
     originRef.current = ctx.currentTime;
@@ -2481,7 +2491,7 @@ export default function VideoStudio({
         // (multicam: on its own shots only, as each camera's sound on its shots)
         const t0 = heard - cfgNow.offset, audible = vol > 0 && t0 >= ci && t0 <= co && !isOff(cfgNow, t0) && camAt(cfgNow.cuts, heard) === 0;
         if (el.muted === audible) el.muted = !audible;
-        if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
+        if (audible && Math.abs(el.volume - vol * playVolRef.current) > 0.005) el.volume = vol * playVolRef.current;
       }
       syncAngles(heard);
       drawAt(heard);
@@ -5370,7 +5380,7 @@ export default function VideoStudio({
       onClick={() => {
         const m = !musicMuted; setMusicMuted(m);
         try { localStorage.setItem("tktgen-music-muted", m ? "1" : "0"); } catch { /* private window */ }
-        const g = muteNode.current; if (g) g.gain.setTargetAtTime(m ? 0 : 1, g.context.currentTime, 0.01);
+        const g = muteNode.current; if (g) g.gain.setTargetAtTime(m ? 0 : playVolRef.current, g.context.currentTime, 0.01);
       }}>
       <Icon name={musicMuted ? "volume-off" : "volume"} size={14} />
     </button>
@@ -6635,6 +6645,20 @@ export default function VideoStudio({
             <span className="dp-head" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
           </div>
           <span className="dp-time mono">{mmss(head - settings.crop.start)}<span className="muted"> / {mmss(segLen)}</span></span>
+          {/* The studio's listening volume (the song and the videos heard here; the export keeps its own sound). */}
+          <Menu float trigger={(_, toggle) => (
+            <button className="dp-vol btn icon quiet" aria-label={t("Listening volume")} title={`${t("Listening volume")} · ${Math.round(playVol * 100)} %`} onClick={toggle}>
+              <Icon name={playVol > 0 ? "volume" : "volume-off"} size={16} />
+            </button>
+          )}>
+            {() => (
+              <div className="sound-pop" data-keep>
+                <Range label={t("Listening volume")} value={Math.round(playVol * 100)} display={playVol > 0 ? `${Math.round(playVol * 100)} %` : t("Muted")}
+                  min={0} max={100} step={1} onChange={(n) => setPlayVol(n / 100)} />
+                <p className="muted xs">{t("Only what you hear in the studio: the export keeps its own sound.")}</p>
+              </div>
+            )}
+          </Menu>
         </div>
   );
 

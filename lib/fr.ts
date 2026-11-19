@@ -371,6 +371,8 @@ export const FR: Record<string, string> = {
   "Playing goes on past the segment, the playhead anywhere in the song. Click to loop on the segment.": "La lecture continue au-delà du segment, la tête partout dans le morceau. Clique pour boucler sur le segment.",
   "Show the video": "Afficher la vidéo",
   "Hide the video": "Masquer la vidéo",
+  "Only what you hear in the studio: the export keeps its own sound.": "Seulement ce que tu entends dans le studio : l'export garde son propre son.",
+  "Listening volume": "Volume d'écoute",
   "Timing pasted on {n} lines": "Calage collé sur {n} lignes",
   "Timing pasted on 1 line": "Calage collé sur 1 ligne",
   "One of those lines is locked: unlock it to paste the timing on it.": "Une de ces lignes est verrouillée : déverrouille-la pour y coller le calage.",
