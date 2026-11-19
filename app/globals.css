@@ -398,12 +398,10 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue.video-clip.on { border-left-color: var(--vc); background: color-mix(in srgb, var(--vc) 16%, var(--bg)); } /* (its own tint kept under the playhead: lit only when clicked, .sel) */
 /* The video clicked (set in the right column): lit as a clicked text (no outline; see .cue.sel). */
 .lyric-track .cue.video-clip.sel { background: color-mix(in srgb, var(--vc) 30%, var(--bg)); color: var(--text); }
-.lyric-track .cue.video-clip { padding-left: 6px; } /* (its name slides by itself, `.vc-name`: never twice) */
 
 /* Its left side stays on the left edge of the view while its start is past it (paintTracks): its start edge is not
    there then, so not draggable. Its name glows around the playhead, as a text's (--hx in px, from the name's left). */
-.video-clip .vc-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; transform: translateX(var(--stick, 0px)); }
-/* (its name slides along it, to stay readable on the left edge of the view; the clip itself never moves nor shrinks) */
+.video-clip .vc-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
 .video-clip.stuck .clip-edge.in { display: none; }
 .video-clip .vc-name .truncate { position: relative; }
 .lyric-track .cue.video-clip.on .vc-name .truncate::after { content: attr(data-text); position: absolute; inset: 0; white-space: nowrap; overflow: hidden;
@@ -462,7 +460,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 @media (prefers-reduced-motion: reduce) { .skel-wave { animation: none; } }
 
 .lyric-track { position: relative; height: 34px; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; cursor: pointer; touch-action: none; }
-.lyric-track .cue { position: absolute; top: 4px; bottom: 4px; min-width: 3px; padding: 0 6px 0 calc(6px + var(--stick, 0px)); border: 0; border-left: 2px solid var(--line-2); border-radius: 2px;
+.lyric-track .cue { position: absolute; top: 4px; bottom: 4px; min-width: 3px; padding: 0 6px; border: 0; border-left: 2px solid var(--line-2); border-radius: 2px;
   background: var(--raised); color: var(--muted); font-size: var(--fs-xs); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .lyric-track .cue:hover { color: var(--text); }
 .lyric-track .cue.song-line { display: flex; align-items: center; }
@@ -2931,7 +2929,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .lyric-track .cue.video-clip .cue-ico, .lyric-track .cue.cam-shot .cue-ico { margin-right: 0; color: var(--vc, var(--cam)); }
 .lyric-track .cue .cue-ico svg { display: block; }
 /* (the glow over a playing text: drawn where the text is, after its icon) */
-.lyric-track .cue.on:not(.cam-shot):not(.video-clip)::after { padding-left: calc(22px + var(--stick, 0px)); }
+.lyric-track .cue.on:not(.cam-shot):not(.video-clip)::after { padding-left: 22px; }
 @media (min-width: 641px) {
   /* (the same room all around: the headers fill their lines, top to bottom) */
   .tl-stack { row-gap: 2px; padding: 6px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
