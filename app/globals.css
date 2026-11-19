@@ -2907,6 +2907,11 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .video-block.dragging .cue-bar-glow { display: none; }
 .video-block.dragging .lyric-track { overflow: visible; }
 .video-block .lyric-track:has(.lifted) { z-index: 5; }
+/* A video clip cut, a piece of it turned off (as in Premiere): the cuts as thin lines, the off pieces greyed and hatched;
+   the clip itself stays whole. */
+.lyric-track .vc-off { position: absolute; top: 4px; bottom: 4px; pointer-events: none; z-index: 2;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--bg) 72%, transparent) 0 5px, color-mix(in srgb, var(--bg) 52%, transparent) 5px 10px); }
+.lyric-track .vc-split { position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; pointer-events: none; z-index: 3; background: var(--bg); }
 .lyric-track .cue.lifted { z-index: 10 !important; cursor: grabbing; box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 80%, transparent); }
 .lyric-track .cue.shifted { transition: translate .16s ease; }
 .video-clip .vc-no { color: var(--vc); font-weight: 600; }

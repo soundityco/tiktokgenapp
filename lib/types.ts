@@ -407,6 +407,10 @@ export interface VideoSettings {
    *  in an editor (the video track of the timeline). None: the whole file. */
   clipIn?: number;
   clipOut?: number;
+  /** Cuts in the clip and pieces turned off (seconds in the file, `lib/clipParts.ts`): the clip stays whole and in sync,
+   *  nothing of it shown nor heard in an off piece. */
+  splits?: number[];
+  offParts?: [number, number][];
   /** Older single video over the first one: read as `overlays` (one), never written any more. */
   overlay?: VideoOverlay;
   /** Videos over the first one (picture in picture), from the bottom up: other takes of the release, each on its own
@@ -492,6 +496,9 @@ export interface VideoOverlay {
   offset: number;
   clipIn?: number;
   clipOut?: number;
+  /** As the video's (`VideoSettings.splits`, `offParts`). */
+  splits?: number[];
+  offParts?: [number, number][];
   x: number;
   y: number;
   w: number;

@@ -2,6 +2,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { defaultCaptionStyle, defaultVideo, uid } from "@/lib/defaults";
 import { useT } from "@/lib/i18n";
+import { isOff, joinAt, onWindows, pieceAt, splitAt as splitClip, togglePiece, wholeAgain, type ClipParts } from "@/lib/clipParts";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
@@ -112,7 +113,7 @@ const LYRICS_ALIGN_V = 4;
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
-const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
@@ -917,7 +918,7 @@ export default function VideoStudio({
     if (!a) return null;
     const el = a.el, target = time - o.offset;
     const [ci, co] = clipSpan(o, Number.isFinite(el.duration) ? el.duration : Infinity);
-    if (target < ci - 0.001 || target > co + 0.001) return null;
+    if (target < ci - 0.001 || target > co + 0.001 || isOff(o, target)) return null;
     if (still && !el.seeking && Math.abs(el.currentTime - target) > 0.02) el.currentTime = Math.max(0, target);
     // Ready: its picture, copied (a player that seeks or starts gives none for a moment: the copy is shown then,
     // never a blink of the video under it).
@@ -956,7 +957,7 @@ export default function VideoStudio({
       if (isOv) {
         const [ci, co] = clipSpan(ov!, Number.isFinite(el.duration) ? el.duration : Infinity);
         if (target > ci - PREROLL && target < co) live.add(a.id);
-        const vol = clamp(ov!.volume ?? 0, 0, 1), audible = vol > 0 && target >= ci && target <= co;
+        const vol = clamp(ov!.volume ?? 0, 0, 1), audible = vol > 0 && target >= ci && target <= co && !isOff(ov!, target);
         if (el.muted === audible) el.muted = !audible;
         if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
       }
@@ -1025,7 +1026,8 @@ export default function VideoStudio({
     const off = settingsRef.current.offset;
     // (the part kept on the video track: black before and after it)
     const [ci, co] = clipSpan(settingsRef.current, Number.isFinite(el?.duration) ? el!.duration : Infinity);
-    const inVideo = time >= off + ci - 0.001 && time <= off + co + 0.001;
+    // (a piece of it turned off: nothing there, as outside it)
+    const inVideo = time >= off + ci - 0.001 && time <= off + co + 0.001 && !isOff(settingsRef.current, time - off);
     // No picture from the player yet (Safari, before the first play): the frame read from the file. Only until the
     // player gave one: ffmpeg's decoding differs slightly in colour, so coming back on that frame later (a seek, the
     // pause going back to the start) flashed another grade for a moment.
@@ -2421,7 +2423,7 @@ export default function VideoStudio({
         const cfgNow = settingsRef.current, vol = clamp(cfgNow.clipVolume ?? 0, 0, 1);
         const [ci, co] = clipSpan(cfgNow, Number.isFinite(el.duration) ? el.duration : Infinity);
         // (multicam: on its own shots only, as each camera's sound on its shots)
-        const t0 = heard - cfgNow.offset, audible = vol > 0 && t0 >= ci && t0 <= co && camAt(cfgNow.cuts, heard) === 0;
+        const t0 = heard - cfgNow.offset, audible = vol > 0 && t0 >= ci && t0 <= co && !isOff(cfgNow, t0) && camAt(cfgNow.cuts, heard) === 0;
         if (el.muted === audible) el.muted = !audible;
         if (audible && Math.abs(el.volume - vol) > 0.005) el.volume = vol;
       }
@@ -3983,7 +3985,7 @@ export default function VideoStudio({
     const angles = (cfg.angles ?? []).filter(Boolean);
     const shots = angles.length ? shotsOf(cfg.cuts, 0, official.duration) : null;
     const winOf = (cam: number) => shots ? shots.filter((x) => x.cam === cam).map((x) => [x.from, x.to] as [number, number]) : null;
-    const parts: { blob: Blob | null; vol: number; span: Pick<VideoSettings, "clipIn" | "clipOut">; offset: number; len: number; win: [number, number][] | null }[] = [
+    const parts: { blob: Blob | null; vol: number; span: Pick<VideoSettings, "clipIn" | "clipOut"> & ClipParts; offset: number; len: number; win: [number, number][] | null }[] = [
       { blob: videoBlob, vol: clamp(cfg.clipVolume ?? 0, 0, 1), span: cfg, offset: cfg.offset, len: videoDur || 60, win: winOf(0) },
       ...angles.map((id, k) => {
         const a = anglesRef.current.get(id);
@@ -4015,14 +4017,17 @@ export default function VideoStudio({
       gain.gain.value = x.vol;
       gain.connect(ctx.destination);
       // Its part kept, on the official track, cut to its shots: each window played from its own place in the file.
+      // (and never in a piece turned off)
       for (const [w0, w1] of x.win ?? [[-Infinity, Infinity]]) {
-        const a = Math.max(0, x.offset + ci, w0), b = Math.min(official.duration, x.offset + co, w1);
-        if (b - a < 0.01) continue;
-        const src = ctx.createBufferSource();
-        src.buffer = cam;
-        src.connect(gain);
-        src.start(a, a - x.offset, b - a);
-        mixed = true;
+        const a0 = Math.max(0, x.offset + ci, w0), b0 = Math.min(official.duration, x.offset + co, w1);
+        for (const [a, b] of b0 - a0 < 0.01 ? [] : onWindows(x.span, a0, b0, x.offset)) {
+          if (b - a < 0.01) continue;
+          const src = ctx.createBufferSource();
+          src.buffer = cam;
+          src.connect(gain);
+          src.start(a, a - x.offset, b - a);
+          mixed = true;
+        }
       }
     }
     return mixed ? ctx.startRendering() : official;
@@ -4198,7 +4203,7 @@ export default function VideoStudio({
           if (!ovA) return null;
           const [ci, co] = clipSpan(ov, Number.isFinite(ovA.el.duration) ? ovA.el.duration : Infinity);
           const tt = time - ov.offset;
-          if (tt < ci - 0.001 || tt > co + 0.001) return null;
+          if (tt < ci - 0.001 || tt > co + 0.001 || isOff(ov, tt)) return null;
           ovSrc ??= (async () => {
             await whenReady(ovA.el);
             const s0 = Math.max(0, from - ov.offset, ci), s1 = Math.min(until - ov.offset, co);
@@ -4250,7 +4255,7 @@ export default function VideoStudio({
             }
             const target = time - cfg.offset;
             const [ci, co] = clipSpan(cfg, Number.isFinite(vdur) ? vdur : Infinity);
-            const inside = target >= ci - 0.001 && target <= co + 0.001;
+            const inside = target >= ci - 0.001 && target <= co + 0.001 && !isOff(cfg, target);
             let pic: Picture | null = null;
             if (inside && src) {
               pic = await src.frameAt(target - base);
@@ -5103,6 +5108,41 @@ export default function VideoStudio({
    * no picture). Locked (synced and linked): shown, not moved.
    */
   const clipDrag = useRef<{ mode: "move" | "in" | "out"; px: number; py: number; el: HTMLElement; left: number; width: number; s: number; d: number; offset: number; ci: number; co: number; moved?: boolean } | null>(null);
+  /**
+   * A clip cut and a piece of it turned off, as in Premiere (right click on a video clip, C, Shift + E): `which` is the
+   * video ("base" or the take over it), `t` the file time under the pointer.
+   */
+  const [clipMenu, setClipMenu] = useState<{ x: number; y: number; which: string; t: number } | null>(null);
+  const partsOf = (which: string) => {
+    const cur = settingsRef.current;
+    if (which === "base") {
+      const len = onCopy && cur.source?.duration ? cur.source.duration : videoDurRef.current || Infinity;
+      const [ci, co] = clipSpan(cur, len);
+      return { p: cur as ClipParts, ci, co, offset: cur.offset, set: (x: ClipParts) => setV({ splits: x.splits, offParts: x.offParts }) };
+    }
+    const o = overlayOf(cur, which);
+    if (!o) return null;
+    const a = anglesRef.current.get(o.clip);
+    const [ci, co] = clipSpan(o, a && Number.isFinite(a.el.duration) ? a.el.duration : Infinity);
+    return { p: o as ClipParts, ci, co, offset: o.offset, set: (x: ClipParts) => patchOverlay(o.clip, { splits: x.splits, offParts: x.offParts }) };
+  };
+  /** The video the keys act on: the one clicked (over it, or the base). */
+  const pickedVideo = () => (pick === "video" ? overLook ?? "base" : null);
+  const cutVideoAt = (which: string, at: number) => { const x = partsOf(which); if (x) { const n = splitClip(x.p, at - x.offset, x.ci, x.co); if (n !== x.p) x.set(n); } };
+  const togglePart = (which: string, at: number) => { const x = partsOf(which); if (x) { x.set(togglePiece(x.p, at - x.offset, x.ci, x.co)); requestAnimationFrame(() => drawAt(headRef.current)); } };
+  /** On a video clip: its cuts (thin lines) and pieces turned off (greyed), laid on the track as the clip is. */
+  const partsEl = (p: ClipParts, offset: number, ci: number, co: number) => (<>
+    {(p.offParts ?? []).map(([a, b]) => { const s0 = offset + Math.max(a, ci), s1 = offset + Math.min(b, co); return s1 > s0 && onTrack(s0, s1) ? <span key={"o" + a} className="vc-off" style={{ ...place(s0), width: wFull(s0, s1) }} /> : null; })}
+    {(p.splits ?? []).filter((x) => x > ci && x < co).map((x) => onTrack(offset + x, offset + x) ? <span key={"s" + x} className="vc-split" style={place(offset + x)} /> : null)}
+  </>);
+  /** Right click on a video clip: its menu (cut here, turn this piece off or on, join, whole again). */
+  const clipCtx = (which: string) => (e: React.MouseEvent<HTMLElement>) => {
+    e.preventDefault(); e.stopPropagation();
+    const tr = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect(), w = viewRef.current ?? twRef.current;
+    const at = w.s + ((e.clientX - tr.left) / Math.max(1, tr.width)) * w.d;
+    setPick("video"); setOverLook(which === "base" ? null : which); if (which === "base") setPinCam("main");
+    setClipMenu({ x: e.clientX, y: e.clientY, which, t: at });
+  };
   /** The eye at the end of a video track: hidden, the video is not drawn (preview and export), its sound stays. */
   const eyeEl = (hidden: boolean, toggle: () => void) => (
     <button className={"btn icon sm quiet track-eye" + (hidden ? " off" : "")} aria-pressed={hidden} aria-label={hidden ? t("Show the video") : t("Hide the video")}
@@ -5141,7 +5181,7 @@ export default function VideoStudio({
     const trimmed = ci > 0.01 || co < len - 0.01;
     const vol = clamp(settings.clipVolume ?? 0, 0, 1);
     const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
-      if (e.button !== 0) return; // (trimmed even locked: the sync stays, only a part of the video is kept)
+      if (e.button !== 0) { if (e.button === 2) e.stopPropagation(); return; } // (right: its menu, never the track's scrub; trimmed even locked: the sync stays)
       e.stopPropagation(); stop();
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
@@ -5245,7 +5285,7 @@ export default function VideoStudio({
               <div className={"cue video-clip cam-0" + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake ? " sel" : "")}
                 style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
-                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }}>
+                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }} onContextMenu={clipCtx("base")}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name">
                   <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">1</b>
@@ -5259,6 +5299,7 @@ export default function VideoStudio({
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
+            {partsEl(settings, settings.offset, ci, co)}
             {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
@@ -5275,7 +5316,7 @@ export default function VideoStudio({
    * place with the base (the base goes over, at the place it had; the new base at the place it had over it).
    */
   const CAM_KEYS = ["media", "videoName", "videoSize", "source", "offset", "score", "anchors", "musicStart", "musicEnd", "takes", "linked", "frame",
-    "desqueeze", "grade", "drive", "clipIn", "clipOut", "clipVolume", "matte", "push", "pushIn", "box"] as const satisfies readonly (keyof VideoSetup)[];
+    "desqueeze", "grade", "drive", "clipIn", "clipOut", "splits", "offParts", "clipVolume", "matte", "push", "pushIn", "box"] as const satisfies readonly (keyof VideoSetup)[];
   /** A video's size and place over another one: its own (`VideoSettings.box`), else top right, 42 % wide. */
   const boxOr = (b: VideoSettings["box"]) => ({ x: b?.x ?? 70, y: b?.y ?? 28, w: b?.w ?? 42, radius: b?.radius ?? 8 });
   const boxOf = (o: VideoOverlay): NonNullable<VideoSettings["box"]> => ({ x: o.x, y: o.y, w: o.w, radius: o.radius });
@@ -5298,9 +5339,10 @@ export default function VideoStudio({
       // (each keeps its own size and place over a video: the base finds the one it had last time it was over one)
       // (still where its sync put it: it stays locked to the audio as the base)
       theirs.offset = ov.offset; theirs.clipIn = ov.clipIn; theirs.clipOut = ov.clipOut; theirs.box = boxOf(ov);
+      (theirs as Partial<VideoSettings>).splits = ov.splits; (theirs as Partial<VideoSettings>).offParts = ov.offParts;
       theirs.linked = x.score !== undefined && Math.abs(ov.offset - x.offset) < 0.01;
       // (hidden or not, as each video was)
-      place = { ...withOverlays(overlaysOf(cur).map((o) => (o.clip === x.id ? { ...o, ...boxOr(base.box), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut, hidden: cur.videoHidden || undefined } : o))),
+      place = { ...withOverlays(overlaysOf(cur).map((o) => (o.clip === x.id ? { ...o, ...boxOr(base.box), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut, splits: cur.splits, offParts: cur.offParts, hidden: cur.videoHidden || undefined } : o))),
         videoHidden: ov.hidden || undefined };
     }
     onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, ...theirs, ...place, ...more } : c.id === x.id ? { ...c, ...mine } : c)) }));
@@ -5551,7 +5593,7 @@ export default function VideoStudio({
     const setO = (patch: Partial<VideoOverlay>) => patchOverlay(o.clip, patch);
     const inSeg = (t: number) => round2(clamp(t, settings.crop.start, end - 0.05));
     const down = (mode: "move" | "in" | "out") => (e: React.PointerEvent<HTMLElement>) => {
-      if (e.button !== 0) return; // (trimmed even locked: the sync stays, only a part of the video is kept)
+      if (e.button !== 0) { if (e.button === 2) e.stopPropagation(); return; } // (right: its menu, never the track's scrub; trimmed even locked: the sync stays)
       e.stopPropagation(); stop();
       e.currentTarget.setPointerCapture(e.pointerId);
       const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget).getBoundingClientRect();
@@ -5649,7 +5691,7 @@ export default function VideoStudio({
             {onTrack(a0, b0) && (
               <div className={"cue video-clip over-clip cam-" + no + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (pick === "video" && picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
-                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }}>
+                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }} onContextMenu={clipCtx(o.clip)}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{no + 1}</b>
                   {synced && <button className="clip-lock" aria-label={locked ? t("Unlock: slide it freely") : t("Lock it back on its synced place")}
@@ -5659,6 +5701,7 @@ export default function VideoStudio({
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
+            {partsEl(o, o.offset, a0 - o.offset, b0 - o.offset)}
             {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + no} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
@@ -6261,6 +6304,9 @@ export default function VideoStudio({
     } else if (k === "ArrowLeft" || k === "ArrowRight") { e.preventDefault(); stop(); stepTo(k === "ArrowRight" ? 1 : -1); }
     else if (k.toLowerCase() === "i") markIn();
     else if (k.toLowerCase() === "o") markOut();
+    // A video clip clicked: C cuts it at the playhead, Shift + E turns the piece under the playhead off or on (as in Premiere).
+    else if (pickedVideo() && !playing && k.toLowerCase() === "e" && e.shiftKey) { e.preventDefault(); togglePart(pickedVideo()!, headRef.current); }
+    else if (pickedVideo() && !playing && k.toLowerCase() === "c" && (pickedVideo() !== "base" || !settingsRef.current.angles?.some(Boolean))) { e.preventDefault(); cutVideoAt(pickedVideo()!, headRef.current); }
     else if (settingsRef.current.angles?.some(Boolean)) {
       // Multicam: 1 to 4 = a camera (playing: cut to it now; paused: the shot under the playhead shows it),
       // C = cut the shot here, Delete = remove the cut that starts it.
@@ -6601,6 +6647,24 @@ export default function VideoStudio({
                       ? <button onClick={() => { relinkCue(here.key); setVctx(null); }}><Icon name="refresh" size={14} />{t("Link to the lyrics style")}</button>
                       : <button onClick={() => { setCueLook(here.key, cueStyleRef.current(here.cue)); setVctx(null); }}><Icon name="type" size={14} />{mode === "word" ? t("Own style for this word") : t("Own style for this phrase")}</button>)}
                   </TextQuickMenu>
+                </ContextMenu>
+              );
+            })()}
+            {clipMenu && (() => {
+              const x = partsOf(clipMenu.which);
+              if (!x) return null;
+              const ft = clipMenu.t - x.offset, pc = pieceAt(x.p, ft, x.ci, x.co), off = pc ? isOff(x.p, (pc[0] + pc[1]) / 2) : false;
+              const near = ((viewRef.current ?? twRef.current).d / 100) * 1.5; // (a cut within a few pixels)
+              const hasCut = (x.p.splits ?? []).some((c) => Math.abs(c - ft) <= near);
+              const inClip = headRef.current - x.offset > x.ci && headRef.current - x.offset < x.co;
+              const close = () => setClipMenu(null);
+              return (
+                <ContextMenu x={clipMenu.x} y={clipMenu.y} onClose={close}>
+                  <div className="label cap">{t("Video")}</div>
+                  <button disabled={!inClip} onClick={() => { cutVideoAt(clipMenu.which, headRef.current); close(); }}><Icon name="scissors" size={14} />{t("Cut at the playhead")}<kbd>C</kbd></button>
+                  {pc && <button onClick={() => { togglePart(clipMenu.which, clipMenu.t); close(); }}><Icon name={off ? "eye" : "eye-off"} size={14} />{off ? t("Turn this part back on") : t("Turn this part off")}<kbd>⇧E</kbd></button>}
+                  {hasCut && <button onClick={() => { x.set(joinAt(x.p, ft, near, x.ci, x.co)); close(); }}><Icon name="minus" size={14} />{t("Remove this cut")}</button>}
+                  {(x.p.splits?.length || x.p.offParts?.length) ? <button onClick={() => { x.set(wholeAgain(x.p)); close(); requestAnimationFrame(() => drawAt(headRef.current)); }}><Icon name="refresh" size={14} />{t("Remove every cut")}</button> : null}
                 </ContextMenu>
               );
             })()}
