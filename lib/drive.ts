@@ -89,12 +89,16 @@ async function findOrMakeFolder(): Promise<string> {
       }
     }
   } catch { /* look it up again */ }
+  // (the oldest one when there are two: every device on the same folder, never one each)
   const folder = async (name: string) => {
     const q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false`;
-    const found = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1" })}`)).json();
+    const found = await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id)", pageSize: "1", orderBy: "createdTime" })}`)).json();
     return found.files?.[0]?.id as string | undefined;
   };
   let id = await folder(APP_FOLDER);
+  // Not found: looked for again a moment later before making one (Drive's search can miss a folder made or renamed a
+  // few seconds ago, on another device: a second "RAW by aurare" was made, both filled with the same files).
+  if (!id) { await wait(2500); id = await folder(APP_FOLDER); }
   // Made when the app was called Rollout or TkTgen: renamed, so its photos, fonts, LUTs and videos stay found.
   for (const old of OLD_FOLDERS) {
     if (id) break;
@@ -443,7 +447,16 @@ export async function findDriveTwins(isUsed: (id: string) => boolean): Promise<{
   const twins: { keep: string; drop: string[] }[] = [];
   let merged = 0;
   if (isDemo()) return { merged, twins };
-  const folders = [await appFolder()];
+  const root = await appFolder();
+  // Two app folders at the root of the Drive (made by two devices at once, or before the search saw the first): the
+  // others merged into this one (their sub-folders into its own, the files twice found below and put in the bin).
+  try {
+    const q = `mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false and (name contains 'aurare' or name = 'Rollout' or name = 'TkTgen')`;
+    const found: { id: string; name: string }[] = (await (await api(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: "files(id,name)", pageSize: "50" })}`)).json()).files ?? [];
+    const others = found.filter((f) => f.id !== root && (f.name.toLowerCase() === APP_FOLDER.toLowerCase() || OLD_FOLDERS.includes(f.name))).map((f) => f.id);
+    if (others.length && await mergeFolders(root, others)) { merged += others.length; checked.clear(); }
+  } catch (e) { console.warn("[drive] app folders not merged", e); }
+  const folders = [root];
   for (let i = 0; i < folders.length && i < 800; i++) {
     const kids: (Listed & { mimeType: string })[] = [];
     let page: string | undefined;

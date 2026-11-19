@@ -260,7 +260,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
    * to the one kept, the others go to the Drive's bin, where they can be taken back for 30 days).
    */
   const tidyTwins = async () => {
-    const KEY = "tktgen-drive-twins";
+    const KEY = "tktgen-drive-twins-v2"; // (v2: the app folders made twice at the root merged too: looked at again now)
     let last = 0;
     try { last = Number(localStorage.getItem(KEY) ?? 0); } catch { /* private mode */ }
     if (!wsRef.current || isDemo() || Date.now() - last < 24 * 3600_000 || !(await canWriteDrive())) return;
