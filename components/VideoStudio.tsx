@@ -3246,9 +3246,20 @@ export default function VideoStudio({
         scrubRef.current = null;
         if (d?.moved && d.mv) { setPick(d.pick); onSaveNow(); return; }
         if (!d || d.moved) return;
-        // (Shift: a line added to the lines picked, or taken out of them — to copy their timing, ⌘C / ⌘V)
-        if (d.at !== null && e.shiftKey && d.pick?.startsWith("text:") && pick?.startsWith("text:") && d.pick !== pick) {
+        // Several lines picked (to copy their timing, ⌘C / ⌘V), as in an editor: ⌘ (Ctrl) + click adds a line or takes
+        // it out, wherever it is; Shift + click picks every line from the one picked to this one.
+        if (d.at !== null && d.pick?.startsWith("text:") && pick?.startsWith("text:") && d.pick !== pick && (e.metaKey || e.ctrlKey || e.shiftKey)) {
           const k = d.pick;
+          if (e.shiftKey) {
+            const keyAt = (c: Cue, i: number) => "text:" + (keyOf(c) ?? "o" + i);
+            const all = songCues.map((c, i) => ({ c, k: keyAt(c, i) }));
+            const a = all.find((x) => x.k === pick)?.c, b = all.find((x) => x.k === k)?.c;
+            if (a && b) {
+              const lo = Math.min(a.start, b.start), hi = Math.max(a.start, b.start);
+              setMulti(all.filter((x) => x.c.start >= lo - 1e-3 && x.c.start <= hi + 1e-3 && x.k !== pick).map((x) => x.k));
+              return;
+            }
+          }
           setMulti((m) => (m.includes(k) ? m.filter((x) => x !== k) : [...m, k]));
           return;
         }

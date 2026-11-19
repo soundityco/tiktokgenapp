@@ -184,7 +184,7 @@ dans ton Google Drive.
 - **Typo animée** : un mot mis en avant (autre police, taille, apparition). — À venir
 - **Cuts calés sur les paroles** en multicam. — À venir
 - **Version live sans audio officiel** : le son de la prise comme référence. — À venir
-- **Copier / coller un calage** : sélectionne des lignes bien calées (clic, puis Maj + clic), ⌘C, place la tête là où les mêmes lignes reviennent, ⌘V : elles prennent le même calage (rien n'est ajouté aux paroles) ; ⌘Z pour annuler. — En test
+- **Copier / coller un calage** : sélectionne des lignes bien calées (clic, puis ⌘ + clic pour en ajouter une, Maj + clic pour toutes celles entre deux), ⌘C, place la tête là où les mêmes lignes reviennent, ⌘V : elles prennent le même calage (rien n'est ajouté aux paroles) ; ⌘Z pour annuler. — En test
 - **Correction mot par mot sur la timeline** : clique une ligne de paroles, ses mots apparaissent à leur place ; glisse le trait d'un mot pour changer l'instant où il commence (la tête de lecture suit, pour l'entendre) ; annuler / rétablir. — En test
 - **Aperçu vidéo plus compact** sur téléphone (option). — À venir
 - **Bouton d'action flottant** (Générer / Exporter) sur téléphone. — À venir
