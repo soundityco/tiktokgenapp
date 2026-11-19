@@ -3229,14 +3229,35 @@ export default function VideoStudio({
     const v = viewOf(), [lo, hi] = headRange();
     return onCut(round2(clamp(v.s + f * v.d, lo, hi)), Math.max(1, trackW) / v.d);
   };
-  /** The playhead drawn onto a video's cut (its own cuts, the multicam's) within 8 px, as onto the other magnets. */
+  /** ⌘ (Ctrl) held: the playhead free, no magnet (as for the clips' edges). */
+  const freeHead = useRef(false);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { freeHead.current = e.metaKey || e.ctrlKey; };
+    const blur = () => { freeHead.current = false; };
+    window.addEventListener("keydown", k); window.addEventListener("keyup", k); window.addEventListener("blur", blur);
+    return () => { window.removeEventListener("keydown", k); window.removeEventListener("keyup", k); window.removeEventListener("blur", blur); };
+  }, []);
+  /**
+   * The playhead drawn onto what starts or ends near it, within 8 px, as an editor does: the lines of the lyrics, the
+   * hooks, the video clips (and their cuts, the multicam's), the segment's edges. A bit further: free; ⌘ (Ctrl): free.
+   */
   const onCut = (t: number, pxPerSec: number) => {
-    const c = settingsRef.current, cuts: number[] = [];
-    for (const x of c.splits ?? []) cuts.push(c.offset + x);
-    for (const o of overlaysOf(c)) for (const x of o.splits ?? []) cuts.push(o.offset + x);
-    for (const k of c.cuts ?? []) cuts.push(k.at);
+    if (freeHead.current) return t;
+    const c = settingsRef.current, pts: number[] = [c.crop.start, c.crop.start + c.crop.duration];
+    for (const x of songCues) pts.push(x.start, x.end);
+    const segLen0 = c.crop.duration;
+    for (const h of c.hooks ?? []) pts.push(c.crop.start + h.from, c.crop.start + (h.to ?? segLen0));
+    const vd = videoDurRef.current;
+    if (vd) { const [ci, co] = clipSpan(c, vd); pts.push(c.offset + ci, c.offset + co); }
+    for (const x of c.splits ?? []) pts.push(c.offset + x);
+    for (const o of overlaysOf(c)) {
+      const a = anglesRef.current.get(o.clip), d = a && Number.isFinite(a.el.duration) ? a.el.duration : clips.find((x) => x.id === o.clip)?.source?.duration;
+      if (d) { const [ci, co] = clipSpan(o, d); pts.push(o.offset + ci, o.offset + co); }
+      for (const x of o.splits ?? []) pts.push(o.offset + x);
+    }
+    for (const k of c.cuts ?? []) pts.push(k.at);
     let best = t, gap = 8 / Math.max(1e-6, pxPerSec);
-    for (const x of cuts) if (Math.abs(x - t) < gap) { gap = Math.abs(x - t); best = x; }
+    for (const x of pts) if (Number.isFinite(x) && Math.abs(x - t) < gap) { gap = Math.abs(x - t); best = x; }
     return best;
   };
   /**
