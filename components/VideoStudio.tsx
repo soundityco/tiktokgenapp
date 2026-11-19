@@ -7531,10 +7531,11 @@ export default function VideoStudio({
           {/* A text or a hook picked on the timeline (or on the preview): what the column sets, at a glance, as for a video. */}
           {(pick?.startsWith("text:") || pick?.startsWith("hook:")) && (() => {
             const hook = pick.startsWith("hook:");
-            const h = hook ? hooks.find((x) => "hook:" + x.id === pick) : undefined;
             const key = pick.slice(5);
             const c = hook ? undefined : [...cues, ...songCues].find((x, i) => (keyOf(x) ?? String(i)) === key);
-            const what = (hook ? h?.text : c?.text)?.replace(/\n/g, " ").trim();
+            // (the phrase itself only when it is the one set: "This phrase" chosen, or it has its own look; else the lyrics)
+            const own = !hook && !!c && (lookScope === "one" || !!looks[keyOf(c) ?? ""]);
+            const what = own ? c!.text.replace(/\n/g, " ").trim() : undefined;
             return (
               <div className={"look-of text-of " + (hook ? "is-hook" : "is-lyrics")}>
                 <Icon name={hook ? "sparkle" : "type"} size={13} />
