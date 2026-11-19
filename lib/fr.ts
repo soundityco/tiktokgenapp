@@ -371,6 +371,8 @@ export const FR: Record<string, string> = {
   "Playing goes on past the segment, the playhead anywhere in the song. Click to loop on the segment.": "La lecture continue au-delà du segment, la tête partout dans le morceau. Clique pour boucler sur le segment.",
   "Show the video": "Afficher la vidéo",
   "Hide the video": "Masquer la vidéo",
+  "Make again": "Refaire",
+  "Make its Drive copy again": "Refaire sa copie Drive",
   "{n} files deleted ({size} freed), {k} could not be: try again.": "{n} fichiers supprimés ({size} libérés), {k} n'ont pas pu l'être : réessaie.",
   "{n} files deleted for good: {size} freed (Google may take a few minutes to count it).": "{n} fichiers supprimés définitivement : {size} libérés (Google peut mettre quelques minutes à le compter).",
   "Deleting… {n}/{of}": "Suppression… {n}/{of}",

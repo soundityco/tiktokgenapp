@@ -1739,8 +1739,10 @@ export default function VideoStudio({
       return { text: cp ? t("The passage goes past the copy: new copy in {n} s", { n }) : t("Drive copy in {n} s", { n }), p: 0, busy: true, action: { label: t("Now"), run: copyNow } };
     }
     const took = copyTook?.clip === clip.id ? ` · ${copyTook.text}` : "";
-    if (copyFits) return { text: t("Passage already in the copy") + took, p: 1, ok: true };
-    if (cp && videoBlob && cp.of === videoBlob.size) return { text: t("Drive copy up to date") + took, p: 1, ok: true,
+    // (made again on demand: a lighter one replaces it, the old one deleted from the Drive)
+    const again = driveWrite && videoBlob ? { label: t("Make again"), run: copyNow } : undefined;
+    if (copyFits) return { text: t("Passage already in the copy") + took, p: 1, ok: true, action: again };
+    if (cp && videoBlob && cp.of === videoBlob.size) return { text: t("Drive copy up to date") + took, p: 1, ok: true, action: again,
       hint: t("A copy of the passage used ({quality}) is on your Drive: open this video on another device to go on working there.", { quality: q }) };
     return null;
   })();
@@ -5142,7 +5144,7 @@ export default function VideoStudio({
           const a = anglesRef.current.get(c.id);
           if (!a || a.fromCopy || !Number.isFinite(a.el.duration)) return null;
           const ov = overlaysOf(settings).find((o) => o.clip === c.id), dur = a.el.duration;
-          return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}>{t("Make its Drive copy now")}</button>;
+          return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}>{c.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>;
         })()}
         {cam !== 0 && <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}>{t("Replace from this computer")}</button>}
         {c.takeOnly && <>
