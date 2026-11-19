@@ -759,8 +759,16 @@ export function moveCueStart(all: LyricWord[], cues: Cue[], i: number, at: numbe
   const to = r3(Math.max(prev ? prev.start + MIN : 0, Math.min(c.end - MIN, at)));
   if (Math.abs(to - c.start) < 0.005) return null;
   const moved = new Map<LyricWord, LyricWord>();
-  c.words.forEach((x, k) => {
-    const ns = k === 0 ? to : r3(Math.max(x.s, to + k * 0.01));
+  const second = c.words[1], lineEnd = Math.max(c.end, c.words[c.words.length - 1]?.e ?? c.end);
+  if (second && to > second.s - 0.05) {
+    // Brought onto its next words: they all draw together into what is left, in the same rhythm (as its end brought onto
+    // its last word does), never piled up on the start one after the other.
+    const span = Math.max(0.05, lineEnd - c.start), room = Math.max(0.1, lineEnd - to);
+    const map = (t: number) => r3(to + ((t - c.start) / span) * room);
+    c.words.forEach((x) => { const ns = map(x.s); moved.set(x, { ...x, s: ns, e: r3(Math.max(ns + 0.03, map(x.e))), manual: true }); });
+  } else c.words.forEach((x, k) => {
+    // (else only its first word moves: the others stay where they are sung)
+    const ns = k === 0 ? to : x.s;
     if (ns !== x.s) moved.set(x, { ...x, s: ns, e: r3(Math.max(x.e, ns + 0.05)), manual: true });
   });
   let out = all.map((x) => moved.get(x) ?? x);

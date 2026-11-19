@@ -29,3 +29,19 @@ describe("word by word retouch", () => {
     expect(moveWordStart(all, cue, 0, 9.5)).toBeNull();
   });
 });
+
+describe("a line's start brought onto its words", () => {
+  it("only the first word moves while there is room, then all draw together in rhythm", async () => {
+    const { moveCueStart } = await import("../lib/lyricsAlign");
+    const all = words();
+    const cues = buildCues(all, "phrase");
+    const a = moveCueStart(all, cues, 0, 10.1)!;
+    expect(a[0].s).toBeCloseTo(10.1);
+    expect(a[1].s).toBe(10.3); // untouched
+    const b = moveCueStart(all, cues, 0, 10.8)!;
+    const line = b.slice(0, 4);
+    expect(line[0].s).toBeCloseTo(10.8);
+    for (let k = 1; k < 4; k++) expect(line[k].s).toBeGreaterThan(line[k - 1].s); // in order, never piled
+    expect(line[3].s).toBeLessThan(11.5);
+  });
+});
