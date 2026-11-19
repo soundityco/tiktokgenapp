@@ -7,3 +7,6 @@ next-env.d.ts
 *.tsbuildinfo
 .DS_Store
 .next-test
+
+# Claude's durable workbench (bench scripts, test media, browser profiles with the AI models, results): kept across reboots, never committed
+.workbench/
