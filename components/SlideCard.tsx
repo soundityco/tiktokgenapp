@@ -9,7 +9,7 @@ import { clamp, clampPic, renderSlide, snapPic, TextBox, zoomPic } from "@/lib/r
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
 import { type AIProgress, type AIStep, coversFrame, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
-import { compareTexts, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
+import { poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { isLineList } from "@/lib/defaults";
 import ImageFinder from "./ImageFinder";

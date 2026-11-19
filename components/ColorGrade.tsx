@@ -38,7 +38,7 @@ export function lastLut(): { id: string; name: string } | undefined {
 }
 
 /** Colour panel of the video studio: camera profile, look LUT, the sliders, vignette and grain. */
-export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, footage, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut, onLutSettings, disabled }: {
+export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStored, sdr, footage, presets, onSavePreset, onDeletePreset, library, onImported, onRemoveLut, disabled }: {
   /** The camera file is standard SDR: the grade is not needed. */
   sdr?: boolean;
   /** What the video was recorded in, when known: a preset made for another kind is advised against before it goes on. */
@@ -58,8 +58,6 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
   onImported: (lut: LutRef) => void;
   /** A LUT to delete from the account (asked first). */
   onRemoveLut?: (lut: LutRef) => void;
-  /** The LUT's own settings changed (input, output, highlights): the account's LUT follows, every video with it. */
-  onLutSettings?: (lut: LutRef) => void;
   /** The whole colour turned off: every part greyed, nothing to change (the parts still open, to look). */
   disabled?: boolean;
 }) {

@@ -23,7 +23,6 @@ export async function getToken(): Promise<string> {
   return cached.token;
 }
 
-export interface DriveItem { id: string; name: string; mimeType: string; thumbnailLink?: string }
 /** Thumbnail links seen while listing folders: spares one request per thumbnail (see lib/thumb.ts). */
 export const thumbLinks = new Map<string, string>();
 
