@@ -357,21 +357,28 @@ export function drawStyledText(
     placed.push({ line, lx, ly: y + L.lh / 2 });
     y += L.lh;
   });
-  const paint = ({ line, lx, ly }: { line: string; lx: number; ly: number }) => {
+  type Placed = { line: string; lx: number; ly: number };
+  // Drawn in layers over all the lines, never line by line: every line's box first, then every outline, then the
+  // letters (a line's box or outline drawn after the line above covered its letters where the lines come close).
+  const layer = (kind: "box" | "stroke" | "fill", { line, lx, ly }: Placed) => {
     const lw = textW(ctx, line);
-    if (st.look === "box") {
+    if (kind === "box") {
+      if (st.look !== "box") return;
       const padX = L.size * (st.padX ?? 30) / 100, inset = L.size * 0.08 - L.size * (st.padY ?? 0) / 100;
       ctx.fillStyle = st.accent;
       ctx.beginPath();
       ctx.roundRect(lx - padX, ly - L.lh / 2 + inset, lw + padX * 2, L.lh - inset * 2, L.size * 0.2);
       ctx.fill();
+      return;
     }
     ctx.textAlign = "left";
     // The stroke is centred on the edge of the letters and the fill covers its inner half: only the outside shows.
-    if (st.look === "outline" && stroke > 0) {
+    if (kind === "stroke") {
+      if (st.look !== "outline" || stroke <= 0) return;
       ctx.strokeStyle = st.accent;
       ctx.lineWidth = Math.max(2, L.size * stroke / 100);
       paintText(ctx, line, lx, ly, "stroke");
+      return;
     }
     if (st.look === "shadow") {
       ctx.shadowColor = withAlpha(st.accent, (st.shadowOpacity ?? 100) / 100);
@@ -386,15 +393,26 @@ export function drawStyledText(
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
   };
-  if (!lit) placed.forEach(paint);
+  /** Every line, layer after layer (`clipOf`: a line drawn only inside that rectangle). */
+  const paintAll = (list: Placed[], clipOf?: (p: Placed) => [number, number, number, number] | null) => {
+    for (const kind of ["box", "stroke", "fill"] as const) for (const p of list) {
+      const r = clipOf ? clipOf(p) : null;
+      if (clipOf && !r) continue;
+      if (r) { ctx.save(); ctx.beginPath(); ctx.rect(...r); ctx.clip(); }
+      layer(kind, p);
+      if (r) ctx.restore();
+    }
+  };
+  if (!lit) paintAll(placed);
   else {
     // The whole phrase, dimmed; then each line again, whole look, up to where it is sung (a clip on the line).
     ctx.save();
     ctx.globalAlpha *= clamp(lit.dim, 0, 1);
-    placed.forEach(paint);
+    paintAll(placed);
     ctx.restore();
     const reach = L.size * 2 + (st.look === "box" ? L.size * (st.padX ?? 30) / 100 : 0);
     let before = 0; // the words of the lines above
+    const clips = new Map<Placed, [number, number, number, number]>();
     for (const p of placed) {
       // its words (start and end in the line)
       const spans: [number, number][] = [];
@@ -415,13 +433,9 @@ export function drawStyledText(
       // (a word sung whole: its outline and the end of its box too, up to the next word)
       // (inside a word — a syllable, a filling —: cut right at its last letter, never a bit of the next one)
       const end = partial ? 0 : upTo >= textW(ctx, p.line) - 0.5 ? reach : Math.min(textW(ctx, " ") * 0.6, L.size * stroke / 200);
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(p.lx - reach, p.ly - L.lh, upTo + reach + Math.max(0, end), L.lh * 2);
-      ctx.clip();
-      paint(p);
-      ctx.restore();
+      clips.set(p, [p.lx - reach, p.ly - L.lh, upTo + reach + Math.max(0, end), L.lh * 2]);
     }
+    paintAll(placed, (p) => clips.get(p) ?? null);
   }
   if (nativeTracking(ctx)) (ctx as Ctx2D).letterSpacing = "0px";
   tracking = 0;
