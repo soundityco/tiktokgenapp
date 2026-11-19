@@ -2884,9 +2884,36 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .lyrics-track .cue.on, .hook-track .cue.on { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 16%, var(--bg)); }
 /* The clip clicked, of any kind (one at a time on the whole timeline): lit more than the others. Playing (.on) only
    makes its text glow under the playhead. */
-.tl-row { display: contents; --tl-hd: 124px; }
-.tl-hd { display: none; }
 .tl-stack { --tl-hd: 124px; }
+/* Premiere-like: each line's tools (eye, sound, settings, locks) in a column of headers on its left; the time
+   starts right of it, nothing over the clips. On the phone too, narrower: the stripe and the two switches, without the line's name. */
+.tl-row { display: grid; grid-template-columns: var(--tl-hd) minmax(0, 1fr); column-gap: 4px; align-items: stretch; }
+/* Each line's header: a stripe and its name in the line's colour, then its two switches (the eye, or the song's
+   sound; the padlock), neutral: white when on, grey when off. The headers almost touch, as in Premiere. */
+.tl-hd { --row: var(--muted); display: grid; grid-template-columns: minmax(0, 1fr) 24px 24px; align-items: center; column-gap: 1px;
+  position: relative; z-index: 6; padding: 0 2px 0 8px; border-radius: 3px; background: var(--raised);
+  box-shadow: inset 3px 0 0 var(--row); }
+.tl-hd.cam-0, .tl-hd.cam-1, .tl-hd.cam-2, .tl-hd.cam-3 { --row: var(--cam); }
+.tl-hd.hd-hook { --row: var(--blue); }
+.tl-hd.hd-lyrics { --row: var(--lyrics); }
+.tl-hd.hd-audio { --row: var(--text); }
+.tl-hd > .hd-name { grid-column: 1; display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--text); }
+.tl-hd > .hd-name svg { flex: none; color: var(--row); }
+.tl-hd > .track-eye { grid-column: 2; }
+.tl-hd > .track-lock { grid-column: 3; }
+.tl-hd .btn.icon.sm { width: 24px; height: 24px; color: var(--faint); border-color: transparent; background: none; box-shadow: none; }
+.tl-hd .btn.icon.sm:hover { color: var(--text); }
+.tl-hd .btn.icon.sm.track-eye:not(.off), .tl-hd .btn.icon.sm.track-lock.on { color: var(--text); }
+.tl-hd .btn.icon.sm.track-lock.some { color: var(--muted); }
+.tl-stack .track-tools { display: none; }
+.tl-stack .video-block > .drop-over-row, .tl-stack .video-block > .drop-main-hint { margin-left: calc(var(--tl-hd) + 4px); }
+@media (max-width: 640px) {
+  .tl-stack { --tl-hd: 54px; }
+  .tl-hd { grid-template-columns: 24px 24px; justify-content: end; padding: 0 1px 0 5px; }
+  .tl-hd > .hd-name { display: none; }
+  .tl-hd > .track-eye { grid-column: 1; }
+  .tl-hd > .track-lock { grid-column: 2; }
+}
 .lyrics-track .cue.sel, .hook-track .cue.sel { background: color-mix(in srgb, var(--clip) 30%, var(--bg)); }
 .lyric-track .cue .cue-ico { display: inline-flex; vertical-align: -1px; margin-right: 5px; color: var(--clip); }
 .lyric-track .cue.video-clip .cue-ico, .lyric-track .cue.cam-shot .cue-ico { margin-right: 0; color: var(--vc, var(--cam)); }
@@ -2904,28 +2931,6 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   .tl-stack .lyric-head { display: none; }
   .tl-stack .track-seg { display: none; } /* (the segment is on the waveform, right above) */
   /* from the waveform's top to the last clip's bottom: never on the frame */
-  /* Premiere-like: each line's tools (eye, sound, settings, locks) in a column of headers on its left; the time
-     starts right of it, nothing over the clips. (On the phone the lines keep their tools at their end.) */
-  .tl-row { display: grid; grid-template-columns: var(--tl-hd) minmax(0, 1fr); column-gap: 4px; align-items: stretch; }
-  /* Each line's header: a stripe and its name in the line's colour, then its two switches (the eye, or the song's
-     sound; the padlock), neutral: white when on, grey when off. The headers almost touch, as in Premiere. */
-  .tl-hd { --row: var(--muted); display: grid; grid-template-columns: minmax(0, 1fr) 24px 24px; align-items: center; column-gap: 1px;
-    position: relative; z-index: 6; padding: 0 2px 0 8px; border-radius: 3px; background: var(--raised);
-    box-shadow: inset 3px 0 0 var(--row); }
-  .tl-hd.cam-0, .tl-hd.cam-1, .tl-hd.cam-2, .tl-hd.cam-3 { --row: var(--cam); }
-  .tl-hd.hd-hook { --row: var(--blue); }
-  .tl-hd.hd-lyrics { --row: var(--lyrics); }
-  .tl-hd.hd-audio { --row: var(--text); }
-  .tl-hd > .hd-name { grid-column: 1; display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--text); }
-  .tl-hd > .hd-name svg { flex: none; color: var(--row); }
-  .tl-hd > .track-eye { grid-column: 2; }
-  .tl-hd > .track-lock { grid-column: 3; }
-  .tl-hd .btn.icon.sm { width: 24px; height: 24px; color: var(--faint); border-color: transparent; background: none; box-shadow: none; }
-  .tl-hd .btn.icon.sm:hover { color: var(--text); }
-  .tl-hd .btn.icon.sm.track-eye:not(.off), .tl-hd .btn.icon.sm.track-lock.on { color: var(--text); }
-  .tl-hd .btn.icon.sm.track-lock.some { color: var(--muted); }
-  .tl-stack .track-tools { display: none; }
-  .tl-stack .video-block > .drop-over-row, .tl-stack .video-block > .drop-main-hint { margin-left: calc(var(--tl-hd) + 4px); }
   .tl-head { display: block; position: absolute; top: 6px; bottom: 6px; left: 0; width: 2px; margin-left: -1px; background: var(--text);
     pointer-events: none; z-index: 4; will-change: transform; }
 }
