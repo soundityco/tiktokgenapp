@@ -1201,8 +1201,8 @@ canvas.cv { -webkit-touch-callout: none; -webkit-user-select: none; user-select:
 .brand-full { display: inline-flex; align-items: center; gap: 10px; }
 /* The wordmark: RAW, then "by Aurare" raised at its top right (as an exponent), Space Grotesk; the letters alone on a phone. */
 .wordmark { display: inline-flex; align-items: flex-start; gap: calc(var(--wm-h) * .22); flex: none; line-height: 1; }
-.wm-by { font-family: "Space Grotesk", var(--sans); font-weight: 400; font-size: max(8px, calc(var(--wm-h) * .48)); line-height: 1; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--muted); vertical-align: baseline; position: static; margin-top: -1px; white-space: nowrap; }
+.wm-by { font-family: "Space Grotesk", var(--sans); font-weight: 400; font-size: max(8px, calc(var(--wm-h) * .48)); line-height: 1; letter-spacing: .02em;
+  color: var(--text); vertical-align: baseline; position: static; margin-top: -1px; white-space: nowrap; }
 @media (max-width: 640px) { .wm-by { display: none; } }
 
 /* The head of both studios. On a computer the slots are not there (display: contents). On a phone every control
