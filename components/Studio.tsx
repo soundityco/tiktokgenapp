@@ -131,6 +131,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
   const [appCtx, setAppCtx] = useState<{ x: number; y: number } | null>(null);
   /** A working copy of a take on its way to the Drive (shown in the top bar, whatever is open). */
   const [copyJob, setCopyJob] = useState<CopyJob | null>(null);
+  /** "Make every Drive copy again" asked (a new number each time): the video studio does it for the open release. */
+  const [remakeCopies, setRemakeCopies] = useState(0);
   const [fonts, setFonts] = useState<string[]>([]);
   /** Fonts saved before their family and style were read from the files: the texts using them follow. */
   const [renamedFonts, setRenamedFonts] = useState<Record<string, FaceInfo>>({});
@@ -1826,6 +1828,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
             <button onClick={() => { close(); restoreInput.current?.click(); }}><Icon name="upload" size={14} />{t("Restore a backup")}</button>
             <button onClick={() => { close(); setVersionsOpen(true); }}><Icon name="history" size={14} />{t("Version history")}</button>
             <button onClick={() => { close(); setStorageOpen(true); }}><Icon name="storage" size={14} />{t("Storage")}</button>
+            <button disabled={!!copyJob} title={t("Every video of the open release whose file is on this computer: its Drive copy made again (the old one deleted).")}
+              onClick={() => { close(); switchStudio("video"); setRemakeCopies((n) => n + 1); }}><Icon name="refresh" size={14} />{t("Make every Drive copy again")}</button>
             <button onClick={() => { close(); setKeysOpen(true); }}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
             {/* The installed app: nothing here. The browser: installed, or the install, standing out. */}
             {canInstall && <><div className="sep" /><button className="menu-primary" onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
@@ -1880,7 +1884,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
             title={`${copyJob.step === "make" ? t("Making the copy of {video} for your other devices", { video: copyJob.label }) : t("Sending the copy of {video} to your Drive", { video: copyJob.label })} · ${t("keep this page open")}`}
             onClick={() => { upd((w) => ({ ...w, currentProjectId: copyJob.project, projects: w.projects.map((p) => (p.id === copyJob.project ? { ...p, videoId: copyJob.clip } : p)) })); switchStudio("video"); }}>
             <span className="bg-ring" aria-hidden />
-            <span className="bg-label">{t("Drive copy")}</span>
+            <span className="bg-label">{t("Drive copy")}{copyJob.n && copyJob.n > 1 ? ` ${copyJob.k}/${copyJob.n}` : ""}</span>
             <span className="mono">{Math.round(copyJob.p * 100)}%</span>
           </button>
         )}
@@ -1938,6 +1942,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
             onCopyJob={setCopyJob}
+            remakeCopies={remakeCopies}
             onToast={say}
             onVariants={offerVariants}
             playReturn={ws.playReturn !== false}

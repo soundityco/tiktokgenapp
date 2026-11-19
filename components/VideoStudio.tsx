@@ -71,7 +71,7 @@ type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoE
 
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 /** A working copy on its way (shown in the top bar wherever the user is: see Studio). */
-export interface CopyJob { step: "make" | "send"; p: number; clip: string; project: string; label: string }
+export interface CopyJob { step: "make" | "send"; p: number; clip: string; project: string; label: string; /** In a batch ("Make every Drive copy again"): which one, of how many. */ k?: number; n?: number }
 
 function clipsOf(p: Project): VideoSetup[] {
   return p.videos?.length
@@ -344,6 +344,7 @@ export default function VideoStudio({
   libraryPhone,
   lyricsRow,
   onCopyJob,
+  remakeCopies = 0,
   onToast,
   onVariants,
   playReturn = true,
@@ -385,6 +386,8 @@ export default function VideoStudio({
   releaseTitle: ReactNode;
   /** A working copy on its way, or done (null): the shell shows it wherever the user is. */
   onCopyJob?: (job: CopyJob | null) => void;
+  /** Raised (a new number) by "Make every Drive copy again": every video of the release with its file here, copied again. */
+  remakeCopies?: number;
   /** A short message, wherever the user is (the copy is done, or failed). */
   onToast?: (msg: string) => void;
   /** After an export: the hooks retouched into texts their list does not have (see lib/variants), to offer keeping. */
@@ -1582,7 +1585,7 @@ export default function VideoStudio({
     const ac = new AbortController();
     copyAc.current = ac;
     copyClip.current = clipId;
-    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}` };
+    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}`, ...(copyBatch.current ?? {}) };
     setCopyJob({ step: "make", p: 0, ...job });
     try {
       const plan = copyPlanFor(take ? take.c.source : cur.source);
@@ -1689,6 +1692,39 @@ export default function VideoStudio({
     const id = window.setTimeout(() => void makeCopy(job), 15_000);
     return () => clearTimeout(id);
   }, [driveWrite, copyJob, copyDueAt, playing, angleRev, anglesKey, audioBuf, overlaysOf(settings).map((o) => `${o.offset}|${o.clipIn}|${o.clipOut}`).join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** A batch of copies made again (which one, of how many): shown with each one's progress. */
+  const copyBatch = useRef<{ k: number; n: number } | null>(null);
+  const remakeDone = useRef(0);
+  /**
+   * Every video of the release whose camera file is on this device (projects and takes) copied again, one after the
+   * other: each new copy replaces the old one (deleted from the Drive), at the copies' current quality.
+   */
+  const remakeAll = async () => {
+    const jobs: (null | { c: VideoSetup; blob: Blob; dur: number; off?: number; span?: [number, number] })[] = [];
+    for (const c of clips) {
+      if (c.id === clip.id) { if (videoBlob && !onCopy) jobs.push(null); continue; } // (the open video: its own copy)
+      const a = anglesRef.current.get(c.id);
+      let blob: Blob | undefined = a && !a.fromCopy ? a.blob : undefined;
+      if (!blob) { const kept = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined); blob = kept && (!c.videoSize || kept.size === c.videoSize) ? kept : undefined; }
+      const dur = a && Number.isFinite(a.el.duration) ? a.el.duration : c.source?.duration;
+      if (!blob || !dur) continue;
+      const ov = overlaysOf(settingsRef.current).find((o) => o.clip === c.id);
+      jobs.push({ c, blob, dur, off: ov ? ov.offset : c.offset, span: ov ? clipSpan(ov, dur) : clipSpan(c, dur) });
+    }
+    if (!jobs.length) { onToast?.(t("No video of this release has its file on this device: open it on the computer that has them.")); return; }
+    copyFailed.current.clear();
+    for (let i = 0; i < jobs.length; i++) {
+      while (copyAc.current) await new Promise((r) => setTimeout(r, 500)); // (a copy going on: after it)
+      copyBatch.current = { k: i + 1, n: jobs.length };
+      try { const j = jobs[i]; await (j ? makeCopy(j) : makeCopy()); } finally { copyBatch.current = null; }
+    }
+    onToast?.(t("Every Drive copy made again ({n})", { n: jobs.length }));
+  };
+  useEffect(() => {
+    if (!remakeCopies || remakeCopies === remakeDone.current || !driveWrite || loadedClip !== clip.id || !audioBuf) return;
+    remakeDone.current = remakeCopies;
+    void remakeAll();
+  }, [remakeCopies, driveWrite, loadedClip, audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
@@ -5104,6 +5140,18 @@ export default function VideoStudio({
   }, [takeOpen]);
 
   /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
+  /** Camera 1's menu (its line and its card): the same as every other video's, with its own file, copy and removal. */
+  const baseMenu = (close: () => void) => (<>
+    <button disabled={!videoBlob || syncBusy} onClick={() => { close(); void autoSync(); }}><Icon name="refresh" size={14} />{t("Sync again")}</button>
+    {/* The same camera file found again on this computer (the sync and settings kept). */}
+    <button onClick={() => { close(); document.getElementById("video-original")?.click(); }}><Icon name="link" size={14} />{t("Link the original file")}</button>
+    {driveWrite && videoBlob && !onCopy && <button disabled={!!copyJob} onClick={() => { close(); copyNow(); }}><Icon name="copy" size={14} />{settings.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>}
+    {copyJob && <button onClick={() => { close(); copyAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the Drive copy")}</button>}
+    {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the transfer")}</button>}
+    {/* Another take for this video. */}
+    <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
+    {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}><Icon name="trash" size={14} />{t("Remove video")}</button></>}
+  </>);
   const takesEl = (part: "first" | "rest") => {
     const angles = (settings.angles ?? []).filter(Boolean);
     // The videos over it are the project's takes too (listed with them, not with the release's others).
@@ -5131,27 +5179,28 @@ export default function VideoStudio({
       // What it can do, by where it is: on its own track (over the video) → into the multicam; a camera of the multicam →
       // onto its own track; either → out of the project (back with the release's other takes); not in it → added (on
       // its own track, on top, as an import).
-      const menu = (close: () => void) => (<>
-        {isOver && <button onClick={() => { close(); stop(); setV({ angles: [...angles, c.id], ...withOverlays(overlaysOf(settingsRef.current).filter((o) => o.clip !== c.id)) }); }}>{t("Put in the multicam")}</button>}
-        {cam !== null && cam > 0 && <button onClick={() => { close(); stop(); removeAngle(i, withOverlays([...overlaysOf(settingsRef.current), overlayFor(c)])); }}>{t("Put on its own track (over the video)")}</button>}
-        {cam === null && !isOver && <button disabled={!room} onClick={() => { close(); putOverlay(c); }}>{t("Add to the project")}</button>}
-        {(isOver || (cam !== null && cam > 0)) && <button onClick={() => { close(); stop(); if (isOver) patchOverlay(c.id, null); else removeAngle(i); }}>{t("Take out of the project")}</button>}
-        <button disabled={(!!job && !job.err) || (cam === 0 && (!videoBlob || syncBusy))} onClick={() => { close(); if (cam === 0) void autoSync(); else void resyncTake(c); }}>{t("Sync again")}</button>
-        {/* Its camera file found again on this computer (camera 1: in its own card's menu). */}
-        {cam !== 0 && <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}>{t("Link the original file")}</button>}
-        {/* Its Drive copy made now (another device opens it; a failed one tried again). */}
-        {cam !== 0 && driveWrite && (() => {
+      // (camera 1: the same menu, with what it has of its own — its file, its Drive copy, removed from the video)
+      const menu = (close: () => void) => cam === 0 ? baseMenu(close) : (<>
+        {isOver && <button onClick={() => { close(); stop(); setV({ angles: [...angles, c.id], ...withOverlays(overlaysOf(settingsRef.current).filter((o) => o.clip !== c.id)) }); }}><Icon name="layers" size={14} />{t("Put in the multicam")}</button>}
+        {cam !== null && cam > 0 && <button onClick={() => { close(); stop(); removeAngle(i, withOverlays([...overlaysOf(settingsRef.current), overlayFor(c)])); }}><Icon name="film" size={14} />{t("Put on its own track (over the video)")}</button>}
+        {cam === null && !isOver && <button disabled={!room} onClick={() => { close(); putOverlay(c); }}><Icon name="plus" size={14} />{t("Add to the project")}</button>}
+        <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}><Icon name="refresh" size={14} />{t("Sync again")}</button>
+        <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}><Icon name="link" size={14} />{t("Link the original file")}</button>
+        {/* Its Drive copy made now, or again (another device opens it; the old one replaced). */}
+        {driveWrite && (() => {
           const a = anglesRef.current.get(c.id);
           if (!a || a.fromCopy || !Number.isFinite(a.el.duration)) return null;
           const ov = overlaysOf(settings).find((o) => o.clip === c.id), dur = a.el.duration;
-          return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}>{c.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>;
+          return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}><Icon name="copy" size={14} />{c.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>;
         })()}
-        {cam !== 0 && <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}>{t("Replace from this computer")}</button>}
+        {copyJob?.clip === c.id && <button onClick={() => { close(); copyAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the Drive copy")}</button>}
+        <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
+        {(isOver || (cam !== null && cam > 0)) && <><div className="sep" /><button onClick={() => { close(); stop(); if (isOver) patchOverlay(c.id, null); else removeAngle(i); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button></>}
         {c.takeOnly && <>
           <div className="sep" />
           <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
             title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
-            onClick={() => { close(); deleteTake(c); }}>{t("Delete this take")}</button>
+            onClick={() => { close(); deleteTake(c); }}><Icon name="trash" size={14} />{t("Delete this take")}</button>
         </>}
       </>);
       // The one over it: numbered and coloured as the next camera (as on its track).
@@ -6511,9 +6560,9 @@ export default function VideoStudio({
                 )}
                 <div className="sep" />
                 {isMain && versions.length > 1 ? (
-                  <button disabled title={t("The other versions are kept next to this one: remove them first.")}>{t("Remove audio")}</button>
+                  <button disabled title={t("The other versions are kept next to this one: remove them first.")}><Icon name="trash" size={14} />{t("Remove audio")}</button>
                 ) : (
-                  <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setConfirmRemove(true); }}>{isMain ? t("Remove audio") : t("Remove this version")}</button>
+                  <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setConfirmRemove(true); }}><Icon name="trash" size={14} />{isMain ? t("Remove audio") : t("Remove this version")}</button>
                 )}
               </>))}>
               {!audioBlob && audioPick}
@@ -6566,15 +6615,7 @@ export default function VideoStudio({
                       {/* The copy of the take: the same words as under the preview. */}
                       {copyStatusEl(true)}
                     </>)}
-                  menu={settings.videoName && ((close) => (<>
-                    {/* Two ways to the file: another take for this video (Replace), or, on the Drive copy or without the
-                        file here, the same camera file found again on this computer (Link: the sync and settings kept). */}
-                    <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}>{t("Replace from this computer")}</button>
-                    {(!videoBlob || onCopy) && <button onClick={() => { close(); document.getElementById("video-original")?.click(); }}>{t("Link the original file")}</button>}
-                    {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}>{t("Stop the transfer")}</button>}
-                    {copyJob && <button onClick={() => { close(); copyAc.current?.abort(); }}>{t("Stop the Drive copy")}</button>}
-                    {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}>{t("Remove video")}</button></>}
-                  </>))}>
+                  menu={settings.videoName ? baseMenu : undefined}>
                   {!settings.videoName && (
                     <div className="row"><button className="btn sm" onClick={() => document.getElementById("video-file")?.click()}>{t("From this computer")}</button></div>
                   )}
