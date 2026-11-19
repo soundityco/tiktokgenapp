@@ -35,6 +35,21 @@ export async function loadWorkspace(email: string): Promise<unknown | null> {
   return (await readAll())[email] ?? null;
 }
 
+/**
+ * The workspace's revision only (a few bytes from the database, its JSON never sent): the app checks it every 30 s for
+ * another device's changes, and downloads the whole workspace only when it moved. (Downloading it every time used 4 GB
+ * of Neon's monthly transfer.) Null: no workspace.
+ */
+export async function workspaceRev(email: string): Promise<number | null> {
+  if (sql) {
+    await ensure();
+    const rows = await sql`SELECT COALESCE((data->>'rev')::int, 0) AS rev FROM workspaces WHERE email = ${email}`;
+    return rows[0] ? Number(rows[0].rev) : null;
+  }
+  const w = (await readAll())[email] as { rev?: number } | undefined;
+  return w ? w.rev ?? 0 : null;
+}
+
 export type SaveResult = { ok: true; rev: number } | { ok: false; rev: number };
 
 // ---- Version history: a copy of the workspace at most every 10 minutes, the last 30 kept ----

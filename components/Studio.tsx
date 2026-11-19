@@ -731,9 +731,11 @@ export default function Studio({ userName, userImage }: { userName: string; user
       if (isDemo() || busy || document.visibilityState !== "visible" || saveStateRef.current !== "saved" || saveBusy.current || conflict.current) return;
       busy = true;
       try {
-        const r = await fetch("/api/workspace", { cache: "no-store" });
+        // (the revision only, unless another device saved since: never the whole workspace for nothing)
+        const r = await fetch(`/api/workspace?rev=${rev.current}`, { cache: "no-store" });
         if (!r.ok) return;
         const j = await r.json();
+        if (j.unchanged) return;
         const srv = j.data?.rev ?? 0;
         if (!j.data || srv <= rev.current || saveStateRef.current !== "saved" || saveBusy.current) return;
         if (j.data.v !== 1 || !Array.isArray(j.data.projects)) return;

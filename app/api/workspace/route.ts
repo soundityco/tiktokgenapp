@@ -1,15 +1,21 @@
 import { sessionEmail } from "@/auth";
-import { loadWorkspace, saveWorkspaceCas } from "@/lib/db";
+import { loadWorkspace, saveWorkspaceCas, workspaceRev } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 // Netlify functions take up to 6 MB per request; the timed lyrics of many releases need room.
 const MAX_BODY = 5_000_000;
 
-export async function GET() {
+export async function GET(req: Request) {
   const e = await sessionEmail();
   if (!e) return Response.json({ error: "unauthorized" }, { status: 401 });
   try {
+    // ?rev=N (the app's check for another device's changes): the revision alone when it has not moved past N.
+    const have = Number(new URL(req.url).searchParams.get("rev"));
+    if (Number.isFinite(have) && new URL(req.url).searchParams.has("rev")) {
+      const cur = await workspaceRev(e);
+      if (cur !== null && cur <= have) return Response.json({ unchanged: true, rev: cur });
+    }
     return Response.json({ data: await loadWorkspace(e) });
   } catch (err) {
     console.error("workspace load failed", err);
