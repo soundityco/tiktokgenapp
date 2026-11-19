@@ -6673,6 +6673,12 @@ export default function VideoStudio({
                   <button disabled={!inClip} onClick={() => { cutVideoAt(clipMenu.which, headRef.current); close(); }}><Icon name="scissors" size={14} />{t("Cut at the playhead")}<kbd>C</kbd></button>
                   {pc && <button onClick={() => { togglePart(clipMenu.which, clipMenu.t); close(); }}><Icon name={off ? "eye" : "eye-off"} size={14} />{off ? t("Turn this part back on") : t("Turn this part off")}<kbd>⇧E</kbd></button>}
                   {hasCut && <button onClick={() => { x.set(joinAt(x.p, ft, near, x.ci, x.co)); close(); }}><Icon name="minus" size={14} />{t("Remove this cut")}</button>}
+                  {(() => {
+                    // (trimmed: the whole file back on the track)
+                    const cur = settingsRef.current, o = clipMenu.which === "base" ? cur : overlayOf(cur, clipMenu.which);
+                    if (!o || (o.clipIn === undefined && o.clipOut === undefined) || (clipMenu.which === "base" && cur.linked)) return null;
+                    return <button onClick={() => { if (clipMenu.which === "base") setV({ clipIn: undefined, clipOut: undefined }); else patchOverlay(clipMenu.which, { clipIn: undefined, clipOut: undefined }); close(); }}><Icon name="expand" size={14} />{t("Whole video")}</button>;
+                  })()}
                   {(x.p.splits?.length || x.p.offParts?.length) ? <button onClick={() => { x.set(wholeAgain(x.p)); close(); requestAnimationFrame(() => drawAt(headRef.current)); }}><Icon name="refresh" size={14} />{t("Remove every cut")}</button> : null}
                 </ContextMenu>
               );
