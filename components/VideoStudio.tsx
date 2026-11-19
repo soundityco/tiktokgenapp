@@ -5286,6 +5286,33 @@ export default function VideoStudio({
     {(p.offParts ?? []).map(([a, b]) => { const s0 = offset + Math.max(a, ci), s1 = offset + Math.min(b, co); return s1 > s0 && onTrack(s0, s1) ? <span key={"o" + a} className="vc-off" style={{ ...place(s0), width: wFull(s0, s1) }} /> : null; })}
     {(p.splits ?? []).filter((x) => x > ci && x < co).map((x) => onTrack(offset + x, offset + x) ? <span key={"s" + x} className={"vc-split cam-" + cam} style={place(offset + x)} /> : null)}
   </>);
+  /**
+   * A finger held on a video clip (a phone has no right click; iOS gives no "contextmenu"): its menu after 0.5 s, if it
+   * did not move (a drag stays a drag).
+   */
+  const holdRef = useRef<{ t: number; x: number; y: number } | null>(null);
+  const holdMenu = (which: string) => ({
+    onPointerDownCapture: (e: React.PointerEvent<HTMLElement>) => {
+      if (e.pointerType !== "touch") return;
+      const x = e.clientX, y = e.clientY, el = e.currentTarget;
+      const tr = (el.closest(".lyric-track") ?? el).getBoundingClientRect(), w = viewRef.current ?? twRef.current;
+      const at = w.s + ((x - tr.left) / Math.max(1, tr.width)) * w.d;
+      if (holdRef.current) clearTimeout(holdRef.current.t);
+      holdRef.current = { x, y, t: window.setTimeout(() => {
+        holdRef.current = null;
+        clipDrag.current = null; ovDrag.current = null; // (the press was not a drag)
+        try { navigator.vibrate?.(10); } catch { /* not on this phone */ }
+        setPick("video"); setOverLook(which === "base" ? null : which); if (which === "base") setPinCam("main");
+        setClipMenu({ x, y, which, t: at });
+      }, 500) };
+    },
+    onPointerMoveCapture: (e: React.PointerEvent<HTMLElement>) => {
+      const h = holdRef.current;
+      if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 8) { clearTimeout(h.t); holdRef.current = null; }
+    },
+    onPointerUpCapture: () => { if (holdRef.current) { clearTimeout(holdRef.current.t); holdRef.current = null; } },
+    onPointerCancelCapture: () => { if (holdRef.current) { clearTimeout(holdRef.current.t); holdRef.current = null; } },
+  });
   /** Right click on a video clip: its menu (cut here, turn this piece off or on, join, whole again). */
   const clipCtx = (which: string) => (e: React.MouseEvent<HTMLElement>) => {
     e.preventDefault(); e.stopPropagation();
@@ -5435,7 +5462,7 @@ export default function VideoStudio({
               <div className={"cue video-clip cam-0" + (lost ? " missing" : "") + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake && pickPiece?.which !== "base" ? " sel" : "")}
                 style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
-                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }} onContextMenu={clipCtx("base")}>
+                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }} onContextMenu={clipCtx("base")} {...holdMenu("base")}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name">
                   <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">1</b>
@@ -5818,7 +5845,7 @@ export default function VideoStudio({
             {onTrack(a0, b0) && (
               <div className={"cue video-clip over-clip cam-" + no + (!a && !anglesBusy ? " missing" : "") + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (pick === "video" && picked && pickPiece?.which !== o.clip ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
-                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }} onContextMenu={clipCtx(o.clip)}>
+                onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }} onContextMenu={clipCtx(o.clip)} {...holdMenu(o.clip)}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{no + 1}</b>
                   {synced && <span className="clip-lock" title={syncTitle(locked)}><Icon name={locked ? "link" : "link-off"} size={11} /></span>}

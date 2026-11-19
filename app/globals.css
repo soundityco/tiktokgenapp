@@ -588,7 +588,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .track-content { position: absolute; inset: 0; will-change: transform; }
 .lyric-track .cue, .lyric-track .cam-cut, .lyric-track .lyric-head, .lyric-track .cue-bar-glow, .lyric-track .track-seg { will-change: transform; }
 .lyric-track .track-seg { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 5%, transparent); pointer-events: none; }
-.lyric-track-empty { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.lyric-track-empty { position: absolute; left: 10px; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* (one line in its track, on a phone too) */
 .hook-track .cue { border-left-color: var(--blue); }
 .hook-track .cue.on { border-left-color: var(--blue); }
 /* A track whose text is not shown on the video (lyrics or hook switched off): dimmed in the timeline. */
@@ -2965,3 +2966,5 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   .video-col-r.focus-video .sheet-text { display: none; }
   .video-col-r.focus-text .look-of, .video-col-r.focus-text [data-sec="video-render"], .video-col-r.focus-text #video-color { display: none; }
 }
+/* A phone has no keyboard: the keys shown in the menus go. */
+@media (hover: none) { .menu kbd { display: none; } }

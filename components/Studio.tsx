@@ -848,7 +848,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
   }, [flushSave]);
 
   useEffect(() => {
-    const h = () => setDriveAuth(true);
+    // (the demo never uses the Drive: never "access expired" there)
+    const h = () => { if (!isDemo()) setDriveAuth(true); };
     window.addEventListener(DRIVE_AUTH_EVENT, h);
     return () => window.removeEventListener(DRIVE_AUTH_EVENT, h);
   }, []);
@@ -2117,7 +2118,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
             <div className="board-empty">
               <h2 className="display">{t("Make your next")} <em>{t("post")}</em>.</h2>
               <ol>
-                <li>{t("Add photos from your Drive")}</li>
+                <li>{t("Add photos to a list (drop them or pick them)")}</li>
                 <li>{t("Write or import your texts and lyrics")}</li>
                 <li>{t("Press Generate")}</li>
               </ol>
