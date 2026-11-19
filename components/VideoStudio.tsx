@@ -6241,7 +6241,7 @@ export default function VideoStudio({
     const at = (x: number) => clamp((x - c.start) / (c.end - c.start), 0, 1) * 100;
     // (each word where it is, between its marks, over the line's text: one sees which word starts where)
     const labels = (
-      <span className="cue-words" aria-hidden>
+      <span key="words" className="cue-words" aria-hidden>
         {c.words.map((w, k) => {
           const a = at(w.s), b = k + 1 < c.words.length ? at(c.words[k + 1].s) : 100;
           return <span key={k} className={"cue-word" + (k === 0 ? " first" : "")} style={{ left: `${a}%`, width: `${Math.max(0, b - a)}%` }}>{w.w}</span>;
