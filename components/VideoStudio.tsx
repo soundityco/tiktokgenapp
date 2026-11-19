@@ -608,6 +608,14 @@ export default function VideoStudio({
   /** The studio's listening volume (the player's speaker, 0-1): the song and the videos' sound heard here, never the export. */
   const [playVol, setPlayVolState] = useState(() => { try { const v = Number(localStorage.getItem("tktgen-play-volume")); return localStorage.getItem("tktgen-play-volume") !== null && v >= 0 && v <= 1 ? v : 1; } catch { return 1; } });
   const playVolRef = useRef(playVol);
+  /** The volume's slider shown in the player (closed by a click anywhere else). */
+  const [volOpen, setVolOpen] = useState(false);
+  useEffect(() => {
+    if (!volOpen) return;
+    const away = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest?.(".dp-volume")) setVolOpen(false); };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [volOpen]);
   playVolRef.current = playVol;
   const setPlayVol = (v: number) => {
     const x = clamp(v, 0, 1);
@@ -6645,20 +6653,20 @@ export default function VideoStudio({
             <span className="dp-head" style={{ left: `${clamp((head - settings.crop.start) / segLen, 0, 1) * 100}%` }} />
           </div>
           <span className="dp-time mono">{mmss(head - settings.crop.start)}<span className="muted"> / {mmss(segLen)}</span></span>
-          {/* The studio's listening volume (the song and the videos heard here; the export keeps its own sound). */}
-          <Menu float trigger={(_, toggle) => (
-            <button className="dp-vol btn icon quiet" aria-label={t("Listening volume")} title={`${t("Listening volume")} · ${Math.round(playVol * 100)} %`} onClick={toggle}>
+          {/* The studio's listening volume (the song and the videos heard here; the export keeps its own sound): its slider
+              opens inside the player, the film strip making room on its left, as in Apple Music; closed by a click elsewhere. */}
+          <span className={"dp-volume" + (volOpen ? " open" : "")}>
+            <span className="dp-vol-track">
+              <input type="range" min={0} max={100} step={1} value={Math.round(playVol * 100)} aria-label={t("Listening volume")}
+                style={{ ["--v" as string]: `${Math.round(playVol * 100)}%` }}
+                onChange={(e) => setPlayVol(Number(e.target.value) / 100)} tabIndex={volOpen ? 0 : -1} />
+            </span>
+            <button className="dp-vol btn icon quiet" aria-label={t("Listening volume")} aria-expanded={volOpen}
+              title={`${t("Listening volume")} · ${Math.round(playVol * 100)} % · ${t("Only what you hear in the studio: the export keeps its own sound.")}`}
+              onClick={() => setVolOpen((o) => !o)}>
               <Icon name={playVol > 0 ? "volume" : "volume-off"} size={16} />
             </button>
-          )}>
-            {() => (
-              <div className="sound-pop" data-keep>
-                <Range label={t("Listening volume")} value={Math.round(playVol * 100)} display={playVol > 0 ? `${Math.round(playVol * 100)} %` : t("Muted")}
-                  min={0} max={100} step={1} onChange={(n) => setPlayVol(n / 100)} />
-                <p className="muted xs">{t("Only what you hear in the studio: the export keeps its own sound.")}</p>
-              </div>
-            )}
-          </Menu>
+          </span>
         </div>
   );
 

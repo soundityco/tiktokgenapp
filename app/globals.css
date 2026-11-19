@@ -2278,8 +2278,6 @@ details.sec:first-of-type { background-image: none; }
 @media (min-width: 1001px) {
   .board-player { display: block; position: sticky; bottom: 18px; z-index: 20; justify-self: center; width: min(640px, 100%); padding: 7px; border-radius: 17px; border: 1px solid rgba(255,255,255,.09); background: rgba(22,22,28,.72); backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7); box-shadow: 0 18px 50px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07); }
   .board-player .dp { display: flex; align-items: center; gap: 12px; padding: 0 10px 0 0; }
-  .dp .dp-vol { flex: none; width: 34px; height: 34px; color: var(--muted); }
-  .dp .dp-vol:hover { color: var(--text); }
   .board-player .dp-play { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); cursor: pointer; transition: scale .12s; }
   .board-player .dp-play:active { scale: .94; } .board-player .dp-play:disabled { opacity: .5; }
   .board-player .dp-track { position: relative; flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; touch-action: none; cursor: pointer; }
@@ -2993,3 +2991,19 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 }
 /* A phone has no keyboard: the keys shown in the menus go. */
 @media (hover: none) { .menu kbd { display: none; } }
+/* The player's listening volume: its slider slides open inside the player (the film strip makes room on its left). */
+.dp-volume { display: flex; align-items: center; flex: none; }
+.dp-volume .dp-vol { width: 34px; height: 34px; color: var(--muted); border-color: transparent; background: none; box-shadow: none; }
+.dp-volume .dp-vol:hover, .dp-volume.open .dp-vol { color: var(--text); }
+.dp-vol-track { display: flex; align-items: center; width: 0; overflow: hidden; opacity: 0;
+  transition: width .32s cubic-bezier(.2,.9,.25,1), opacity .22s ease; }
+.dp-volume.open .dp-vol-track { width: 112px; opacity: 1; }
+.dp-vol-track input { width: 104px; margin: 0 4px; height: 18px; background: none; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.dp-vol-track input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--text) var(--v), var(--line-2) var(--v)); }
+.dp-vol-track input::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line-2); }
+.dp-vol-track input::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--text); }
+.dp-vol-track input::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: var(--text); border: 0; }
+.dp-vol-track input::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 0; }
+@media (max-width: 640px) { .dp-volume.open .dp-vol-track { width: 84px; } .dp-vol-track input { width: 76px; }
+  .dp:has(.dp-volume.open) .dp-time { display: none; } /* (the volume open on a phone: the time makes room for the strip) */ }
