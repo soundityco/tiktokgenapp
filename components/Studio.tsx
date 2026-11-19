@@ -2,8 +2,10 @@
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
-import { delMedia } from "@/lib/idb";
-import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, movePictureTo, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, trashDriveFolder, webPicId } from "@/lib/drive";
+import { delMedia, getMedia } from "@/lib/idb";
+import { COPY_VERSION } from "@/lib/fastCopy";
+import { copyBusy, copySpan, makeDriveCopy } from "@/lib/driveCopy";
+import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, deleteDriveFile, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, movePictureTo, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, trashDriveFolder, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
 import { type FaceInfo, renameFonts } from "@/lib/fontInfo";
@@ -20,7 +22,7 @@ import ShareDialog, { useHandheld } from "./ShareDialog";
 import LyricsEditor from "./LyricsEditor";
 import { linkAllLyrics, migrateLyrics, refreshAllLyrics, refreshLyricSlides, relinkSections, slideLyrics, songOf, sungOf } from "@/lib/lyricsSections";
 import { loadFonts, slideToBlob, textOverflow } from "@/lib/render";
-import type { GenSlide, LutRef, PicEdit, PicPool, Project, SlideCfg, StylePreset, TextPool, VideoGrade, Workspace } from "@/lib/types";
+import type { GenSlide, LutRef, PicEdit, PicPool, Project, SlideCfg, StylePreset, TextPool, VideoGrade, VideoSetup, Workspace } from "@/lib/types";
 import { forgetLut, sameLut } from "./ColorGrade";
 import HooksExtract, { NEW_IMPORT_POOL, NewHook } from "./HooksExtract";
 import Icon from "./Icon";
@@ -132,25 +134,9 @@ export default function Studio({ userName, userImage }: { userName: string; user
   /** A working copy of a take on its way to the Drive (shown in the top bar, whatever is open). */
   const [copyJob, setCopyJob] = useState<CopyJob | null>(null);
   /** "Make every Drive copy again" asked (a new number each time): the video studio does it for the open release. */
-  const [remakeCopies, setRemakeCopies] = useState(0);
-  /** The whole account's copies made again: the releases left (ids), and how many there were. */
-  const [remakeQueue, setRemakeQueue] = useState<{ ids: string[]; k: number; n: number; made: number } | null>(null);
-  /** The next release of the queue opened (its video studio does its copies, then says so). */
-  const remakeNext = (q: { ids: string[]; k: number; n: number; made: number }) => {
-    const id = q.ids[q.k - 1];
-    if (!id) { setRemakeQueue(null); say(t("Every Drive copy of the account made again")); return; }
-    setRemakeQueue(q);
-    upd((w) => ({ ...w, currentProjectId: id }));
-    switchStudio("video");
-    setRemakeCopies((n) => n + 1);
-  };
-  const remakeAccount = () => {
-    if (!ws) return;
-    // (the releases with a camera video: the others have nothing to copy)
-    const ids = ws.projects.filter((p) => (p.videos ?? []).some((v) => v.videoName)).map((p) => p.id);
-    if (!ids.length) { say(t("No video to copy in this account.")); return; }
-    remakeNext({ ids, k: 1, n: ids.length, made: 0 });
-  };
+  /** "Make every Drive copy again", running in the background (never moving the artist to another release): its stop. */
+  const remakeAc = useRef<AbortController | null>(null);
+  const [remaking, setRemaking] = useState(false);
   const [fonts, setFonts] = useState<string[]>([]);
   /** Fonts saved before their family and style were read from the files: the texts using them follow. */
   const [renamedFonts, setRenamedFonts] = useState<Record<string, FaceInfo>>({});
@@ -279,6 +265,73 @@ export default function Studio({ userName, userImage }: { userName: string; user
    * folders of the same name merged, files with the same bytes in one folder kept once (the workspace then points
    * to the one kept, the others go to the Drive's bin, where they can be taken back for 30 days).
    */
+  /**
+   * Every video of every release whose camera file is on this device: its Drive copy made again, in the background,
+   * one after the other (the artist stays where they are). A copy already made from the same file, holding its passage,
+   * the current way (COPY_VERSION) is kept. Each new copy replaces the old one (deleted from the Drive).
+   */
+  const remakeAccount = async () => {
+    const w0 = wsRef.current;
+    if (!w0 || remakeAc.current) return;
+    const ac = new AbortController();
+    remakeAc.current = ac;
+    setRemaking(true);
+    const releases = w0.projects.filter((p) => (p.videos ?? []).some((v) => v.videoName));
+    let made = 0, kept = 0, failed = 0;
+    try {
+      for (let r = 0; r < releases.length && !ac.signal.aborted; r++) {
+        const rel = releases[r], vids = rel.videos ?? [];
+        // (a take over a video: its place there decides its passage)
+        const overs = vids.flatMap((v) => v.overlays ?? (v.overlay ? [v.overlay] : []));
+        const jobs: { c: VideoSetup; blob: Blob; from: number; to: number }[] = [];
+        for (const c of vids) {
+          if (!c.videoName) continue;
+          const file = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
+          const dur = c.source?.duration;
+          if (!file || !dur || (c.videoSize && file.size !== c.videoSize)) continue;
+          const ov = overs.find((o) => o.clip === c.id), at = ov ?? c;
+          const a = Math.min(Math.max(0, at.clipIn ?? 0), dur), b = Math.min(Math.max(a, at.clipOut ?? dur), dur);
+          const [from, to] = copySpan(ov ? ov.offset : c.offset, [a, b], dur);
+          const cp = c.drive?.copy;
+          if (cp && cp.q === COPY_VERSION && cp.of === file.size && cp.from <= from + 0.6 && cp.to >= to - 0.6) { kept++; continue; }
+          if (to > from) jobs.push({ c, blob: file, from, to });
+        }
+        for (let i = 0; i < jobs.length && !ac.signal.aborted; i++) {
+          const { c, blob, from, to } = jobs[i];
+          while (copyBusy.on && !ac.signal.aborted) await new Promise((ok) => setTimeout(ok, 500)); // (the studio's own copy first)
+          if (ac.signal.aborted) break;
+          copyBusy.on = true;
+          const base = { clip: c.id, project: rel.id, label: `${rel.name} · ${c.videoName?.replace(/\.[^.]+$/, "") ?? c.name}`, release: rel.name, rk: r + 1, rn: releases.length, k: i + 1, n: jobs.length };
+          let shown = -1;
+          setCopyJob({ step: "make", p: 0, ...base });
+          try {
+            const cp = await makeDriveCopy({ c, blob, from, to, release: { id: rel.id, name: rel.name }, signal: ac.signal,
+              onStep: (step, p) => { const n = Math.floor(p * 100) + (step === "send" ? 1000 : 0); if (n !== shown) { shown = n; setCopyJob({ step, p, ...base }); } } });
+            let old: string | undefined;
+            const now = wsRef.current;
+            if (now) apply({ ...now, projects: now.projects.map((p) => (p.id !== rel.id ? p : { ...p, videos: (p.videos ?? []).map((v) => {
+              if (v.id !== c.id) return v;
+              old = v.drive?.copy?.id;
+              return { ...v, drive: { ...(v.drive ?? {}), copy: cp } };
+            }) })) }, false);
+            if (old && old !== cp.id) void deleteDriveFile(old);
+            made++;
+          } catch (e) {
+            if (ac.signal.aborted) break;
+            failed++;
+            console.warn("[copy] not made", c.videoName, e);
+          } finally { copyBusy.on = false; }
+        }
+      }
+    } finally {
+      remakeAc.current = null;
+      setRemaking(false);
+      setCopyJob(null);
+      say(ac.signal.aborted ? t("Drive copies stopped ({n} made)", { n: made })
+        : failed ? t("Drive copies: {n} made, {k} already up to date, {f} failed", { n: made, k: kept, f: failed })
+        : t("Drive copies: {n} made, {k} already up to date", { n: made, k: kept }));
+    }
+  };
   const tidyTwins = async () => {
     const KEY = "tktgen-drive-twins-v2"; // (v2: the app folders made twice at the root merged too: looked at again now)
     let last = 0;
@@ -1846,8 +1899,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
             <button onClick={() => { close(); restoreInput.current?.click(); }}><Icon name="upload" size={14} />{t("Restore a backup")}</button>
             <button onClick={() => { close(); setVersionsOpen(true); }}><Icon name="history" size={14} />{t("Version history")}</button>
             <button onClick={() => { close(); setStorageOpen(true); }}><Icon name="storage" size={14} />{t("Storage")}</button>
-            <button disabled={!!copyJob} title={t("Every video of every release whose file is on this computer: its Drive copy made again (the old one deleted), release after release.")}
-              onClick={() => { close(); remakeAccount(); }}><Icon name="refresh" size={14} />{t("Make every Drive copy again")}</button>
+            <button disabled={!!copyJob && !remaking} title={t("Every video of every release whose file is on this computer: its Drive copy made again (the old one deleted), release after release.")}
+              onClick={() => { close(); if (remaking) remakeAc.current?.abort(); else void remakeAccount(); }}><Icon name={remaking ? "x" : "refresh"} size={14} />{remaking ? t("Stop making the Drive copies") : t("Make every Drive copy again")}</button>
             <button onClick={() => { close(); setKeysOpen(true); }}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
             {/* The installed app: nothing here. The browser: installed, or the install, standing out. */}
             {canInstall && <><div className="sep" /><button className="menu-primary" onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
@@ -1960,9 +2013,6 @@ export default function Studio({ userName, userImage }: { userName: string; user
             onSaveNow={() => void flushSave()}
             releaseTitle={releaseTitle}
             onCopyJob={setCopyJob}
-            remakeCopies={remakeCopies}
-            remakeRelease={remakeQueue ? { k: remakeQueue.k, n: remakeQueue.n } : undefined}
-            onRemakeDone={(id) => { const q = remakeQueue; if (q && q.ids[q.k - 1] === id) remakeNext({ ...q, k: q.k + 1 }); }}
             onToast={say}
             onVariants={offerVariants}
             playReturn={ws.playReturn !== false}

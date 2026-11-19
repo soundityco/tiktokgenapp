@@ -24,6 +24,7 @@ import { AUDIO_KBPS, exportMp4, exportSettings, ExportStep, exportSampleRate, mp
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
 import { COPY_VERSION, fastWorkCopy } from "@/lib/fastCopy";
+import { copyBusy as copyLock } from "@/lib/driveCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
@@ -344,9 +345,6 @@ export default function VideoStudio({
   libraryPhone,
   lyricsRow,
   onCopyJob,
-  remakeCopies = 0,
-  onRemakeDone,
-  remakeRelease,
   onToast,
   onVariants,
   playReturn = true,
@@ -388,12 +386,6 @@ export default function VideoStudio({
   releaseTitle: ReactNode;
   /** A working copy on its way, or done (null): the shell shows it wherever the user is. */
   onCopyJob?: (job: CopyJob | null) => void;
-  /** Raised (a new number) by "Make every Drive copy again": every video of the release with its file here, copied again. */
-  remakeCopies?: number;
-  /** That release's copies done (or none to make here): the shell opens the next release. */
-  onRemakeDone?: (releaseId: string) => void;
-  /** The whole account being done: which release, of how many (shown with each copy). */
-  remakeRelease?: { k: number; n: number };
   /** A short message, wherever the user is (the copy is done, or failed). */
   onToast?: (msg: string) => void;
   /** After an export: the hooks retouched into texts their list does not have (see lib/variants), to offer keeping. */
@@ -1577,7 +1569,8 @@ export default function VideoStudio({
   const copyHolds = (cp: { from: number; to: number } | undefined, need: [number, number]) => !!cp && cp.from <= need[0] + 0.1 && cp.to >= need[1] - 0.1;
   const makeCopy = async (take?: { c: VideoSetup; blob: Blob; dur: number; off?: number; span?: [number, number] }) => {
     const blob = take ? take.blob : videoBlob;
-    if (!blob || (!take && onCopy) || copyAc.current) return;
+    // (one copy at a time on the page: a background one going on, after it)
+    if (!blob || (!take && onCopy) || copyAc.current || copyLock.on) return;
     const cur = settingsRef.current;
     const clipId = take ? take.c.id : clip.id;
     const videoDur = take ? take.dur : videoDurRef.current;
@@ -1590,8 +1583,9 @@ export default function VideoStudio({
     if (to <= from || copyFailed.current.has(key)) return;
     const ac = new AbortController();
     copyAc.current = ac;
+    copyLock.on = true;
     copyClip.current = clipId;
-    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}`, ...(copyBatch.current ? { ...copyBatch.current, release: project.name, rk: remakeRelease?.k, rn: remakeRelease?.n } : {}) };
+    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}` };
     setCopyJob({ step: "make", p: 0, ...job });
     try {
       const plan = copyPlanFor(take ? take.c.source : cur.source);
@@ -1649,7 +1643,7 @@ export default function VideoStudio({
         onToast?.(msg === "drive-full" ? `${t("The Drive copy of {video} could not be made", { video: job.label })} · ${driveFullText()}` : t("The Drive copy of {video} could not be made", { video: job.label }));
       }
     } finally {
-      if (copyAc.current === ac) { copyAc.current = null; copyClip.current = null; }
+      if (copyAc.current === ac) { copyAc.current = null; copyClip.current = null; copyLock.on = false; }
       setCopyJob(null);
     }
   };
@@ -1698,55 +1692,6 @@ export default function VideoStudio({
     const id = window.setTimeout(() => void makeCopy(job), 15_000);
     return () => clearTimeout(id);
   }, [driveWrite, copyJob, copyDueAt, playing, angleRev, anglesKey, audioBuf, overlaysOf(settings).map((o) => `${o.offset}|${o.clipIn}|${o.clipOut}`).join()]); // eslint-disable-line react-hooks/exhaustive-deps
-  /** A batch of copies made again (which one, of how many): shown with each one's progress. */
-  const copyBatch = useRef<{ k: number; n: number } | null>(null);
-  const remakeDone = useRef(0);
-  /**
-   * Every video of the release whose camera file is on this device (projects and takes) copied again, one after the
-   * other: each new copy replaces the old one (deleted from the Drive), at the copies' current quality.
-   */
-  const remakeAll = async () => {
-    const jobs: (null | { c: VideoSetup; blob: Blob; dur: number; off?: number; span?: [number, number] })[] = [];
-    for (const c of clips) {
-      if (c.id === clip.id) { if (videoBlob && !onCopy) jobs.push(null); continue; } // (the open video: its own copy)
-      const a = anglesRef.current.get(c.id);
-      let blob: Blob | undefined = a && !a.fromCopy ? a.blob : undefined;
-      if (!blob) { const kept = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined); blob = kept && (!c.videoSize || kept.size === c.videoSize) ? kept : undefined; }
-      const dur = a && Number.isFinite(a.el.duration) ? a.el.duration : c.source?.duration;
-      if (!blob || !dur) continue;
-      const ov = overlaysOf(settingsRef.current).find((o) => o.clip === c.id);
-      jobs.push({ c, blob, dur, off: ov ? ov.offset : c.offset, span: ov ? clipSpan(ov, dur) : clipSpan(c, dur) });
-    }
-    // Already made from this file, holding its passage, the current way (COPY_VERSION): kept, not made again.
-    const fresh = (c: VideoSetup | null, blob: Blob, off: number, span: [number, number], dur: number) => {
-      const cp = (c ?? clip).drive?.copy;
-      return !!cp && cp.q === COPY_VERSION && cp.of === blob.size && copyHolds(cp, copyNeed(off, span, dur));
-    };
-    const all = jobs.length;
-    for (let i = jobs.length - 1; i >= 0; i--) {
-      const j = jobs[i];
-      const keep = j ? fresh(j.c, j.blob, j.off ?? j.c.offset, j.span ?? [0, j.dur], j.dur)
-        : !!videoBlob && fresh(null, videoBlob, settingsRef.current.offset, clipSpan(settingsRef.current, videoDurRef.current), videoDurRef.current);
-      if (keep) jobs.splice(i, 1);
-    }
-    if (all && !jobs.length) { if (!remakeRelease) onToast?.(t("Every Drive copy of this release is already up to date.")); return 0; }
-    if (!jobs.length) { if (!remakeRelease) onToast?.(t("No video of this release has its file on this device: open it on the computer that has them.")); return 0; }
-    copyFailed.current.clear();
-    for (let i = 0; i < jobs.length; i++) {
-      while (copyAc.current) await new Promise((r) => setTimeout(r, 500)); // (a copy going on: after it)
-      copyBatch.current = { k: i + 1, n: jobs.length };
-      try { const j = jobs[i]; await (j ? makeCopy(j) : makeCopy()); } finally { copyBatch.current = null; }
-    }
-    if (!remakeRelease) onToast?.(t("Every Drive copy made again ({n})", { n: jobs.length }));
-    return jobs.length;
-  };
-  useEffect(() => {
-    // (the release opened and read: its videos; a release without its song is done too, its copies whole)
-    if (!remakeCopies || remakeCopies === remakeDone.current || !driveWrite || loadedClip !== clip.id) return;
-    remakeDone.current = remakeCopies;
-    const id = project.id;
-    void remakeAll().catch(() => 0).then((n) => onRemakeDone?.(id) ?? n);
-  }, [remakeCopies, driveWrite, loadedClip]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
