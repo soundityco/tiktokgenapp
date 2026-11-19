@@ -411,6 +411,9 @@ export interface VideoSettings {
    *  nothing of it shown nor heard in an off piece. */
   splits?: number[];
   offParts?: [number, number][];
+  /** Tracks locked in the timeline's headers (as in Premiere): "base" (the video under it, or the multicam), a take
+   *  over it (its id), "hooks". A locked track's clips are not moved nor trimmed. */
+  trackLocks?: string[];
   /** Older single video over the first one: read as `overlays` (one), never written any more. */
   overlay?: VideoOverlay;
   /** Videos over the first one (picture in picture), from the bottom up: other takes of the release, each on its own

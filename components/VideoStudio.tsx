@@ -113,7 +113,7 @@ const LYRICS_ALIGN_V = 4;
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
-const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
+const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "trackLocks", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
@@ -5153,6 +5153,19 @@ export default function VideoStudio({
     setPick("video"); setOverLook(which === "base" ? null : which); if (which === "base") setPinCam("main");
     setClipMenu({ x: e.clientX, y: e.clientY, which, t: at });
   };
+  /** A track locked in its header (as in Premiere): its clips are not moved nor trimmed (clicked: still selected). */
+  const trackLocked = (key: string) => !!settings.trackLocks?.includes(key);
+  const trackLockEl = (key: string) => {
+    const on = trackLocked(key);
+    return (
+      <button className={"btn icon sm quiet track-lock" + (on ? " on" : "")} aria-pressed={on}
+        aria-label={on ? t("Unlock the track") : t("Lock the track")}
+        title={on ? t("Track locked: its clips are not moved nor trimmed. Click to unlock it.") : t("Lock the track: its clips are not moved nor trimmed")}
+        onClick={() => { const l = (settingsRef.current.trackLocks ?? []).filter((x) => x !== key); setV({ trackLocks: on ? (l.length ? l : undefined) : [...l, key] }); }}>
+        <Icon name={on ? "lock" : "unlock"} size={14} />
+      </button>
+    );
+  };
   /** The eye at the end of a video track: hidden, the video is not drawn (preview and export), its sound stays. */
   const eyeEl = (hidden: boolean, toggle: () => void) => (
     <button className={"btn icon sm quiet track-eye" + (hidden ? " off" : "")} aria-pressed={hidden} aria-label={hidden ? t("Show the video") : t("Hide the video")}
@@ -5204,7 +5217,7 @@ export default function VideoStudio({
     const move = (e: React.PointerEvent<HTMLElement>) => {
       if (moveVdrag(e)) return;
       const d = clipDrag.current;
-      if (!d) return;
+      if (!d || trackLocked("base")) return; // (its track locked: a click only)
       // Up or down more than sideways: the clip is carried to another row (multicam, over or under another video).
       if (d.mode === "move" && vertical(e, d)) {
         clipDrag.current = null;
@@ -5246,14 +5259,7 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(null); setPinCam("main"); setPick("video"); }
     };
     return (<>
-        <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>
-            {eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}
-            {trimmed && !locked && (
-              <button className="btn icon sm quiet" aria-label={t("Whole video")} title={t("Whole video")} onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>
-                <Icon name="refresh" size={13} />
-              </button>
-            )}
-            <Menu float trigger={(_, toggle) => (
+        <div className="tl-row"><div className={"tl-hd cam-0"} onPointerDown={(e) => e.stopPropagation()}><span className="hd-x"><Menu float trigger={(_, toggle) => (
               <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Video sound")} title={vol > 0 ? `${t("Video sound")} · ${Math.round(vol * 100)} %` : `${t("Video sound")} · ${t("Muted")}`} onClick={toggle}>
                 <Icon name={vol > 0 ? "volume" : "volume-off"} size={14} />
               </button>
@@ -5265,8 +5271,7 @@ export default function VideoStudio({
                   <p className="muted xs">{t("The take's own sound, over the official audio, only in the part kept.")}</p>
                 </div>
               )}
-            </Menu>
-          </div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
+            </Menu></span>{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
@@ -5614,7 +5619,7 @@ export default function VideoStudio({
     const move = (e: React.PointerEvent<HTMLElement>) => {
       if (moveVdrag(e)) return;
       const d = ovDrag.current;
-      if (!d) return;
+      if (!d || trackLocked(o.clip)) return; // (its track locked: a click only)
       // Up or down more than sideways: carried to another row (the base line: multicam; under it: it becomes the base).
       if (d.mode === "move" && d.py !== undefined && d.el && vertical(e, { px: d.px, py: d.py })) {
         ovDrag.current = null;
@@ -5653,9 +5658,7 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(o.clip); setPick("video"); }
     };
     return (<>
-        <div className="tl-row" key={o.clip}><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>
-            {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
-            <Menu float trigger={(_, toggle) => (
+        <div className="tl-row" key={o.clip}><div className={"tl-hd cam-" + no} onPointerDown={(e) => e.stopPropagation()}><span className="hd-x"><Menu float trigger={(_, toggle) => (
               <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Settings")} title={t("Corners and sound of the video over it")} onClick={toggle}>
                 <Icon name={vol > 0 ? "volume" : "tune"} size={14} />
               </button>
@@ -5673,8 +5676,7 @@ export default function VideoStudio({
                   </div>
                 </div>
               )}
-            </Menu>
-          </div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
+            </Menu></span>{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
             <Menu float trigger={(_, toggle) => (
@@ -5734,9 +5736,7 @@ export default function VideoStudio({
     const camNow = camAt(settings.cuts, head);
     const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
     if (part === "track") return (<>
-          <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>
-              {eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}
-              {(() => {
+          <div className="tl-row"><div className={"tl-hd cam-0"} onPointerDown={(e) => e.stopPropagation()}><span className="hd-x">{(() => {
                 const cams = [clip, ...angles.map((id) => clips.find((c) => c.id === id))];
                 const anyOn = cams.some((c) => (c?.id === clip.id ? settings.clipVolume : c?.clipVolume) ?? 0);
                 return (
@@ -5761,8 +5761,7 @@ export default function VideoStudio({
                     )}
                   </Menu>
                 );
-              })()}
-            </div><div className={"lyric-track cam-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Shots")} {...scrub()}
+              })()}</span>{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track cam-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Shots")} {...scrub()}
             // (the track holds the pointer while it is down: the pull up is followed here)
             onPointerMoveCapture={(e) => {
               if (moveVdrag(e)) { e.stopPropagation(); return; }
@@ -5813,7 +5812,7 @@ export default function VideoStudio({
               return (
                 <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from} data-a={x.from} data-b={x.to}
                   // Pulled up (as in CapCut): this camera leaves the cuts and goes over the video, on its own track.
-                  onPointerDown={(e) => { if (e.button === 0) liftRef.current = { x: e.clientX, y: e.clientY, cam: x.cam, el: e.currentTarget }; }}
+                  onPointerDown={(e) => { if (e.button === 0 && !trackLocked("base")) liftRef.current = { x: e.clientX, y: e.clientY, cam: x.cam, el: e.currentTarget }; }}
 
                   style={{ ...place(x.from), width: wFull(x.from, x.to) }}
                   title={`${x.cam + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
@@ -5834,7 +5833,7 @@ export default function VideoStudio({
               <span key={"k" + i} className="cam-cut" style={{ ...place(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
                 onPointerDown={(e) => {
-                  if (e.button === 1) return;
+                  if (e.button === 1 || trackLocked("base")) return; // (its track locked: the cuts stay)
                   e.stopPropagation(); stop();
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget.parentElement!).getBoundingClientRect(); // the track (its content may be sliding)
@@ -6854,13 +6853,13 @@ export default function VideoStudio({
                 {/* One frame for every line of the timeline (waveform, hook, lyrics, videos), each with its kind's icon on
                     the left, and one playhead across them all (desktop; the phone keeps one per line). */}
                 <div className="tl-stack" ref={stackRef}>
-                <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>{muteEl}</div><div className="wave-wrap">
+                <div className="tl-row"><div className="tl-hd hd-audio" onPointerDown={(e) => e.stopPropagation()}><span className="hd-x" />{muteEl}<span className="hd-master" title={t("Master: the song of the release, the key of everything")}>M</span></div><div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
                     onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
                 </div></div>
                 {hooks.length > 0 && (<>
-                  <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>{textEye(settings.showHooks !== false, () => setV({ showHooks: settings.showHooks === false }), "hooks")}</div><div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
+                  <div className="tl-row"><div className="tl-hd hd-hook" onPointerDown={(e) => e.stopPropagation()}><span className="hd-x" />{textEye(settings.showHooks !== false, () => setV({ showHooks: settings.showHooks === false }), "hooks")}{trackLockEl("hooks")}</div><div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                     {hooks.map((h, i) => onTrack(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)) && (
@@ -6874,7 +6873,7 @@ export default function VideoStudio({
                         title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
                         onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
                         <span className="cue-ico" aria-hidden><Icon name="sparkle" size={11} /></span>{h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
-                        {grips(moveHook(h.id), moveHookEnd(h.id))}
+                        {!trackLocked("hooks") && grips(moveHook(h.id), moveHookEnd(h.id))}
                       </button>
                     ))}
                     {(() => { const h = hookAt(settings, head); const a0 = h ? settings.crop.start + h.from : 0, b0 = h ? settings.crop.start + (h.to ?? segLen) : 0; const at = h ? barAt(a0, b0) : null; return at !== null ? <span className="cue-bar-glow" data-a={a0} data-b={b0} style={place(at)} /> : null; })()}
@@ -6882,7 +6881,7 @@ export default function VideoStudio({
                     </div>
                   </div></div>
                 </>)}
-                <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>{textEye(!!settings.captions, () => setV({ captions: !settings.captions }), "lyrics")}
+                <div className="tl-row"><div className="tl-hd hd-lyrics" onPointerDown={(e) => e.stopPropagation()}><span className="hd-x" />{textEye(!!settings.captions, () => setV({ captions: !settings.captions }), "lyrics")}
                   {(project.lyricWords?.length ?? 0) > 0 && mode !== "word" && (() => {
                     const ws = project.lyricWords!, n = ws.filter((x) => x.lock).length, all = n === ws.length;
                     return (
