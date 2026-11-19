@@ -491,7 +491,9 @@ export default function VideoStudio({
   /** The video whose copy is on its way (only that video's changes stop it). */
   const copyClip = useRef<string | null>(null);
   const stopCopyOf = (id: string) => { if (copyClip.current === id) copyAc.current?.abort(); };
-  const copyFailed = useRef<string | null>(null);
+  /** Copies that failed (video, size, passage): not tried again by themselves (each video its own: one failing never
+   *  held the others' copies back any more; they waited behind it for ever). */
+  const copyFailed = useRef(new Set<string>());
   /** The copy of the open video will be made again in a few seconds (its passage changed). */
   /** When the copy of the open video will be made again (its passage went past it): a countdown, "now" skips it. */
   const [copyDueAt, setCopyDueAt] = useState<number | null>(null);
@@ -1560,7 +1562,7 @@ export default function VideoStudio({
       ? copyRange(take.off ?? take.c.offset, take.span ?? [0, videoDur], videoDur)
       : copyRange(cur.offset, clipSpan(cur, videoDur), videoDur);
     const key = `${clipId}|${blob.size}|${from.toFixed(1)}|${to.toFixed(1)}`;
-    if (to <= from || copyFailed.current === key) return;
+    if (to <= from || copyFailed.current.has(key)) return;
     const ac = new AbortController();
     copyAc.current = ac;
     copyClip.current = clipId;
@@ -1613,7 +1615,7 @@ export default function VideoStudio({
     } catch (e) {
       if (!ac.signal.aborted) {
         console.warn("[copy] not made", e);
-        copyFailed.current = key;
+        copyFailed.current.add(key);
         setCopyErr(clipId);
         onToast?.(t("The Drive copy of {video} could not be made", { video: job.label }));
       }
@@ -1646,8 +1648,11 @@ export default function VideoStudio({
       if (!c || !a || a.fromCopy || (c.score === undefined && !ov)) return false;
       const dur = a.el.duration;
       if (!Number.isFinite(dur)) return false;
-      const off = ov ? ov.offset : c.offset, need = copyNeed(off, ov ? clipSpan(ov, dur) : [0, dur], dur), cp = c.drive?.copy;
+      const off = ov ? ov.offset : c.offset, span: [number, number] = ov ? clipSpan(ov, dur) : [0, dur], need = copyNeed(off, span, dur), cp = c.drive?.copy;
       if (need[1] - need[0] < 0.5) return false;
+      // (its copy failed already: the next one's turn, never stuck behind it)
+      const [f0, f1] = copyRange(off, span, dur);
+      if (copyFailed.current.has(`${c.id}|${a.blob.size}|${f0.toFixed(1)}|${f1.toFixed(1)}`)) return false;
       return !(cp && cp.of === a.blob.size && copyHolds(cp, need));
     });
     if (!next) return;
@@ -1660,7 +1665,7 @@ export default function VideoStudio({
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
     setCopyDueAt(null);
-    copyFailed.current = null;
+    copyFailed.current.clear();
     setCopyErr(null);
     void makeCopy();
   };
@@ -5060,6 +5065,13 @@ export default function VideoStudio({
         <button disabled={(!!job && !job.err) || (cam === 0 && (!videoBlob || syncBusy))} onClick={() => { close(); if (cam === 0) void autoSync(); else void resyncTake(c); }}>{t("Sync again")}</button>
         {/* Its camera file found again on this computer (camera 1: in its own card's menu). */}
         {cam !== 0 && <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}>{t("Link the original file")}</button>}
+        {/* Its Drive copy made now (another device opens it; a failed one tried again). */}
+        {cam !== 0 && driveWrite && (() => {
+          const a = anglesRef.current.get(c.id);
+          if (!a || a.fromCopy || !Number.isFinite(a.el.duration)) return null;
+          const ov = overlaysOf(settings).find((o) => o.clip === c.id), dur = a.el.duration;
+          return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}>{t("Make its Drive copy now")}</button>;
+        })()}
         {cam !== 0 && <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}>{t("Replace from this computer")}</button>}
         {c.takeOnly && <>
           <div className="sep" />
@@ -5224,8 +5236,10 @@ export default function VideoStudio({
   const videoTrackEl = () => {
     // (its file still being read or fetched: its clip stays where it is, "Loading…" in place of its name)
     const waiting = !videoBlob && fileLooking && !!settings.source?.duration;
-    if ((!waiting && (!videoBlob || videoDur <= 0)) || !audioBuf) return null;
-    const len: number = waiting ? settings.source?.duration ?? 0 : onCopy && settings.source?.duration ? settings.source.duration : videoDur;
+    // (its file nowhere, here nor on the Drive: its clip stays, in red, "File missing")
+    const lost = !videoBlob && !fileLooking && !!settings.videoName && !!settings.source?.duration;
+    if ((!waiting && !lost && (!videoBlob || videoDur <= 0)) || !audioBuf) return null;
+    const len: number = waiting || lost ? settings.source?.duration ?? 0 : onCopy && settings.source?.duration ? settings.source.duration : videoDur;
     const [ci, co] = clipSpan(settings, len);
     const a = settings.offset + ci, b = settings.offset + co;
     const locked = !!settings.linked;
@@ -5313,7 +5327,7 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a, b) && (
-              <div className={"cue video-clip cam-0" + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake ? " sel" : "")}
+              <div className={"cue video-clip cam-0" + (lost ? " missing" : "") + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake ? " sel" : "")}
                 style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }} onContextMenu={clipCtx("base")}>
@@ -5326,6 +5340,7 @@ export default function VideoStudio({
                     onPointerDown={(e) => e.stopPropagation()} onClick={() => { stop(); if (locked) setV({ linked: false }); else { const range = linkRangeOf(settingsRef.current); setV({ linked: true, ...(range ? { crop: fitCrop(settingsRef.current.crop.start, settingsRef.current.crop.duration, range) } : null) }); } }}>
                     <Icon name={locked ? "link" : "link-off"} size={11} /></button>}
                   {waiting ? <span className="truncate shine">{t("Loading…")}</span>
+                    : lost ? <span className="truncate">{t("File missing")}</span>
                     : <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>}
                 </span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
@@ -5700,7 +5715,7 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a0, b0) && (
-              <div className={"cue video-clip over-clip cam-" + no + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (pick === "video" && picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
+              <div className={"cue video-clip over-clip cam-" + no + (!a && !anglesBusy ? " missing" : "") + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (pick === "video" && picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }} onContextMenu={clipCtx(o.clip)}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
@@ -5709,6 +5724,7 @@ export default function VideoStudio({
                     title={locked ? t("Locked to the audio (synced): click to unlock and slide it freely.") : t("Click to put it back where its sync places it, locked.")}
                     onPointerDown={(e) => e.stopPropagation()} onClick={toggleLock}><Icon name={locked ? "link" : "link-off"} size={11} /></button>}
                   {!a && anglesBusy ? <span className="truncate shine">{t("Loading…")}</span>
+                    : !a ? <span className="truncate">{t("File missing")}</span>
                     : <span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span>}</span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>

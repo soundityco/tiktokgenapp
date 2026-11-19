@@ -2925,10 +2925,12 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .video-block .lyric-track:has(.lifted) { z-index: 5; }
 /* A video clip cut, a piece of it turned off (as in Premiere): the cuts as thin lines, the off pieces greyed and hatched;
    the clip itself stays whole. */
+.lyric-track .video-clip.missing { --vc: var(--danger); --cam: var(--danger); color: var(--danger);
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 18%, var(--bg)) 0 6px, color-mix(in srgb, var(--danger) 10%, var(--bg)) 6px 12px); }
 .lyric-track .vc-off { position: absolute; top: 4px; bottom: 4px; pointer-events: none; z-index: 2;
   background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--bg) 72%, transparent) 0 5px, color-mix(in srgb, var(--bg) 52%, transparent) 5px 10px); }
-.lyric-track .vc-split { position: absolute; top: 4px; bottom: 4px; width: 3px; margin-left: -1px; pointer-events: none; z-index: 3; background: var(--bg);
-  box-shadow: 2px 0 0 0 var(--cam); } /* (a gap, then the next piece's own coloured edge: two clips, as in an editor) */
+.lyric-track .vc-split { position: absolute; top: 4px; bottom: 4px; width: 2px; pointer-events: none; z-index: 3; background: var(--cam);
+  box-shadow: -1px 0 0 0 color-mix(in srgb, var(--bg) 70%, transparent); } /* (a seam, never a gap: the two pieces touch, the next one's coloured edge after a 1 px line, as two clips side by side in an editor) */
 .lyric-track .cue.lifted { z-index: 10 !important; cursor: grabbing; box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 80%, transparent); }
 .lyric-track .cue.shifted { transition: translate .16s ease; }
 .video-clip .vc-no { color: var(--vc); font-weight: 600; }
