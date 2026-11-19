@@ -723,7 +723,6 @@ export default function VideoStudio({
   const keyOf = (c: Cue | null | undefined) => (c ? cueKey(c, mode, wordKeyMap) : null);
   const looks = settings.captionLooks ?? {};
   /** What the lyrics panel sets: every caption ("all"), or only the one under the playhead ("one"). */
-  const [lookScope, setLookScope] = useState<"all" | "one">("all");
   /** A caption's style as drawn: the lyrics' style, its own look over it (and a font tried in a list, on it alone). */
   const cueStyleRef = useRef<(c: Cue) => TextStyle>(() => captionStyle);
   cueStyleRef.current = (c: Cue) => {
@@ -747,7 +746,7 @@ export default function VideoStudio({
   const cueHere = () => {
     const c = activeRef.current(headRef.current), key = keyOf(c);
     if (!c || !key) return null;
-    return { cue: c, key, one: lookScope === "one" || !!settingsRef.current.captionLooks?.[key] };
+    return { cue: c, key, one: !!settingsRef.current.captionLooks?.[key] };
   };
 
   const end = audioBuf ? Math.min(audioBuf.duration, settings.crop.start + settings.crop.duration) : settings.crop.start + settings.crop.duration;
@@ -6167,6 +6166,12 @@ export default function VideoStudio({
   const cueIcon = (c: Cue) => {
     if (mode === "word") return <span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>;
     const on = lockedCue(c);
+    // (its padlock answers once the line is picked: on a short line the icon is where one clicks to pick it, and that
+    // click locked it by mistake; a first click picks the line, as anywhere on it)
+    const armed = !!keyOf(c) && pick === "text:" + keyOf(c);
+    if (!armed) return (
+      <span className={"cue-ico" + (on ? " locked" : "")} aria-hidden><Icon name={on ? "lock" : "type"} size={11} /></span>
+    );
     return (
       <span role="button" tabIndex={-1} className={"cue-ico lockable" + (on ? " locked" : "")} aria-pressed={on}
         title={on ? t("Locked: kept as it is (not moved by hand nor when the lyrics are placed again). Click to unlock.") : t("Lock this line: kept as it is when the lyrics are placed again")}
@@ -6298,10 +6303,12 @@ export default function VideoStudio({
     setHead(round2(settings.crop.start + (edge === "from" ? clamp(h.from + d, hookMin, to - 0.3) : Math.max(h.from, clamp(to + d, h.from + 0.3, hookMax) - 0.3))));
   };
   const current = activeCue(cues, head);
-  // The lyrics panel: the lyrics' style, or the own look of the caption under the playhead ("this word / phrase").
-  const curKey = keyOf(current);
+  // The lyrics panel: the lyrics' style (by default, every line), or — a line picked on the timeline that has its own
+  // style ("Own style for this phrase" on) — that line's alone.
+  const pickedCue = pick?.startsWith("text:") ? [...cues, ...songCues].find((x, i) => "text:" + (keyOf(x) ?? String(i)) === pick) : undefined;
+  const curKey = keyOf(pickedCue);
   const curOwn = !!curKey && !!looks[curKey];
-  const panelOne = lookScope === "one" && !!curKey;
+  const panelOne = curOwn;
   const panelStyle = panelOne ? cueStyle(captionStyle, looks[curKey!]) : captionStyle;
   const setPanelStyle = (next: TextStyle) => (panelOne ? setCueLook(curKey!, next) : setV({ captionStyle: next }));
   // A word picked on the timeline (or the timeline let go) brings its line of the lyrics list to the middle of the
@@ -7534,7 +7541,7 @@ export default function VideoStudio({
             const key = pick.slice(5);
             const c = hook ? undefined : [...cues, ...songCues].find((x, i) => (keyOf(x) ?? String(i)) === key);
             // (the phrase itself only when it is the one set: "This phrase" chosen, or it has its own look; else the lyrics)
-            const own = !hook && !!c && (lookScope === "one" || !!looks[keyOf(c) ?? ""]);
+            const own = !hook && !!c && !!looks[keyOf(c) ?? ""];
             const what = own ? c!.text.replace(/\n/g, " ").trim() : undefined;
             return (
               <div className={"look-of text-of " + (hook ? "is-hook" : "is-lyrics")}>
@@ -7667,22 +7674,18 @@ export default function VideoStudio({
                 <span className="grow" />
                 <button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button>
               </div>
-              {/* Custom subtitles: the style of every caption, or of the one under the playhead alone (word or phrase). */}
-              <div className="row look-scope">
-                <button className={"btn sm" + (lookScope === "all" ? " on" : "")} aria-pressed={lookScope === "all"} onClick={() => setLookScope("all")}>{t("All the lyrics")}</button>
-                <button className={"btn sm" + (lookScope === "one" ? " on" : "")} aria-pressed={lookScope === "one"} onClick={() => setLookScope("one")}>{mode === "word" ? t("This word") : t("This phrase")}</button>
-                <Hint text={t("This word / phrase: the settings below only change the one under the playhead (font, effect, size, colours, place); drag it on the video to move it alone. “Link to the lyrics style” gives it the lyrics' style back.")} />
-              </div>
-              {lookScope === "one" && (curKey ? (
-                <div className="row look-cue">
-                  <span className={"look-cue-text truncate" + (curOwn ? " own" : "")}>« {current!.text.replace(/\n/g, " ")} »</span>
-                  <span className="grow" />
-                  {curOwn
-                    ? <button className="btn sm quiet" onClick={() => relinkCue(curKey)}>{t("Link to the lyrics style")}</button>
-                    : <span className="muted xs">{t("Lyrics style")}</span>}
+              {/* A line picked: its own style or the lyrics' (the lyrics' style is every line's, by default). */}
+              {curKey && (
+                <div className="row look-scope own-switch">
+                  <span className="grow sm">{mode === "word" ? t("Own style for this word") : t("Own style for this phrase")}</span>
+                  <Hint text={t("On: the settings below change this one alone (font, effect, size, colours, place), and it can be moved alone on the video; it is marked with a dot on the lyrics track. Off: it takes the lyrics' style again.")} />
+                  <button className={"switch" + (curOwn ? " on" : "")} role="switch" aria-checked={curOwn} aria-label={mode === "word" ? t("Own style for this word") : t("Own style for this phrase")}
+                    onClick={() => { if (curOwn) relinkCue(curKey); else setCueLook(curKey, cueStyleRef.current(pickedCue!)); }}>
+                    <span className="switch-track"><span className="switch-knob" /></span>
+                  </button>
                 </div>
-              ) : <p className="muted xs">{mode === "word" ? t("Put the playhead on a word to give it its own style.") : t("Put the playhead on a phrase to give it its own style.")}</p>)}
-              {Object.keys(looks).length > 0 && lookScope === "all" && (
+              )}
+              {Object.keys(looks).length > 0 && !curOwn && (
                 <p className="muted xs look-count">{t("{n} with their own style (marked on the lyrics track).", { n: Object.keys(looks).length })}{" "}
                   <button className="btn sm quiet" onClick={() => setV({ captionLooks: undefined })}>{t("Link them all to the lyrics style")}</button></p>
               )}
@@ -7727,7 +7730,7 @@ export default function VideoStudio({
                   </div>
                 )}
               </Section>
-                {(lookScope === "all" || curKey) && <CaptionStyle
+                {<CaptionStyle
                   sid="lyrics-style"
                   style={panelStyle}
                   defaults={slideStyle}
