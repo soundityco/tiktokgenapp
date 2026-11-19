@@ -371,6 +371,7 @@ export const FR: Record<string, string> = {
   "Playing goes on past the segment, the playhead anywhere in the song. Click to loop on the segment.": "La lecture continue au-delà du segment, la tête partout dans le morceau. Clique pour boucler sur le segment.",
   "Show the video": "Afficher la vidéo",
   "Hide the video": "Masquer la vidéo",
+  "Multicam": "Multicam",
   "Master: the song of the release, the key of everything": "Master : le morceau de la release, la clé de tout",
   "Unlock the track": "Déverrouiller la piste",
   "Lock the track": "Verrouiller la piste",
