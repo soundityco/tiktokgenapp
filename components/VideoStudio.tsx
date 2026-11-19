@@ -2918,10 +2918,10 @@ export default function VideoStudio({
   };
   /** The lock of audio and video (on the phone above the tracks, on a computer in the segment's row). */
   const lockEl = (where = "") => videoBlob && videoDur > 0 ? (
-    <button className={"btn sm icon tr-lock " + where + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
-      aria-label={linked ? t("Audio and video linked") : t("Link audio and video")}
-      title={(linked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}>
-      <Icon name={linked ? "link" : "link-off"} size={13} />
+    <button className={"btn sm icon tr-lock " + where + (syncOn ? " on" : "")} aria-pressed={syncOn} onClick={toggleLink}
+      aria-label={syncOn ? t("Audio and video linked") : t("Link audio and video")}
+      title={(syncOn ? t("Audio and video linked") : t("Link audio and video")) + " · " + (syncOn ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}>
+      <Icon name={syncOn ? "link" : "link-off"} size={13} />
     </button>
   ) : null;
   /** A video's chain (its sync with the audio), on its clip: what it says. */
@@ -3040,7 +3040,8 @@ export default function VideoStudio({
     const cur = settingsRef.current;
     const takes = [...(cur.angles ?? []).filter(Boolean), ...overlaysOf(cur).map((o) => o.clip)]
       .map((id) => clips.find((c) => c.id === id)).filter((c): c is VideoSetup => !!c && c.score !== undefined);
-    if (cur.linked) {
+    // (linked: the video under it, or — it not synced — any synced video over it: the chain shows them all as one)
+    if ((cur.linked && !!linkRangeOf(cur)) || takes.some((c) => c.linked)) {
       setV({ linked: false });
       for (const c of takes) patchTake(c.id, { linked: false });
       return;
@@ -3052,6 +3053,9 @@ export default function VideoStudio({
     for (const c of takes) patchTake(c.id, { linked: true });
   };
   const linked = !!settings.linked && !!linkRangeOf(settings);
+  /** The chain above the tracks: on when a video is held on its sync (the one under it, else one over it). */
+  const syncOn = linked || [...(settings.angles ?? []).filter(Boolean), ...overlaysOf(settings).map((o) => o.clip)]
+    .some((id) => { const c = clips.find((x) => x.id === id); return !!c && c.score !== undefined && !!c.linked; });
 
   // ---- crop ----
   const setCropStart = (v: number) => {

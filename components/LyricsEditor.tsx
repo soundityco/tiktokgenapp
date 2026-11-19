@@ -74,9 +74,11 @@ export default function LyricsEditor({ name, lyrics, song, synced, onChange, onC
     onChange([...lyrics.slice(0, i), { ...a, text: `${a.text.replace(/\s+$/, "")}\n${b.text}`, times: undefined }, ...lyrics.slice(i + 2)], { from: b.id, to: a.id, keep: false });
   };
   const names = [t("Verse 1"), t("Chorus"), t("Verse 2"), t("Bridge"), t("Outro")];
+  // Closed with the whole song pasted and not cut yet (no sections so far): it is cut then, never lost.
+  const finish = () => { if (!lyrics.length && paste.trim()) cutSong(); onClose(); };
 
   return (
-    <Modal title={t("Lyrics · {name}", { name })} wide onClose={onClose}>
+    <Modal title={t("Lyrics · {name}", { name })} wide onClose={finish}>
       <div className="stack lyrics-editor">
         <details className="sec" open={pasteOpen} onToggle={(e) => setPasteOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary>{t("Paste the whole song")}</summary>
@@ -129,7 +131,7 @@ export default function LyricsEditor({ name, lyrics, song, synced, onChange, onC
         <button className="btn left" onClick={() => onChange([...lyrics, { id: uid(), name: names[lyrics.length] ?? t("Section {n}", { n: lyrics.length + 1 }), text: "" }])}>
           <Icon name="plus" size={14} />{t("Add a section")}
         </button>
-        <button className="btn primary" onClick={onClose}>{t("Done")}</button>
+        <button className="btn primary" onClick={finish}>{t("Done")}</button>
       </div>
     </Modal>
   );
