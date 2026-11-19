@@ -2881,8 +2881,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* (the glow over a playing text: drawn where the text is, after its icon) */
 .lyric-track .cue.on:not(.cam-shot):not(.video-clip)::after { padding-left: 22px; }
 @media (min-width: 641px) {
-  /* (bottom: the last clip already sits 4 px inside its line, the same room as on the sides) */
-  .tl-stack { row-gap: 2px; padding: 6px 6px 2px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
+  /* (the same room all around: the headers fill their lines, top to bottom) */
+  .tl-stack { row-gap: 2px; padding: 6px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); }
   /* (the lines lose their own frame: the whole is one) */
   .tl-stack .wave { border: 0; }
   .tl-stack .lyric-track { border: 0; background: none; border-radius: 0; }
@@ -2927,7 +2927,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
    the clip itself stays whole. */
 .lyric-track .vc-off { position: absolute; top: 4px; bottom: 4px; pointer-events: none; z-index: 2;
   background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--bg) 72%, transparent) 0 5px, color-mix(in srgb, var(--bg) 52%, transparent) 5px 10px); }
-.lyric-track .vc-split { position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; pointer-events: none; z-index: 3; background: var(--bg); }
+.lyric-track .vc-split { position: absolute; top: 4px; bottom: 4px; width: 3px; margin-left: -1px; pointer-events: none; z-index: 3; background: var(--bg);
+  box-shadow: 2px 0 0 0 var(--cam); } /* (a gap, then the next piece's own coloured edge: two clips, as in an editor) */
 .lyric-track .cue.lifted { z-index: 10 !important; cursor: grabbing; box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 80%, transparent); }
 .lyric-track .cue.shifted { transition: translate .16s ease; }
 .video-clip .vc-no { color: var(--vc); font-weight: 600; }

@@ -521,6 +521,10 @@ export default function VideoStudio({
   const [exporting, setExporting] = useState(false);
   /** The clip whose files were read from the device (its camera file found or not): a batch export waits for it. */
   const [loadedClip, setLoadedClip] = useState<string | null>(null);
+  /** The Drive copy being looked for or fetched (no camera file here): "loading", never "missing" meanwhile. */
+  const [copyBusy, setCopyBusy] = useState(false);
+  /** The takes' files being read (device, else their Drive copy): "loading", never "not on this device" meanwhile. */
+  const [anglesBusy, setAnglesBusy] = useState(false);
   /** Exporting every video of the release, one after the other (see the batch runner below). */
   const [batch, setBatch] = useState<null | { ids: string[]; i: number; res: Record<string, "done" | "failed" | "skipped">; back: string }>(null);
   const batchBusy = useRef(false);
@@ -845,6 +849,7 @@ export default function VideoStudio({
     const map = anglesRef.current;
     const want = new Set(angleClips.filter(Boolean).map((c) => c!.id));
     for (const [id, a] of map) if (!want.has(id)) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); map.delete(id); }
+    if (angleClips.some((c) => c && !map.has(c.id))) setAnglesBusy(true);
     void (async () => {
       for (const c of angleClips) {
         if (!c || off) continue;
@@ -899,7 +904,7 @@ export default function VideoStudio({
         a.grade = grade; a.look = look;
         a.lut = gradesColour(grade) ? buildGradeLut(grade, lutRef ? look : null, 33) : null;
       }
-      if (!off) { setAngleRev((n) => n + 1); drawAt(headRef.current); }
+      if (!off) { setAnglesBusy(false); setAngleRev((n) => n + 1); drawAt(headRef.current); }
     })();
     return () => { off = true; };
   }, [anglesKey, takeFilesRev]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1744,7 +1749,9 @@ export default function VideoStudio({
     if (copyLook.current === want) return;
     copyLook.current = want;
     let off = false;
+    setCopyBusy(true);
     void (async () => {
+      try {
       let cp: { id: string; size: number } | undefined = clip.drive?.copy;
       if (!cp) {
         const found = (await listAppFiles("copy").catch(() => [])).filter((f) => f.appProperties?.clip === clip.id);
@@ -1759,8 +1766,9 @@ export default function VideoStudio({
       }
       const cb = await copyBlob(cp, () => off);
       if (cb && !off && openClip.current === clip.id) { fileClip.current = clip.id; copyShown.current = cp.id; setOnCopy(true); setVideoBlob(cb); }
+      } finally { setCopyBusy(false); }
     })();
-    return () => { off = true; };
+    return () => { off = true; setCopyBusy(false); };
   }, [videoBlob, onCopy, loadedClip, clip.id, clip.drive?.copy?.id, settings.videoName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On the copy, the passage goes past it: a longer copy of this video may be on the Drive without the data saying
@@ -3148,7 +3156,7 @@ export default function VideoStudio({
       const r = el.getBoundingClientRect();
       const w = viewRef.current ?? twRef.current; // what is on screen (live while playing)
       const [lo, hi] = headRange();
-      return round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, lo, hi));
+      return onCut(round2(clamp(w.s + clamp((x - r.left) / r.width, 0, 1) * w.d, lo, hi)), r.width / w.d);
     };
     return {
       onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
@@ -3197,10 +3205,20 @@ export default function VideoStudio({
       onPointerCancel: () => { scrubRef.current = null; },
     };
   };
-  /** Time under the pointer, kept inside the segment (where the playhead lives). */
+  /** Time under the pointer, kept inside the segment (where the playhead lives); drawn onto a video's cut within 8 px. */
   const headAt = (f: number) => {
     const v = viewOf(), [lo, hi] = headRange();
-    return round2(clamp(v.s + f * v.d, lo, hi));
+    return onCut(round2(clamp(v.s + f * v.d, lo, hi)), Math.max(1, trackW) / v.d);
+  };
+  /** The playhead drawn onto a video's cut (its own cuts, the multicam's) within 8 px, as onto the other magnets. */
+  const onCut = (t: number, pxPerSec: number) => {
+    const c = settingsRef.current, cuts: number[] = [];
+    for (const x of c.splits ?? []) cuts.push(c.offset + x);
+    for (const o of overlaysOf(c)) for (const x of o.splits ?? []) cuts.push(o.offset + x);
+    for (const k of c.cuts ?? []) cuts.push(k.at);
+    let best = t, gap = 8 / Math.max(1e-6, pxPerSec);
+    for (const x of cuts) if (Math.abs(x - t) < gap) { gap = Math.abs(x - t); best = x; }
+    return best;
   };
   /**
    * Where the playhead may go: the segment while the video is locked to the audio (the padlock); unlocked, anywhere in
@@ -4611,15 +4629,18 @@ export default function VideoStudio({
   // The film strip of the dock's timeline: a few small pictures of the take along the segment, made in the
   // background from the file already open (a hidden player of its own, never the one on screen).
   const [strip, setStrip] = useState<string[]>([]);
+  /** Its camera file still being read here or fetched (its Drive copy): shown as loading, never as missing. */
+  const fileLooking = !!settings.videoName && !videoBlob && (loadedClip !== clip.id || copyBusy);
   /** Where the release stands, shown next to the export button. */
   const status: { text: string; tone: "" | "ok" | "warn" } =
     !audioBlob ? { text: t("Audio missing"), tone: "warn" }
+    : !videoBlob && fileLooking ? { text: t("Loading the video…"), tone: "" }
     : !videoBlob ? (settings.videoName ? { text: t("Video missing"), tone: "warn" } : { text: t("No camera video yet"), tone: "" })
     : syncBusy || genBusy ? { text: t("Syncing…"), tone: "" }
     : settings.score === undefined ? { text: t("Not synced yet"), tone: "warn" }
     : { text: t("Sync quality {n}%", { n: Math.round(settings.score * 100) }), tone: settings.score >= 0.7 ? "ok" : "warn" };
   /** The release's state (sync, lyrics…): beside the video picker on a computer, in the Segment block on a phone. */
-  const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy ? "shine" : undefined}>{status.text}</span></span>;
+  const statusBadge = <span className={"badge video-status" + (status.tone ? " " + status.tone : "")}><span className={syncBusy || genBusy || (!videoBlob && fileLooking) ? "shine" : undefined}>{status.text}</span></span>;
   const segLen = Math.max(0.1, end - settings.crop.start);
   // A hook's edges (seconds from the segment's start): anywhere in the song, before the segment as after it (the post
   // shows what of it falls in the segment; the preview, outside it, the rest).
@@ -5018,10 +5039,12 @@ export default function VideoStudio({
       // Camera 1 unfolded: its own full card (file, Drive copy, sync) shows in its place, just below.
       if (open && cam === 0) return null;
       // A camera whose file is not on this device (its shots stay black: never another camera's picture instead).
-      const missing = ((cam !== null && cam > 0) || isOver) && angleRev > 0 && !anglesRef.current.has(c.id);
+      const loading = ((cam !== null && cam > 0) || isOver) && anglesBusy && !anglesRef.current.has(c.id);
+      const missing = ((cam !== null && cam > 0) || isOver) && angleRev > 0 && !anglesBusy && !anglesRef.current.has(c.id);
       const name = c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c);
       const toggle = () => { stop(); foldTo(open ? null : c.id); if (cam !== null) { setPinCam(cam === 0 ? "main" : c.id); setPick("video"); } };
       const sync = job && !job.err ? <span className="xs muted">{Math.round(job.p * 100)} %</span>
+        : loading ? <span className="xs muted shine">{t("Loading…")}</span>
         : missing ? <span className="xs warn-text">{t("File not on this device")}</span>
         : job?.err ? <span className="xs warn-text" title={job?.err}>{t("Not synced")}</span>
         : c.score === undefined ? <span className="xs muted">{t("Not synced")}</span>
@@ -5128,22 +5151,23 @@ export default function VideoStudio({
     if (which === "base") {
       const len = onCopy && cur.source?.duration ? cur.source.duration : videoDurRef.current || Infinity;
       const [ci, co] = clipSpan(cur, len);
-      return { p: cur as ClipParts, ci, co, offset: cur.offset, set: (x: ClipParts) => setV({ splits: x.splits, offParts: x.offParts }) };
+      return { p: cur as ClipParts, ci, co, offset: cur.offset, locked: trackLocked("base"), set: (x: ClipParts) => setV({ splits: x.splits, offParts: x.offParts }) };
     }
     const o = overlayOf(cur, which);
     if (!o) return null;
     const a = anglesRef.current.get(o.clip);
     const [ci, co] = clipSpan(o, a && Number.isFinite(a.el.duration) ? a.el.duration : Infinity);
-    return { p: o as ClipParts, ci, co, offset: o.offset, set: (x: ClipParts) => patchOverlay(o.clip, { splits: x.splits, offParts: x.offParts }) };
+    return { p: o as ClipParts, ci, co, offset: o.offset, locked: trackLocked(o.clip), set: (x: ClipParts) => patchOverlay(o.clip, { splits: x.splits, offParts: x.offParts }) };
   };
   /** The video the keys act on: the one clicked (over it, or the base). */
   const pickedVideo = () => (pick === "video" ? overLook ?? "base" : null);
-  const cutVideoAt = (which: string, at: number) => { const x = partsOf(which); if (x) { const n = splitClip(x.p, at - x.offset, x.ci, x.co); if (n !== x.p) x.set(n); } };
-  const togglePart = (which: string, at: number) => { const x = partsOf(which); if (x) { x.set(togglePiece(x.p, at - x.offset, x.ci, x.co)); requestAnimationFrame(() => drawAt(headRef.current)); } };
+  // (a locked track: never cut, nor a part turned off or on)
+  const cutVideoAt = (which: string, at: number) => { const x = partsOf(which); if (x && !x.locked) { const n = splitClip(x.p, at - x.offset, x.ci, x.co); if (n !== x.p) x.set(n); } };
+  const togglePart = (which: string, at: number) => { const x = partsOf(which); if (x && !x.locked) { x.set(togglePiece(x.p, at - x.offset, x.ci, x.co)); requestAnimationFrame(() => drawAt(headRef.current)); } };
   /** On a video clip: its cuts (thin lines) and pieces turned off (greyed), laid on the track as the clip is. */
-  const partsEl = (p: ClipParts, offset: number, ci: number, co: number) => (<>
+  const partsEl = (p: ClipParts, offset: number, ci: number, co: number, cam: number) => (<>
     {(p.offParts ?? []).map(([a, b]) => { const s0 = offset + Math.max(a, ci), s1 = offset + Math.min(b, co); return s1 > s0 && onTrack(s0, s1) ? <span key={"o" + a} className="vc-off" style={{ ...place(s0), width: wFull(s0, s1) }} /> : null; })}
-    {(p.splits ?? []).filter((x) => x > ci && x < co).map((x) => onTrack(offset + x, offset + x) ? <span key={"s" + x} className="vc-split" style={place(offset + x)} /> : null)}
+    {(p.splits ?? []).filter((x) => x > ci && x < co).map((x) => onTrack(offset + x, offset + x) ? <span key={"s" + x} className={"vc-split cam-" + cam} style={place(offset + x)} /> : null)}
   </>);
   /** Right click on a video clip: its menu (cut here, turn this piece off or on, join, whole again). */
   const clipCtx = (which: string) => (e: React.MouseEvent<HTMLElement>) => {
@@ -5198,8 +5222,10 @@ export default function VideoStudio({
     </button>
   );
   const videoTrackEl = () => {
-    if (!videoBlob || videoDur <= 0 || !audioBuf) return null;
-    const len = onCopy && settings.source?.duration ? settings.source.duration : videoDur;
+    // (its file still being read or fetched: its clip stays where it is, "Loading…" in place of its name)
+    const waiting = !videoBlob && fileLooking && !!settings.source?.duration;
+    if ((!waiting && (!videoBlob || videoDur <= 0)) || !audioBuf) return null;
+    const len: number = waiting ? settings.source?.duration ?? 0 : onCopy && settings.source?.duration ? settings.source.duration : videoDur;
     const [ci, co] = clipSpan(settings, len);
     const a = settings.offset + ci, b = settings.offset + co;
     const locked = !!settings.linked;
@@ -5298,13 +5324,14 @@ export default function VideoStudio({
                   {settings.score !== undefined && <button className="clip-lock" aria-label={locked ? t("Audio and video linked") : t("Link audio and video")}
                     title={(locked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (locked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}
                     onPointerDown={(e) => e.stopPropagation()} onClick={() => { stop(); if (locked) setV({ linked: false }); else { const range = linkRangeOf(settingsRef.current); setV({ linked: true, ...(range ? { crop: fitCrop(settingsRef.current.crop.start, settingsRef.current.crop.duration, range) } : null) }); } }}>
-                    <Icon name={locked ? "lock" : "unlock"} size={11} /></button>}
-                  <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>
+                    <Icon name={locked ? "link" : "link-off"} size={11} /></button>}
+                  {waiting ? <span className="truncate shine">{t("Loading…")}</span>
+                    : <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>}
                 </span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
-            {partsEl(settings, settings.offset, ci, co)}
+            {partsEl(settings, settings.offset, ci, co, 0)}
             {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
@@ -5680,12 +5707,13 @@ export default function VideoStudio({
                 <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{no + 1}</b>
                   {synced && <button className="clip-lock" aria-label={locked ? t("Unlock: slide it freely") : t("Lock it back on its synced place")}
                     title={locked ? t("Locked to the audio (synced): click to unlock and slide it freely.") : t("Click to put it back where its sync places it, locked.")}
-                    onPointerDown={(e) => e.stopPropagation()} onClick={toggleLock}><Icon name={locked ? "lock" : "unlock"} size={11} /></button>}
-                  <span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span></span>
+                    onPointerDown={(e) => e.stopPropagation()} onClick={toggleLock}><Icon name={locked ? "link" : "link-off"} size={11} /></button>}
+                  {!a && anglesBusy ? <span className="truncate shine">{t("Loading…")}</span>
+                    : <span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span>}</span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
-            {partsEl(o, o.offset, a0 - o.offset, b0 - o.offset)}
+            {partsEl(o, o.offset, a0 - o.offset, b0 - o.offset, no)}
             {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + no} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
@@ -6634,22 +6662,26 @@ export default function VideoStudio({
               if (!x) return null;
               const ft = clipMenu.t - x.offset, pc = pieceAt(x.p, ft, x.ci, x.co), off = pc ? isOff(x.p, (pc[0] + pc[1]) / 2) : false;
               const near = ((viewRef.current ?? twRef.current).d / 100) * 1.5; // (a cut within a few pixels)
-              const hasCut = (x.p.splits ?? []).some((c) => Math.abs(c - ft) <= near);
-              const inClip = headRef.current - x.offset > x.ci && headRef.current - x.offset < x.co;
+              // (the cut under the pointer, else the one under the playhead: the playhead snaps onto cuts)
+              const hft = headRef.current - x.offset;
+              const cutT = (x.p.splits ?? []).some((c) => Math.abs(c - ft) <= near) ? ft : (x.p.splits ?? []).some((c) => Math.abs(c - hft) <= 0.02) ? hft : null;
+              const hasCut = cutT !== null && !x.locked;
+              const inClip = !x.locked && hft > x.ci && hft < x.co;
               const close = () => setClipMenu(null);
               return (
                 <ContextMenu x={clipMenu.x} y={clipMenu.y} onClose={close}>
                   <div className="label cap">{t("Video")}</div>
+                  {x.locked && <p className="muted xs" style={{ padding: "0 8px" }}>{t("Its track is locked (padlock on the left): unlock it to cut or edit this video.")}</p>}
                   <button disabled={!inClip} onClick={() => { cutVideoAt(clipMenu.which, headRef.current); close(); }}><Icon name="scissors" size={14} />{t("Cut at the playhead")}<kbd>C</kbd></button>
-                  {pc && <button onClick={() => { togglePart(clipMenu.which, clipMenu.t); close(); }}><Icon name={off ? "eye" : "eye-off"} size={14} />{off ? t("Turn this part back on") : t("Turn this part off")}<kbd>⇧E</kbd></button>}
-                  {hasCut && <button onClick={() => { x.set(joinAt(x.p, ft, near, x.ci, x.co)); close(); }}><Icon name="minus" size={14} />{t("Remove this cut")}</button>}
+                  {pc && <button disabled={x.locked} onClick={() => { togglePart(clipMenu.which, clipMenu.t); close(); }}><Icon name={off ? "eye" : "eye-off"} size={14} />{off ? t("Turn this part back on") : t("Turn this part off")}<kbd>⇧E</kbd></button>}
+                  {hasCut && <button onClick={() => { x.set(joinAt(x.p, cutT!, near, x.ci, x.co)); close(); }}><Icon name="minus" size={14} />{t("Remove this cut")}</button>}
                   {(() => {
                     // (trimmed: the whole file back on the track)
                     const cur = settingsRef.current, o = clipMenu.which === "base" ? cur : overlayOf(cur, clipMenu.which);
                     if (!o || (o.clipIn === undefined && o.clipOut === undefined) || (clipMenu.which === "base" && cur.linked)) return null;
                     return <button onClick={() => { if (clipMenu.which === "base") setV({ clipIn: undefined, clipOut: undefined }); else patchOverlay(clipMenu.which, { clipIn: undefined, clipOut: undefined }); close(); }}><Icon name="expand" size={14} />{t("Whole video")}</button>;
                   })()}
-                  {(x.p.splits?.length || x.p.offParts?.length) ? <button onClick={() => { x.set(wholeAgain(x.p)); close(); requestAnimationFrame(() => drawAt(headRef.current)); }}><Icon name="refresh" size={14} />{t("Remove every cut")}</button> : null}
+                  {(x.p.splits?.length || x.p.offParts?.length) ? <button disabled={x.locked} onClick={() => { x.set(wholeAgain(x.p)); close(); requestAnimationFrame(() => drawAt(headRef.current)); }}><Icon name="refresh" size={14} />{t("Remove every cut")}</button> : null}
                   {/* Its sound (and, over the video, its corners), as on the track's own tools before. */}
                   {(() => {
                     const ov = clipMenu.which === "base" ? null : overlayOf(settings, clipMenu.which);

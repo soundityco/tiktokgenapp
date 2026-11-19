@@ -59,6 +59,9 @@ const P: Record<string, string> = {
   loop: "M17 2l4 4-4 4M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 01-3 3H3",
   lock: "M7 10V7a5 5 0 0110 0v3M5 10h14v10H5zM12 14v3",
   unlock: "M7 10V7a5 5 0 019.4-2.4M5 10h14v10H5zM12 14v3",
+  /** A video linked to the audio (its sync): a chain; broken when unlinked. */
+  link: "M10 14a4 4 0 005.66 0l3-3a4 4 0 00-5.66-5.66l-1.2 1.2M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 005.66 5.66l1.2-1.2",
+  "link-off": "M9 6.3l1.8-1.8a4 4 0 015.66 5.66L14.7 12M9.3 12l-1.8 1.8a4 4 0 005.66 5.66L15 17.7M4 4l16 16",
   undo: "M8 7L3 12l5 5M3 12h9a6 6 0 016 6",
   redo: "M16 7l5 5-5 5M21 12h-9a6 6 0 00-6 6",
   search: "M11 4a7 7 0 105.2 11.9L21 21M11 4a7 7 0 00-7 7",
