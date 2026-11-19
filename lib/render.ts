@@ -281,15 +281,16 @@ export function textOverflow(cfg: SlideCfg, text: string): boolean {
  * How much of a phrase is sung at `at` (the "lit" captions): the words started, the one being sung counted for the part
  * of it already sung when `sweep` (it fills left to right), else whole as soon as it starts. Words: their start and end.
  */
-export function litWords(words: { s: number; e: number; w?: string; sy?: number[] }[], at: number, sweep: boolean): number {
+export function litWords(words: { s: number; e: number; w?: string; sy?: number[]; manual?: boolean }[], at: number, sweep: boolean): number {
   // A word lit right when it is sung reads late (the eye wants it a hair before, as karaoke and Apple Music do): lit
   // LIT_LEAD early. Measured: the aligned starts sit on the voice's attacks (median 0 / -10 ms on 375 words of two songs
   // against their isolated vocals), so the lag seen was the reading, not the timing. Filling: over the word, 0.5 s at most
   // (a held word filled to its end looked slow). A word whose syllables were heard (`sy`) lights syllable by syllable
   // ("vou" then "loir"), each when it is sung; the fraction returned for the word being sung is then of its letters.
-  const t = at + LIT_LEAD;
+  // (a word timed by hand lights right where it was put: the artist set it there, the lead made it light early)
   let n = 0;
   for (const w of words) {
+    const t = at + (w.manual ? 0 : LIT_LEAD);
     if (t < w.s) break;
     // (a word with no syllable heard — a line the model hardly hears, or set by hand —: its syllables evenly over it, so
     // "wanna" still lights "wan" then "na", never at once)

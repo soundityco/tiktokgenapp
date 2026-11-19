@@ -45,3 +45,15 @@ describe("a line's start brought onto its words", () => {
     expect(line[3].s).toBeLessThan(11.5);
   });
 });
+
+describe("lit lyrics and words timed by hand", () => {
+  it("a word timed by hand lights right at its start, an automatic one a hair before", async () => {
+    const { litWords, LIT_LEAD } = await import("../lib/render");
+    const auto = [{ w: "Tout", s: 0, e: 1 }, { w: "mais", s: 1, e: 2 }];
+    const hand = [{ w: "Tout", s: 0, e: 1, manual: true }, { w: "mais", s: 1, e: 2, manual: true }];
+    const just = 1 - LIT_LEAD / 2; // inside the lead, before "mais" starts
+    expect(litWords(auto, just, false)).toBe(2);
+    expect(litWords(hand, just, false)).toBe(1);
+    expect(litWords(hand, 1, false)).toBe(2);
+  });
+});
