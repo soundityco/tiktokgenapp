@@ -581,6 +581,11 @@ export default function VideoStudio({
   const ctxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const fadeRef = useRef<GainNode | null>(null);
+  /** The song muted in the studio (the eye-like button by the waveform): heard nowhere here, still in the export. */
+  const [musicMuted, setMusicMuted] = useState(() => { try { return localStorage.getItem("tktgen-music-muted") === "1"; } catch { return false; } });
+  const mutedRef = useRef(musicMuted);
+  mutedRef.current = musicMuted;
+  const muteNode = useRef<GainNode | null>(null);
   const rafRef = useRef(0);
   const originRef = useRef(0);
   const ioRef = useRef(0);
@@ -598,7 +603,7 @@ export default function VideoStudio({
   const scrubGrain = useRef<{ src: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const scrubAt = useRef({ t: -1, ms: 0 });
   const scrubSound = (t: number) => {
-    if (!audioBuf || sourceRef.current) return;
+    if (!audioBuf || sourceRef.current || mutedRef.current) return;
     const now = performance.now(), last = scrubAt.current;
     if (now - last.ms < 50 || Math.abs(t - last.t) < 0.005) return;
     scrubAt.current = { t, ms: now };
@@ -1266,7 +1271,8 @@ export default function VideoStudio({
         }
         src.stop(fade ? now + FADE + 0.01 : 0);
       } catch { /* already stopped */ }
-      window.setTimeout(() => { src.disconnect(); fade?.disconnect(); }, fade ? FADE * 1000 + 60 : 0);
+      const mute = muteNode.current; muteNode.current = null;
+      window.setTimeout(() => { src.disconnect(); fade?.disconnect(); mute?.disconnect(); }, fade ? FADE * 1000 + 60 : 0);
     }
     if (videoRef.current) { videoRef.current.pause(); videoRef.current.playbackRate = 1; }
     for (const a of anglesRef.current.values()) { a.el.pause(); a.el.playbackRate = 1; }
@@ -2379,7 +2385,10 @@ export default function VideoStudio({
     fade.gain.setValueAtTime(0, ctx.currentTime);
     fade.gain.linearRampToValueAtTime(1, ctx.currentTime + FADE);
     src.connect(fade);
-    fade.connect(ctx.destination);
+    const mute = ctx.createGain();
+    mute.gain.value = mutedRef.current ? 0 : 1;
+    fade.connect(mute); mute.connect(ctx.destination);
+    muteNode.current = mute;
     originRef.current = ctx.currentTime;
     src.start(0, from, until - from);
     sourceRef.current = src;
@@ -4628,7 +4637,7 @@ export default function VideoStudio({
     timelineEls.current = {
       contents, clips: contents.map((c) => all(":scope > .cue[data-a]", c)),
       // (where the tracks' time starts in the frame: the one playhead is placed from there)
-      headOff: (() => { const st = stackRef.current, tr = st?.querySelector<HTMLElement>(":scope > .lyric-track:not(.hook-track)"); if (!st || !tr) return 0; return tr.getBoundingClientRect().left + tr.clientLeft - st.getBoundingClientRect().left - st.clientLeft; })(),
+      headOff: (() => { const st = stackRef.current, tr = st?.querySelector<HTMLElement>(".lyrics-track"); if (!st || !tr) return 0; return tr.getBoundingClientRect().left + tr.clientLeft - st.getBoundingClientRect().left - st.clientLeft; })(),
       vclips: all(".lyric-track .video-clip[data-va]").map((el) => { const name = el.querySelector<HTMLElement>(".vc-name .truncate"); return { el, name, at: name?.offsetLeft ?? 0 }; }), heads: all(".lyric-track .lyric-head"),
       bars: all(".lyric-track .cue-bar-glow[data-a]"), playing: all(".lyric-track .cue.on[data-a]"),
       dock: all(".dp-track .dp-played", document), dockHeads: all(".dp-track .dp-head", document),
@@ -5101,6 +5110,28 @@ export default function VideoStudio({
       <Icon name={hidden ? "eye-off" : "eye"} size={14} />
     </button>
   );
+  /** The song's mute, in the header of the waveform (studio only: the export keeps it). */
+  const muteEl = (
+    <button className={"btn icon sm quiet track-eye" + (musicMuted ? " off" : "")} aria-pressed={musicMuted}
+      aria-label={musicMuted ? t("Hear the song") : t("Mute the song")}
+      title={musicMuted ? t("Hear the song") : t("Mute the song in the studio (the export keeps it)")}
+      onClick={() => {
+        const m = !musicMuted; setMusicMuted(m);
+        try { localStorage.setItem("tktgen-music-muted", m ? "1" : "0"); } catch { /* private window */ }
+        const g = muteNode.current; if (g) g.gain.setTargetAtTime(m ? 0 : 1, g.context.currentTime, 0.01);
+      }}>
+      <Icon name={musicMuted ? "volume-off" : "volume"} size={14} />
+    </button>
+  );
+  /** The eye of a text track (hooks, lyrics): hidden, not drawn on the preview nor in the export. */
+  const textEye = (shown: boolean, toggle: () => void, what: "hooks" | "lyrics") => (
+    <button className={"btn icon sm quiet track-eye" + (shown ? "" : " off")} aria-pressed={!shown}
+      aria-label={shown ? (what === "hooks" ? t("Hide the hooks") : t("Hide the lyrics")) : (what === "hooks" ? t("Show the hooks") : t("Show the lyrics"))}
+      title={shown ? (what === "hooks" ? t("Hide the hooks") : t("Hide the lyrics")) : (what === "hooks" ? t("Show the hooks") : t("Show the lyrics"))}
+      onClick={() => { toggle(); requestAnimationFrame(() => drawAt(headRef.current)); }}>
+      <Icon name={shown ? "eye" : "eye-off"} size={14} />
+    </button>
+  );
   const videoTrackEl = () => {
     if (!videoBlob || videoDur <= 0 || !audioBuf) return null;
     const len = onCopy && settings.source?.duration ? settings.source.duration : videoDur;
@@ -5165,7 +5196,27 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(null); setPinCam("main"); setPick("video"); }
     };
     return (<>
-        <div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
+        <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>
+            {eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}
+            {trimmed && !locked && (
+              <button className="btn icon sm quiet" aria-label={t("Whole video")} title={t("Whole video")} onClick={() => setV({ clipIn: undefined, clipOut: undefined })}>
+                <Icon name="refresh" size={13} />
+              </button>
+            )}
+            <Menu float trigger={(_, toggle) => (
+              <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Video sound")} title={vol > 0 ? `${t("Video sound")} · ${Math.round(vol * 100)} %` : `${t("Video sound")} · ${t("Muted")}`} onClick={toggle}>
+                <Icon name={vol > 0 ? "volume" : "volume-off"} size={14} />
+              </button>
+            )}>
+              {() => (
+                <div className="sound-pop" data-keep>
+                  <Range label={t("Video sound")} value={Math.round(vol * 100)} display={vol > 0 ? `${Math.round(vol * 100)} %` : t("Muted")}
+                    min={0} max={100} step={1} onChange={(n) => setV({ clipVolume: n > 0 ? n / 100 : undefined })} />
+                  <p className="muted xs">{t("The take's own sound, over the official audio, only in the part kept.")}</p>
+                </div>
+              )}
+            </Menu>
+          </div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
@@ -5211,7 +5262,7 @@ export default function VideoStudio({
             {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
-        </div>
+        </div></div>
         </>
     );
   };
@@ -5266,7 +5317,7 @@ export default function VideoStudio({
   const vdragRef = useRef(vdrag);
   vdragRef.current = vdrag;
   /** The video rows on screen, from the top: each one's key (the take over it, or "base") and element. */
-  const videoRows = () => [...document.querySelectorAll<HTMLElement>(".video-block > .over-track[data-ov], .video-block > .cam-track, .video-block > .video-track:not(.over-track)")]
+  const videoRows = () => [...document.querySelectorAll<HTMLElement>(".video-block .over-track[data-ov], .video-block .cam-track, .video-block .video-track:not(.over-track)")]
     .map((el) => ({ key: el.dataset.ov ?? "base", el, r: el.getBoundingClientRect() }));
   /** Where the video on a row starts on the track. */
   const rowStart = (key: string) => {
@@ -5278,10 +5329,12 @@ export default function VideoStudio({
   /** What letting go there would do, the row it is about, and the time its start lands on (its left edge under the pointer). */
   const landing = (d: { from: "base" | "over" | "cam"; id?: string; grab: number }, x: number, y: number) => {
     const block = document.querySelector<HTMLElement>(".video-block")?.getBoundingClientRect();
+    // (the time is read on a track, right of the rows' headers; the cut is drawn in the block)
+    const track = document.querySelector<HTMLElement>(".video-block .lyric-track")?.getBoundingClientRect() ?? block;
     const w = viewRef.current ?? twRef.current;
     const left = x - d.grab;
-    const at = block ? round2(w.s + ((left - block.left) / Math.max(1, block.width)) * w.d) : 0;
-    const none = { at, act: null as VAct | null, target: null as string | null, cutX: block ? clamp(left - block.left, 0, block.width) : 0 };
+    const at = track ? round2(w.s + ((left - track.left) / Math.max(1, track.width)) * w.d) : 0;
+    const none = { at, act: null as VAct | null, target: null as string | null, cutX: block && track ? clamp(left - track.left, 0, track.width) + track.left - block.left : 0 };
     const rows = videoRows();
     if (!rows.length) return none;
     const mine = d.from === "over" ? d.id ?? "" : "base";
@@ -5442,10 +5495,12 @@ export default function VideoStudio({
       const r = rowOf(e);
       if (r !== dropRow) setDropRow(r);
       // Over the video: the clip shown where it would land, following the pointer (its start under it).
-      const box = e.currentTarget.getBoundingClientRect(), w = viewRef.current ?? twRef.current;
+      // (the time read on a track, right of the rows' headers; the ghost placed in the block)
+      const blk = e.currentTarget.getBoundingClientRect(), w = viewRef.current ?? twRef.current;
+      const box = e.currentTarget.querySelector<HTMLElement>(".lyric-track")?.getBoundingClientRect() ?? blk;
       const c = clips.find((x) => x.id === dragTake), len = c?.source?.duration ?? 10;
-      const x = clamp(e.clientX - box.left, 0, box.width);
-      const t = round2(w.s + (x / Math.max(1, box.width)) * w.d);
+      const xt = clamp(e.clientX - box.left, 0, box.width), x = xt + box.left - blk.left;
+      const t = round2(w.s + (xt / Math.max(1, box.width)) * w.d);
       if (r === "over") { if (!dropAt || Math.abs(dropAt.x - x) > 0.5) setDropAt({ t, x, w: (len / w.d) * box.width }); }
       else if (dropAt) setDropAt(null);
     },
@@ -5546,7 +5601,28 @@ export default function VideoStudio({
       if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(o.clip); setPick("video"); }
     };
     return (<>
-        <div key={o.clip} className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
+        <div className="tl-row" key={o.clip}><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>
+            {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
+            <Menu float trigger={(_, toggle) => (
+              <button className={"btn icon sm quiet" + (vol > 0 ? " on" : "")} aria-label={t("Settings")} title={t("Corners and sound of the video over it")} onClick={toggle}>
+                <Icon name={vol > 0 ? "volume" : "tune"} size={14} />
+              </button>
+            )}>
+              {(close) => (
+                <div className="sound-pop" data-keep>
+                  <Range label={t("Rounded corners")} value={Math.round(o.radius ?? 0)} display={`${Math.round(o.radius ?? 0)} %`} min={0} max={50} step={1} onChange={(n) => setO({ radius: n })} />
+                  <Range label={t("Video sound")} value={Math.round(vol * 100)} display={vol > 0 ? `${Math.round(vol * 100)} %` : t("Muted")}
+                    min={0} max={100} step={1} onChange={(n) => setO({ volume: n > 0 ? n / 100 : undefined })} />
+                  <p className="muted xs">{t("Click it to set it in the right column (its size is the Zoom of the framing, its colour…); drag it on the video to move it.")}</p>
+                  <div className="row" style={{ gap: 6 }}>
+                    {trimmed && <button className="btn sm quiet" onClick={() => setO({ clipIn: undefined, clipOut: undefined })}>{t("Whole video")}</button>}
+                    <span className="grow" />
+                    <button className="btn sm quiet" style={{ color: "var(--danger)" }} onClick={() => { close(); stop(); patchOverlay(o.clip, null); }}>{t("Take out of the project")}</button>
+                  </div>
+                </div>
+              )}
+            </Menu>
+          </div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
             <Menu float trigger={(_, toggle) => (
@@ -5586,7 +5662,7 @@ export default function VideoStudio({
             {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + no} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
-        </div>
+        </div></div>
         </>
     );
   };
@@ -5605,7 +5681,35 @@ export default function VideoStudio({
     const camNow = camAt(settings.cuts, head);
     const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
     if (part === "track") return (<>
-          <div className={"lyric-track cam-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Shots")} {...scrub()}
+          <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>
+              {eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}
+              {(() => {
+                const cams = [clip, ...angles.map((id) => clips.find((c) => c.id === id))];
+                const anyOn = cams.some((c) => (c?.id === clip.id ? settings.clipVolume : c?.clipVolume) ?? 0);
+                return (
+                  <Menu float trigger={(_, toggle) => (
+                    <button className={"btn icon sm quiet" + (anyOn ? " on" : "")} aria-label={t("Cameras' sound")} title={t("Cameras' sound")} onClick={toggle}>
+                      <Icon name={anyOn ? "volume" : "volume-off"} size={14} />
+                    </button>
+                  )}>
+                    {() => (
+                      <div className="sound-pop" data-keep>
+                        {cams.map((c, k) => {
+                          if (!c) return null;
+                          const vol = clamp((k === 0 ? settings.clipVolume : c.clipVolume) ?? 0, 0, 1);
+                          const set = (n: number) => { const x = n > 0 ? n / 100 : undefined; if (k === 0) setV({ clipVolume: x }); else patchTake(c.id, { clipVolume: x }); };
+                          return (
+                            <Range key={c.id} label={`${k + 1} · ${c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}`} value={Math.round(vol * 100)}
+                              display={vol > 0 ? `${Math.round(vol * 100)} %` : t("Muted")} min={0} max={100} step={1} onChange={set} />
+                          );
+                        })}
+                        <p className="muted xs">{t("Each camera's own sound, over the official audio, heard on its shots.")}</p>
+                      </div>
+                    )}
+                  </Menu>
+                );
+              })()}
+            </div><div className={"lyric-track cam-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Shots")} {...scrub()}
             // (the track holds the pointer while it is down: the pull up is followed here)
             onPointerMoveCapture={(e) => {
               if (moveVdrag(e)) { e.stopPropagation(); return; }
@@ -5703,7 +5807,7 @@ export default function VideoStudio({
             ))}
             <span className="lyric-head" style={{ ...pos(head) }} />
             </div>
-          </div>
+          </div></div>
         </>
     );
     return (
@@ -6676,13 +6780,13 @@ export default function VideoStudio({
                 {/* One frame for every line of the timeline (waveform, hook, lyrics, videos), each with its kind's icon on
                     the left, and one playhead across them all (desktop; the phone keeps one per line). */}
                 <div className="tl-stack" ref={stackRef}>
-                <div className="wave-wrap">
+                <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>{muteEl}</div><div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
                     onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
-                </div>
+                </div></div>
                 {hooks.length > 0 && (<>
-                  <div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
+                  <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>{textEye(settings.showHooks !== false, () => setV({ showHooks: settings.showHooks === false }), "hooks")}</div><div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                     {hooks.map((h, i) => onTrack(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)) && (
@@ -6702,9 +6806,20 @@ export default function VideoStudio({
                     {(() => { const h = hookAt(settings, head); const a0 = h ? settings.crop.start + h.from : 0, b0 = h ? settings.crop.start + (h.to ?? segLen) : 0; const at = h ? barAt(a0, b0) : null; return at !== null ? <span className="cue-bar-glow" data-a={a0} data-b={b0} style={place(at)} /> : null; })()}
                     <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                     </div>
-                  </div>
+                  </div></div>
                 </>)}
-                <div ref={trackRef} className={"lyric-track lyrics-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
+                <div className="tl-row"><div className="tl-hd" onPointerDown={(e) => e.stopPropagation()}>{textEye(!!settings.captions, () => setV({ captions: !settings.captions }), "lyrics")}
+                  {(project.lyricWords?.length ?? 0) > 0 && mode !== "word" && (() => {
+                    const ws = project.lyricWords!, n = ws.filter((x) => x.lock).length, all = n === ws.length;
+                    return (
+                        <button className={"btn icon sm quiet track-lock" + (all ? " on" : n ? " some" : "")} aria-pressed={all}
+                          aria-label={all ? t("Unlock every line") : t("Lock every line")}
+                          title={all ? t("Every line is locked: kept as it is when the lyrics are placed again. Click to unlock them all.") : n ? t("Some lines are locked. Click to lock them all.") : t("Lock every line: kept as they are when the lyrics are placed again")}
+                          onClick={() => toggleAllLocks(!all)}>
+                          <Icon name={all ? "lock" : "unlock"} size={14} />
+                        </button>
+                    );
+                  })()}</div><div ref={trackRef} className={"lyric-track lyrics-track" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics of the segment")} {...scrub(() => setTab("lyrics"))}>
                   {/* At the track's end: every line locked or unlocked at once (all: closed; some: open with a dot). */}
                   {(project.lyricWords?.length ?? 0) > 0 && mode !== "word" && (() => {
                     const ws = project.lyricWords!, n = ws.filter((x) => x.lock).length, all = n === ws.length;
@@ -6749,7 +6864,7 @@ export default function VideoStudio({
                   {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" data-a={Math.max(current.start, settings.crop.start)} data-b={Math.min(current.end, end)} style={place(barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))!)} />}
                   <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
-                </div>
+                </div></div>
                 {/* The video part of the timeline: every video track in one block (the one over it on top). */}
                 {audioBuf && videoBlob && (
                   <div className={"video-block" + (dragTake || vdrag ? " dragging" : "") + (dropRow ? " drop-" + dropRow : "") + (vdrag?.act ? " va-" + vdrag.act : "")} {...blockDrop}>
