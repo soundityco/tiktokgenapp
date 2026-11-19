@@ -7100,7 +7100,7 @@ export default function VideoStudio({
                       style={{
                         ...place(c.start),
                         width: wFull(c.start, c.end),
-                        ...(c === current ? { ["--hx" as string]: hxIn(clamp(c.start, settings.crop.start, end), clamp(c.end, settings.crop.start, end)) } : null),
+                        ...(c === current ? { ["--hx" as string]: hxIn(c.start, c.end) } : null),
                       }}
                       data-a={c.start} data-b={c.end}
                       data-at={Math.max(settings.crop.start, c.start)}
@@ -7112,7 +7112,8 @@ export default function VideoStudio({
                   {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
                   {/* Loop off: the whole song plays as the segment does, its lines outside lit under the playhead too (loop on: dimmed). */}
                   {!loopSeg && (() => { const o = songCues.find((c) => (c.end <= settings.crop.start || c.start >= end) && head >= c.start && head < c.end); const at = o ? barAt(o.start, o.end) : null; return o && at !== null ? <span className="cue-bar-glow" data-a={o.start} data-b={o.end} style={place(at)} /> : null; })()}
-                  {current && barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end)) !== null && <span className="cue-bar-glow" data-a={Math.max(current.start, settings.crop.start)} data-b={Math.min(current.end, end)} style={place(barAt(Math.max(current.start, settings.crop.start), Math.min(current.end, end))!)} />}
+                  {/* (on the line's own edge: a line across the segment's edge is drawn whole, its bar where it starts, never at the segment's start in its middle) */}
+                  {current && barAt(current.start, current.end) !== null && <span className="cue-bar-glow" data-a={current.start} data-b={current.end} style={place(barAt(current.start, current.end)!)} />}
                   <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                   </div>
                 </div></div>
