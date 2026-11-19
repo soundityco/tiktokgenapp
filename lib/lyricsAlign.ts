@@ -648,6 +648,28 @@ export function moveCueBy(all: LyricWord[], cues: Cue[], i: number, delta: numbe
 }
 
 /** When a caption leaves the screen, set by hand on its last word. */
+/** Shortest a word may be when its start is moved by hand (seconds). */
+export const MIN_WORD = 0.05;
+/**
+ * One word of a line retimed by hand (the word-by-word correction on the timeline): word `k` of `cue` (never its first:
+ * the line's own start is its handle) starts at `at`, kept between the word before it and the one after it; the word
+ * before ends there. Both are marked retouched (`manual`), the line's doubt is cleared. Null when nothing changes.
+ */
+export function moveWordStart(all: LyricWord[], cue: Cue, k: number, at: number): LyricWord[] | null {
+  if (k <= 0 || k >= cue.words.length) return null;
+  const w = cue.words[k], prev = cue.words[k - 1], next = cue.words[k + 1];
+  const lo = prev.s + MIN_WORD, hi = (next ? next.s : Math.max(w.e, cue.end)) - MIN_WORD;
+  if (hi < lo) return null;
+  const t = Math.round(Math.min(hi, Math.max(lo, at)) * 1000) / 1000;
+  if (Math.abs(t - w.s) < 1e-4) return null;
+  const line = new Set(cue.words);
+  return all.map((x) => {
+    if (x === w) return { ...x, s: t, e: Math.max(x.e, t + MIN_WORD), manual: true, doubt: undefined };
+    if (x === prev) return { ...x, e: t, manual: true, doubt: undefined };
+    return line.has(x) && x.doubt ? { ...x, doubt: undefined } : x;
+  });
+}
+
 export function setCueEnd(all: LyricWord[], cue: Cue, end: number): LyricWord[] {
   const mine = new Set(cue.words);
   const last = cue.words[cue.words.length - 1];

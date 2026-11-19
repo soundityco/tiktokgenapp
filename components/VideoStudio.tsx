@@ -8,7 +8,7 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, driveQuota, renameDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
-import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, moveWordStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -6196,6 +6196,39 @@ export default function VideoStudio({
     setHead(round2(clamp(at, prev ? prev.start + 0.2 : 0, c.end - 0.2)));
     onProject((p) => ({ ...p, lyricWords: out }));
   }, true, true);
+  /**
+   * Word by word, on the timeline: the line picked shows its words, each one's start a thin mark to drag (as a cut in an
+   * editor); the playhead follows the mark, so the word can be heard where it starts. From the gesture's start (`c` and
+   * the words as they were then): back where it was, nothing moved. A locked line shows its words, not their marks.
+   */
+  const wordMarks = (c: Cue) => {
+    if (mode === "word" || c.words.length < 2 || !(c.end > c.start)) return null;
+    const locked = lockedCue(c);
+    const at = (x: number) => clamp((x - c.start) / (c.end - c.start), 0, 1) * 100;
+    // (each word where it is, between its marks, over the line's text: one sees which word starts where)
+    const labels = (
+      <span className="cue-words" aria-hidden>
+        {c.words.map((w, k) => {
+          const a = at(w.s), b = k + 1 < c.words.length ? at(c.words[k + 1].s) : 100;
+          return <span key={k} className={"cue-word" + (k === 0 ? " first" : "")} style={{ left: `${a}%`, width: `${Math.max(0, b - a)}%` }}>{w.w}</span>;
+        })}
+      </span>
+    );
+    return [labels, ...c.words.slice(1).map((w, j) => {
+      const k = j + 1, left = `${at(w.s)}%`;
+      const drag = edgeDrag((at) => {
+        const out = moveWordStart(project.lyricWords ?? [], c, k, at);
+        if (!out) return;
+        setTab("lyrics");
+        setHead(round2(out[(project.lyricWords ?? []).indexOf(w)]?.s ?? at));
+        onProject((p) => ({ ...p, lyricWords: out }));
+      }, true, true);
+      return (
+        <span key={k} className={"word-mark" + (w.manual ? " manual" : "")} style={{ left }}
+          title={locked ? w.w : t("“{word}” starts here: drag to move it", { word: w.w })} {...(locked ? { onPointerDown: (e: React.PointerEvent) => e.stopPropagation() } : drag)} />
+      );
+    })];
+  };
   /** A line outside the segment (the whole song's lines, `songCues`): its start or its end moved the same way, anywhere
    *  in the song (to check and set the lyrics of a passage the post does not use yet, the segment locked elsewhere). */
   const moveSongLine = (i: number) => edgeDrag((at, free) => {
@@ -7090,7 +7123,7 @@ export default function VideoStudio({
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
                     <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={lockedCue(c) ? undefined : "song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
-                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{cueIcon(c)}{c.text.replace(/\n/g, " ")}{mode !== "word" && !lockedCue(c) && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
+                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{cueIcon(c)}{c.text.replace(/\n/g, " ")}{pick === "text:" + (keyOf(c) ?? "o" + i) && wordMarks(c)}{mode !== "word" && !lockedCue(c) && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
@@ -7106,6 +7139,7 @@ export default function VideoStudio({
                       data-at={Math.max(settings.crop.start, c.start)}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       {cueIcon(c)}{c.text.replace(/\n/g, " ")}
+                      {pick === "text:" + (keyOf(c) ?? i) && wordMarks(c)}
                       {mode !== "word" && !lockedCue(c) && grips(moveLine(i), moveLineEnd(i))}
                     </button>
                   ))}

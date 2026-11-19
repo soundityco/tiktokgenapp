@@ -371,6 +371,7 @@ export const FR: Record<string, string> = {
   "Playing goes on past the segment, the playhead anywhere in the song. Click to loop on the segment.": "La lecture continue au-delà du segment, la tête partout dans le morceau. Clique pour boucler sur le segment.",
   "Show the video": "Afficher la vidéo",
   "Hide the video": "Masquer la vidéo",
+  "“{word}” starts here: drag to move it": "« {word} » commence ici : glisse pour le déplacer",
   "On: the settings below change this one alone (font, effect, size, colours, place), and it can be moved alone on the video; it is marked with a dot on the lyrics track. Off: it takes the lyrics' style again.": "Activé : les réglages ci-dessous ne changent qu'elle (police, effet, taille, couleurs, place), et elle se déplace seule sur la vidéo ; un point la marque sur la piste des paroles. Désactivé : elle reprend le style des paroles.",
   "Add photos to a list (drop them or pick them)": "Ajoute des photos à une liste (glisse-les ou choisis-les)",
   "Stop making the Drive copies": "Arrêter les copies Drive",

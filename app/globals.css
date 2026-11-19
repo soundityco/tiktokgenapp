@@ -582,6 +582,16 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue:has(.cue-ico.locked) { cursor: default; }
 /* A text's or a hook's own handles, inside the clip (as a video clip's): its start on its coloured edge, its end a bar
    shown on hover; each clip its own, even where two touch. */
+/* The words of the line picked (word by word on the timeline): each one's start a thin mark, dragged as a cut. */
+.lyric-track .cue .cue-words { position: absolute; inset: 0; z-index: 1; background: inherit; pointer-events: none; }
+.lyric-track .cue .cue-word { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding: 0 3px 0 6px; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; color: var(--text); font-size: var(--fs-xs); }
+.lyric-track .cue .cue-word.first { padding-left: 22px; } /* (after the line's icon, its padlock) */
+.lyric-track .cue:has(.cue-words) .cue-ico { position: relative; z-index: 3; }
+.lyric-track .cue .word-mark { position: absolute; top: 3px; bottom: 3px; width: 9px; margin-left: -4px; z-index: 2; cursor: ew-resize; touch-action: none; pointer-events: auto; }
+.lyric-track .cue .word-mark::after { content: ""; position: absolute; top: 2px; bottom: 2px; left: 4px; width: 1px; background: color-mix(in srgb, var(--clip, var(--lyrics)) 75%, transparent); }
+.lyric-track .cue .word-mark.manual::after { background: var(--text); }
+.lyric-track .cue .word-mark:hover::after { width: 2px; left: 3.5px; background: var(--text); }
 .lyric-track .cue .cue-grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 1; touch-action: none; pointer-events: auto; }
 .lyric-track .cue .cue-grip.in { left: -2px; }
 .lyric-track .cue .cue-grip.out { right: 0; }
