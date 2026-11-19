@@ -8,7 +8,7 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, driveQuota, renameDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
-import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, moveWordStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, norm, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, moveWordStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -3246,8 +3246,14 @@ export default function VideoStudio({
         scrubRef.current = null;
         if (d?.moved && d.mv) { setPick(d.pick); onSaveNow(); return; }
         if (!d || d.moved) return;
-        if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); onCue?.(); }
-        else { setHead(timeOf(e.currentTarget, e.clientX)); setPick(null); }
+        // (Shift: a line added to the lines picked, or taken out of them — to copy their timing, ⌘C / ⌘V)
+        if (d.at !== null && e.shiftKey && d.pick?.startsWith("text:") && pick?.startsWith("text:") && d.pick !== pick) {
+          const k = d.pick;
+          setMulti((m) => (m.includes(k) ? m.filter((x) => x !== k) : [...m, k]));
+          return;
+        }
+        if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); setMulti([]); onCue?.(); }
+        else { setHead(timeOf(e.currentTarget, e.clientX)); setPick(null); setMulti([]); }
       },
       onPointerCancel: () => { scrubRef.current = null; },
     };
@@ -5249,6 +5255,8 @@ export default function VideoStudio({
    */
   const [clipMenu, setClipMenu] = useState<{ x: number; y: number; which: string; t: number } | null>(null);
   /** A piece of a cut clip picked (a click on it): `which` the video, `t` a file time inside it. Shift + E, Delete: it. */
+  /** Lines picked with Shift + click, besides `pick` (to copy their timing). */
+  const [multi, setMulti] = useState<string[]>([]);
   const [pickPiece, setPickPiece] = useState<{ which: string; t: number } | null>(null);
   /** A click on a video clip: the piece under it picked when the clip is cut (else the whole clip). */
   const pickPieceAt = (which: string, at: number) => {
@@ -6455,10 +6463,71 @@ export default function VideoStudio({
   /** The preview's right-click menu, where it was opened. */
   const [vctx, setVctx] = useState<{ x: number; y: number; text?: "hook" | "text" } | null>(null);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  /**
+   * A line's timing copied and pasted, as clips in an editor: lines picked (a click, then Shift + click), ⌘C keeps when
+   * each line and each word starts (from the first one); ⌘V, the playhead where it should go: the same lines found from
+   * there (the same words, in the same order: a chorus again) take that timing, the first one at the playhead. Nothing is
+   * added to the lyrics: the lines already there are placed (retouched by hand, kept at the next sync).
+   */
+  const timingCopy = useRef<null | { key: string; n: number; s: number; e: number; words: { s: number; e: number }[] }[]>(null);
+  const lineKey = (text: string) => { const n = norm(text); return n.replace(/^(?:and|but|so|cause|oh|yeah|et|mais|car|donc|alors)\s+/, "") || n; };
+  const pickedLines = () => {
+    const keys = [pick, ...multi].filter((k): k is string => !!k && k.startsWith("text:"));
+    return songCues.filter((c, i) => keys.includes("text:" + (keyOf(c) ?? "o" + i)) || keys.includes("text:" + (keyOf(c) ?? i))).sort((a, b) => a.start - b.start);
+  };
+  const copyTiming = () => {
+    const lines = pickedLines();
+    if (!lines.length) return false;
+    const t0 = lines[0].start;
+    timingCopy.current = lines.map((c) => ({ key: lineKey(c.text), n: c.words.length, s: c.start - t0, e: c.end - t0, words: c.words.map((w) => ({ s: w.s - t0, e: w.e - t0 })) }));
+    onToast?.(lines.length === 1 ? t("Timing of 1 line copied: put the playhead where the same line is sung again, then ⌘V") : t("Timing of {n} lines copied: put the playhead where the same lines are sung again, then ⌘V", { n: lines.length }));
+    return true;
+  };
+  const pasteTiming = () => {
+    const tpl = timingCopy.current;
+    if (!tpl?.length) return false;
+    const at = headRef.current, list = songCues;
+    // the same lines from the playhead on (the one under it, else the next ones), within the next twenty
+    const from = list.findIndex((c) => c.end > at - 0.05);
+    let j = -1;
+    for (let k = Math.max(0, from); k >= 0 && k < list.length && k <= from + 20; k++) {
+      if (tpl.every((x, q) => list[k + q] && lineKey(list[k + q].text) === x.key)) { j = k; break; }
+    }
+    if (j < 0) { onToast?.(t("Those lines are not sung after the playhead: put it where they come again.")); return true; }
+    const targets = tpl.map((_, q) => list[j + q]);
+    if (targets.some((c) => lockedCue(c))) { onToast?.(t("One of those lines is locked: unlock it to paste the timing on it.")); return true; }
+    const moved = new Map<LyricWord, LyricWord>();
+    targets.forEach((c, q) => {
+      const x = tpl[q], s0 = at + x.s, e0 = at + x.e;
+      c.words.forEach((w, k) => {
+        // (the same words, one for one; else in the same rhythm as the line copied)
+        const src = x.n === c.words.length ? x.words[k] : null;
+        const f = (v: number) => s0 + ((v - c.start) / Math.max(0.05, c.end - c.start)) * (e0 - s0);
+        const s1 = round2(src ? at + src.s : f(w.s)), e1 = round2(src ? at + src.e : f(w.e));
+        moved.set(w, { ...w, s: s1, e: Math.max(s1 + 0.03, e1), manual: true, doubt: undefined, ...(k === c.words.length - 1 ? { until: round2(e0) } : {}) });
+      });
+    });
+    let out = (project.lyricWords ?? []).map((w) => moved.get(w) ?? w);
+    // the line before leaves when these come (never stretched)
+    const prev = list[j - 1];
+    if (prev && prev.end > at) out = setCueEnd(out, { ...prev, words: prev.words.map((w) => moved.get(w) ?? w) }, at);
+    onProject((p) => ({ ...p, lyricWords: out }));
+    onSaveNow();
+    setTab("lyrics");
+    onToast?.(tpl.length === 1 ? t("Timing pasted on 1 line") : t("Timing pasted on {n} lines", { n: tpl.length }));
+    return true;
+  };
   keyRef.current = (e) => {
     if (!active) return; // hidden behind the carousel: its shortcuts are the carousel's
     const el = e.target as HTMLElement;
-    if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable || e.metaKey || e.ctrlKey) return;
+    if (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable) return;
+    // ⌘C / ⌘V: a line's timing (lines picked on the timeline), as clips in an editor
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !document.querySelector(".ov")) {
+      const c = e.key.toLowerCase();
+      if (c === "c" && pick?.startsWith("text:") && copyTiming()) { e.preventDefault(); return; }
+      if (c === "v" && pasteTiming()) { e.preventDefault(); return; }
+    }
+    if (e.metaKey || e.ctrlKey) return;
     if (document.querySelector(".ov")) return;
     const k = e.key;
     // The list of them all: ShortcutsDialog. F and G need the video only (in the full screen, F closes it: FullView).
@@ -7116,12 +7185,12 @@ export default function VideoStudio({
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
-                    <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={lockedCue(c) ? undefined : "song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
+                    <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) || multi.includes("text:" + (keyOf(c) ?? "o" + i)) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={lockedCue(c) ? undefined : "song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
                       style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{cueIcon(c)}{c.text.replace(/\n/g, " ")}{pick === "text:" + (keyOf(c) ?? "o" + i) && wordMarks(c)}{mode !== "word" && !lockedCue(c) && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
                   {cues.map((c, i) => onTrack(c.start, c.end) && (
-                    <button key={i} className={"cue" + (c === current ? " on" : "") + (pick === "text:" + (keyOf(c) ?? i) ? " sel" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} data-pick={"text:" + (keyOf(c) ?? i)} data-mv={lockedCue(c) ? undefined : "seg:" + i} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
+                    <button key={i} className={"cue" + (c === current ? " on" : "") + (pick === "text:" + (keyOf(c) ?? i) || multi.includes("text:" + (keyOf(c) ?? i)) ? " sel" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} data-pick={"text:" + (keyOf(c) ?? i)} data-mv={lockedCue(c) ? undefined : "seg:" + i} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
                       data-text={c.text.replace(/\n/g, " ")}
                       // (a line across the segment's edge drawn whole, one clip: its end handle where it really ends)
                       style={{
