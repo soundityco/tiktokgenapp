@@ -494,6 +494,8 @@ export default function VideoStudio({
   /** Copies that failed (video, size, passage): not tried again by themselves (each video its own: one failing never
    *  held the others' copies back any more; they waited behind it for ever). */
   const copyFailed = useRef(new Set<string>());
+  /** Why a video's copy failed (its id): shown on its line. */
+  const copyWhy = useRef(new Map<string, string>());
   /** The copy of the open video will be made again in a few seconds (its passage changed). */
   /** When the copy of the open video will be made again (its passage went past it): a countdown, "now" skips it. */
   const [copyDueAt, setCopyDueAt] = useState<number | null>(null);
@@ -1616,6 +1618,7 @@ export default function VideoStudio({
       if (!ac.signal.aborted) {
         console.warn("[copy] not made", e);
         copyFailed.current.add(key);
+        copyWhy.current.set(clipId, e instanceof Error ? e.message : String(e));
         setCopyErr(clipId);
         onToast?.(t("The Drive copy of {video} could not be made", { video: job.label }));
       }
@@ -1637,28 +1640,36 @@ export default function VideoStudio({
     dueTimer.current = window.setTimeout(() => { dueTimer.current = null; setCopyDueAt(null); void makeCopy(); }, DELAY);
     return () => { if (dueTimer.current) clearTimeout(dueTimer.current); dueTimer.current = null; setCopyDueAt(null); };
   }, [videoBlob, onCopy, driveWrite, copyJob, settings.score, settings.offset, settings.clipIn, settings.clipOut, settings.drive?.copy, videoDur, audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
+  /**
+   * Where a take of the project stands with its Drive copy: "ok" (it has one holding its passage), "wait" (it needs one,
+   * made in turn), "failed" (tried, could not: Try again), "busy" (being made), "none" (nothing to copy here: its file
+   * not on this device, or its copy is what plays here). `job`: what makeCopy needs for it.
+   */
+  const takeCopy = (id: string) => {
+    const c = clips.find((x) => x.id === id), a = anglesRef.current.get(id);
+    if (!c) return null;
+    if (copyJob?.clip === id) return { state: "busy" as const };
+    if (!a || a.fromCopy || !Number.isFinite(a.el.duration)) return { state: "none" as const };
+    const ov = overlaysOf(settings).find((o) => o.clip === id), dur = a.el.duration;
+    // (a camera of the multicam: by its own sync; never synced, from where it is placed: its copy is made all the same)
+    const off = ov ? ov.offset : c.offset, span: [number, number] = ov ? clipSpan(ov, dur) : [0, dur], need = copyNeed(off, span, dur), cp = c.drive?.copy;
+    // (none of it on the song where it is: its whole file is copied, never no copy at all)
+    const wide = need[1] - need[0] < 0.5;
+    const job = { c, blob: a.blob, dur, off: wide ? 0 : off, span: wide ? [0, dur] as [number, number] : span };
+    if (cp && cp.of === a.blob.size && (wide || copyHolds(cp, need))) return { state: "ok" as const };
+    const [f0, f1] = copyRange(job.off, job.span, dur);
+    if (copyFailed.current.has(`${c.id}|${a.blob.size}|${f0.toFixed(1)}|${f1.toFixed(1)}`)) return { state: "failed" as const, job };
+    return { state: "wait" as const, job };
+  };
   // The project's other cameras: each gets its Drive working copy too (one after the other, after this video's own),
   // so another device opens the multicam. 15 s after the passage last moved, never while playing.
   useEffect(() => {
     if (!driveWrite || copyJob || copyDueAt || playing || !audioBuf) return;
     // (and the videos over it, placed on their own tracks: each copy holds what of it falls on the song there)
-    const ovs = overlaysOf(settings);
-    const next = [...(settings.angles ?? []), ...ovs.map((o) => o.clip)].map((id) => [clips.find((c) => c.id === id), anglesRef.current.get(id)] as const).find(([c, a]) => {
-      const ov = c ? ovs.find((o) => o.clip === c.id) : undefined;
-      if (!c || !a || a.fromCopy || (c.score === undefined && !ov)) return false;
-      const dur = a.el.duration;
-      if (!Number.isFinite(dur)) return false;
-      const off = ov ? ov.offset : c.offset, span: [number, number] = ov ? clipSpan(ov, dur) : [0, dur], need = copyNeed(off, span, dur), cp = c.drive?.copy;
-      if (need[1] - need[0] < 0.5) return false;
-      // (its copy failed already: the next one's turn, never stuck behind it)
-      const [f0, f1] = copyRange(off, span, dur);
-      if (copyFailed.current.has(`${c.id}|${a.blob.size}|${f0.toFixed(1)}|${f1.toFixed(1)}`)) return false;
-      return !(cp && cp.of === a.blob.size && copyHolds(cp, need));
-    });
-    if (!next) return;
-    const [c, a] = next;
-    const nov = ovs.find((o) => o.clip === c!.id), dur = a!.el.duration;
-    const id = window.setTimeout(() => void makeCopy({ c: c!, blob: a!.blob, dur, off: nov ? nov.offset : undefined, span: nov ? clipSpan(nov, dur) : undefined }), 15_000);
+    const next = [...(settings.angles ?? []), ...overlaysOf(settings).map((o) => o.clip)].map((id) => takeCopy(id)).find((x) => x?.state === "wait");
+    if (!next?.job) return;
+    const job = next.job;
+    const id = window.setTimeout(() => void makeCopy(job), 15_000);
     return () => clearTimeout(id);
   }, [driveWrite, copyJob, copyDueAt, playing, angleRev, anglesKey, audioBuf, overlaysOf(settings).map((o) => `${o.offset}|${o.clipIn}|${o.clipOut}`).join()]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
@@ -4491,13 +4502,18 @@ export default function VideoStudio({
     const ovNow = textKind ? null : overUnder(c.x, c.y);
     if (ovNow) {
       // Picked: the right column sets it (its colour, its framing inside its box).
-      setPinCam(null); setOverLook(ovNow.clip);
+      setPinCam(null); setOverLook(ovNow.clip); setPick("video"); setPickPiece(null);
       pdrag.current = { kind: "over", id: ovNow.clip, sx: e.clientX, sy: e.clientY, ox: ovNow.x, oy: ovNow.y, k: c.k };
       return;
     }
     // The video over it was picked: a press beside it only gives the right column back to the picture under it.
-    if (!textKind && overLook) { setOverLook(null); return; }
+    if (!textKind && overLook) { setOverLook(null); setPick("video"); return; }
     const kind = textKind;
+    // Pressed, as a clip clicked on the timeline: the right column on what it is (the hook's or the lyrics' settings, or
+    // the video's), that clip lit on the timeline.
+    if (kind === "hook") { const h = hookAt(settingsRef.current, headRef.current); setPick(h ? "hook:" + h.id : null); setTab("hook"); }
+    else if (kind === "text") { const c = activeRef.current(headRef.current), key = keyOf(c); setPick(c ? "text:" + (key ?? cues.indexOf(c)) : null); setTab("lyrics"); }
+    else { setPick("video"); setPickPiece(null); }
     const f = fitFrame(curFrame());
     // The lyrics: the caption shown alone when it has its own look (or "this word" is chosen), else all of them.
     const here = kind === "text" ? cueHere() : null;
@@ -4996,6 +5012,13 @@ export default function VideoStudio({
     if (copyJob?.clip === c.id) return <span className="copy-status compact busy xs"><span className="shine">{copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) })}</span></span>;
     if (a?.fromCopy && cp) return <span className="copy-status compact on-copy xs"><span className="pill-copy">{t("Drive copy")}</span></span>;
     if (a && cp && cp.of === a.blob.size) return <span className="copy-status compact xs"><span className="pill-copy ready"><Icon name="check" size={10} />{t("Backed up")}</span></span>;
+    // (its turn not come yet, or its copy failed: said, never nothing)
+    const st = driveWrite ? takeCopy(c.id) : null;
+    if (st?.state === "wait") return <span className="copy-status compact xs muted" title={t("Its Drive copy is made after the others, when the video is paused for 15 s.")}><span className="pill-copy">{t("Copy waiting")}</span></span>;
+    if (st?.state === "failed" && st.job) {
+      const job = st.job;
+      return <button className="copy-status compact xs warn-text" title={`${copyWhy.current.get(c.id) ?? ""} · ${t("Try again")}`} onClick={(e) => { e.stopPropagation(); copyFailed.current.clear(); void makeCopy(job); }}><span className="pill-copy">{t("Copy failed · try again")}</span></button>;
+    }
     return null;
   };
   /** The take whose line is unfolded (its details), one at a time. */
