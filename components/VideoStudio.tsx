@@ -2885,9 +2885,12 @@ export default function VideoStudio({
     <button className={"btn sm icon tr-lock " + where + (linked ? " on" : "")} aria-pressed={linked} onClick={toggleLink}
       aria-label={linked ? t("Audio and video linked") : t("Link audio and video")}
       title={(linked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (linked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}>
-      <Icon name={linked ? "lock" : "unlock"} size={13} />
+      <Icon name={linked ? "link" : "link-off"} size={13} />
     </button>
   ) : null;
+  /** A video's chain (its sync with the audio), on its clip: what it says. */
+  const syncTitle = (on: boolean) => on ? t("Synced with the audio: it stays in place. The chain above the tracks (the sync's master) unlinks every video at once.")
+    : t("Synced, unlinked: it can be moved. The chain above the tracks puts every video back on its sync.");
   /** The loop (next to the padlock): playing kept in the segment, or on past it. */
   const loopEl = (where = "") => audioBuf ? (
     <button className={"btn sm icon tr-loop " + where + (loopSeg ? " on" : "")} aria-pressed={loopSeg} onClick={() => setLoopSeg(!loopSeg)}
@@ -5158,6 +5161,13 @@ export default function VideoStudio({
    * video ("base" or the take over it), `t` the file time under the pointer.
    */
   const [clipMenu, setClipMenu] = useState<{ x: number; y: number; which: string; t: number } | null>(null);
+  /** A piece of a cut clip picked (a click on it): `which` the video, `t` a file time inside it. Shift + E, Delete: it. */
+  const [pickPiece, setPickPiece] = useState<{ which: string; t: number } | null>(null);
+  /** A click on a video clip: the piece under it picked when the clip is cut (else the whole clip). */
+  const pickPieceAt = (which: string, at: number) => {
+    const x = partsOf(which);
+    setPickPiece(x && x.p.splits?.length && pieceAt(x.p, at - x.offset, x.ci, x.co) ? { which, t: at - x.offset } : null);
+  };
   const partsOf = (which: string) => {
     const cur = settingsRef.current;
     if (which === "base") {
@@ -5177,7 +5187,12 @@ export default function VideoStudio({
   const cutVideoAt = (which: string, at: number) => { const x = partsOf(which); if (x && !x.locked) { const n = splitClip(x.p, at - x.offset, x.ci, x.co); if (n !== x.p) x.set(n); } };
   const togglePart = (which: string, at: number) => { const x = partsOf(which); if (x && !x.locked) { x.set(togglePiece(x.p, at - x.offset, x.ci, x.co)); requestAnimationFrame(() => drawAt(headRef.current)); } };
   /** On a video clip: its cuts (thin lines) and pieces turned off (greyed), laid on the track as the clip is. */
-  const partsEl = (p: ClipParts, offset: number, ci: number, co: number, cam: number) => (<>
+  const partsEl = (p: ClipParts, offset: number, ci: number, co: number, cam: number, which: string) => (<>
+    {(() => {
+      // (the piece picked: outlined, the rest of the clip not lit)
+      const pp = pick === "video" && pickPiece?.which === which ? pieceAt(p, pickPiece.t, ci, co) : null;
+      return pp && onTrack(offset + pp[0], offset + pp[1]) ? <span className={"vc-pick cam-" + cam} style={{ ...place(offset + pp[0]), width: wFull(offset + pp[0], offset + pp[1]) }} /> : null;
+    })()}
     {(p.offParts ?? []).map(([a, b]) => { const s0 = offset + Math.max(a, ci), s1 = offset + Math.min(b, co); return s1 > s0 && onTrack(s0, s1) ? <span key={"o" + a} className="vc-off" style={{ ...place(s0), width: wFull(s0, s1) }} /> : null; })}
     {(p.splits ?? []).filter((x) => x > ci && x < co).map((x) => onTrack(offset + x, offset + x) ? <span key={"s" + x} className={"vc-split cam-" + cam} style={place(offset + x)} /> : null)}
   </>);
@@ -5298,7 +5313,7 @@ export default function VideoStudio({
       const d = clipDrag.current;
       clipDrag.current = null;
       // A click: the playhead there, and the right column (and the waveform's band) on this video.
-      if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setOverLook(null); setPinCam("main"); setPick("video"); }
+      if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setOverLook(null); setPinCam("main"); setPick("video"); pickPieceAt("base", at); }
     };
     return (<>
         <div className="tl-row"><div className="tl-hd cam-0" onPointerDown={(e) => e.stopPropagation()}>{hdName("film", "V1")}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
@@ -5327,18 +5342,15 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a, b) && (
-              <div className={"cue video-clip cam-0" + (lost ? " missing" : "") + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake ? " sel" : "")}
+              <div className={"cue video-clip cam-0" + (lost ? " missing" : "") + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake && pickPiece?.which !== "base" ? " sel" : "")}
                 style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }} onContextMenu={clipCtx("base")}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name">
                   <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">1</b>
-                  {/* Its own padlock, as the ones over it (the one above the tracks: every video at once). */}
-                  {settings.score !== undefined && <button className="clip-lock" aria-label={locked ? t("Audio and video linked") : t("Link audio and video")}
-                    title={(locked ? t("Audio and video linked") : t("Link audio and video")) + " · " + (locked ? t("Unlink to move the sync by hand") : t("Keep the sync while you move the segment"))}
-                    onPointerDown={(e) => e.stopPropagation()} onClick={() => { stop(); if (locked) setV({ linked: false }); else { const range = linkRangeOf(settingsRef.current); setV({ linked: true, ...(range ? { crop: fitCrop(settingsRef.current.crop.start, settingsRef.current.crop.duration, range) } : null) }); } }}>
-                    <Icon name={locked ? "link" : "link-off"} size={11} /></button>}
+                  {/* Its sync with the audio (a chain): shown here, set by the chain above the tracks (the master of the sync). */}
+                  {settings.score !== undefined && <span className="clip-lock" title={syncTitle(locked)}><Icon name={locked ? "link" : "link-off"} size={11} /></span>}
                   {waiting ? <span className="truncate shine">{t("Loading…")}</span>
                     : lost ? <span className="truncate">{t("File missing")}</span>
                     : <span className="truncate" data-text={settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}>{settings.videoName?.replace(/\.[^.]+$/, "") ?? clipName(clip)}</span>}
@@ -5346,7 +5358,7 @@ export default function VideoStudio({
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
-            {partsEl(settings, settings.offset, ci, co, 0)}
+            {partsEl(settings, settings.offset, ci, co, 0, "base")}
             {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
@@ -5626,11 +5638,6 @@ export default function VideoStudio({
     // down, to another row); its padlock unlocks it, and locks it back on its synced place.
     const synced = take.score !== undefined;
     const locked = synced && !!take.linked && Math.abs(o.offset - take.offset) < 0.01;
-    const toggleLock = () => {
-      stop();
-      if (locked) patchTake(take.id, { linked: false });
-      else if (synced) { patchTake(take.id, { linked: true }); patchOverlay(o.clip, { offset: take.offset }); }
-    };
     const len = a && Number.isFinite(a.el.duration) ? a.el.duration : take.source?.duration ?? 0;
     if (!len) return null;
     const [ci, co] = clipSpan(o, len);
@@ -5687,7 +5694,7 @@ export default function VideoStudio({
       const d = ovDrag.current;
       ovDrag.current = null;
       // A click: the playhead there, and the right column on this video.
-      if (d && !d.moved) { setHead(inSeg(d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d)); setPinCam(null); setOverLook(o.clip); setPick("video"); }
+      if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setPinCam(null); setOverLook(o.clip); setPick("video"); pickPieceAt(o.clip, at); }
     };
     return (<>
         <div className="tl-row" key={o.clip}><div className={"tl-hd cam-" + no} onPointerDown={(e) => e.stopPropagation()}>{hdName("film", "V" + (no + 1))}{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
@@ -5715,21 +5722,19 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a0, b0) && (
-              <div className={"cue video-clip over-clip cam-" + no + (!a && !anglesBusy ? " missing" : "") + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (pick === "video" && picked ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
+              <div className={"cue video-clip over-clip cam-" + no + (!a && !anglesBusy ? " missing" : "") + (locked ? " locked" : "") + (head >= a0 && head < b0 ? " on" : "") + (pick === "video" && picked && pickPiece?.which !== o.clip ? " sel" : "")} style={{ ...place(a0), width: wFull(a0, b0) }} data-va={a0} data-vb={b0}
                 title={t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { ovDrag.current = null; }} onContextMenu={clipCtx(o.clip)}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name"><span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{no + 1}</b>
-                  {synced && <button className="clip-lock" aria-label={locked ? t("Unlock: slide it freely") : t("Lock it back on its synced place")}
-                    title={locked ? t("Locked to the audio (synced): click to unlock and slide it freely.") : t("Click to put it back where its sync places it, locked.")}
-                    onPointerDown={(e) => e.stopPropagation()} onClick={toggleLock}><Icon name={locked ? "link" : "link-off"} size={11} /></button>}
+                  {synced && <span className="clip-lock" title={syncTitle(locked)}><Icon name={locked ? "link" : "link-off"} size={11} /></span>}
                   {!a && anglesBusy ? <span className="truncate shine">{t("Loading…")}</span>
                     : !a ? <span className="truncate">{t("File missing")}</span>
                     : <span className="truncate" data-text={take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}>{take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</span>}</span>
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
-            {partsEl(o, o.offset, a0 - o.offset, b0 - o.offset, no)}
+            {partsEl(o, o.offset, a0 - o.offset, b0 - o.offset, no, o.clip)}
             {head >= a0 && head < b0 && barAt(a0, b0) !== null && <span className={"cue-bar-glow cam-glow cam-" + no} data-a={a0} data-b={b0} style={place(barAt(a0, b0)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
@@ -6309,7 +6314,18 @@ export default function VideoStudio({
     else if (k.toLowerCase() === "i") markIn();
     else if (k.toLowerCase() === "o") markOut();
     // A video clip clicked: C cuts it at the playhead, Shift + E turns the piece under the playhead off or on (as in Premiere).
-    else if (pickedVideo() && !playing && k.toLowerCase() === "e" && e.shiftKey) { e.preventDefault(); togglePart(pickedVideo()!, headRef.current); }
+    else if (pickedVideo() && !playing && k.toLowerCase() === "e" && e.shiftKey) {
+      e.preventDefault();
+      const w = pickedVideo()!, x = partsOf(w);
+      // (the piece picked, else the one under the playhead)
+      togglePart(w, pickPiece?.which === w && x ? x.offset + pickPiece.t : headRef.current);
+    }
+    // Delete on a piece picked: turned off (the clip stays whole; Shift + E or its menu turns it back on).
+    else if (pickPiece && pickedVideo() === pickPiece.which && !playing && (k === "Backspace" || k === "Delete")) {
+      e.preventDefault();
+      const x = partsOf(pickPiece.which);
+      if (x && !isOff(x.p, pickPiece.t)) togglePart(pickPiece.which, x.offset + pickPiece.t);
+    }
     else if (pickedVideo() && !playing && k.toLowerCase() === "c" && (pickedVideo() !== "base" || !settingsRef.current.angles?.some(Boolean))) { e.preventDefault(); cutVideoAt(pickedVideo()!, headRef.current); }
     else if (settingsRef.current.angles?.some(Boolean)) {
       // Multicam: 1 to 4 = a camera (playing: cut to it now; paused: the shot under the playhead shows it),

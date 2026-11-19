@@ -2927,6 +2927,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
    the clip itself stays whole. */
 .lyric-track .video-clip.missing { --vc: var(--danger); --cam: var(--danger); color: var(--danger);
   background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 18%, var(--bg)) 0 6px, color-mix(in srgb, var(--danger) 10%, var(--bg)) 6px 12px); }
+.lyric-track .vc-pick { position: absolute; top: 4px; bottom: 4px; pointer-events: none; z-index: 4; border-radius: 2px;
+  background: color-mix(in srgb, var(--cam) 16%, transparent); box-shadow: inset 0 0 0 1px var(--cam); }
 .lyric-track .vc-off { position: absolute; top: 4px; bottom: 4px; pointer-events: none; z-index: 2;
   background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--bg) 72%, transparent) 0 5px, color-mix(in srgb, var(--bg) 52%, transparent) 5px 10px); }
 .lyric-track .vc-split { position: absolute; top: 4px; bottom: 4px; width: 2px; pointer-events: none; z-index: 3; background: var(--cam);
@@ -2950,8 +2952,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .lyrics-track .cue.outside.sel { background: color-mix(in srgb, var(--lyrics) 18%, var(--bg)); color: var(--text); }
 
 /* A synced video over another: its padlock on the clip (locked: it only changes rows; click: unlocked, or put back). */
-.video-clip .clip-lock { display: inline-grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; opacity: .75; cursor: pointer; }
-.video-clip .clip-lock:hover { opacity: 1; }
+.video-clip .clip-lock { display: inline-grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; opacity: .75; } /* (a sign: the sync is set by the chain above the tracks) */
 
 /* Computer: the right column follows the clip selected on the timeline (as in an editor): a lyrics line or a hook, the
    text settings only; a video clip, the video's only (which camera, framing, colour, export). Nothing selected: all.
