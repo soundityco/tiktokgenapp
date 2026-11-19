@@ -447,6 +447,14 @@ export default function VideoStudio({
   const clip = clips.find((c) => c.id === project.videoId && !c.takeOnly) ?? clips.find((c) => !c.takeOnly) ?? clips[0];
   /** The release's projects (posts): its videos, the takes only imported for the library apart. */
   const projects = useMemo(() => clips.filter((c) => !c.takeOnly), [clips]);
+  // Repair: a project without any camera file of its own cannot hold other videos (an older "+" copied the open video,
+  // its cameras and videos over it included: listed in its takes, nothing on its timeline). They stay takes of the release.
+  useEffect(() => {
+    const bad = projects.filter((c) => !c.videoName && !c.media && ((c.angles ?? []).some(Boolean) || !!c.overlays?.length || !!c.overlay));
+    if (!bad.length) return;
+    const ids = new Set(bad.map((c) => c.id));
+    onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (ids.has(c.id) ? { ...c, angles: undefined, cuts: undefined, overlays: undefined, overlay: undefined } : c)) }));
+  }, [projects]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Multicam: a take put on the paused preview from the library ("main" = camera 1); playing gives it back to the cuts. */
   const [pinCam, setPinCam] = useState<string | null>(null);
   const pinRef = useRef(pinCam);
@@ -4763,6 +4771,8 @@ export default function VideoStudio({
       ...cur, id: uid(), name: f.name.replace(/\.[^.]+$/, ""), takeOnly: true, media: undefined, videoName: f.name, videoSize: f.size,
       source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined,
       takes: undefined, linked: false, versions: undefined, angles: undefined, cuts: undefined,
+      // (a take holds only its own file: never the project's other videos, nor its cuts)
+      overlays: undefined, overlay: undefined, clipIn: undefined, clipOut: undefined, splits: undefined, offParts: undefined, box: undefined,
     } as VideoSetup }));
     // A file already in the release (same name and size): not a new take; it joins this project if it is not in it.
     const known = (f: File) => clips.find((c) => c.videoName === f.name && c.videoSize === f.size);
