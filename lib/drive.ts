@@ -242,6 +242,18 @@ export async function ensureDriveTree(): Promise<void> {
   for (const k of Object.keys(fresh)) checked.add(k);
 }
 
+/** A file renamed on the Drive; true when done. Never throws. */
+export async function renameDriveFile(id: string, name: string): Promise<boolean> {
+  if (isDemo()) return true;
+  try {
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`, {
+      method: "PATCH", headers: { Authorization: `Bearer ${await getToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    return r.ok || r.status === 404;
+  } catch { return false; }
+}
+
 /** A list or a release renamed: its folder takes the new name (what is in it stays). Never throws. */
 export async function renameDriveFolder(path: string[], newName: string): Promise<void> {
   if (isDemo()) return;
@@ -478,7 +490,7 @@ async function sendFile(blob: Blob, name: string, onProgress: (p: number) => voi
   });
   if (start.status === 401) signalAuth();
   const session = start.headers.get("Location");
-  if (!start.ok || !session) throw new Error(`Google Drive error ${start.status}`);
+  if (!start.ok || !session) throw await driveError(start);
   const PIECE = 32 * 256 * 1024; // 8 MB, a multiple of 256 KB as Drive asks
   for (let at = 0; at < blob.size;) {
     const end = Math.min(blob.size, at + PIECE);
@@ -498,13 +510,21 @@ async function sendFile(blob: Blob, name: string, onProgress: (p: number) => voi
     }
     if (!res) throw new Error("upload interrupted");
     if (res.ok) { onProgress(1); return (await res.json()).id as string; }
-    if (res.status !== 308) throw new Error(`Google Drive error ${res.status}`);
+    if (res.status !== 308) throw await driveError(res);
     // 308: piece kept. Drive says up to where it has the file, when it lets us read it.
     const range = /bytes=0-(\d+)/.exec(res.headers.get("Range") ?? "");
     at = range ? Number(range[1]) + 1 : end;
     onProgress(at / blob.size);
   }
   throw new Error("upload incomplete");
+}
+
+/** A refused upload, with Drive's reason: "drive-full" when the Drive has no room left (said as such to the artist). */
+async function driveError(res: Response): Promise<Error> {
+  const body = await res.clone().text().catch(() => "");
+  if (/storageQuotaExceeded/i.test(body)) return new Error("drive-full");
+  const reason = /"reason"\s*:\s*"([^"]+)"/.exec(body)?.[1];
+  return new Error(`Google Drive error ${res.status}${reason ? ` (${reason})` : ""}`);
 }
 
 /** Files the app put in the RAW by aurare folder with this label (see uploadToDrive), with their labels. */
@@ -560,11 +580,16 @@ export async function listAppVisible(trashed: boolean): Promise<AppFile[]> {
 }
 
 /** Delete a file the app made (a copy replaced or of a video removed). Never throws. */
-export async function deleteDriveFile(id: string): Promise<void> {
-  if (isDemo()) return;
+/** A file deleted for good (bin included); true when it is gone (already gone: true too). Never throws. */
+export async function deleteDriveFile(id: string): Promise<boolean> {
+  if (isDemo()) return true;
   try {
-    await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`, { method: "DELETE", headers: { Authorization: `Bearer ${await getToken()}` } });
-  } catch (e) { console.warn("[drive] delete failed", e); }
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`, { method: "DELETE", headers: { Authorization: `Bearer ${await getToken()}` } });
+    if (r.status === 401) signalAuth();
+    if (r.ok || r.status === 404) return true;
+    console.warn("[drive] delete refused", r.status, await r.text().catch(() => ""));
+    return false;
+  } catch (e) { console.warn("[drive] delete failed", e); return false; }
 }
 
 export async function listAppFiles(kind: string): Promise<{ id: string; name: string; appProperties: Record<string, string>; md5Checksum?: string; size?: string }[]> {

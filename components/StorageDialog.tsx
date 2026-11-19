@@ -36,10 +36,11 @@ export default function StorageDialog({ usedCopies, onClose }: {
   // folder (an old flat Rollout file, a folder moved by hand).
   const [bin, setBin] = useState<AppFile[]>([]);
   const [elsewhere, setElsewhere] = useState<AppFile[]>([]);
-  const [emptying, setEmptying] = useState(false);
+  /** A deletion going on (which list, how far), then what it did (shown until the next one). */
+  const [del, setDel] = useState<{ what: "bin" | "orphans"; done: number; of: number } | null>(null);
+  const [delNote, setDelNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const [files, setFiles] = useState<AppFile[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [cleaning, setCleaning] = useState(false);
   const load = () => {
     setErr(null);
     void Promise.all([driveQuota(), listAppFolder(), listAppVisible(true).catch(() => []), listAppVisible(false).catch(() => [])])
@@ -69,18 +70,40 @@ export default function StorageDialog({ usedCopies, onClose }: {
   const pct = (b: number) => (limit ? `${Math.min(100, (b / limit) * 100)}%` : "0%");
 
   const binSize = bin.reduce((n, f) => n + f.size, 0), outSize = elsewhere.reduce((n, f) => n + f.size, 0);
-  const emptyBin = async () => {
-    setEmptying(true);
-    for (const f of bin) await deleteDriveFile(f.id);
-    setEmptying(false);
-    load();
+  /**
+   * Files deleted for good, a few at a time, the count going up; each one gone leaves the page at once (its list, the
+   * bar); one refused never stops the others nor leaves the button spinning; at the end, what was freed.
+   */
+  const deleteAll = async (what: "bin" | "orphans", list: AppFile[]) => {
+    if (del || !list.length) return;
+    setDelNote(null);
+    setDel({ what, done: 0, of: list.length });
+    const gone = new Set<string>();
+    let freed = 0, failed = 0, done = 0;
+    const queue = [...list];
+    const worker = async () => {
+      for (let f = queue.shift(); f; f = queue.shift()) {
+        try { if (!(await deleteDriveFile(f.id))) throw new Error("refused"); gone.add(f.id); freed += f.size; }
+        catch (e) { failed++; console.warn("[storage] not deleted", f.name, e); }
+        done++;
+        setDel({ what, done, of: list.length });
+        const drop = (l: AppFile[]) => l.filter((x) => !gone.has(x.id));
+        if (what === "bin") setBin(drop); else setFiles((l) => (l ? drop(l) : l));
+        setQuota((q) => (q ? { ...q, used: Math.max(0, q.used - (gone.has(f!.id) ? f!.size : 0)) } : q));
+      }
+    };
+    try { await Promise.all(Array.from({ length: Math.min(6, list.length) }, worker)); }
+    finally {
+      setDel(null);
+      setDelNote(failed
+        ? { text: t("{n} files deleted ({size} freed), {k} could not be: try again.", { n: gone.size, size: fmt(freed), k: failed }), bad: true }
+        : { text: t("{n} files deleted for good: {size} freed (Google may take a few minutes to count it).", { n: gone.size, size: fmt(freed) }) });
+      // (the Drive read again: what it says now)
+      load();
+    }
   };
-  const clean = async () => {
-    setCleaning(true);
-    for (const f of orphans) await deleteDriveFile(f.id);
-    setCleaning(false);
-    load();
-  };
+  const emptyBin = () => deleteAll("bin", bin);
+  const clean = () => deleteAll("orphans", orphans);
 
   return (
     <Modal title={t("Storage")} onClose={onClose}>
@@ -122,7 +145,7 @@ export default function StorageDialog({ usedCopies, onClose }: {
           {bin.length > 0 && (
             <div className="notice xs row" style={{ justifyContent: "space-between", gap: "var(--s2)" }}>
               <span>{t("In the Drive's bin: {n} files from RAW ({size}), still counted until Google empties it (30 days).", { n: bin.length, size: fmt(binSize) })}</span>
-              <button className="btn sm" disabled={emptying} onClick={() => void emptyBin()}>{emptying ? t("Deleting…") : t("Delete them for good")}</button>
+              <button className="btn sm" disabled={!!del} onClick={() => void emptyBin()}>{del?.what === "bin" ? t("Deleting… {n}/{of}", { n: del.done, of: del.of }) : t("Delete them for good")}</button>
             </div>
           )}
           {elsewhere.length > 0 && (
@@ -131,9 +154,12 @@ export default function StorageDialog({ usedCopies, onClose }: {
           {orphans.length > 0 && (
             <div className="notice warn xs row" style={{ justifyContent: "space-between", gap: "var(--s2)" }}>
               <span>{t("{n} video copies are no longer used by any video ({size}).", { n: orphans.length, size: fmt(orphanSize) })}</span>
-              <button className="btn sm" disabled={cleaning} onClick={() => void clean()}>{cleaning ? t("Deleting…") : t("Delete them")}</button>
+              <button className="btn sm" disabled={!!del} onClick={() => void clean()}>{del?.what === "orphans" ? t("Deleting… {n}/{of}", { n: del.done, of: del.of }) : t("Delete them")}</button>
             </div>
           )}
+          {delNote && <p className={"notice xs" + (delNote.bad ? " bad" : " ok")}>{delNote.text}</p>}
+          {/* A full Drive: said, with what can be done here. */}
+          {limit && quota.used >= limit * 0.98 && <p className="notice bad xs">{t("Your Google Drive is full: new copies cannot be sent. Delete RAW's files in the bin above, or free space in Google Drive.")}</p>}
           <p className="muted xs">{t("The copies of a video go with it. Your camera files stay where you put them.")}</p>
         </>
       )}

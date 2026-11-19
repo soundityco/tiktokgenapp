@@ -120,6 +120,12 @@ export default function Studio({ userName, userImage }: { userName: string; user
   const [preview, setPreview] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
+  // (the video studio asks for it: a Drive copy refused, the Drive full)
+  useEffect(() => {
+    const open = () => setStorageOpen(true);
+    window.addEventListener("rollout:open-storage", open);
+    return () => window.removeEventListener("rollout:open-storage", open);
+  }, []);
   const [keysOpen, setKeysOpen] = useState(false);
   /** The app's quick right-click menu, where it was opened (see the app's root below). */
   const [appCtx, setAppCtx] = useState<{ x: number; y: number } | null>(null);

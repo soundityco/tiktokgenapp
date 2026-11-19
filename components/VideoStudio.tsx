@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { isOff, joinAt, onWindows, pieceAt, splitAt as splitClip, togglePiece, wholeAgain, type ClipParts } from "@/lib/clipParts";
 import { safeName, saveBlob, stamp } from "@/lib/files";
 import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
-import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
+import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, driveQuota, renameDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
 import { activeCue, alignLyrics, alignSong, buildCues, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
@@ -494,6 +494,7 @@ export default function VideoStudio({
   /** Copies that failed (video, size, passage): not tried again by themselves (each video its own: one failing never
    *  held the others' copies back any more; they waited behind it for ever). */
   const copyFailed = useRef(new Set<string>());
+  const driveFullText = () => t("Your Google Drive is full: free some space (or get more), then try again.");
   /** Why a video's copy failed (its id): shown on its line. */
   const copyWhy = useRef(new Map<string, string>());
   /** The copy of the open video will be made again in a few seconds (its passage changed). */
@@ -1432,7 +1433,20 @@ export default function VideoStudio({
       return null;
     } finally { setDriveJob(null); } // even when gone: never a fetch shown forever
   };
-  const driveName = (what: string) => safeName(`${project.name || "RAW"} - ${clip.name} - ${what}.mp4`);
+  /** A video's Drive copy is named as its camera file (an MP4): never "Video 1 - copy" for every one of them. */
+  const copyName = (c: Pick<VideoSetup, "videoName" | "name">) => safeName(`${(c.videoName ?? clipName(c as VideoSetup)).replace(/\.[^.]+$/, "")}.mp4`);
+  // The copies sent before under the older names ("Release - Video 1 - copy"): renamed as their camera file, once.
+  useEffect(() => {
+    if (!driveWrite) return;
+    let done: string[] = [];
+    try { done = JSON.parse(localStorage.getItem("tktgen-copy-named") ?? "[]"); } catch { /* none */ }
+    const todo = clips.filter((c) => c.drive?.copy?.id && c.videoName && !done.includes(c.drive.copy.id));
+    if (!todo.length) return;
+    void (async () => {
+      for (const c of todo) if (await renameDriveFile(c.drive!.copy!.id, copyName(c))) done.push(c.drive!.copy!.id);
+      try { localStorage.setItem("tktgen-copy-named", JSON.stringify(done.slice(-500))); } catch { /* private window */ }
+    })();
+  }, [driveWrite, clips.map((c) => c.drive?.copy?.id ?? "").join()]); // eslint-disable-line react-hooks/exhaustive-deps
   // ---- the account's LUTs: listed on every device, each file on the Drive (Utils / LUTS) as soon as it is imported ----
   /** The LUTs to choose from: the account's, and the ones of this device it does not list yet. */
   const lutChoices = useMemo(() => {
@@ -1572,7 +1586,7 @@ export default function VideoStudio({
     setCopyJob({ step: "make", p: 0, ...job });
     try {
       const plan = copyPlanFor(take ? take.c.source : cur.source);
-      const name = take ? safeName(`${project.name || "RAW"} - ${clipName(take.c)} - ${t("copy")}.mp4`) : driveName(t("copy"));
+      const name = copyName(take ? take.c : { ...clip, videoName: cur.videoName });
       // The device's video chip first (seconds), ffmpeg when it cannot (minutes).
       const t0 = performance.now();
       // The progress redraws the studio: once per percent, not once per picture (that made the playback stutter).
@@ -1618,9 +1632,12 @@ export default function VideoStudio({
       if (!ac.signal.aborted) {
         console.warn("[copy] not made", e);
         copyFailed.current.add(key);
-        copyWhy.current.set(clipId, e instanceof Error ? e.message : String(e));
+        const msg = e instanceof Error ? e.message : String(e);
+        copyWhy.current.set(clipId, msg === "drive-full" ? driveFullText() : msg);
+        // (refused for another reason: the Drive's space looked at all the same, a full Drive said as such)
+        if (msg !== "drive-full") void driveQuota().then((q) => { if (q.limit && q.used >= q.limit * 0.995) { copyWhy.current.set(clipId, driveFullText()); tick((n) => n + 1); } }).catch(() => {});
         setCopyErr(clipId);
-        onToast?.(t("The Drive copy of {video} could not be made", { video: job.label }));
+        onToast?.(msg === "drive-full" ? `${t("The Drive copy of {video} could not be made", { video: job.label })} · ${driveFullText()}` : t("The Drive copy of {video} could not be made", { video: job.label }));
       }
     } finally {
       if (copyAc.current === ac) { copyAc.current = null; copyClip.current = null; }
@@ -1716,7 +1733,7 @@ export default function VideoStudio({
     if (copyJob?.clip === clip.id) return { text: copyJob.step === "make" ? t("Copy for your other devices… {n}%", { n: Math.round(copyJob.p * 100) }) : t("Sending the copy to your Drive… {n}%", { n: Math.round(copyJob.p * 100) }),
       p: copyJob.p, busy: true, hint: t("Keep this page open until it is done: leaving it stops the copy (it starts again next time).") };
     if (copyJob) return { text: t("Another video's copy first: {video}", { video: copyJob.label }), p: 0, busy: true };
-    if (copyErr === clip.id) return { text: t("The Drive copy could not be made"), p: 0, bad: true, action: { label: t("Try again"), run: copyNow } };
+    if (copyErr === clip.id) return { text: copyWhy.current.get(clip.id) ? `${t("The Drive copy could not be made")} · ${copyWhy.current.get(clip.id)}` : t("The Drive copy could not be made"), p: 0, bad: true, action: { label: t("Try again"), run: copyNow } };
     if (copyDueAt) {
       const n = Math.max(1, Math.ceil((copyDueAt - Date.now()) / 1000));
       return { text: cp ? t("The passage goes past the copy: new copy in {n} s", { n }) : t("Drive copy in {n} s", { n }), p: 0, busy: true, action: { label: t("Now"), run: copyNow } };
@@ -5038,7 +5055,15 @@ export default function VideoStudio({
     if (st?.state === "wait") return <span className="copy-status compact xs muted" title={t("Its Drive copy is made after the others, when the video is paused for 15 s.")}><span className="pill-copy">{t("Copy waiting")}</span></span>;
     if (st?.state === "failed" && st.job) {
       const job = st.job;
-      return <button className="copy-status compact xs warn-text" title={`${copyWhy.current.get(c.id) ?? ""} · ${t("Try again")}`} onClick={(e) => { e.stopPropagation(); copyFailed.current.clear(); void makeCopy(job); }}><span className="pill-copy">{t("Copy failed · try again")}</span></button>;
+      // (said in words, with why — a full Drive, a lost connection… — and Try again)
+      return (
+        <span className="copy-fail xs">
+          <span className="warn-text"><Icon name="alert" size={12} />{t("Drive copy failed")}</span>
+          {copyWhy.current.get(c.id) && <span className="muted copy-why">{copyWhy.current.get(c.id)}</span>}
+          <button className="btn sm quiet" onClick={(e) => { e.stopPropagation(); copyFailed.current.clear(); void makeCopy(job); }}>{t("Try again")}</button>
+          {copyWhy.current.get(c.id) === driveFullText() && <button className="btn sm quiet" onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new Event("rollout:open-storage")); }}>{t("Storage")}</button>}
+        </span>
+      );
     }
     return null;
   };
