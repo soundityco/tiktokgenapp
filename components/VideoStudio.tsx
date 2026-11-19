@@ -4767,19 +4767,17 @@ export default function VideoStudio({
     els.heads.forEach((el) => { el.style.transform = `translate3d(${hx}px,0,0)`; });
     // The one playhead across the frame: where the tracks' playheads are (their slide, then their place).
     if (tlHeadRef.current) tlHeadRef.current.style.transform = `translate3d(${els.headOff + dx + hx}px,0,0)`;
-    // On each track a clip whose start has gone past the left edge of what is on screen keeps its left side (its edge,
-    // its text) on that edge and ends at its own end, as a video clip, until that end leaves too: its text goes out with
-    // it, never before. Never wider than it is: nothing of it shows past its end.
-    const stuckAt = new Map<HTMLElement, number>();
+    // Every clip where it is, at its own size, as in Premiere or CapCut (a clip held on the left edge, shrinking, made a
+    // text unreadable as it went): only its text slides along it, to stay readable on the left edge while the clip is
+    // there (`--stick`). A line showing its words (word by word): nothing slides, each word is where it is sung.
+    const stick = (a: number, b: number) => (a < live.s && b > live.s ? Math.max(0, xOf(live.s) - xOf(a)) : 0);
     els.clips.forEach((list) => {
       for (const el of list) {
         const a = Number(el.dataset.a), b = Number(el.dataset.b);
-        const from = a < live.s && b > live.s ? live.s : a;
-        stuckAt.set(el, from);
-        const x0 = xOf(from);
+        const x0 = xOf(a);
         el.style.transform = `translate3d(${x0}px,0,0)`;
         el.style.width = `${Math.max(3, xOf(b) - x0)}px`;
-        el.classList.toggle("stuck", from > a);
+        el.style.setProperty("--stick", `${el.querySelector(".cue-words") ? 0 : Math.min(stick(a, b), Math.max(0, xOf(b) - x0 - 40))}px`);
       }
     });
     // A video clip (long: never moved whole, it would show past its end): once its start has gone past the left edge of
@@ -4787,18 +4785,18 @@ export default function VideoStudio({
     // that end reaches the edge too. Its name glows where the playhead is on it, as a text's.
     const hxPx = xOf(at);
     els.vclips.forEach(({ el, name, at: nameAt }) => {
-      const a = Number(el.dataset.va), b = Number(el.dataset.vb), from = Math.min(Math.max(a, live.s), b);
-      const x0 = xOf(from);
+      const a = Number(el.dataset.va), b = Number(el.dataset.vb);
+      const x0 = xOf(a), st = Math.min(stick(a, b), Math.max(0, xOf(b) - x0 - 60));
       el.style.transform = `translate3d(${x0}px,0,0)`;
       el.style.width = `${Math.max(0, xOf(b) - x0)}px`;
-      el.classList.toggle("stuck", from > a);
-      if (name && el.classList.contains("on")) name.style.setProperty("--hx", `${hxPx - x0 - nameAt}px`);
+      el.style.setProperty("--stick", `${st}px`);
+      if (name && el.classList.contains("on")) name.style.setProperty("--hx", `${hxPx - x0 - nameAt - st}px`);
     });
-    // The playing clip's bar: at its start, or on the left edge once its start has gone past it; its text glows under the playhead.
-    els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Math.max(Number(el.dataset.a), live.s))}px,0,0)`; });
+    // The playing clip's bar: on its own start (gone off the left edge with it); its text glows under the playhead.
+    els.bars.forEach((el) => { el.style.transform = `translate3d(${xOf(Number(el.dataset.a))}px,0,0)`; });
     els.playing.forEach((el) => {
-      const a = Number(el.dataset.a), b = Number(el.dataset.b), from = stuckAt.get(el) ?? a;
-      el.style.setProperty("--hx", `${b > from ? clamp((at - from) / (b - from), 0, 1) * 100 : 0}%`);
+      const a = Number(el.dataset.a), b = Number(el.dataset.b);
+      el.style.setProperty("--hx", `${b > a ? clamp((at - a) / (b - a), 0, 1) * 100 : 0}%`);
     });
   };
   // (the tracks laid out again: their slide put back to what is on screen, before it is seen)
