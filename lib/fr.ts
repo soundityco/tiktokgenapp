@@ -371,6 +371,7 @@ export const FR: Record<string, string> = {
   "Playing goes on past the segment, the playhead anywhere in the song. Click to loop on the segment.": "La lecture continue au-delà du segment, la tête partout dans le morceau. Clique pour boucler sur le segment.",
   "Show the video": "Afficher la vidéo",
   "Hide the video": "Masquer la vidéo",
+  "Every Drive copy of this release is already up to date.": "Toutes les copies Drive de cette release sont déjà à jour.",
   "Every Drive copy of the account made again": "Toutes les copies Drive du compte refaites",
   "No video to copy in this account.": "Aucune vidéo à copier dans ce compte.",
   "video {k}/{n}": "vidéo {k}/{n}",

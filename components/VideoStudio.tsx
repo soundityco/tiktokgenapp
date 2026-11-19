@@ -23,7 +23,7 @@ import ColorGrade, { knownLuts, lastLut, rememberLut, sameLut } from "./ColorGra
 import { AUDIO_KBPS, exportMp4, exportSettings, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
-import { fastWorkCopy } from "@/lib/fastCopy";
+import { COPY_VERSION, fastWorkCopy } from "@/lib/fastCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
@@ -1625,7 +1625,7 @@ export default function VideoStudio({
       onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => {
         if (c.id !== clipId) return c;
         old = c.drive?.copy?.id;
-        return { ...c, drive: { ...(c.drive ?? {}), copy: { id, from, to, of: blob.size, size: copy.size, tenBit: plan.tenBit } } };
+        return { ...c, drive: { ...(c.drive ?? {}), copy: { id, from, to, of: blob.size, size: copy.size, tenBit: plan.tenBit, q: COPY_VERSION } } };
       }) }));
       onSaveNow();
       if (old && old !== id) void deleteDriveFile(old);
@@ -1717,6 +1717,19 @@ export default function VideoStudio({
       const ov = overlaysOf(settingsRef.current).find((o) => o.clip === c.id);
       jobs.push({ c, blob, dur, off: ov ? ov.offset : c.offset, span: ov ? clipSpan(ov, dur) : clipSpan(c, dur) });
     }
+    // Already made from this file, holding its passage, the current way (COPY_VERSION): kept, not made again.
+    const fresh = (c: VideoSetup | null, blob: Blob, off: number, span: [number, number], dur: number) => {
+      const cp = (c ?? clip).drive?.copy;
+      return !!cp && cp.q === COPY_VERSION && cp.of === blob.size && copyHolds(cp, copyNeed(off, span, dur));
+    };
+    const all = jobs.length;
+    for (let i = jobs.length - 1; i >= 0; i--) {
+      const j = jobs[i];
+      const keep = j ? fresh(j.c, j.blob, j.off ?? j.c.offset, j.span ?? [0, j.dur], j.dur)
+        : !!videoBlob && fresh(null, videoBlob, settingsRef.current.offset, clipSpan(settingsRef.current, videoDurRef.current), videoDurRef.current);
+      if (keep) jobs.splice(i, 1);
+    }
+    if (all && !jobs.length) { if (!remakeRelease) onToast?.(t("Every Drive copy of this release is already up to date.")); return 0; }
     if (!jobs.length) { if (!remakeRelease) onToast?.(t("No video of this release has its file on this device: open it on the computer that has them.")); return 0; }
     copyFailed.current.clear();
     for (let i = 0; i < jobs.length; i++) {

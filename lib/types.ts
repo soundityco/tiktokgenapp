@@ -397,7 +397,8 @@ export interface VideoSettings {
     /** The working copy on the Drive (lib/convert makeWorkCopy): the take's own clock from 0 to `to`, real pictures
      *  from `from`; made from the camera file of `of` bytes. The other devices work on it, the one with the
      *  camera file exports from the camera file. */
-    copy?: { id: string; from: number; to: number; of: number; size: number; tenBit: boolean };
+    /** `q`: the copies' version it was made with (lib/fastCopy COPY_VERSION; none: before the 24-40 Mb/s copies). */
+    copy?: { id: string; from: number; to: number; of: number; size: number; tenBit: boolean; q?: number };
   };
   /** Part of the official audio used by the post (seconds). The imported file itself is never trimmed. */
   crop: { start: number; duration: number };

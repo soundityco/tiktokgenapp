@@ -18,6 +18,8 @@ import { describe, readIndex, readSamples, rotationOf } from "./videoSource";
 
 /** The Drive copy's bitrate at most (bits per second), also ffmpeg's cap (lib/convert.ts). */
 export const COPY_MAX_RATE = 40e6;
+/** The copies' version: raised when the way copies are made changes (their quality), so "make them again" knows. */
+export const COPY_VERSION = 2;
 /** …and at least (the export's top: the copy, encoded again, never the weak link). */
 export const COPY_MIN_RATE = 24e6;
 const clampRate = (r: number) => Math.min(COPY_MAX_RATE, Math.max(COPY_MIN_RATE, r));
