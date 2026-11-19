@@ -6120,7 +6120,9 @@ export default function VideoStudio({
   const hookPoolId = settings.hookPoolId && hookPools.some((p) => p.id === settings.hookPoolId) ? settings.hookPoolId : slide1Pool ?? hookPools[0]?.id;
   // A hook line edited in the carousel's list: every video of the release that uses it follows.
   // The lists are made again at each render: only their text decides when to look.
-  const listsKey = hookPools.map((p) => `${p.id}\u0001${p.text}`).join("\u0002");
+  // (their tags too: a hook added gets its tags a moment later, from the model; with the text alone, its tags stayed
+  // the old ones and the new hook was missing from a tag's hooks until the page was loaded again)
+  const listsKey = hookPools.map((p) => `${p.id}\u0001${p.text}\u0001${JSON.stringify([p.tags, p.themes, p.aiTags, p.aiVersion, p.aiThemes])}`).join("\u0002");
   const tagsByPool = useMemo(() => new Map(hookPools.map((p) => [p.id, p.kind === "hooks" ? poolTags(p) : []])), [listsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Where a hook is drawn from: its own list and tags (each hook its own), else the video's (by default slide 1's list). */
   const srcOf = (h?: VideoHook) => {

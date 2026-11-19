@@ -41,7 +41,9 @@ export const ownTagsOf = (pool: TextPool): string[][] =>
  * whole list when its tags were found with an older version of the tags, else only the texts added since.
  */
 export function modelWork(pool: TextPool): string[] {
-  if (!pool.aiTags && !pool.aiThemes) return [];
+  // (a hooks list is always sorted by the model, never sorted by hand first: a new hook lands in its best tag, not
+  // "Other"; the other lists only once sorted by the model)
+  if (!pool.aiTags && !pool.aiThemes && pool.kind !== "hooks") return [];
   const now = aiTagsNow(pool);
   const items = textItems(pool);
   return now ? items.filter((x) => !(hookKey(x) in now)) : items;
