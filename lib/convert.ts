@@ -202,7 +202,8 @@ export function copyArgs(plan: CopyPlan, from: number, to: number): string[] {
     "-t", to.toFixed(3), "-i", "/in/source",
     "-filter_complex", `[0:v]${short},setpts=PTS-STARTPTS${lead > 0 ? `,tpad=start_duration=${lead.toFixed(3)}:start_mode=clone` : ""},format=${pix}[v]`,
     "-map", "[v]", "-map", "1:a:0?",
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", String(plan.crf), "-pix_fmt", pix, "-g", "50",
+    // (its quality, capped at 40 Mb/s: never a 700 MB copy for a minute; the post is exported at 16-24 Mb/s)
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", String(plan.crf), "-maxrate", "40M", "-bufsize", "80M", "-pix_fmt", pix, "-g", "50",
     "-c:a", "aac", "-b:a", "160k",
     "-movflags", "+faststart",
     "copy.mp4",

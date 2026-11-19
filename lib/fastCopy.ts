@@ -16,6 +16,12 @@ import { describe, readIndex, readSamples, rotationOf } from "./videoSource";
  * failed: the caller uses ffmpeg too.
  */
 
+/** The Drive copy's bitrate at most (bits per second), also ffmpeg's cap (lib/convert.ts). */
+export const COPY_MAX_RATE = 40e6;
+/** …and at least (the export's top: the copy, encoded again, never the weak link). */
+export const COPY_MIN_RATE = 24e6;
+const clampRate = (r: number) => Math.min(COPY_MAX_RATE, Math.max(COPY_MIN_RATE, r));
+
 export interface FastCopyReport { codec: string; width: number; height: number; frames: number; sound: number; picture: number }
 
 const aborted = () => new DOMException("aborted", "AbortError");
@@ -64,8 +70,11 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
     const k = Math.min(1, 1920 / Math.min(upW, upH));
     width = Math.round((upW * k) / 2) * 2; height = Math.round((upH * k) / 2) * 2;
   }
-  // About what CRF 16 gives on a camera picture, for the post's use; HEVC needs less for the same look.
-  const bitrate = Math.round(Math.min(80e6, width * height * Math.min(fps, 60) * (tenBit ? 0.14 : 0.2)));
+  // Very good, never wasteful: 40 Mb/s at most (the post is exported at 16-24 Mb/s: the copy, encoded again at the
+  // export, stays well above it, nothing lost to the eye). It used to go up to 80 Mb/s: a minute of phone video filled
+  // 700 MB of the artist's Drive. HEVC (10 bits) needs less for the same look.
+  // (and never under 24 Mb/s, the export's own top: a phone's 1080p, already compressed by the phone, loses nothing more)
+  const bitrate = Math.round(clampRate(width * height * Math.min(fps, 60) * (tenBit ? 0.08 : 0.12)));
   const base = { width, height, bitrate, framerate: fps, latencyMode: "quality" as const, bitrateMode: "variable" as const };
   const econf = await firstSupported((c) => VideoEncoder.isConfigSupported(c),
     (tenBit ? TEN : AVC).flatMap((codec) => (["prefer-hardware", "no-preference"] as const).map((hardwareAcceleration) => ({
