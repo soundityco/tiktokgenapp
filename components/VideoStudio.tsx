@@ -3154,8 +3154,11 @@ export default function VideoStudio({
     const r = e.currentTarget.getBoundingClientRect();
     return clamp((e.clientX - r.left) / r.width, 0, 1);
   };
+  /** Nothing picked any more (a click on the waveform, or in the empty part of a track), as in an editor. */
+  const pickNothing = () => { setPick(null); setMulti([]); setPickPiece(null); };
   const waveDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!audioBuf) return;
+    if (e.button === 0) pickNothing();
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, e.clientX);
     const rect = e.currentTarget.getBoundingClientRect();
@@ -3264,7 +3267,7 @@ export default function VideoStudio({
           return;
         }
         if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); setMulti([]); onCue?.(); }
-        else { setHead(timeOf(e.currentTarget, e.clientX)); setPick(null); setMulti([]); }
+        else { setHead(timeOf(e.currentTarget, e.clientX)); pickNothing(); }
       },
       onPointerCancel: () => { scrubRef.current = null; },
     };
