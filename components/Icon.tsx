@@ -72,6 +72,8 @@ const P: Record<string, string> = {
   music: "M9 17.5V5.5l10-2v12M9 17.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM19 15.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z",
   /** A clip's own sound: a speaker and its waves; with a cross when silent. */
   volume: "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9.2a4 4 0 010 5.6M18.2 6.6a7.6 7.6 0 010 10.8",
+  /** The same speaker, one wave only: a low volume (half or less, as Spotify). */
+  "volume-low": "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9.2a4 4 0 010 5.6",
   /** A video over another (picture in picture): two frames, one over the other. */
   layers: "M3.5 5.5h12v9h-12zM9.5 10.5h11v8h-11z",
   "volume-off": "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5",

@@ -6664,7 +6664,7 @@ export default function VideoStudio({
             <button className="dp-vol btn icon quiet" aria-label={t("Listening volume")} aria-expanded={volOpen}
               title={`${t("Listening volume")} · ${Math.round(playVol * 100)} % · ${t("Only what you hear in the studio: the export keeps its own sound.")}`}
               onClick={() => setVolOpen((o) => !o)}>
-              <Icon name={playVol > 0 ? "volume" : "volume-off"} size={16} />
+              <Icon name={playVol <= 0 ? "volume-off" : playVol <= 0.5 ? "volume-low" : "volume"} size={16} />
             </button>
           </span>
         </div>
