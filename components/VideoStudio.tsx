@@ -840,6 +840,8 @@ export default function VideoStudio({
   /** One of them changed (`patch`), or taken off (null). */
   const patchOverlay = (id: string, patch: Partial<VideoOverlay> | null) => {
     const list = overlaysOf(settingsRef.current);
+    // (a whole one moved or sized by hand: from then on a box, starting from the whole width)
+    if (patch && (patch.x !== undefined || patch.y !== undefined || patch.w !== undefined) && list.find((o) => o.clip === id)?.full) patch = { ...patch, full: undefined };
     setV(withOverlays(patch ? list.map((o) => (o.clip === id ? { ...o, ...patch } : o)) : list.filter((o) => o.clip !== id)));
   };
   /** Its number's colour (0-based): after the cameras, from the bottom up. */
@@ -1137,14 +1139,15 @@ export default function VideoStudio({
       if (!over.pic.w || !over.pic.h || over.o.hidden) continue;
       const o = over.o;
       let op: Picture | null = desqueeze(over.pic, over.a.desqueeze);
-      const w = (W * clamp(o.w, 5, 400)) / 100, h = (w * op.h) / op.w;
-      const x = (W * o.x) / 100 - w / 2, y = (H * o.y) / 100 - h / 2;
+      // (the whole picture: framed as the video under it, the post's size)
+      const w = o.full ? W : (W * clamp(o.w, 5, 400)) / 100, h = o.full ? H : (w * op.h) / op.w;
+      const x = o.full ? 0 : (W * o.x) / 100 - w / 2, y = o.full ? 0 : (H * o.y) / 100 - h / 2;
       if (!raw && !op.graded && over.a.lut && gradesColour(over.a.grade)) {
         const grader = graderRef.current ?? (graderRef.current = Grader.shared());
         if (grader && !grader.lost) { grader.setLut(over.a.lut, 33); op = grader.grade(op, { x: 0, y: 0, w: op.w, h: op.h }, Math.min(4096, w), Math.min(4096, h)); }
       }
       if (op) {
-        const r = (Math.min(w, h) * clamp(o.radius ?? 0, 0, 50)) / 100;
+        const r = o.full ? 0 : (Math.min(w, h) * clamp(o.radius ?? 0, 0, 50)) / 100;
         g.save();
         g.beginPath();
         g.roundRect(x, y, w, h, r);
@@ -5464,8 +5467,12 @@ export default function VideoStudio({
   const CAM_KEYS = ["media", "videoName", "videoSize", "source", "offset", "score", "anchors", "musicStart", "musicEnd", "takes", "linked", "frame",
     "desqueeze", "grade", "drive", "clipIn", "clipOut", "splits", "offParts", "clipVolume", "matte", "push", "pushIn", "box"] as const satisfies readonly (keyof VideoSetup)[];
   /** A video's size and place over another one: its own (`VideoSettings.box`), else top right, 42 % wide. */
-  const boxOr = (b: VideoSettings["box"]) => ({ x: b?.x ?? 70, y: b?.y ?? 28, w: b?.w ?? 42, radius: b?.radius ?? 8 });
-  const boxOf = (o: VideoOverlay): NonNullable<VideoSettings["box"]> => ({ x: o.x, y: o.y, w: o.w, radius: o.radius });
+  // (`whole`: a video that has only been the one under, moved over for the first time: it keeps the whole picture, its
+  // framing as it was, never the small box of a video added over it)
+  const boxOr = (b: VideoSettings["box"], whole = false) => b
+    ? { x: b.x, y: b.y, w: b.w, radius: b.radius ?? 8, full: b.full || undefined }
+    : whole ? { x: 50, y: 50, w: 100, radius: 0, full: true as const } : { x: 70, y: 28, w: 42, radius: 8, full: undefined };
+  const boxOf = (o: VideoOverlay): NonNullable<VideoSettings["box"]> => ({ x: o.x, y: o.y, w: o.w, radius: o.radius, full: o.full || undefined });
   // Each one over the video keeps its size and place in its own take (it finds them again wherever it goes).
   useEffect(() => {
     for (const o of overlaysOf(settings)) {
@@ -5488,7 +5495,7 @@ export default function VideoStudio({
       (theirs as Partial<VideoSettings>).splits = ov.splits; (theirs as Partial<VideoSettings>).offParts = ov.offParts;
       theirs.linked = x.score !== undefined && Math.abs(ov.offset - x.offset) < 0.01;
       // (hidden or not, as each video was)
-      place = { ...withOverlays(overlaysOf(cur).map((o) => (o.clip === x.id ? { ...o, ...boxOr(base.box), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut, splits: cur.splits, offParts: cur.offParts, hidden: cur.videoHidden || undefined } : o))),
+      place = { ...withOverlays(overlaysOf(cur).map((o) => (o.clip === x.id ? { ...o, ...boxOr(base.box, true), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut, splits: cur.splits, offParts: cur.offParts, hidden: cur.videoHidden || undefined } : o))),
         videoHidden: ov.hidden || undefined };
     }
     onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, ...theirs, ...place, ...more } : c.id === x.id ? { ...c, ...mine } : c)) }));
@@ -5640,7 +5647,7 @@ export default function VideoStudio({
       const next = clips.find((c) => c.id === angles[0]);
       if (!next || d.act !== "over") return;
       swapBase(next, { angles: angles.slice(1).length ? angles.slice(1) : undefined, cuts: undefined,
-        ...insert({ ...overlayFor(next), ...boxOr(cur.box), offset: cur.offset, clipIn: cur.clipIn, clipOut: cur.clipOut }) });
+        ...insert({ ...overlayFor(next), ...boxOr(cur.box, true), offset: cur.offset, clipIn: cur.clipIn, clipOut: cur.clipOut }) });
       return;
     }
     const id = angles[d.cam - 1], c = clips.find((q) => q.id === id);

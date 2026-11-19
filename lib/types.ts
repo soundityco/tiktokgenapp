@@ -428,7 +428,8 @@ export interface VideoSettings {
   clipVolume?: number;
   /** Where and how big this video is when it is the one over another (picture in picture): kept with the video, so it
    *  finds its own size and place again when it goes back over (never the one of the video it changed place with). */
-  box?: { x: number; y: number; w: number; radius?: number };
+  /** Its size and place over another video (`full`: the whole picture, as the video under it: never shrunk when it is moved over). */
+  box?: { x: number; y: number; w: number; radius?: number; full?: boolean };
   /** Confidence of the automatic sync, 0 to 1. */
   score?: number;
   /** Clip seconds where the music really plays, found by the automatic sync. */
@@ -507,6 +508,8 @@ export interface VideoOverlay {
   y: number;
   w: number;
   radius?: number;
+  /** The whole picture, framed as the video under it (it was that video: moved over, it keeps its look). */
+  full?: boolean;
   volume?: number;
   /** Hidden (the eye of its track): not drawn, at the preview nor in the export; its sound and its place stay. */
   hidden?: boolean;
