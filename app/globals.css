@@ -425,7 +425,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .track-tools .btn.icon { width: 26px; height: 26px; }
 .lyric-track .track-tools .btn.on { color: var(--video); border-color: transparent; background: none; box-shadow: none; }
 .sound-pop { display: grid; gap: 6px; width: 230px; padding: 6px 4px 2px; }
-.lyric-track .cue.own-look::before { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--lyrics); pointer-events: none; }
+/* A line with its own style ("This phrase"): a dot seen at a glance, white ringed with the dark (gold on a gold clip did not show). */
+.lyric-track .cue.own-look::before { content: ""; position: absolute; top: 3px; right: 4px; z-index: 3; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text); box-shadow: 0 0 0 1.5px var(--bg), 0 0 6px color-mix(in srgb, var(--text) 60%, transparent); pointer-events: none; }
 .look-scope { gap: 6px; }
 .look-cue { gap: 8px; min-width: 0; }
 .look-cue-text { min-width: 0; font-size: 12px; color: var(--muted); }
