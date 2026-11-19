@@ -71,7 +71,7 @@ type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoE
 
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 /** A working copy on its way (shown in the top bar wherever the user is: see Studio). */
-export interface CopyJob { step: "make" | "send"; p: number; clip: string; project: string; label: string; /** In a batch ("Make every Drive copy again"): which one, of how many. */ k?: number; n?: number }
+export interface CopyJob { step: "make" | "send"; p: number; clip: string; project: string; label: string; /** In a batch ("Make every Drive copy again"): which one, of how many; the release, and which of how many. */ k?: number; n?: number; release?: string; rk?: number; rn?: number }
 
 function clipsOf(p: Project): VideoSetup[] {
   return p.videos?.length
@@ -345,6 +345,8 @@ export default function VideoStudio({
   lyricsRow,
   onCopyJob,
   remakeCopies = 0,
+  onRemakeDone,
+  remakeRelease,
   onToast,
   onVariants,
   playReturn = true,
@@ -388,6 +390,10 @@ export default function VideoStudio({
   onCopyJob?: (job: CopyJob | null) => void;
   /** Raised (a new number) by "Make every Drive copy again": every video of the release with its file here, copied again. */
   remakeCopies?: number;
+  /** That release's copies done (or none to make here): the shell opens the next release. */
+  onRemakeDone?: (releaseId: string) => void;
+  /** The whole account being done: which release, of how many (shown with each copy). */
+  remakeRelease?: { k: number; n: number };
   /** A short message, wherever the user is (the copy is done, or failed). */
   onToast?: (msg: string) => void;
   /** After an export: the hooks retouched into texts their list does not have (see lib/variants), to offer keeping. */
@@ -1585,7 +1591,7 @@ export default function VideoStudio({
     const ac = new AbortController();
     copyAc.current = ac;
     copyClip.current = clipId;
-    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}`, ...(copyBatch.current ?? {}) };
+    const job = { clip: clipId, project: project.id, label: `${project.name} · ${clipName(take ? take.c : clip)}`, ...(copyBatch.current ? { ...copyBatch.current, release: project.name, rk: remakeRelease?.k, rn: remakeRelease?.n } : {}) };
     setCopyJob({ step: "make", p: 0, ...job });
     try {
       const plan = copyPlanFor(take ? take.c.source : cur.source);
@@ -1711,20 +1717,23 @@ export default function VideoStudio({
       const ov = overlaysOf(settingsRef.current).find((o) => o.clip === c.id);
       jobs.push({ c, blob, dur, off: ov ? ov.offset : c.offset, span: ov ? clipSpan(ov, dur) : clipSpan(c, dur) });
     }
-    if (!jobs.length) { onToast?.(t("No video of this release has its file on this device: open it on the computer that has them.")); return; }
+    if (!jobs.length) { if (!remakeRelease) onToast?.(t("No video of this release has its file on this device: open it on the computer that has them.")); return 0; }
     copyFailed.current.clear();
     for (let i = 0; i < jobs.length; i++) {
       while (copyAc.current) await new Promise((r) => setTimeout(r, 500)); // (a copy going on: after it)
       copyBatch.current = { k: i + 1, n: jobs.length };
       try { const j = jobs[i]; await (j ? makeCopy(j) : makeCopy()); } finally { copyBatch.current = null; }
     }
-    onToast?.(t("Every Drive copy made again ({n})", { n: jobs.length }));
+    if (!remakeRelease) onToast?.(t("Every Drive copy made again ({n})", { n: jobs.length }));
+    return jobs.length;
   };
   useEffect(() => {
-    if (!remakeCopies || remakeCopies === remakeDone.current || !driveWrite || loadedClip !== clip.id || !audioBuf) return;
+    // (the release opened and read: its videos; a release without its song is done too, its copies whole)
+    if (!remakeCopies || remakeCopies === remakeDone.current || !driveWrite || loadedClip !== clip.id) return;
     remakeDone.current = remakeCopies;
-    void remakeAll();
-  }, [remakeCopies, driveWrite, loadedClip, audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
+    const id = project.id;
+    void remakeAll().catch(() => 0).then((n) => onRemakeDone?.(id) ?? n);
+  }, [remakeCopies, driveWrite, loadedClip]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Make the copy now (no countdown). */
   const copyNow = () => {
     if (dueTimer.current) { clearTimeout(dueTimer.current); dueTimer.current = null; }
