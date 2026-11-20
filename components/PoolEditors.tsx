@@ -11,7 +11,7 @@ import { thumbnailLink } from "@/lib/thumb";
 import type { PicPool, PicRef, TextPool } from "@/lib/types";
 import Icon from "./Icon";
 import PhotoView from "./PhotoView";
-import { ContextMenu, Menu, Modal, RoleSelect, ScopeSelect } from "./ui";
+import { ContextMenu, Menu, Modal, RoleSelect, ScopeSelect, Select } from "./ui";
 
 export function Thumb({ id, name }: { id: string; name: string }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -81,6 +81,71 @@ function CaptionsEditor({ text, onText }: { text: string; onText: (text: string)
         </div>
       ))}
       <div><button className="btn sm" onClick={() => setItems([...items, ""])}><Icon name="plus" size={14} />{t("Add a caption")}</button></div>
+    </div>
+  );
+}
+
+/**
+ * A text's tags, on one line at the end of its row: two or so in view, the others reached by scrolling it sideways (a
+ * fade over the edge where more is hidden, as Spotify's genre chips) — the text keeps its room, cut by "…".
+ */
+function TagScroll({ children }: { children: React.ReactNode }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const [edge, setEdge] = useState({ l: false, r: false });
+  // (set only when an edge changes: a new object at each render looped)
+  const look = () => {
+    const b = box.current;
+    if (!b) return;
+    const l = b.scrollLeft > 1, r = b.scrollLeft + b.clientWidth < b.scrollWidth - 1;
+    setEdge((e) => (e.l === l && e.r === r ? e : { l, r }));
+  };
+  useEffect(() => {
+    look();
+    const b = box.current;
+    if (!b || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(look); ro.observe(b);
+    return () => ro.disconnect();
+  });
+  return (
+    <span ref={box} className={"tag-scroll" + (edge.l ? " fade-l" : "") + (edge.r ? " fade-r" : "")} onScroll={look}
+      onWheel={(e) => { const b = box.current; if (b && b.scrollWidth > b.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { b.scrollLeft += e.deltaY; } }}>
+      {children}
+    </span>
+  );
+}
+
+/** A hooks list by release: the hooks for every release, then the ones kept for each release; each one moved by its menu. */
+function ReleasesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void }) {
+  const { t } = useT();
+  const items = textItems(pool);
+  const open = currentRelease();
+  const releases = [...releasesKnown()].sort((a, b) => (a.id === open ? -1 : b.id === open ? 1 : compareTexts(a.name, b.name)));
+  const of = (x: string) => pool.only?.[hookKey(x)] ?? "";
+  const setOnly = (text: string, release: string) => onChange((x) => {
+    const only = { ...(x.only ?? {}) };
+    if (release) only[hookKey(text)] = release; else delete only[hookKey(text)];
+    return { ...x, only: Object.keys(only).length ? only : undefined };
+  });
+  const groups = [{ id: "", name: t("Every release") }, ...releases].map((r) => ({ ...r, items: items.filter((x) => of(x) === r.id).sort(compareTexts) }))
+    .filter((g) => g.id === "" || g.items.length || g.id === open);
+  return (
+    <div className="theme-groups">
+      <p className="muted xs">{t("A hook kept for a release is drawn there only (another release can still tick its tag to draw it).")}</p>
+      {groups.map((g) => (
+        <section key={g.id || "all"} className="theme-group">
+          <h4 className={"label row tag-head" + (g.id ? " is-release" : "")}>{g.id && <Icon name="pin" size={11} />}<span>{g.name}</span> <span className="muted">· {g.items.length}</span>{g.id === open && <span className="muted"> · {t("this one")}</span>}</h4>
+          {!g.items.length && <p className="muted xs">{t("No hook kept for it yet: move one here with its menu.")}</p>}
+          {g.items.map((x) => (
+            <div key={x} className="row nowrap theme-item">
+              <span className="grow truncate" title={x}>{x.replace(/\|/g, " ")}</span>
+              <Select className="input sm rel-pick" value={of(x)} onChange={(e) => setOnly(x, e.target.value)} aria-label={t("For which release")}>
+                <option value="">{t("Every release")}</option>
+                {releases.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </Select>
+            </div>
+          ))}
+        </section>
+      ))}
     </div>
   );
 }
@@ -166,13 +231,15 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
           {g.items.map((i) => (
             <div key={i} className="row nowrap theme-item">
               <span className="grow truncate" title={items[i]}>{items[i].replace(/\|/g, " ")}</span>
-              <span className="tag-chips">
+              <TagScroll>
                 {tagsNow[i].filter(Boolean).map((tag) => (
                   <button key={tag} className={"tag-chip" + (isReleaseTag(tag) ? " release" : "")} title={isReleaseTag(tag) ? t("Kept for this release only: click to offer it in every release") : t("Remove this tag")}
                     onClick={() => (isReleaseTag(tag) ? setOnly(items[i], null) : setTags(items[i], tagsNow[i].filter((x) => x !== tag)))}>
                     {themeLabel(tag, t)}<Icon name="x" size={10} />
                   </button>
                 ))}
+              </TagScroll>
+              <span className="tag-chips">
                 <Menu float trigger={(_, toggle) => (
                   <button className="tag-chip add" aria-label={t("Add a tag")} title={t("Add a tag")} onClick={toggle}><Icon name="plus" size={11} /></button>
                 )}>
@@ -232,7 +299,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   const { pool } = p;
   const file = useRef<HTMLInputElement>(null);
   const [imports, setImports] = useState(0); // a .txt added: the captions boxes are read again
-  const [view, setView] = useState<"text" | "themes">(p.byTag ? "themes" : "text");
+  const [view, setView] = useState<"text" | "themes" | "releases">(p.byTag ? "themes" : "text");
   // A hooks list is kept in alphabetical order: when it opens, after an import, when its text field is left (never
   // while typing: the line would jump away). The order changes nothing to the draws (random).
   const tidy = () => { if (pool.kind === "hooks" && sortLines(pool.text) !== pool.text) p.onChange((x) => ({ ...x, text: sortLines(x.text) })); };
@@ -258,10 +325,13 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <div className="row seg-tabs" role="tablist">
           <button role="tab" aria-selected={view === "text"} className={"btn sm" + (view === "text" ? " on" : "")} onClick={() => setView("text")}>{t("Texts")}</button>
           <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By tag")}</button>
+          {pool.kind === "hooks" && <button role="tab" aria-selected={view === "releases"} className={"btn sm" + (view === "releases" ? " on" : "")} onClick={() => setView("releases")}>{t("By release")}</button>}
 
         </div>
       )}
-      {isLineList(pool) && view === "themes" && n > 1 ? (
+      {pool.kind === "hooks" && view === "releases" && n > 1 ? (
+        <ReleasesView pool={pool} onChange={p.onChange} />
+      ) : isLineList(pool) && view === "themes" && n > 1 ? (
         <ThemesView pool={pool} onChange={p.onChange} />
       ) : pool.kind === "captions" ? (
         <CaptionsEditor key={`${pool.id}:${imports}`} text={pool.text} onText={(text) => p.onChange((x) => ({ ...x, text }))} />
@@ -273,8 +343,8 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
       )}
       {/* (where a hook is kept for one release: the pin of each hook, in the tags' view) */}
       {pool.kind === "hooks" && view === "text" && n > 1 && (
-        <p className="muted xs row" style={{ gap: 6 }}><Icon name="pin" size={12} />{t("To keep a hook for one release only: “By tag”, then its pin.")}
-          <button className="link" onClick={() => setView("themes")}>{t("By tag")}</button></p>
+        <p className="muted xs row" style={{ gap: 6 }}><Icon name="pin" size={12} />{t("To keep a hook for one release only: “By release”, or its pin in “By tag”.")}
+          <button className="link" onClick={() => setView("releases")}>{t("By release")}</button></p>
       )}
       {perf.length > 0 && (
         <details className="sec">

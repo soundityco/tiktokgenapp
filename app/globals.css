@@ -3101,3 +3101,17 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 .theme-item .pin-release:hover { color: var(--text); }
 .theme-item .pin-release.on { color: var(--lyrics); }
 .theme-item .pin-release.other { color: color-mix(in srgb, var(--lyrics) 45%, var(--faint)); }
+
+/* A hook's row: its text cut by "…", its tags on one line that scrolls sideways (about two in view, a fade where more
+   is hidden, as Spotify's chips), its +, pin and Auto always in view at the right. (The mask only uses alpha.) */
+.theme-item > .grow { min-width: 0; }
+.theme-groups > *, .theme-group > * { min-width: 0; } /* (a grid's items grow with their longest text: rows kept to the box) */
+.tag-scroll { display: flex; gap: 4px; flex: 0 1 auto; min-width: 0; max-width: 230px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.tag-scroll::-webkit-scrollbar { display: none; }
+.tag-scroll > * { flex: none; }
+.tag-scroll.fade-r { -webkit-mask-image: linear-gradient(to right, black calc(100% - 32px), transparent); mask-image: linear-gradient(to right, black calc(100% - 32px), transparent); }
+.tag-scroll.fade-l { -webkit-mask-image: linear-gradient(to right, transparent, black 32px); mask-image: linear-gradient(to right, transparent, black 32px); }
+.tag-scroll.fade-l.fade-r { -webkit-mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent); }
+.theme-item > .tag-chips { max-width: none; }
+.theme-item .rel-pick { width: 190px; flex: none; }
+.tag-head.is-release { color: var(--lyrics); gap: 6px; }
