@@ -2287,25 +2287,6 @@ export default function VideoStudio({
     onSaveNow();
   };
 
-  const removeVideo = async () => {
-    syncRef.current?.abort();
-    stopCopyOf(clip.id);
-    stop();
-    if (settingsRef.current.drive?.copy?.id) void deleteDriveFile(settingsRef.current.drive.copy.id);
-    setOnCopy(false);
-    dropKeptCopy(clip.id, settingsRef.current.drive?.copy?.id);
-    setVideoBlob(null);
-    setVideoDur(0);
-    // Another video still reads these files: they stay, this one stops reading them (a duplicate: its own key, empty;
-    // the video it was made from: a new, empty one).
-    const shared = sharedFiles();
-    setV({ ...(shared ? { media: clip.media ? undefined : uid() } : {}), videoName: undefined, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined, anchors: undefined, takes: undefined, linked: false });
-    setHead(settingsRef.current.crop.start);
-    posterRef.current = null;
-    if (!shared) { await delMedia(`video:${mediaId}`); await delMedia(posterKey); }
-    onSaveNow();
-  };
-
   /** "Video 3": the next free number (after a deletion, clips.length + 1 could repeat a name). */
   // (this release's videos only: the takes imported are stored as videos too, and made "Video 7" of the second one)
   const nextClipName = () => `Video ${Math.max(projects.length, ...projects.map((c) => Number(/^Video (\d+)$/.exec(c.name)?.[1] ?? 0))) + 1}`;
@@ -3227,7 +3208,7 @@ export default function VideoStudio({
   /** Nothing picked any more (a click on the waveform, or in the empty part of a track), as in an editor. */
   const pickNothing = () => { setPick(null); setMulti([]); setPickPiece(null); };
   const waveDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!audioBuf) return;
+    if (!audioBuf || e.button === 2) return; // (a right click: its menu, the playhead stays)
     if (e.button === 0) pickNothing();
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, e.clientX);
@@ -3280,7 +3261,7 @@ export default function VideoStudio({
     };
     return {
       onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
-        if (e.button === 1) return; // the wheel pressed: not a click on the track, playback goes on
+        if (e.button !== 0) return; // the wheel pressed or a right click (its menu): not a click on the track, playback goes on
         stop();
         e.currentTarget.setPointerCapture(e.pointerId);
         const cue = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
@@ -5199,6 +5180,10 @@ export default function VideoStudio({
   /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
   /** Camera 1's menu (its line and its card): the same as every other video's, with its own file, copy and removal. */
   const baseMenu = (close: () => void) => (<>
+    {/* Into a multicam with the video just above it (as V2's « Put in the multicam » with this one). */}
+    {overlaysOf(settings).length > 0 && !(settings.angles ?? []).some(Boolean) && (
+      <button onClick={() => { close(); stop(); const ovs = overlaysOf(settingsRef.current); setV({ angles: [ovs[0].clip], ...withOverlays(ovs.slice(1)) }); }}><Icon name="layers" size={14} />{t("Put in the multicam")}</button>
+    )}
     <button disabled={!videoBlob || syncBusy} onClick={() => { close(); void autoSync(); }}><Icon name="refresh" size={14} />{t("Sync again")}</button>
     {/* The same camera file found again on this computer (the sync and settings kept). */}
     <button onClick={() => { close(); document.getElementById("video-original")?.click(); }}><Icon name="link" size={14} />{t("Link the original file")}</button>
@@ -5207,8 +5192,74 @@ export default function VideoStudio({
     {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the transfer")}</button>}
     {/* Another take for this video. */}
     <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
-    {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}><Icon name="trash" size={14} />{t("Remove video")}</button></>}
+    {/* Out of the project, as any other video (V2, V3…): the one above it becomes the one under, it waits in the
+        release's other takes. */}
+    {settings.videoName && <><div className="sep" /><button onClick={() => { close(); takeOutBase(); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button></>}
   </>);
+  /**
+   * The video under taken out of the project, as the ones over it can be: another video of the project takes its place
+   * (the one just above it; in a multicam, camera 2), and its file waits in the release's other takes (never deleted).
+   * Alone, it becomes a take of the release and the project has no video any more.
+   */
+  const takeOutBase = () => {
+    const cur = settingsRef.current, ovs = overlaysOf(cur), angles = (cur.angles ?? []).filter(Boolean);
+    syncRef.current?.abort(); stop();
+    const no = baseNo(cur) + 1;
+    if (ovs.length) {
+      const x = clips.find((c) => c.id === ovs[0].clip);
+      if (!x) return;
+      swapBase(x, withOverlays(ovs.filter((o) => o.clip !== x.id)));
+    } else if (angles.length) {
+      const x = clips.find((c) => c.id === angles[0]);
+      if (!x) return;
+      swapBase(x);
+      removeAngle(0);
+    } else {
+      // (its own take: same file, sync and grade, read where it was — nothing copied, nothing deleted)
+      stopCopyOf(clip.id);
+      const id = uid();
+      onProject((p) => ({ ...p, videos: [...clipsOf(p), { ...cur, id, name: cur.videoName?.replace(/\.[^.]+$/, "") || clipName(clip), takeOnly: true, media: mediaId,
+        angles: undefined, cuts: undefined, versions: undefined, overlays: undefined, overlay: undefined, hooks: undefined }] }));
+      setOnCopy(false); setVideoBlob(null); setVideoDur(0); posterRef.current = null;
+      setV({ media: uid(), videoName: undefined, videoSize: undefined, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined, musicEnd: undefined,
+        anchors: undefined, takes: undefined, linked: false, clipIn: undefined, clipOut: undefined, splits: undefined, offParts: undefined });
+      setHead(settingsRef.current.crop.start);
+      onSaveNow();
+    }
+    onToast?.(t("Video {n} taken out of the project: it waits in the release's other takes.", { n: no }));
+  };
+  /**
+   * A take's menu (its ⋯ in the library, its line's header and its right click): what it can do by where it is — over
+   * the video, a camera of the multicam, or not in the project —, camera 1 its own (`baseMenu`).
+   */
+  const takeMenuFor = (c: VideoSetup) => (close: () => void) => {
+    const angles = (settings.angles ?? []).filter(Boolean), ovIds = overlaysOf(settings).map((o) => o.clip);
+    const k = angles.indexOf(c.id), cam = c.id === clip.id ? 0 : k >= 0 ? k + 1 : null, i = cam === null ? -1 : cam - 1;
+    const isOver = cam === null && ovIds.includes(c.id), job = takeJobs[c.id], room = videosIn(settings) < MAX_CAMS;
+    return cam === 0 ? baseMenu(close) : (<>
+        {isOver && <button onClick={() => { close(); stop(); setV({ angles: [...angles, c.id], ...withOverlays(overlaysOf(settingsRef.current).filter((o) => o.clip !== c.id)) }); }}><Icon name="layers" size={14} />{t("Put in the multicam")}</button>}
+        {cam !== null && cam > 0 && <button onClick={() => { close(); stop(); removeAngle(i, withOverlays([...overlaysOf(settingsRef.current), overlayFor(c)])); }}><Icon name="film" size={14} />{t("Put on its own track (over the video)")}</button>}
+        {cam === null && !isOver && <button disabled={!room} onClick={() => { close(); putOverlay(c); }}><Icon name="plus" size={14} />{t("Add to the project")}</button>}
+        <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}><Icon name="refresh" size={14} />{t("Sync again")}</button>
+        <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}><Icon name="link" size={14} />{t("Link the original file")}</button>
+        {/* Its Drive copy made now, or again (another device opens it; the old one replaced). */}
+        {driveWrite && (() => {
+          const a = anglesRef.current.get(c.id);
+          if (!a || a.fromCopy || !Number.isFinite(a.el.duration)) return null;
+          const ov = overlaysOf(settings).find((o) => o.clip === c.id), dur = a.el.duration;
+          return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}><Icon name="copy" size={14} />{c.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>;
+        })()}
+        {copyJob?.clip === c.id && <button onClick={() => { close(); copyAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the Drive copy")}</button>}
+        <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
+        {(isOver || (cam !== null && cam > 0)) && <><div className="sep" /><button onClick={() => { close(); stop(); if (isOver) patchOverlay(c.id, null); else removeAngle(i); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button></>}
+        {c.takeOnly && <>
+          <div className="sep" />
+          <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
+            title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
+            onClick={() => { close(); deleteTake(c); }}><Icon name="trash" size={14} />{t("Delete this take")}</button>
+        </>}
+    </>);
+  };
   /** The project's videos, in the order of their numbers (`strip`: camera 1's full card, under its line). */
   const takesEl = (strip?: React.ReactNode) => {
     const angles = (settings.angles ?? []).filter(Boolean);
@@ -5238,35 +5289,13 @@ export default function VideoStudio({
       // onto its own track; either → out of the project (back with the release's other takes); not in it → added (on
       // its own track, on top, as an import).
       // (camera 1: the same menu, with what it has of its own — its file, its Drive copy, removed from the video)
-      const menu = (close: () => void) => cam === 0 ? baseMenu(close) : (<>
-        {isOver && <button onClick={() => { close(); stop(); setV({ angles: [...angles, c.id], ...withOverlays(overlaysOf(settingsRef.current).filter((o) => o.clip !== c.id)) }); }}><Icon name="layers" size={14} />{t("Put in the multicam")}</button>}
-        {cam !== null && cam > 0 && <button onClick={() => { close(); stop(); removeAngle(i, withOverlays([...overlaysOf(settingsRef.current), overlayFor(c)])); }}><Icon name="film" size={14} />{t("Put on its own track (over the video)")}</button>}
-        {cam === null && !isOver && <button disabled={!room} onClick={() => { close(); putOverlay(c); }}><Icon name="plus" size={14} />{t("Add to the project")}</button>}
-        <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}><Icon name="refresh" size={14} />{t("Sync again")}</button>
-        <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}><Icon name="link" size={14} />{t("Link the original file")}</button>
-        {/* Its Drive copy made now, or again (another device opens it; the old one replaced). */}
-        {driveWrite && (() => {
-          const a = anglesRef.current.get(c.id);
-          if (!a || a.fromCopy || !Number.isFinite(a.el.duration)) return null;
-          const ov = overlaysOf(settings).find((o) => o.clip === c.id), dur = a.el.duration;
-          return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}><Icon name="copy" size={14} />{c.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>;
-        })()}
-        {copyJob?.clip === c.id && <button onClick={() => { close(); copyAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the Drive copy")}</button>}
-        <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
-        {(isOver || (cam !== null && cam > 0)) && <><div className="sep" /><button onClick={() => { close(); stop(); if (isOver) patchOverlay(c.id, null); else removeAngle(i); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button></>}
-        {c.takeOnly && <>
-          <div className="sep" />
-          <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
-            title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
-            onClick={() => { close(); deleteTake(c); }}><Icon name="trash" size={14} />{t("Delete this take")}</button>
-        </>}
-      </>);
+      const menu = takeMenuFor(c);
       // The one over it: numbered and coloured as the next camera (as on its track).
       const shown = cam === 0 ? baseNo(settings) : isOver || (cam !== null && cam > 0) ? overNo(settings, c.id) : null;
       const cls = "take" + (shown === null ? " other" : " cam-" + shown) + (open ? " open" : "");
       // Unfolded: the same full card as camera 1's (its name, file, what it is, its sync), in place of its line.
       if (open) return (
-        <div key={c.id} className={cls} {...takeDrag(c, cam)}>
+        <div key={c.id} className={cls} {...takeDrag(c, cam)} onContextMenu={ctxOn(menu)}>
           <MediaTile icon="film" name={c.videoName ?? null} warn={missing} loading={!!job && !job.err} menu={cam === 0 ? false : menu}
             label={<button className="take-label" onClick={toggle} title={t("Fold")}>{shown !== null && <b>{shown + 1}</b>}{shown !== null && <span>·</span>}<span className="truncate">{clipName(c)}</span><Icon name="chevron" size={11} /></button>}
             meta={<>
@@ -5279,7 +5308,7 @@ export default function VideoStudio({
       );
       // Folded: one slim line (all the cameras seen at once), number and colour as on the shots track.
       return (
-        <div key={c.id} className={cls}>
+        <div key={c.id} className={cls} onContextMenu={ctxOn(menu)}>
         <div className={"take-row" + (job && !job.err ? " shine-box" : "")} {...takeDrag(c, cam)}>
           <button className="take-main" aria-expanded={false}
             title={cam !== null ? t("Show it on the preview and set its colour and framing") : undefined} onClick={toggle}>
@@ -5344,6 +5373,17 @@ export default function VideoStudio({
    * video ("base" or the take over it), `t` the file time under the pointer.
    */
   const [clipMenu, setClipMenu] = useState<{ x: number; y: number; which: string; t: number } | null>(null);
+  /**
+   * A right click with its own menu, by where it is (a track's header, a take of the library, an empty track…), as in
+   * any software: `render` draws its items (the same as its ⋯ when it has one). Not on a touch screen (no right click).
+   */
+  const [ctx, setCtx] = useState<{ x: number; y: number; render: (close: () => void) => ReactNode } | null>(null);
+  const ctxOn = (render: ((close: () => void) => ReactNode) | null | undefined | false) => (e: React.MouseEvent) => {
+    if (!render || e.defaultPrevented || matchMedia("(hover: none)").matches) return;
+    if ((e.target as HTMLElement).closest("input, textarea")) return;
+    e.preventDefault(); e.stopPropagation();
+    setCtx({ x: e.clientX, y: e.clientY, render });
+  };
   /** A piece of a cut clip picked (a click on it): `which` the video, `t` a file time inside it. Shift + E, Delete: it. */
   /** Lines picked with Shift + click, besides `pick` (to copy their timing). */
   const [multi, setMulti] = useState<string[]>([]);
@@ -5437,13 +5477,17 @@ export default function VideoStudio({
   );
   /** A track locked in its header (as in Premiere): its clips are not moved nor trimmed (clicked: still selected). */
   const trackLocked = (key: string) => !!settings.trackLocks?.includes(key);
+  const toggleTrackLock = (key: string) => {
+    const on = !!settingsRef.current.trackLocks?.includes(key), l = (settingsRef.current.trackLocks ?? []).filter((x) => x !== key);
+    setV({ trackLocks: on ? (l.length ? l : undefined) : [...l, key] });
+  };
   const trackLockEl = (key: string) => {
     const on = trackLocked(key);
     return (
       <button className={"btn icon sm quiet track-lock" + (on ? " on" : "")} aria-pressed={on}
         aria-label={on ? t("Unlock the track") : t("Lock the track")}
         title={on ? t("Track locked: its clips are not moved nor trimmed. Click to unlock it.") : t("Lock the track: its clips are not moved nor trimmed")}
-        onClick={() => { const l = (settingsRef.current.trackLocks ?? []).filter((x) => x !== key); setV({ trackLocks: on ? (l.length ? l : undefined) : [...l, key] }); }}>
+        onClick={() => toggleTrackLock(key)}>
         <Icon name={on ? "lock" : "unlock"} size={14} />
       </button>
     );
@@ -5455,16 +5499,17 @@ export default function VideoStudio({
       <Icon name={hidden ? "eye-off" : "eye"} size={14} />
     </button>
   );
+  const toggleMusic = () => {
+    const m = !musicMuted; setMusicMuted(m);
+    try { localStorage.setItem("tktgen-music-muted", m ? "1" : "0"); } catch { /* private window */ }
+    const g = muteNode.current; if (g) g.gain.setTargetAtTime(m ? 0 : playVolRef.current, g.context.currentTime, 0.01);
+  };
   /** The song's mute, in the header of the waveform (studio only: the export keeps it). */
   const muteEl = (
     <button className={"btn icon sm quiet track-eye" + (musicMuted ? " off" : "")} aria-pressed={musicMuted}
       aria-label={musicMuted ? t("Hear the song") : t("Mute the song")}
       title={musicMuted ? t("Hear the song") : t("Mute the song in the studio (the export keeps it)")}
-      onClick={() => {
-        const m = !musicMuted; setMusicMuted(m);
-        try { localStorage.setItem("tktgen-music-muted", m ? "1" : "0"); } catch { /* private window */ }
-        const g = muteNode.current; if (g) g.gain.setTargetAtTime(m ? 0 : playVolRef.current, g.context.currentTime, 0.01);
-      }}>
+      onClick={() => toggleMusic()}>
       <Icon name={musicMuted ? "volume-off" : "volume"} size={14} />
     </button>
   );
@@ -5477,6 +5522,113 @@ export default function VideoStudio({
       <Icon name={shown ? "eye" : "eye-off"} size={14} />
     </button>
   );
+  // ---- right clicks on the tracks' headers (the same switches as in the header, then what the line can do) ----
+  const redraw = () => requestAnimationFrame(() => drawAt(headRef.current));
+  /** A video's line ("base": the one under, else the take over it): its name, its eye and padlock, then its take's menu. */
+  const videoHdMenu = (which: string) => (close: () => void) => {
+    const cur = settings, base = which === "base", ov = base ? null : overlayOf(cur, which), take = base ? clip : clips.find((c) => c.id === which);
+    if (!take) return null;
+    const key = base ? fileKey(clip) : takeKey(which), no = base ? baseNo(cur) : overNo(cur, which);
+    const hidden = base ? !!cur.videoHidden : !!ov?.hidden, lockKey = base ? "base" : which, locked = trackLocked(lockKey);
+    return (<>
+      <div className="label cap truncate">{trackName(cur, key, no)} · {take.videoName?.replace(/\.[^.]+$/, "") ?? clipName(take)}</div>
+      <button onClick={() => { close(); setTrackRenaming(key); }}><Icon name="pencil" size={14} />{t("Rename the track")}</button>
+      {cur.trackNames?.[key] && <button onClick={() => { close(); renameTrack(key, ""); }}><Icon name="refresh" size={14} />{t("Name back to {name}", { name: "V" + (no + 1) })}</button>}
+      <button onClick={() => { close(); if (base) setV({ videoHidden: hidden ? undefined : true }); else patchOverlay(which, { hidden: hidden ? undefined : true }); redraw(); }}>
+        <Icon name={hidden ? "eye" : "eye-off"} size={14} />{hidden ? t("Show the video") : t("Hide the video")}</button>
+      <button onClick={() => { close(); toggleTrackLock(lockKey); }}><Icon name={locked ? "unlock" : "lock"} size={14} />{locked ? t("Unlock the track") : t("Lock the track")}</button>
+      <div className="sep" />
+      {takeMenuFor(take)(close)}
+    </>);
+  };
+  /** The multicam's line: its eye, its padlock, the cameras' sound. */
+  const camsHdMenu = (e: React.MouseEvent) => ctxOn((close) => (<>
+    <div className="label cap">{t("Multicam")}</div>
+    <button onClick={() => { close(); setV({ videoHidden: settings.videoHidden ? undefined : true }); redraw(); }}>
+      <Icon name={settings.videoHidden ? "eye" : "eye-off"} size={14} />{settings.videoHidden ? t("Show the video") : t("Hide the video")}</button>
+    <button onClick={() => { close(); toggleTrackLock("base"); }}><Icon name={trackLocked("base") ? "unlock" : "lock"} size={14} />{trackLocked("base") ? t("Unlock the track") : t("Lock the track")}</button>
+    <button onClick={() => { close(); setClipMenu({ x: e.clientX, y: e.clientY, which: "cams", t: 0 }); }}><Icon name="volume" size={14} />{t("Cameras' sound")}…</button>
+  </>))(e);
+  /** The song's line: heard or not in the studio, its segment, its file. */
+  const audioHdMenu = (close: () => void) => (<>
+    <div className="label cap truncate">{project.audioName ?? settings.audioName ?? t("Audio")}</div>
+    <button onClick={() => { close(); toggleMusic(); }}><Icon name={musicMuted ? "volume" : "volume-off"} size={14} />{musicMuted ? t("Hear the song") : t("Mute the song")}</button>
+    <button disabled={!audioBuf} onClick={() => { close(); markIn(); }}><Icon name="arrowLeft" size={14} />{t("Start of the segment here")}<kbd>I</kbd></button>
+    <button disabled={!audioBuf} onClick={() => { close(); markOut(); }}><Icon name="arrowRight" size={14} />{t("End of the segment here")}<kbd>O</kbd></button>
+    <div className="sep" />
+    <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}><Icon name="plus" size={14} />{t("Add a version of the audio")}</button>
+    <button onClick={() => { close(); setRenamingAudio(audioId); }}><Icon name="pencil" size={14} />{t("Rename this version")}</button>
+    <button onClick={() => { close(); document.getElementById("audio-replace")?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
+  </>);
+  /** The lyrics' line: shown or not, every line locked or not, the lyrics edited, placed again. */
+  const lyricsHdMenu = (close: () => void) => {
+    const ws = project.lyricWords ?? [], n = ws.filter((x) => x.lock).length, all = ws.length > 0 && n === ws.length;
+    return (<>
+      <div className="label cap">{t("Lyrics")}</div>
+      <button onClick={() => { close(); setV({ captions: !settings.captions }); redraw(); }}><Icon name={settings.captions ? "eye-off" : "eye"} size={14} />{settings.captions ? t("Hide the lyrics") : t("Show the lyrics")}</button>
+      {ws.length > 0 && <button onClick={() => { close(); toggleAllLocks(!all); }}><Icon name={all ? "unlock" : "lock"} size={14} />{all ? t("Unlock every line") : t("Lock every line")}</button>}
+      <button onClick={() => { close(); onEditLyrics(); }}><Icon name="pencil" size={14} />{t("Edit the lyrics")}</button>
+      <div className="sep" />
+      <button disabled={!hasLyrics} onClick={() => { close(); if (hasManual(project.lyricWords) || lockedLines(project.lyricWords).size) setAskReplace(true); else void syncLyrics(); }}>
+        <Icon name="type" size={14} />{placed ? t("Re-place every line") : t("Sync the lyrics")}</button>
+      {placed && <button onClick={() => { close(); void refitWords(); }}><Icon name="sparkle" size={14} />{t("Fit the words in their lines")}</button>}
+      {timingCopy.current && <button onClick={() => { close(); pasteTiming(); }}><Icon name="copy" size={14} />{t("Paste the timing at the playhead")}<kbd>⌘V</kbd></button>}
+    </>);
+  };
+  /** The hooks' line: shown or not, locked or not, one more. */
+  const hookHdMenu = (close: () => void) => (<>
+    <div className="label cap">{t("Hook")}</div>
+    <button onClick={() => { close(); setV({ showHooks: settings.showHooks === false }); redraw(); }}><Icon name={settings.showHooks !== false ? "eye-off" : "eye"} size={14} />{settings.showHooks !== false ? t("Hide the hooks") : t("Show the hooks")}</button>
+    <button onClick={() => { close(); toggleTrackLock("hooks"); }}><Icon name={trackLocked("hooks") ? "unlock" : "lock"} size={14} />{trackLocked("hooks") ? t("Unlock the track") : t("Lock the track")}</button>
+    <button onClick={() => { close(); setTab("hook"); addHook(drawFor(hooks[hooks.length - 1], hooks.map((h) => h.text)) ?? ""); }}><Icon name="plus" size={14} />{t("Add a hook")}</button>
+  </>);
+  /** The latest timing copy / paste (a menu drawn before the line was picked would read the pick it had then). */
+  const timingFns = useRef({ copy: () => false as boolean, paste: () => {} });
+  /** A lyrics line's right click: it is picked (unless it is in the lines picked already), then what it can do. */
+  const cueCtx = (c: Cue, pk: string) => (e: React.MouseEvent) => {
+    if (pick !== pk && !multi.includes(pk)) { setPick(pk); setMulti([]); }
+    setTab("lyrics");
+    ctxOn((close) => {
+      const lk = lockedCue(c);
+      return (<>
+        <div className="label cap truncate">{c.text.replace(/\n/g, " ")}</div>
+        <button disabled={mode === "word"} onClick={() => { close(); toggleLock(c); }}><Icon name={lk ? "unlock" : "lock"} size={14} />{lk ? t("Unlock this line") : t("Lock this line")}</button>
+        <button onClick={() => { close(); stop(); setHead(round2(c.start)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
+        <div className="sep" />
+        <button onClick={() => { close(); timingFns.current.copy(); }}><Icon name="copy" size={14} />{multi.length ? t("Copy the timing of the lines") : t("Copy the timing")}<kbd>⌘C</kbd></button>
+        {timingCopy.current && <button onClick={() => { close(); timingFns.current.paste(); }}><Icon name="copy" size={14} />{t("Paste the timing at the playhead")}<kbd>⌘V</kbd></button>}
+        <div className="sep" />
+        <button onClick={() => { close(); onEditLyrics(); }}><Icon name="pencil" size={14} />{t("Edit the lyrics")}</button>
+      </>);
+    })(e);
+  };
+  /** A hook's right click: picked, then edited, the playhead on it, deleted. */
+  const hookCtx = (h: VideoHook) => (e: React.MouseEvent) => {
+    setPick("hook:" + h.id); setTab("hook");
+    ctxOn((close) => (<>
+      <div className="label cap truncate">{h.text.replace(/\n/g, " ") || t("Hook")}</div>
+      <button onClick={() => { close(); stop(); setHead(round2(settings.crop.start + h.from)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
+      <button onClick={() => { close(); toggleTrackLock("hooks"); }}><Icon name={trackLocked("hooks") ? "unlock" : "lock"} size={14} />{trackLocked("hooks") ? t("Unlock the track") : t("Lock the track")}</button>
+      <div className="sep" />
+      <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setHooks(hooks.filter((x) => x.id !== h.id)); if (pick === "hook:" + h.id) setPick(null); }}><Icon name="trash" size={14} />{t("Delete this hook")}</button>
+    </>))(e);
+  };
+  /** The timeline's right click where no clip is: the playback, the segment, the loop, a timing to paste. */
+  const timelineMenu = (close: () => void) => (<>
+    <div className="label cap">{t("Timeline")}</div>
+    <button disabled={!audioBuf} onClick={() => { close(); if (playing) pause(); else void play(); }}><Icon name={playing ? "pause" : "play"} size={14} />{playing ? t("Pause") : t("Play")}<kbd>{t("Space")}</kbd></button>
+    <button disabled={!audioBuf} onClick={() => { close(); markIn(); }}><Icon name="arrowLeft" size={14} />{t("Start of the segment here")}<kbd>I</kbd></button>
+    <button disabled={!audioBuf} onClick={() => { close(); markOut(); }}><Icon name="arrowRight" size={14} />{t("End of the segment here")}<kbd>O</kbd></button>
+    <button onClick={() => { close(); setLoopSeg(!loopSeg); }}><Icon name="loop" size={14} />{loopSeg ? t("Play past the segment") : t("Loop the segment")}</button>
+    {timingCopy.current && <><div className="sep" /><button onClick={() => { close(); timingFns.current.paste(); }}><Icon name="copy" size={14} />{t("Paste the timing at the playhead")}<kbd>⌘V</kbd></button></>}
+  </>);
+  /** The library's right click where nothing has its own menu: what can be brought in. */
+  const libraryMenu = (close: () => void) => (<>
+    <div className="label cap">{t("Library")}</div>
+    <button onClick={() => { close(); onEditLyrics(); }}><Icon name="type" size={14} />{project.lyrics.length ? t("Edit the lyrics") : t("Add the lyrics")}</button>
+    <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}><Icon name="music" size={14} />{audioBlob ? t("Add a version of the audio") : t("Import the audio")}</button>
+    <button onClick={() => { close(); if (settings.videoName) takeInput.current?.click(); else document.getElementById("video-file")?.click(); }}><Icon name="film" size={14} />{t("Import videos")}</button>
+  </>);
   const videoTrackEl = () => {
     // (its file still being read or fetched: its clip stays where it is, "Loading…" in place of its name)
     const waiting = !videoBlob && fileLooking && !!settings.source?.duration;
@@ -5546,7 +5698,7 @@ export default function VideoStudio({
       if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setOverLook(null); setPinCam("main"); setPick("video"); pickPieceAt("base", at); }
     };
     return (<>
-        <div className="tl-row"><div className={"tl-hd cam-" + bn} onPointerDown={(e) => e.stopPropagation()}>{hdName("film", trackName(settings, fileKey(clip), bn), fileKey(clip))}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
+        <div className="tl-row"><div className={"tl-hd cam-" + bn} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(videoHdMenu("base"))}>{hdName("film", trackName(settings, fileKey(clip), bn), fileKey(clip))}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
@@ -5957,7 +6109,7 @@ export default function VideoStudio({
       if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setPinCam(null); setOverLook(o.clip); setPick("video"); pickPieceAt(o.clip, at); }
     };
     return (<>
-        <div className="tl-row" key={o.clip}><div className={"tl-hd cam-" + no} onPointerDown={(e) => e.stopPropagation()}>{hdName("film", trackName(settings, takeKey(o.clip), no), takeKey(o.clip))}{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
+        <div className="tl-row" key={o.clip}><div className={"tl-hd cam-" + no} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(videoHdMenu(o.clip))}>{hdName("film", trackName(settings, takeKey(o.clip), no), takeKey(o.clip))}{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
             <Menu float trigger={(_, toggle) => (
@@ -6029,7 +6181,7 @@ export default function VideoStudio({
     const camNow = camAt(settings.cuts, head);
     const pos = (x: number) => place(clamp(x, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d)));
     if (part === "track") return (<>
-          <div className="tl-row"><div className="tl-hd cam-0" onPointerDown={(e) => e.stopPropagation()}>{hdName("film", t("Multicam"))}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track cam-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Shots")} {...scrub()}
+          <div className="tl-row"><div className="tl-hd cam-0" onPointerDown={(e) => e.stopPropagation()} onContextMenu={camsHdMenu}>{hdName("film", t("Multicam"))}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track cam-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Shots")} {...scrub()}
             // (the track holds the pointer while it is down: the pull up is followed here)
             onPointerMoveCapture={(e) => {
               if (moveVdrag(e)) { e.stopPropagation(); return; }
@@ -6663,6 +6815,7 @@ export default function VideoStudio({
     onToast?.(tpl.length === 1 ? t("Timing pasted on 1 line") : t("Timing pasted on {n} lines", { n: tpl.length }));
     return true;
   };
+  timingFns.current = { copy: copyTiming, paste: pasteTiming };
   keyRef.current = (e) => {
     if (!active) return; // hidden behind the carousel: its shortcuts are the carousel's
     const el = e.target as HTMLElement;
@@ -6788,9 +6941,10 @@ export default function VideoStudio({
 
   return (
     <div className="video-shell" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onDropFile(Array.from(e.dataTransfer.files)); }}>
+      {ctx && <ContextMenu x={ctx.x} y={ctx.y} onClose={() => setCtx(null)}>{ctx.render(() => setCtx(null))}</ContextMenu>}
         {/* Left: the library. The release's files (audio, lyrics, this video's camera take), then the text lists
             shared with the carousel (hooks, captions). */}
-        <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")}>
+        <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")} onContextMenu={ctxOn(libraryMenu)}>
           <h2 className="lib-title">{t("Library")}</h2>
           <div className="stack media-list">
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
@@ -7110,7 +7264,8 @@ export default function VideoStudio({
                           min={0} max={100} step={1} onChange={(n) => { const v = n > 0 ? n / 100 : undefined; if (ov) patchOverlay(ov.clip, { volume: v }); else setV({ clipVolume: v }); }} />
                         {ov && <Range label={t("Rounded corners")} value={Math.round(ov.radius ?? 0)} display={`${Math.round(ov.radius ?? 0)} %`} min={0} max={50} step={1} onChange={(n) => patchOverlay(ov.clip, { radius: n })} />}
                       </div>
-                      {ov && <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); stop(); patchOverlay(ov.clip, null); }}><Icon name="x" size={14} />{t("Take out of the project")}</button>}
+                      {/* Then everything the video itself can do, the same for each one (V1 as V2…): as its ⋯ in the library. */}
+                      {(() => { const take = ov ? clips.find((c) => c.id === ov.clip) : clip; return take ? <><div className="sep" />{takeMenuFor(take)(close)}</> : null; })()}
                     </>);
                   })()}
                 </ContextMenu>
@@ -7291,14 +7446,14 @@ export default function VideoStudio({
                 )}
                 {/* One frame for every line of the timeline (waveform, hook, lyrics, videos), each with its kind's icon on
                     the left, and one playhead across them all (desktop; the phone keeps one per line). */}
-                <div className="tl-stack" ref={stackRef}>
-                <div className="tl-row"><div className="tl-hd hd-audio" onPointerDown={(e) => e.stopPropagation()}>{hdName("music", t("Audio"))}{muteEl}</div><div className="wave-wrap">
+                <div className="tl-stack" ref={stackRef} onContextMenu={ctxOn(timelineMenu)}>
+                <div className="tl-row"><div className="tl-hd hd-audio" onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(audioHdMenu)}>{hdName("music", t("Audio"))}{muteEl}</div><div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
                     onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
                 </div></div>
                 {hooks.length > 0 && (<>
-                  <div className="tl-row"><div className="tl-hd hd-hook" onPointerDown={(e) => e.stopPropagation()}>{hdName("sparkle", t("Hook"))}{textEye(settings.showHooks !== false, () => setV({ showHooks: settings.showHooks === false }), "hooks")}{trackLockEl("hooks")}</div><div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
+                  <div className="tl-row"><div className="tl-hd hd-hook" onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(hookHdMenu)}>{hdName("sparkle", t("Hook"))}{textEye(settings.showHooks !== false, () => setV({ showHooks: settings.showHooks === false }), "hooks")}{trackLockEl("hooks")}</div><div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">
                     <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                     {hooks.map((h, i) => onTrack(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)) && (
@@ -7309,7 +7464,7 @@ export default function VideoStudio({
                           ...(hookAt(settings, head)?.id === h.id ? { ["--hx" as string]: hxIn(settings.crop.start + h.from, settings.crop.start + (h.to ?? segLen)) } : null),
                         }}
                         data-a={settings.crop.start + h.from} data-b={settings.crop.start + (h.to ?? segLen)}
-                        title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from}
+                        title={h.text || t("Hook {n}", { n: i + 1 })} data-at={settings.crop.start + h.from} onContextMenu={hookCtx(h)}
                         onClick={(e) => { if (e.detail === 0) { stop(); setTab("hook"); setHead(round2(settings.crop.start + h.from)); } }}>
                         <span className="cue-ico" aria-hidden><Icon name="sparkle" size={11} /></span>{h.text.replace(/\n/g, " ") || t("Hook {n}", { n: i + 1 })}
                         {!trackLocked("hooks") && grips(moveHook(h.id), moveHookEnd(h.id))}
@@ -7320,7 +7475,7 @@ export default function VideoStudio({
                     </div>
                   </div></div>
                 </>)}
-                <div className="tl-row"><div className="tl-hd hd-lyrics" onPointerDown={(e) => e.stopPropagation()}>{hdName("type", t("Lyrics"))}{textEye(!!settings.captions, () => setV({ captions: !settings.captions }), "lyrics")}
+                <div className="tl-row"><div className="tl-hd hd-lyrics" onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(lyricsHdMenu)}>{hdName("type", t("Lyrics"))}{textEye(!!settings.captions, () => setV({ captions: !settings.captions }), "lyrics")}
                   {(project.lyricWords?.length ?? 0) > 0 && mode !== "word" && (() => {
                     const ws = project.lyricWords!, n = ws.filter((x) => x.lock).length, all = n === ws.length;
                     return (
@@ -7350,7 +7505,7 @@ export default function VideoStudio({
                   <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
                   {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
                   {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
-                    <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) || multi.includes("text:" + (keyOf(c) ?? "o" + i)) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={lockedCue(c) ? undefined : "song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
+                    <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) || multi.includes("text:" + (keyOf(c) ?? "o" + i)) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={lockedCue(c) ? undefined : "song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} onContextMenu={cueCtx(c, "text:" + (keyOf(c) ?? "o" + i))} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
                       style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{cueIcon(c)}{c.text.replace(/\n/g, " ")}{pick === "text:" + (keyOf(c) ?? "o" + i) && wordMarks(c)}{mode !== "word" && !lockedCue(c) && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
                   ))}
                   {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
@@ -7364,7 +7519,7 @@ export default function VideoStudio({
                         ...(c === current ? { ["--hx" as string]: hxIn(c.start, c.end) } : null),
                       }}
                       data-a={c.start} data-b={c.end}
-                      data-at={Math.max(settings.crop.start, c.start)}
+                      data-at={Math.max(settings.crop.start, c.start)} onContextMenu={cueCtx(c, "text:" + (keyOf(c) ?? i))}
                       onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
                       {cueIcon(c)}{c.text.replace(/\n/g, " ")}
                       {pick === "text:" + (keyOf(c) ?? i) && wordMarks(c)}
@@ -8248,8 +8403,12 @@ function MediaTile({ icon, label, name, meta, menu, warn, loading, children }: {
   meta?: ReactNode; menu?: false | null | "" | ((close: () => void) => ReactNode); children?: ReactNode;
 }) {
   const { t } = useT();
+  // (a right click: its ⋯ menu, where it was clicked)
+  const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
   return (
-    <div className={"media m-" + icon + (name ? "" : " empty") + (warn ? " warn" : "") + (loading ? " shine-box" : "")} aria-busy={loading || undefined}>
+    <div className={"media m-" + icon + (name ? "" : " empty") + (warn ? " warn" : "") + (loading ? " shine-box" : "")} aria-busy={loading || undefined}
+      onContextMenu={menu ? (e) => { if (e.defaultPrevented || matchMedia("(hover: none)").matches) return; e.preventDefault(); e.stopPropagation(); setCtx({ x: e.clientX, y: e.clientY }); } : undefined}>
+      {ctx && menu && <ContextMenu x={ctx.x} y={ctx.y} onClose={() => setCtx(null)}>{menu(() => setCtx(null))}</ContextMenu>}
       <div className="media-head">
         <span className="media-ic"><Icon name={icon} size={16} /></span>
         <div className="media-txt">

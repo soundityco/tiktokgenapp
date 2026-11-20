@@ -132,6 +132,13 @@ export default function Studio({ userName, userImage }: { userName: string; user
   const [keysOpen, setKeysOpen] = useState(false);
   /** The app's quick right-click menu, where it was opened (see the app's root below). */
   const [appCtx, setAppCtx] = useState<{ x: number; y: number } | null>(null);
+  /** A right click in the library (a list, the lyrics, the column itself): its own menu, in both studios. */
+  const [libCtx, setLibCtx] = useState<{ x: number; y: number; render: (close: () => void) => React.ReactNode } | null>(null);
+  const libOn = (render: (close: () => void) => React.ReactNode) => (e: React.MouseEvent) => {
+    if (e.defaultPrevented || matchMedia("(hover: none)").matches || (e.target as HTMLElement).closest("input, textarea")) return;
+    e.preventDefault(); e.stopPropagation();
+    setLibCtx({ x: e.clientX, y: e.clientY, render });
+  };
   /** A working copy of a take on its way to the Drive (shown in the top bar, whatever is open). */
   const [copyJob, setCopyJob] = useState<CopyJob | null>(null);
   /** "Make every Drive copy again" asked (a new number each time): the video studio does it for the open release. */
@@ -1705,6 +1712,12 @@ export default function Studio({ userName, userImage }: { userName: string; user
       const count = pics ? p.pics.length : textItems(p).length;
       return (
         <div key={p.id} className={"item lib-item" + (pics ? " is-pics" : "")} role="button" tabIndex={0} onClick={() => setEditor({ k: kind, id: p.id })}
+          onContextMenu={libOn((close) => (<>
+            <div className="label cap truncate">{p.name}</div>
+            <button onClick={() => { close(); setEditor({ k: kind, id: p.id }); }}><Icon name="pencil" size={14} />{t("Open the list")}</button>
+            <div className="sep" />
+            <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); askDeletePool(kind, p.id); }}><Icon name="trash" size={14} />{t("Delete")}</button>
+          </>))}
           title={p.scope === "shared" ? t("all projects") : t("this project")}
           onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); setEditor({ k: kind, id: p.id }); } }}>
           {pics && <PicStack ids={p.pics.slice(0, 3).map((x) => x.id)} />}
@@ -1725,7 +1738,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
   // The library (left column / phone tab of both studios). The release's lyrics, shown as a file of the release
   // like the official audio; the text lists (hooks, texts, captions), the same in both studios.
   const lyricsRow = (
-    <button type="button" className={"media m-lyrics lib-lyrics" + (project.lyrics.length ? "" : " empty warn")} onClick={() => setOverlay({ k: "lyrics" })}>
+    <button type="button" className={"media m-lyrics lib-lyrics" + (project.lyrics.length ? "" : " empty warn")} onClick={() => setOverlay({ k: "lyrics" })}
+      onContextMenu={libOn((close) => <button onClick={() => { close(); setOverlay({ k: "lyrics" }); }}><Icon name="pencil" size={14} />{project.lyrics.length ? t("Edit the lyrics") : t("Add the lyrics")}</button>)}>
       <div className="media-head">
         <span className="media-ic"><Icon name="type" size={16} /></span>
         <div className="media-txt">
@@ -1918,9 +1932,12 @@ export default function Studio({ userName, userImage }: { userName: string; user
       // A right click where nothing has its own menu (a slide, the video, a photo of a list…): the app's quick menu.
       const el = e.target as HTMLElement;
       if (e.defaultPrevented || el.closest("input, textarea, [contenteditable=true], .ov, .menu") || matchMedia("(hover: none)").matches) return;
+      // (the release's menu belongs to the board and the top bar: in a side column, only what is there has a menu)
+      if (el.closest("aside.col.side")) { e.preventDefault(); return; }
       e.preventDefault();
       setAppCtx({ x: e.clientX, y: e.clientY });
     }}>
+      {libCtx && <ContextMenu x={libCtx.x} y={libCtx.y} onClose={() => setLibCtx(null)}>{libCtx.render(() => setLibCtx(null))}</ContextMenu>}
       {appCtx && project && (
         <ContextMenu x={appCtx.x} y={appCtx.y} onClose={() => setAppCtx(null)} className="app-ctx">
           <div className="label cap truncate">{project.name}</div>
@@ -2049,7 +2066,15 @@ export default function Studio({ userName, userImage }: { userName: string; user
         )}
         {studio === "carousel" && (
         <>
-        <aside className="col side l">
+        <aside className="col side l" onContextMenu={libOn((close) => (<>
+          <div className="label cap">{t("Library")}</div>
+          <button onClick={() => { close(); setOverlay({ k: "lyrics" }); }}><Icon name="type" size={14} />{project.lyrics.length ? t("Edit the lyrics") : t("Add the lyrics")}</button>
+          <div className="sep" />
+          <button onClick={() => { close(); setOverlay({ k: "newPool", kind: "text", textKind: "hooks" }); }}><Icon name="plus" size={14} />{t("New list: {role}", { role: t("Hooks") })}</button>
+          <button onClick={() => { close(); setOverlay({ k: "newPool", kind: "text", textKind: "texts" }); }}><Icon name="plus" size={14} />{t("New list: {role}", { role: t("Other slides") })}</button>
+          <button onClick={() => { close(); setOverlay({ k: "newPool", kind: "text", textKind: "captions" }); }}><Icon name="plus" size={14} />{t("New list: {role}", { role: t("Captions") })}</button>
+          <button onClick={() => { close(); setOverlay({ k: "newPool", kind: "photos" }); }}><Icon name="plus" size={14} />{t("New photo list")}</button>
+        </>))}>
           <h2 className="lib-title">{t("Library")}</h2>
           <section className="group">
             <div className="group-head"><h3 className="label">{t("Release")}</h3></div>
