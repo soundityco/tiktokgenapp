@@ -2027,7 +2027,7 @@ export default function VideoStudio({
       if (ids.includes(clip.id)) {
         setAudioBlob(target.blob);
         setAudioBuf(target.buf);
-        setPeaks(peaksOf(target.buf.getChannelData(0)));
+        revealWave(); setPeaks(peaksOf(target.buf.getChannelData(0)));
         setHead(settingsRef.current.crop.start);
       }
       const only = maps.size === 1 ? [...maps.values()][0] : null;
@@ -2106,7 +2106,7 @@ export default function VideoStudio({
       const buf = await decodeAudio(getCtx(), f);
       if (token !== ioRef.current) return;
       setAudioBuf(buf);
-      setPeaks(peaksOf(buf.getChannelData(0)));
+      revealWave(); setPeaks(peaksOf(buf.getChannelData(0)));
       const cur = settingsRef.current;
       const d = Math.min(cur.crop.duration, buf.duration);
       const start = Math.max(0, Math.min(cur.crop.start, buf.duration - d));
@@ -2203,7 +2203,7 @@ export default function VideoStudio({
       }) }));
       setAudioBlob(f);
       setAudioBuf(buf);
-      setPeaks(peaksOf(buf.getChannelData(0)));
+      revealWave(); setPeaks(peaksOf(buf.getChannelData(0)));
       uploadAudio(f, id, f.name);
       if (oldDrive && !audioUsedElsewhere?.(oldDrive)) void trashDriveFile(oldDrive);
       if (sameSong && m) setRemapReport({ shift: uniformShift(m), coverage: coverage(m), videos, words, notSame: false, to: f.name.replace(/\.[a-z0-9]{2,4}$/i, "") });
@@ -3722,6 +3722,15 @@ export default function VideoStudio({
   };
   /** Desktop: one playhead crosses the whole timeline (the phone keeps one per line, the waveform's in it). */
   const wideTimeline = () => typeof window !== "undefined" && window.matchMedia("(min-width: 641px)").matches;
+  /**
+   * A new audio (imported, replaced, another version): its waveform drawn from left to right in a moment, a bright edge
+   * leading it (as Ableton loading a file) — the change seen at once. (`revealAt`: when it started.)
+   */
+  const revealAt = useRef<number | null>(null);
+  // (-1: asked; its clock starts at its first drawing — the new audio's own work, reading it, placing the videos, would
+  // otherwise have used the moment up before anything was drawn)
+  const revealWave = () => { revealAt.current = -1; };
+  const REVEAL_MS = 700;
   const paintWave = (vw: { s: number; d: number } | null, at: number) => {
     const c = waveRef.current;
     if (!c || !peaks.length || !audioBuf || !waveBox.w) return;
@@ -3795,6 +3804,13 @@ export default function VideoStudio({
       ups.push(mid - Math.max(0.5, Math.min(1, b / peakMax) * half));
       downs.push(mid + Math.max(0.5, Math.min(1, -a / peakMax) * half));
     }
+    // (a new audio: the shape shown up to its edge, which runs left to right; drawn again each frame until done)
+    // (a window over the studio — the new audio's report —: it waits, the waveform empty, and plays once it is closed)
+    const waiting = revealAt.current === -1 && !!document.querySelector(".ov");
+    if (revealAt.current === -1 && !waiting) revealAt.current = performance.now();
+    const rv = revealAt.current === null ? 1 : waiting ? 0 : Math.min(1, (performance.now() - revealAt.current) / REVEAL_MS);
+    const revealX = (1 - Math.pow(1 - rv, 3)) * W;
+    if (rv < 1) { g.save(); g.beginPath(); g.rect(0, 0, revealX, H); g.clip(); }
     if (xs.length) {
       g.beginPath();
       g.moveTo(xs[0], ups[0]);
@@ -3813,6 +3829,16 @@ export default function VideoStudio({
         g.fill();
       }
     }
+    if (rv < 1) {
+      g.restore();
+      // the leading edge: a glow of the accent fading behind it
+      const edge = g.createLinearGradient(revealX - 48, 0, revealX, 0);
+      edge.addColorStop(0, "rgba(255,255,255,0)");
+      edge.addColorStop(1, head0);
+      g.globalAlpha = 0.5; g.fillStyle = edge; g.fillRect(Math.max(0, revealX - 48), top, Math.min(48, revealX), room); g.globalAlpha = 1;
+      g.fillStyle = head0; g.fillRect(revealX - 1, top, 2, room);
+      requestAnimationFrame(() => paintWaveRef.current(viewRef.current, headRef.current));
+    } else revealAt.current = null;
     // Linked: what lies outside the synced video is out of reach for the segment.
     const range = settings.linked ? linkRangeOf(settings) : null;
     if (range) {
