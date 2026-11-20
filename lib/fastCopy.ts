@@ -42,7 +42,7 @@ async function firstSupported<C extends VideoEncoderConfig | VideoDecoderConfig>
 
 export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to: number,
   onProgress: (p: number) => void, signal: AbortSignal,
-  /** A wait while the copy must leave the video chip alone (the user plays the video): no new picture decoded meanwhile. */
+  /** A short breath before each picture decoded while the user plays the video (none: full speed). */
   hold?: () => Promise<void> | undefined): Promise<{ blob: Blob; report: FastCopyReport } | null> {
   if (typeof VideoDecoder === "undefined" || typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") return null;
 
@@ -88,8 +88,6 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
   const t0 = performance.now();
   const RATE = 48000;
   let pcm: Float32Array<ArrayBuffer> | null = null;
-  // (the sound is read by ffmpeg, heavy for a moment: never while the video plays)
-  for (let w = hold?.(); w; w = hold?.()) await w;
   try {
     const raw = await ffmpegAlone(file, ["-t", to.toFixed(3), "-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "2", "-ar", String(RATE), "-f", "f32le", "sound.raw"],
       "sound.raw", Math.max(0.1, to), (p) => onProgress(p * 0.08), signal);
@@ -208,9 +206,10 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
         made++;
         onProgress(0.1 + 0.88 * Math.min(1, made / expected));
       }
-      if (fed < work.length && dec.decodeQueueSize < 6 && pending.length < 8) {
-        const wait = hold?.();
-        if (wait) { await wait; continue; }
+      // (the video playing: fewer pictures in flight and a breath before each one — the copy goes on, the player first)
+      const gentle = hold?.();
+      if (fed < work.length && dec.decodeQueueSize < (gentle ? 2 : 6) && pending.length < (gentle ? 3 : 8)) {
+        if (gentle) await gentle;
         if (readyAt >= ready_.length) { ready_ = await next!; readyAt = 0; next = fed + ready_.length < work.length ? read(fed + ready_.length, BATCH) : null; }
         const s = work[fed++];
         dec.decode(new EncodedVideoChunk({

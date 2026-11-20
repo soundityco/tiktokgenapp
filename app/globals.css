@@ -3095,3 +3095,9 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 .pick-tagchip.release .pick-chip { color: var(--lyrics); border-color: color-mix(in srgb, var(--lyrics) 40%, var(--line-2)); }
 .pick-tagchip.release .pick-chip.on { background: color-mix(in srgb, var(--lyrics) 18%, transparent); }
 .tags-releases { margin-top: var(--s3); color: var(--lyrics); }
+
+/* A hook's pin (kept for the release open): grey, gold when kept for it, dimmed gold when kept for another one. */
+.theme-item .pin-release { color: var(--faint); flex: none; }
+.theme-item .pin-release:hover { color: var(--text); }
+.theme-item .pin-release.on { color: var(--lyrics); }
+.theme-item .pin-release.other { color: color-mix(in srgb, var(--lyrics) 45%, var(--faint)); }

@@ -204,6 +204,17 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
                   </div>)}
                 </Menu>
               </span>
+              {/* One click: kept for the release open (its pin lit), or for every release again. */}
+              {open && (() => {
+                const mine = tagsNow[i].includes(RELEASE_TAG + open), other = !mine && tagsNow[i].some(isReleaseTag);
+                const name = releases.find((r) => r.id === open)?.name ?? "";
+                return (
+                  <button className={"btn icon sm quiet pin-release" + (mine ? " on" : other ? " other" : "")} aria-pressed={mine}
+                    title={mine ? t("Kept for “{name}” only: click to offer it in every release", { name }) : t("Keep it for “{name}” only (the other releases never draw it)", { name })}
+                    aria-label={mine ? t("Kept for “{name}” only: click to offer it in every release", { name }) : t("Keep it for “{name}” only (the other releases never draw it)", { name })}
+                    onClick={() => setOnly(items[i], mine ? null : open)}><Icon name="pin" size={13} /></button>
+                );
+              })()}
               {pool.tags?.[hookKey(items[i])] !== undefined && (
                 <button className="btn sm quiet" title={t("Back to the tag found automatically")}
                   onClick={() => onChange((x) => { const tg = { ...(x.tags ?? {}) }; delete tg[hookKey(items[i])]; return { ...x, tags: tg }; })}>{t("Auto")}</button>
@@ -259,6 +270,11 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
           onBlur={() => { if (pool.kind === "hooks") tidy(); }}
           placeholder={isLineList(pool) ? t("One text per line. Use | to force a line break on the slide.")
             : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
+      )}
+      {/* (where a hook is kept for one release: the pin of each hook, in the tags' view) */}
+      {pool.kind === "hooks" && view === "text" && n > 1 && (
+        <p className="muted xs row" style={{ gap: 6 }}><Icon name="pin" size={12} />{t("To keep a hook for one release only: “By tag”, then its pin.")}
+          <button className="link" onClick={() => setView("themes")}>{t("By tag")}</button></p>
       )}
       {perf.length > 0 && (
         <details className="sec">
