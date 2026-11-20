@@ -3099,7 +3099,8 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 /* A hook's pin (kept for the release open): grey, gold when kept for it, dimmed gold when kept for another one. */
 .theme-item .pin-release { color: var(--faint); flex: none; }
 .theme-item .pin-release:hover { color: var(--text); }
-.theme-item .pin-release.on { color: var(--lyrics); }
+.theme-item .pin-release.on, .theme-item .pin-release.on:hover:not(:disabled) { color: var(--lyrics); background: color-mix(in srgb, var(--lyrics) 16%, transparent);
+  border-color: color-mix(in srgb, var(--lyrics) 55%, transparent); box-shadow: none; font-weight: inherit; } /* (lit for this release: gold, never the buttons' white « on » frame) */
 .theme-item .pin-release.other { color: color-mix(in srgb, var(--lyrics) 45%, var(--faint)); }
 
 /* A hook's row: its text cut by "…", its tags on one line that scrolls sideways (about two in view, a fade where more
