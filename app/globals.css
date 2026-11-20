@@ -2999,13 +2999,13 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .dp-volume .dp-vol:hover, .dp-volume.open .dp-vol { color: var(--text); }
 .dp-vol-track { display: flex; align-items: center; width: 0; overflow: hidden; opacity: 0;
   transition: width .32s cubic-bezier(.2,.9,.25,1), opacity .22s ease; }
-.dp-volume.open .dp-vol-track { width: 112px; opacity: 1; }
-.dp-vol-track input { width: 104px; margin: 0 4px; height: 18px; background: none; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.dp-volume.open .dp-vol-track { width: 88px; opacity: 1; }
+.dp-vol-track input { width: 80px; margin: 0 4px; height: 18px; background: none; -webkit-appearance: none; appearance: none; cursor: pointer; }
 .dp-vol-track input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px;
   background: linear-gradient(to right, var(--text) var(--v), var(--line-2) var(--v)); }
 .dp-vol-track input::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line-2); }
 .dp-vol-track input::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--text); }
 .dp-vol-track input::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: var(--text); border: 0; }
 .dp-vol-track input::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 0; }
-@media (max-width: 640px) { .dp-volume.open .dp-vol-track { width: 84px; } .dp-vol-track input { width: 76px; }
+@media (max-width: 640px) { .dp-volume.open .dp-vol-track { width: 72px; } .dp-vol-track input { width: 64px; }
   .dp:has(.dp-volume.open) .dp-time { display: none; } /* (the volume open on a phone: the time makes room for the strip) */ }
