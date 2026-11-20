@@ -9,7 +9,8 @@ import { clamp, clampPic, renderSlide, snapPic, TextBox, zoomPic } from "@/lib/r
 import { useDriveImage } from "@/lib/useImage";
 import { looksLikeImage } from "@/lib/imageFormat";
 import { type AIProgress, type AIStep, coversFrame, fillFrame, sharpEnough, sharper } from "@/lib/photoAI";
-import { poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
+import { itemTags as tagsPerText, keptElsewhere, sourceTags, tagGroups, textItems } from "@/lib/generate";
+import { currentRelease } from "@/lib/themes";
 import type { GenSlide, LyricSection, PhotoAdjust, PicPool, SlideCfg, TextPool } from "@/lib/types";
 import { isLineList } from "@/lib/defaults";
 import ImageFinder from "./ImageFinder";
@@ -390,13 +391,14 @@ export default function SlideCard(p: Props) {
   // A hooks list sorted by theme: the slide may draw from one theme only.
   const allItems = listPool ? textItems(listPool) : [];
   // Its tags (several per text): the slide draws from the ticked ones only.
-  const itemTags = listPool && isLineList(listPool) ? poolTags(listPool) : [];
+  const itemTags = listPool && isLineList(listPool) ? tagsPerText(listPool) : [];
   const groups = tagGroups(itemTags);
   const ticked = (cfg.textSource.kind === "pool" ? sourceTags(cfg.textSource.tags, cfg.textSource.theme) : undefined)?.filter((x) => groups.some((g) => g.id === x));
   // Its excluded tags (their −): never their texts.
   const notTicked = (cfg.textSource.kind === "pool" ? cfg.textSource.notTags : undefined)?.filter((x) => groups.some((g) => g.id === x)) ?? [];
   const excluded = (i: number) => !!notTicked.length && !!itemTags[i]?.some((x) => notTicked.includes(x));
-  const listItems = allItems.filter((_, i) => !excluded(i) && (!ticked?.length || itemTags[i].some((x) => ticked.includes(x))));
+  // (a text kept for another release: not offered here, unless its release's tag is ticked)
+  const listItems = allItems.filter((_, i) => !excluded(i) && !keptElsewhere(itemTags[i] ?? [], currentRelease(), ticked) && (!ticked?.length || itemTags[i].some((x) => ticked.includes(x))));
   const setTags = (next: { tags: string[]; not: string[] }) => p.onCfg((c) => (c.textSource.kind === "pool"
     ? { ...c, textSource: { ...c.textSource, theme: undefined, tags: next.tags.length ? next.tags : undefined, notTags: next.not.length ? next.not : undefined } } : c));
   const textVal = cfg.textSource.kind === "pool" ? cfg.textSource.poolId : cfg.textSource.kind === "lyrics" ? "__lyrics" : "";

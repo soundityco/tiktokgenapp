@@ -433,12 +433,14 @@ export function ContextMenu({ x, y, onClose, className, children }: { x: number;
  * A tag to draw from, Splice-like: a click ticks it (only the texts with a ticked tag), its − (on hover, always there
  * on a touch screen) excludes it (never its texts), struck through; a click on an excluded tag frees it.
  */
-export function TagChip({ label, count, state, onTick, onNot }: {
+export function TagChip({ label, count, state, onTick, onNot, release }: {
   label: string; count?: number; state?: "on" | "not"; onTick: () => void; onNot: () => void;
+  /** A release's own tag (its hooks kept for it): in its colour. */
+  release?: boolean;
 }) {
   const { t } = useT();
   return (
-    <span className={"pick-tagchip" + (state ? " " + state : "")}>
+    <span className={"pick-tagchip" + (state ? " " + state : "") + (release ? " release" : "")}>
       <button className={"pick-chip" + (state === "on" ? " on" : "")} aria-pressed={state === "on"} onClick={state === "not" ? onNot : onTick}
         title={state === "not" ? t("Excluded: click to draw it again") : undefined}>
         {label}{count !== undefined && state !== "not" ? ` · ${count}` : ""}

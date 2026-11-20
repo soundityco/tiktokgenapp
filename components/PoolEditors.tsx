@@ -1,8 +1,8 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
-import { useEffect, useRef, useState } from "react";
-import { byTagName, compareTexts, hookKey, joinCaptions, poolTags, sortLines, splitCaptions, tagGroups, textItems } from "@/lib/generate";
-import { THEMES, themeLabel } from "@/lib/themes";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { byTagName, compareTexts, hookKey, itemTags, joinCaptions, poolTags, sortLines, splitCaptions, tagGroups, textItems } from "@/lib/generate";
+import { currentRelease, isReleaseTag, RELEASE_TAG, releasesKnown, THEMES, themeLabel } from "@/lib/themes";
 import { modelWork, sortWithModel } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
 import { looksLikeImage } from "@/lib/imageFormat";
@@ -90,11 +90,21 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
   const { t } = useT();
   const items = textItems(pool);
   // Tags: several per text. Without its own, a text has its theme as its only tag.
-  const tagsNow = poolTags(pool);
+  // (with each text's release tag, when it is kept for one release: `pool.only`)
+  const tagsNow = itemTags(pool);
   // By name (Other last), each one's texts in alphabetical order.
   const tagGroupsNow = byTagName(tagGroups(tagsNow), (g) => g.id, (id) => themeLabel(id, t)).map((g) => ({ ...g, items: [...g.items].sort((a, b) => compareTexts(items[a], items[b])) }));
-  const knownTags = byTagName([...new Set([...tagsNow.flat().filter(Boolean), ...THEMES.map((x) => x.id)])], (x) => x, (id) => themeLabel(id, t));
-  const setTags = (text: string, list: string[]) => onChange((x) => ({ ...x, tags: { ...(x.tags ?? {}), [hookKey(text)]: [...new Set(list)] } }));
+  const knownTags = byTagName([...new Set([...tagsNow.flat().filter((x) => x && !isReleaseTag(x)), ...THEMES.map((x) => x.id)])], (x) => x, (id) => themeLabel(id, t));
+  // (a release's tag is never one of the text's own tags: it is `pool.only`)
+  const setTags = (text: string, list: string[]) => onChange((x) => ({ ...x, tags: { ...(x.tags ?? {}), [hookKey(text)]: [...new Set(list.filter((y) => !isReleaseTag(y)))] } }));
+  /** A text kept for one release only (none: for every release again). */
+  const setOnly = (text: string, release: string | null) => onChange((x) => {
+    const only = { ...(x.only ?? {}) };
+    if (release) only[hookKey(text)] = release; else delete only[hookKey(text)];
+    return { ...x, only: Object.keys(only).length ? only : undefined };
+  });
+  const open = currentRelease();
+  const releases = [...releasesKnown()].sort((a, b) => (a.id === open ? -1 : b.id === open ? 1 : compareTexts(a.name, b.name)));
   const [renamingTag, setRenamingTag] = useState<string | null>(null);
   /** A tag renamed on every text that has it (the texts that only had it as their theme get it as their own tag). */
   const renameTag = (from: string, to: string) => {
@@ -139,8 +149,10 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
           <Icon name="sparkle" size={13} />{sorted ? t("Sort again") : t("Sort with the local model")}</button>}
       </div>
       {aiErr && <p className="notice bad xs">{t("The local model could not run: {why}", { why: aiErr })}</p>}
-      {tagGroupsNow.map((g) => (
-        <section key={g.id || "other"} className="theme-group">
+      {tagGroupsNow.map((g, k) => (<Fragment key={g.id || "other"}>
+        {/* (the releases' own tags: their own group, after the others) */}
+        {isReleaseTag(g.id) && !isReleaseTag(tagGroupsNow[k - 1]?.id ?? "") && <div className="label cap tags-releases">{t("Releases")}</div>}
+        <section className="theme-group">
           <h4 className="label row tag-head">
             {renamingTag === g.id ? (
               <input className="input sm" autoFocus defaultValue={g.id ? themeLabel(g.id, t) : ""} aria-label={t("Rename the tag")}
@@ -148,7 +160,7 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
                 onBlur={(e) => renameTag(g.id, e.target.value)} />
             ) : (<>
               <span>{themeLabel(g.id, t)}</span> <span className="muted">· {g.items.length}</span>
-              {g.id && <button className="btn icon sm quiet" aria-label={t("Rename the tag")} title={t("Rename the tag")} onClick={() => setRenamingTag(g.id)}><Icon name="pencil" size={11} /></button>}
+              {g.id && !isReleaseTag(g.id) && <button className="btn icon sm quiet" aria-label={t("Rename the tag")} title={t("Rename the tag")} onClick={() => setRenamingTag(g.id)}><Icon name="pencil" size={11} /></button>}
             </>)}
           </h4>
           {g.items.map((i) => (
@@ -156,7 +168,8 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
               <span className="grow truncate" title={items[i]}>{items[i].replace(/\|/g, " ")}</span>
               <span className="tag-chips">
                 {tagsNow[i].filter(Boolean).map((tag) => (
-                  <button key={tag} className="tag-chip" title={t("Remove this tag")} onClick={() => setTags(items[i], tagsNow[i].filter((x) => x !== tag))}>
+                  <button key={tag} className={"tag-chip" + (isReleaseTag(tag) ? " release" : "")} title={isReleaseTag(tag) ? t("Kept for this release only: click to offer it in every release") : t("Remove this tag")}
+                    onClick={() => (isReleaseTag(tag) ? setOnly(items[i], null) : setTags(items[i], tagsNow[i].filter((x) => x !== tag)))}>
                     {themeLabel(tag, t)}<Icon name="x" size={10} />
                   </button>
                 ))}
@@ -172,6 +185,19 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
                         </button>
                       );
                     })}
+                    {/* The releases' own tags: a text kept for one release only (in the list for all, drawn in that one). */}
+                    {releases.length > 0 && <>
+                      <div className="sep" />
+                      <div className="label cap">{t("Only for a release")}</div>
+                      {releases.map((r) => {
+                        const on = tagsNow[i].includes(RELEASE_TAG + r.id);
+                        return (
+                          <button key={r.id} className={"release" + (on ? " on" : "")} onClick={() => setOnly(items[i], on ? null : r.id)}>
+                            <Icon name={on ? "check" : "plus"} size={12} />{r.name}{r.id === open && <span className="muted xs"> · {t("this one")}</span>}
+                          </button>
+                        );
+                      })}
+                    </>}
                     <div className="sep" />
                     <input className="input sm" placeholder={t("New tag…")} aria-label={t("New tag…")}
                       onKeyDown={(e) => { const v = e.currentTarget.value.trim(); if (e.key === "Enter" && v) { setTags(items[i], [...tagsNow[i].filter(Boolean), v]); close(); } }} />
@@ -185,7 +211,7 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
             </div>
           ))}
         </section>
-      ))}
+      </Fragment>))}
     </div>
   );
 }

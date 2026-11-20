@@ -1,6 +1,6 @@
 import { isLineList } from "./defaults";
 import { slideLyrics } from "./lyricsSections";
-import { tagsOf, THEMES_VERSION } from "./themes";
+import { isReleaseTag, RELEASE_TAG, tagsOf, THEMES_VERSION } from "./themes";
 import { GenSlide, PicPool, Project, TextPool, Workspace } from "./types";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g, " ").trim();
@@ -111,8 +111,9 @@ export function drawHook(ws: Workspace, poolId: string, bags: Record<string, str
   if (!pool) return null;
   // Some tags of the list only (their own shuffle bag), as for a slide; none (or none matching): the whole list.
   const want = typeof tags === "string" ? [tags] : tags;
-  const inTags = want?.length ? taggedItems(pool, want, not) : [];
-  const items = inTags.length ? inTags : drawableItems(pool, not);
+  // (the release drawing: the texts kept for another one are left out)
+  const inTags = want?.length ? taggedItems(pool, want, not, ws.currentProjectId) : [];
+  const items = inTags.length ? inTags : drawableItems(pool, not, ws.currentProjectId);
   const bag = inTags.length ? bagOf(pool.id, want) : pool.id;
   if (!items.length) return null;
   const skip = new Set(exclude);
@@ -170,9 +171,9 @@ export function pickText(project: Project, ws: Workspace, slideIdx: number, bags
     const pool = ws.textPools.find((p) => p.id === src.poolId);
     if (!pool) return "";
     // Some tags of the list only (their own shuffle bag); none ticked, or none matching: the whole list.
-    const all = drawableItems(pool, src.notTags);
+    const all = drawableItems(pool, src.notTags, project.id);
     const want = sourceTags(src.tags, src.theme);
-    const inTags = want ? taggedItems(pool, want, src.notTags) : all;
+    const inTags = want ? taggedItems(pool, want, src.notTags, project.id) : all;
     const items = inTags.length ? inTags : all;
     const bag = want && inTags.length ? bagOf(pool.id, want) : pool.id;
     if (ws.favorTop && pool.kind === "hooks" && pool.views && Object.keys(pool.views).length && items.length) {
@@ -245,25 +246,43 @@ export const compareTexts = (a: string, b: string) => collator.compare(a.replace
 /** A list's texts (one per line) in alphabetical order, the blank lines dropped. */
 export const sortLines = (text: string) => text.split("\n").filter((l) => l.trim()).sort(compareTexts).join("\n");
 /** Tags (or tag groups) in alphabetical order of their names as shown, "Other" ("") last. */
+// (the releases' own tags in their own group, at the very end, after "Other")
+const tagRank = (id: string) => (id === "" ? 1 : isReleaseTag(id) ? 2 : 0);
 export const byTagName = <T,>(list: T[], id: (x: T) => string, label: (id: string) => string): T[] =>
-  [...list].sort((a, b) => (id(a) === "") !== (id(b) === "") ? (id(a) === "" ? 1 : -1) : compareTexts(label(id(a)), label(id(b))));
+  [...list].sort((a, b) => tagRank(id(a)) - tagRank(id(b)) || compareTexts(label(id(a)), label(id(b))));
 /** The tags of a list, the biggest first ("" last), with their texts' indexes (a text is under each of its tags). */
 export function tagGroups(tags: string[][]): { id: string; items: number[] }[] {
   const m = new Map<string, number[]>();
   tags.forEach((list, i) => list.forEach((id) => m.set(id, [...(m.get(id) ?? []), i])));
   return [...m.entries()].map(([id, items]) => ({ id, items })).sort((a, b) => (a.id === "") === (b.id === "") ? b.items.length - a.items.length : a.id === "" ? 1 : -1);
 }
-/** The texts of a list with at least one of `tags`, none of the excluded ones (`not`). */
-export function taggedItems(pool: TextPool, tags: string[], not?: string[]): string[] {
-  const items = textItems(pool), tg = poolTags(pool);
-  return items.filter((_, i) => tg[i].some((x) => tags.includes(x)) && !tg[i].some((x) => not?.includes(x)));
+/**
+ * A list's tags per text, with its release's tag ("release:<id>") when it is kept for one release (`TextPool.only`):
+ * the tags shown and ticked, the draws' filters.
+ */
+export function itemTags(pool: TextPool): string[][] {
+  const base = poolTags(pool);
+  if (!pool.only || !Object.keys(pool.only).length) return base;
+  return textItems(pool).map((x, i) => {
+    const r = pool.only?.[hookKey(x)];
+    return r ? [...base[i].filter(Boolean), RELEASE_TAG + r] : base[i];
+  });
 }
-/** The texts of a list that can be drawn: none with an excluded tag (the − of a tag: `notTags`). */
-export function drawableItems(pool: TextPool, not?: string[]): string[] {
+/** A text kept for another release than `release`, its tag not ticked here: never drawn nor offered in this one. */
+export const keptElsewhere = (tags: string[], release?: string, ticked?: string[]) =>
+  tags.some((x) => isReleaseTag(x) && x !== RELEASE_TAG + release && !ticked?.includes(x));
+/** The texts of a list with at least one of `tags`, none of the excluded ones (`not`), none kept for another release. */
+export function taggedItems(pool: TextPool, tags: string[], not?: string[], release?: string): string[] {
+  const items = textItems(pool), tg = itemTags(pool);
+  return items.filter((_, i) => tg[i].some((x) => tags.includes(x)) && !tg[i].some((x) => not?.includes(x)) && !keptElsewhere(tg[i], release, tags));
+}
+/** The texts of a list that can be drawn: none with an excluded tag (the − of a tag: `notTags`), none kept for another
+ *  release (`release`: the one drawing). */
+export function drawableItems(pool: TextPool, not?: string[], release?: string): string[] {
   const items = textItems(pool);
-  if (!not?.length || !isLineList(pool)) return items;
-  const tg = poolTags(pool);
-  return items.filter((_, i) => !tg[i].some((x) => not.includes(x)));
+  if (!isLineList(pool) || (!not?.length && !pool.only)) return items;
+  const tg = itemTags(pool);
+  return items.filter((_, i) => !tg[i].some((x) => not?.includes(x)) && !keptElsewhere(tg[i], release));
 }
 /**
  * A tag's next state, Splice-like: a click ticks it or not (only the texts with a ticked tag), its − excludes it or not

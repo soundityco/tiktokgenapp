@@ -3088,3 +3088,10 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 .track-lock.flash { animation: lock-flash .3s ease 3; }
 @keyframes lock-flash { 50% { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .track-lock.flash { animation: none; color: var(--warn); } }
+
+/* A release's own tag (hooks kept for one release): gold, the release's colour in the library (its lyrics). */
+.tag-chip.release { color: var(--lyrics); border-color: color-mix(in srgb, var(--lyrics) 45%, var(--line-2)); }
+.tag-menu button.release svg { color: var(--lyrics); }
+.pick-tagchip.release .pick-chip { color: var(--lyrics); border-color: color-mix(in srgb, var(--lyrics) 40%, var(--line-2)); }
+.pick-tagchip.release .pick-chip.on { background: color-mix(in srgb, var(--lyrics) 18%, transparent); }
+.tags-releases { margin-top: var(--s3); color: var(--lyrics); }

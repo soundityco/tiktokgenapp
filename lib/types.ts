@@ -124,6 +124,9 @@ export interface TextPool {
   aiVersion?: number;
   /** Tags of a text set by hand (hookKey -> tags). A text without its own tags has one: its theme (lib/generate poolTags). */
   tags?: Record<string, string[]>;
+  /** Texts kept for one release (hookKey -> release id): drawn and offered only there (or where their release tag,
+   *  "release:<id>", is ticked); they stay in the list for every release. */
+  only?: Record<string, string>;
   /** hook (normalised) -> views. Reserved for the TikTok import (phase 2). */
   views?: Record<string, number>;
 }

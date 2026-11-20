@@ -1,4 +1,5 @@
 "use client";
+import { setReleaseNames } from "@/lib/themes";
 import ColumnGrips from "./ColumnGrips";
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -872,6 +873,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
 
   // ---- derived ----
   const project: Project | null = ws ? ws.projects.find((p) => p.id === ws.currentProjectId) ?? ws.projects[0] : null;
+  // The releases' names for their own tags (hooks kept for one release), and the open one (its own hooks offered).
+  if (ws) setReleaseNames(ws.projects.map((p) => ({ id: p.id, name: p.name })), project?.id);
   // The deck bar's place: measured under the middle slide's picture (every picture has the same height, so it
   // does not move while swiping); again when the board changes size.
   useLayoutEffect(() => {

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { byTagName, compareTexts, tagStep } from "@/lib/generate";
+import { isReleaseTag } from "@/lib/themes";
 import { useT } from "@/lib/i18n";
 import { themeLabel } from "@/lib/themes";
 import Icon from "./Icon";
@@ -35,8 +36,9 @@ export function TagChips({ groups, ticked, not, count, onChange }: {
   return (
     <div className="pick-chips" role="group" aria-label={t("Tags")}>
       <button className={"pick-chip" + (!ticked.length && !not.length ? " on" : "")} onClick={() => onChange({ tags: [], not: [] })}>{t("All ({n})", { n: count })}</button>
+      {/* (the releases' own tags after the others, in their colour: the hooks kept for one release) */}
       {byTagName(groups, (g) => g.id, (id) => themeLabel(id, t)).map((g) => (
-        <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length}
+        <TagChip key={g.id || "other"} label={themeLabel(g.id, t)} count={g.items.length} release={isReleaseTag(g.id)}
           state={ticked.includes(g.id) ? "on" : not.includes(g.id) ? "not" : undefined}
           onTick={() => onChange(tagStep(ticked, not, g.id, "tick"))} onNot={() => onChange(tagStep(ticked, not, g.id, "not"))} />
       ))}

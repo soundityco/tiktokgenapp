@@ -187,9 +187,21 @@ export function tagsOf(texts: string[], keyOf: (t: string) => string, manual: Re
   return out;
 }
 
-/** A theme as shown: the lexicon's (translated), a word group ("« pluie »"), a name typed, or "Other". */
+/** A release's own tag (texts kept for that release): "release:<its id>". */
+export const RELEASE_TAG = "release:";
+export const isReleaseTag = (id: string) => id.startsWith(RELEASE_TAG);
+/** The releases' names, for their tags (kept up to date by the studio). */
+const releaseNames = new Map<string, string>();
+let openRelease: string | undefined;
+export const setReleaseNames = (list: { id: string; name: string }[], open?: string) => { releaseNames.clear(); for (const r of list) releaseNames.set(r.id, r.name); openRelease = open; };
+/** The release open in the studio (its texts kept for it are offered; the ones kept for another, not). */
+export const currentRelease = () => openRelease;
+export const releasesKnown = () => [...releaseNames.entries()].map(([id, name]) => ({ id, name }));
+
+/** A theme as shown: the lexicon's (translated), a word group ("« pluie »"), a release's, a name typed, or "Other". */
 export function themeLabel(id: string, t: (s: string, p?: Record<string, string | number>) => string): string {
   if (!id) return t("Other");
+  if (isReleaseTag(id)) return releaseNames.get(id.slice(RELEASE_TAG.length)) ?? t("Another release");
   if (id.startsWith(WORD_GROUP)) return t("About “{word}”", { word: id.slice(WORD_GROUP.length) });
   const def = THEMES.find((x) => x.id === id);
   return def ? t(def.label) : id;

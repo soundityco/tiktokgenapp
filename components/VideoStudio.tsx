@@ -17,7 +17,7 @@ import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, litWords, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { PROBE_VERSION, probeVideo } from "@/lib/probe";
-import { followLists, hookLink, poolTags, sourceTags, tagGroups, textItems } from "@/lib/generate";
+import { followLists, hookLink, itemTags, keptElsewhere, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
 import ColorGrade, { knownLuts, lastLut, rememberLut, sameLut } from "./ColorGrade";
 import { AUDIO_KBPS, exportMp4, exportSettings, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
@@ -6765,8 +6765,8 @@ export default function VideoStudio({
   // The lists are made again at each render: only their text decides when to look.
   // (their tags too: a hook added gets its tags a moment later, from the model; with the text alone, its tags stayed
   // the old ones and the new hook was missing from a tag's hooks until the page was loaded again)
-  const listsKey = hookPools.map((p) => `${p.id}\u0001${p.text}\u0001${JSON.stringify([p.tags, p.themes, p.aiTags, p.aiVersion, p.aiThemes])}`).join("\u0002");
-  const tagsByPool = useMemo(() => new Map(hookPools.map((p) => [p.id, p.kind === "hooks" ? poolTags(p) : []])), [listsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const listsKey = hookPools.map((p) => `${p.id}\u0001${p.text}\u0001${JSON.stringify([p.tags, p.themes, p.aiTags, p.aiVersion, p.aiThemes, p.only])}`).join("\u0002");
+  const tagsByPool = useMemo(() => new Map(hookPools.map((p) => [p.id, p.kind === "hooks" ? itemTags(p) : []])), [listsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Where a hook is drawn from: its own list and tags (each hook its own), else the video's (by default slide 1's list). */
   const srcOf = (h?: VideoHook) => {
     const poolId = h?.pool && hookPools.some((p) => p.id === h.pool) ? h.pool : hookPoolId;
@@ -6778,7 +6778,8 @@ export default function VideoStudio({
     const all = pool ? textItems(pool) : [];
     // Its excluded tags (their −): never their texts, neither offered nor drawn.
     const notTicked = (h?.pool && h.pool === poolId ? h.notTags ?? [] : []).filter((x) => groups.some((g) => g.id === x));
-    const items = all.filter((_, i) => !tagsOf[i]?.some((x) => notTicked.includes(x)) && (!ticked.length || tagsOf[i]?.some((x) => ticked.includes(x))));
+    // (a hook kept for another release: not offered here, unless its release's tag is ticked)
+    const items = all.filter((_, i) => !tagsOf[i]?.some((x) => notTicked.includes(x)) && !keptElsewhere(tagsOf[i] ?? [], project.id, ticked) && (!ticked.length || tagsOf[i]?.some((x) => ticked.includes(x))));
     return { poolId, pool, groups, ticked, notTicked, items, count: tagsOf.length };
   };
   /** A hook drawn from its list (and tags), different from the ones already on the video. */
