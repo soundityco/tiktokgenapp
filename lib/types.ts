@@ -633,6 +633,9 @@ export interface Workspace {
   luts?: LutRef[];
   /** How videos are exported (lib/exportVideo exportSettings): the recommended settings, or the user's own. */
   videoExport?: VideoExportPrefs;
+  /** The Drive working copies made by themselves (15 s after a video comes in or moves). false: only when asked
+   *  (« Make its Drive copy now »); the videos still open on this device from their files. */
+  autoDriveCopies?: boolean;
   zones: boolean;
   /** Video studio: a pause puts the playhead back where play started (as editing apps do). Default on; false: it
    *  stays where it stopped. */

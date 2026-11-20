@@ -6,7 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
 import { delMedia, getMedia } from "@/lib/idb";
 import { COPY_VERSION } from "@/lib/fastCopy";
-import { copyBusy, copySpan, makeDriveCopy } from "@/lib/driveCopy";
+import { copyBusy, copySpan, makeDriveCopy, shareCopy } from "@/lib/driveCopy";
 import { DRIVE_AUTH_EVENT, DRIVE_PATHS, canWriteDrive, deleteDriveFile, driveFolder, ensureDriveTree, findDriveTwins, findSamePicture, keepPicture, loadDriveImage, moveDriveFolder, movePictureTo, prefetchDriveImages, renameDriveFolder, sendPictureToDrive, tidyDriveRoot, trashDriveFile, trashDriveFolder, webPicId } from "@/lib/drive";
 import DropPhotoDialog, { type DropChoice } from "./DropPhotoDialog";
 import { loadSavedFonts, syncFontsWithDrive } from "@/lib/fonts";
@@ -318,14 +318,11 @@ export default function Studio({ userName, userImage }: { userName: string; user
           try {
             const cp = await makeDriveCopy({ c, blob, from, to, release: { id: rel.id, name: rel.name }, signal: ac.signal,
               onStep: (step, p) => { const n = Math.floor(p * 100) + (step === "send" ? 1000 : 0); if (n !== shown) { shown = n; setCopyJob({ step, p, ...base }); } } });
-            let old: string | undefined;
+            // (for the file: every video of the release reading it gets it; a copy another project still reads stays)
+            let gone: string[] = [];
             const now = wsRef.current;
-            if (now) apply({ ...now, projects: now.projects.map((p) => (p.id !== rel.id ? p : { ...p, videos: (p.videos ?? []).map((v) => {
-              if (v.id !== c.id) return v;
-              old = v.drive?.copy?.id;
-              return { ...v, drive: { ...(v.drive ?? {}), copy: cp } };
-            }) })) }, false);
-            if (old && old !== cp.id) void deleteDriveFile(old);
+            if (now) apply({ ...now, projects: now.projects.map((p) => { if (p.id !== rel.id) return p; const r = shareCopy(p.videos ?? [], c.id, cp); gone = r.gone; return { ...p, videos: r.videos }; }) }, false);
+            for (const g of gone) if (g !== cp.id) void deleteDriveFile(g);
             made++;
           } catch (e) {
             if (ac.signal.aborted) break;
@@ -1922,6 +1919,10 @@ export default function Studio({ userName, userImage }: { userName: string; user
             <button onClick={() => { close(); restoreInput.current?.click(); }}><Icon name="upload" size={14} />{t("Restore a backup")}</button>
             <button onClick={() => { close(); setVersionsOpen(true); }}><Icon name="history" size={14} />{t("Version history")}</button>
             <button onClick={() => { close(); setStorageOpen(true); }}><Icon name="storage" size={14} />{t("Storage")}</button>
+            {/* The Drive copies made by themselves, or only when asked (heavy camera files, a full disk…). */}
+            <button onClick={() => { close(); upd((w) => ({ ...w, autoDriveCopies: w.autoDriveCopies === false ? undefined : false })); }}
+              title={t("A Drive copy lets another device (a phone, another computer) open a video without its camera file. Off: made only when you ask (the ⋯ of a video).")}>
+              <Icon name={ws.autoDriveCopies === false ? "x" : "check"} size={14} />{ws.autoDriveCopies === false ? t("Automatic Drive copies: off") : t("Automatic Drive copies: on")}</button>
             <button disabled={!!copyJob && !remaking} title={t("Every video of every release whose file is on this computer: its Drive copy made again (the old one deleted), release after release.")}
               onClick={() => { close(); if (remaking) remakeAc.current?.abort(); else void remakeAccount(); }}><Icon name={remaking ? "x" : "refresh"} size={14} />{remaking ? t("Stop making the Drive copies") : t("Make every Drive copy again")}</button>
             <button onClick={() => { close(); setKeysOpen(true); }}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
@@ -2065,6 +2066,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
             gradePresets={ws.gradePresets}
             onGradePresets={(list) => upd((w) => ({ ...w, gradePresets: list }))}
             exportPrefs={ws.videoExport}
+            autoCopies={ws.autoDriveCopies !== false}
             onExportPrefs={(v) => upd((w) => ({ ...w, videoExport: v }))}
           />
           </div>

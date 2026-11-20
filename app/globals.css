@@ -3135,3 +3135,8 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 /* The list's search, at the end of its views' row. */
 .seg-tabs .list-search { margin-left: auto; width: 240px; max-width: 45%; }
 .theme-item .row-dup:hover { color: var(--text); }
+
+/* A multicam shot where its camera has no picture (its video shorter, or trimmed): red, hatched, as a missing file. */
+.cam-shot { overflow: hidden; }
+.cam-shot .shot-gap { position: absolute; top: 0; bottom: 0; pointer-events: auto; border-left: 1px solid var(--danger);
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 38%, transparent) 0 4px, color-mix(in srgb, var(--danger) 14%, transparent) 4px 8px); }

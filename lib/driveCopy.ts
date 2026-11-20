@@ -46,3 +46,26 @@ export async function makeDriveCopy(o: {
     DRIVE_PATHS.videos(release.name || "Release"));
   return { id, from, to, of: blob.size, size: copy.size, tenBit: plan.tenBit, q: COPY_VERSION };
 }
+
+/**
+ * A new Drive copy saved, for the file and not for one project: the video it was made for gets it, and so does every
+ * other video of the release reading the same file (a duplicated project, the same take elsewhere) that had the old
+ * copy (if the new one covers the passage the old one held) or none. `gone`: the copies no video uses any more, to
+ * delete from the Drive (a copy still read by another project is never deleted).
+ */
+export function shareCopy(videos: VideoSetup[], clipId: string, cp: DriveCopy): { videos: VideoSetup[]; gone: string[] } {
+  const me = videos.find((v) => v.id === clipId);
+  if (!me) return { videos, gone: [] };
+  const file = me.media ?? me.id, old = me.drive?.copy;
+  const covers = (o?: DriveCopy) => !o || (cp.from <= o.from + 0.05 && cp.to >= o.to - 0.05);
+  const next = videos.map((v) => {
+    if (v.id === clipId) return { ...v, drive: { ...(v.drive ?? {}), copy: cp } };
+    if ((v.media ?? v.id) !== file || (v.videoSize && cp.of && v.videoSize !== cp.of)) return v;
+    const own = v.drive?.copy;
+    if (!own || (old && own.id === old.id && covers(own))) return { ...v, drive: { ...(v.drive ?? {}), copy: cp } };
+    return v;
+  });
+  const used = new Set(next.map((v) => v.drive?.copy?.id).filter(Boolean));
+  const gone = [...new Set(videos.map((v) => v.drive?.copy?.id).filter((id): id is string => !!id && !used.has(id)))];
+  return { videos: next, gone };
+}
