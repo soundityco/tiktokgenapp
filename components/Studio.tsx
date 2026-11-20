@@ -1,4 +1,5 @@
 "use client";
+import ColumnGrips from "./ColumnGrips";
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { defaultVideo, defaultWorkspace, isLineList, isSlidePhotoList, newProject, normalizeWorkspace, uid } from "@/lib/defaults";
@@ -1990,6 +1991,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
         </div>
       )}
 
+      <ColumnGrips studio={studio} />
       <div className="main" data-mobile-tab={mobileTab} data-studio={studio}>
         {(studio === "video" || videoSeen || libHub) && (
           <div style={{ display: studio === "video" || libHub ? "contents" : "none" }}>
