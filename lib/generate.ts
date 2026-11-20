@@ -281,6 +281,34 @@ export function removeText(pool: TextPool, text: string): TextPool {
   }
   return out;
 }
+/**
+ * A text of a list doubled, to change one detail of it: « … (copy) » (« (copy 2) »…, never the same key twice) right
+ * under it, with its tags, theme and release (never its TikTok views: they are the original's). `copy`: the word.
+ */
+export function duplicateText(pool: TextPool, text: string, copy = "copy"): { pool: TextPool; added: string } {
+  const have = new Set(textItems(pool).map(hookKey));
+  let n = 1, next = `${text} (${copy})`;
+  while (have.has(hookKey(next))) next = `${text} (${copy} ${++n})`;
+  const lines = pool.text.split("\n"), at = lines.findIndex((l) => l.trim() === text.trim());
+  lines.splice(at < 0 ? lines.length : at + 1, 0, next);
+  const out: TextPool = { ...pool, text: pool.kind === "hooks" ? sortLines(lines.join("\n")) : lines.join("\n") };
+  const kf = hookKey(text), kt = hookKey(next);
+  for (const f of KEYED) {
+    if (f === "views") continue;
+    const m = pool[f] as Record<string, unknown> | undefined;
+    if (!m || !(kf in m)) continue;
+    (out as unknown as Record<string, unknown>)[f] = { ...m, [kt]: m[kf] };
+  }
+  return { pool: out, added: next };
+}
+/** A list's text found by a search: every word typed in it, or in one of its tags' names (accents and case ignored). */
+export function textMatches(text: string, tagNames: string[], query: string): boolean {
+  const flat = (x: string) => x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const words = flat(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = flat([text, ...tagNames].join(" "));
+  return words.every((w) => hay.includes(w));
+}
 /** Texts pasted (one per line), the ones not in the list yet added (a hooks list stays in alphabetical order). */
 export function addTexts(pool: TextPool, pasted: string): { pool: TextPool; added: string[] } {
   const have = new Set(textItems(pool).map(hookKey)), added: string[] = [];

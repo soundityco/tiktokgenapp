@@ -31,3 +31,20 @@ describe("editing a list's texts in place", () => {
     expect(textItems(rewriteText(base(), "B hook", "  "))).toEqual(["A hook"]);
   });
 });
+
+import { duplicateText, textMatches } from "@/lib/generate";
+describe("doubling a text and searching a list", () => {
+  it("doubles a text with its tags and release, never its views", () => {
+    const { pool, added } = duplicateText(base(), "A hook", "copie");
+    expect(added).toBe("A hook (copie)");
+    expect(pool.tags?.[k(added)]).toEqual(["pov"]);
+    expect(pool.only?.[k(added)]).toBe("r1");
+    expect(pool.views?.[k(added)]).toBeUndefined();
+    expect(duplicateText(pool, "A hook", "copie").added).toBe("A hook (copie 2)");
+  });
+  it("finds a text by its words or its tags, accents ignored", () => {
+    expect(textMatches("Désolé pour ton sommeil", ["Coming soon"], "desole")).toBe(true);
+    expect(textMatches("Désolé pour ton sommeil", ["Coming soon"], "coming sommeil")).toBe(true);
+    expect(textMatches("Désolé pour ton sommeil", ["Coming soon"], "minuit")).toBe(false);
+  });
+});

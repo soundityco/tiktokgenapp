@@ -1,7 +1,7 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { addTexts, byTagName, compareTexts, hookKey, itemTags, joinCaptions, poolTags, removeText, rewriteText, sortLines, splitCaptions, tagGroups, textItems } from "@/lib/generate";
+import { addTexts, byTagName, compareTexts, duplicateText, hookKey, itemTags, joinCaptions, poolTags, removeText, rewriteText, sortLines, splitCaptions, tagGroups, textItems, textMatches } from "@/lib/generate";
 import { currentRelease, isReleaseTag, RELEASE_TAG, releasesKnown, THEMES, themeLabel } from "@/lib/themes";
 import { modelWork, sortWithModel } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
@@ -116,9 +116,11 @@ function TagScroll({ children }: { children: React.ReactNode }) {
 
 /** A text of a list, edited where it is shown (a click: typed in place; Enter or leaving it: saved, its tags and release
  *  kept; Escape: as it was). */
-function EditableText({ text, onSave }: { text: string; onSave: (to: string) => void }) {
+function EditableText({ text, onSave, autoEdit }: { text: string; onSave: (to: string) => void; autoEdit?: boolean }) {
   const { t } = useT();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!autoEdit);
+  // (a text just doubled: opened to be changed at once)
+  useEffect(() => { if (autoEdit) setEditing(true); }, [autoEdit]);
   if (editing) return (
     <input className="input sm grow text-edit" autoFocus defaultValue={text} aria-label={t("Edit this text")}
       // (the caret at the end, nothing selected: typing never wipes the text by mistake)
@@ -133,11 +135,19 @@ function RemoveText({ onRemove }: { onRemove: () => void }) {
   const { t } = useT();
   return <button className="btn icon sm quiet row-del" aria-label={t("Delete this text")} title={t("Delete this text")} onClick={onRemove}><Icon name="trash" size={13} /></button>;
 }
+/** A text doubled (its tags and release with it), the copy opened to change one detail (seen on hover). */
+function DuplicateText({ onDuplicate }: { onDuplicate: () => void }) {
+  const { t } = useT();
+  return <button className="btn icon sm quiet row-del row-dup" aria-label={t("Duplicate this text")} title={t("Duplicate this text (to change one detail)")} onClick={onDuplicate}><Icon name="copy" size={13} /></button>;
+}
 
 /** A hooks list by release: the hooks for every release, then the ones kept for each release; each one moved by its menu. */
-function ReleasesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void }) {
+function ReleasesView({ pool, onChange, query }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; query: string }) {
   const { t } = useT();
-  const items = textItems(pool);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const tagsNow = itemTags(pool), all = textItems(pool);
+  // (the search: its words in the text or in one of its tags)
+  const items = all.filter((x, i) => textMatches(x, tagsNow[i].map((g) => themeLabel(g, t)), query));
   const open = currentRelease();
   const releases = [...releasesKnown()].sort((a, b) => (a.id === open ? -1 : b.id === open ? 1 : compareTexts(a.name, b.name)));
   const of = (x: string) => pool.only?.[hookKey(x)] ?? "";
@@ -147,21 +157,23 @@ function ReleasesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: T
     return { ...x, only: Object.keys(only).length ? only : undefined };
   });
   const groups = [{ id: "", name: t("Every release") }, ...releases].map((r) => ({ ...r, items: items.filter((x) => of(x) === r.id).sort(compareTexts) }))
-    .filter((g) => g.id === "" || g.items.length || g.id === open);
+    .filter((g) => g.items.length || (!query.trim() && (g.id === "" || g.id === open)));
   return (
     <div className="theme-groups">
       <p className="muted xs">{t("A hook kept for a release is drawn there only (another release can still tick its tag to draw it).")}</p>
+      {!groups.length && <p className="muted xs">{t("No text found.")}</p>}
       {groups.map((g) => (
         <section key={g.id || "all"} className="theme-group">
           <h4 className={"label row tag-head" + (g.id ? " is-release" : "")}>{g.id && <Icon name="disc" size={11} />}<span>{g.name}</span> <span className="muted">· {g.items.length}</span>{g.id === open && <span className="muted"> · {t("this one")}</span>}</h4>
           {!g.items.length && <p className="muted xs">{t("No hook kept for it yet: move one here with its menu.")}</p>}
           {g.items.map((x) => (
             <div key={x} className="row nowrap theme-item">
-              <EditableText text={x} onSave={(to) => onChange((p) => rewriteText(p, x, to))} />
+              <EditableText text={x} autoEdit={fresh === x} onSave={(to) => onChange((p) => rewriteText(p, x, to))} />
               <Select className="input sm rel-pick" value={of(x)} onChange={(e) => setOnly(x, e.target.value)} aria-label={t("For which release")}>
                 <option value="">{t("Every release")}</option>
                 {releases.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </Select>
+              <DuplicateText onDuplicate={() => { const r = duplicateText(pool, x, t("copy")); onChange(() => r.pool); setFresh(r.added); }} />
               <RemoveText onRemove={() => onChange((p) => removeText(p, x))} />
             </div>
           ))}
@@ -172,14 +184,18 @@ function ReleasesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: T
 }
 
 /** A hooks list by theme: each group (found locally, or set by hand) with its texts; a text's theme can be changed. */
-function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void }) {
+function ThemesView({ pool, onChange, query }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void; query: string }) {
   const { t } = useT();
   const items = textItems(pool);
   // Tags: several per text. Without its own, a text has its theme as its only tag.
   // (with each text's release tag, when it is kept for one release: `pool.only`)
   const tagsNow = itemTags(pool);
   // By name (Other last), each one's texts in alphabetical order.
-  const tagGroupsNow = byTagName(tagGroups(tagsNow), (g) => g.id, (id) => themeLabel(id, t)).map((g) => ({ ...g, items: [...g.items].sort((a, b) => compareTexts(items[a], items[b])) }));
+  // (the search: its words in the text or in one of its tags; the groups left empty go)
+  const found = (i: number) => textMatches(items[i], tagsNow[i].map((g) => themeLabel(g, t)), query);
+  const tagGroupsNow = byTagName(tagGroups(tagsNow), (g) => g.id, (id) => themeLabel(id, t))
+    .map((g) => ({ ...g, items: g.items.filter(found).sort((a, b) => compareTexts(items[a], items[b])) })).filter((g) => g.items.length);
+  const [fresh, setFresh] = useState<string | null>(null);
   const knownTags = byTagName([...new Set([...tagsNow.flat().filter((x) => x && !isReleaseTag(x)), ...THEMES.map((x) => x.id)])], (x) => x, (id) => themeLabel(id, t));
   // (a release's tag is never one of the text's own tags: it is `pool.only`)
   const setTags = (text: string, list: string[]) => onChange((x) => ({ ...x, tags: { ...(x.tags ?? {}), [hookKey(text)]: [...new Set(list.filter((y) => !isReleaseTag(y)))] } }));
@@ -236,6 +252,7 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
           <Icon name="sparkle" size={13} />{sorted ? t("Sort again") : t("Sort with the local model")}</button>}
       </div>
       {aiErr && <p className="notice bad xs">{t("The local model could not run: {why}", { why: aiErr })}</p>}
+      {!tagGroupsNow.length && <p className="muted xs">{t("No text found.")}</p>}
       {tagGroupsNow.map((g, k) => (<Fragment key={g.id || "other"}>
         {/* (the releases' own tags: their own group, after the others) */}
         {isReleaseTag(g.id) && !isReleaseTag(tagGroupsNow[k - 1]?.id ?? "") && <div className="label cap tags-releases">{t("Releases")}</div>}
@@ -252,7 +269,7 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
           </h4>
           {g.items.map((i) => (
             <div key={i} className="row nowrap theme-item">
-              <EditableText text={items[i]} onSave={(to) => onChange((p) => rewriteText(p, items[i], to))} />
+              <EditableText text={items[i]} autoEdit={fresh === items[i]} onSave={(to) => onChange((p) => rewriteText(p, items[i], to))} />
               <TagScroll>
                 {tagsNow[i].filter(Boolean).map((tag) => (
                   <button key={tag} className={"tag-chip" + (isReleaseTag(tag) ? " release" : "")} title={isReleaseTag(tag) ? t("Kept for this release only: click to offer it in every release") : t("Remove this tag")}
@@ -308,6 +325,7 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
                 <button className="btn sm quiet" title={t("Back to the tag found automatically")}
                   onClick={() => onChange((x) => { const tg = { ...(x.tags ?? {}) }; delete tg[hookKey(items[i])]; return { ...x, tags: tg }; })}>{t("Auto")}</button>
               )}
+              <DuplicateText onDuplicate={() => { const r = duplicateText(pool, items[i], t("copy")); onChange(() => r.pool); setFresh(r.added); }} />
               <RemoveText onRemove={() => onChange((p) => removeText(p, items[i]))} />
             </div>
           ))}
@@ -326,6 +344,7 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   // whole text as one field was the same list twice.
   const [view, setView] = useState<"themes" | "releases">("themes");
   const [paste, setPaste] = useState("");
+  const [query, setQuery] = useState("");
   const add = () => { const pasted = paste; p.onChange((x) => addTexts(x, pasted).pool); setPaste(""); };
   // A hooks list is kept in alphabetical order: when it opens, after an import, when its text field is left (never
   // while typing: the line would jump away). The order changes nothing to the draws (random).
@@ -361,13 +380,16 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
         <div className="row seg-tabs" role="tablist">
           <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By tag")}</button>
           {pool.kind === "hooks" && <button role="tab" aria-selected={view === "releases"} className={"btn sm" + (view === "releases" ? " on" : "")} onClick={() => setView("releases")}>{t("By release")}</button>}
+          {/* A text found at once (its words, or a tag's name), to change it, double it, move it. */}
+          <input className="input sm list-search" type="search" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("Search a text or a tag…")} aria-label={t("Search a text or a tag…")} />
 
         </div>
       )}
       {isLineList(pool) ? (
         n === 0 ? <p className="muted xs">{t("No text yet: paste them above.")}</p>
-          : pool.kind === "hooks" && view === "releases" ? <ReleasesView pool={pool} onChange={p.onChange} />
-          : <ThemesView pool={pool} onChange={p.onChange} />
+          : pool.kind === "hooks" && view === "releases" ? <ReleasesView pool={pool} onChange={p.onChange} query={query} />
+          : <ThemesView pool={pool} onChange={p.onChange} query={query} />
       ) : pool.kind === "captions" ? (
         <CaptionsEditor key={`${pool.id}:${imports}`} text={pool.text} onText={(text) => p.onChange((x) => ({ ...x, text }))} />
       ) : (
