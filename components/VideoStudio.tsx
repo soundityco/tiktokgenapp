@@ -2581,7 +2581,10 @@ export default function VideoStudio({
       headRef.current = heard;
       followHead(heard);
       paintTimeline(heard);
-      if (performance.now() - lastHeadState > 80) { lastHeadState = performance.now(); setHead(heard); }
+      // (the studio drawn again only when something it shows changes: a second more on the counter, or the playhead
+      // into or out of a clip, a line, a hook, a shot — the rest moves straight, every frame: paintTracks)
+      const sig = headSig(heard);
+      if (sig !== lastHeadState) { lastHeadState = sig; setHead(heard); }
       if (el) {
         // What is heard right now, in the camera file's time.
         const target = Math.max(0, heard - settingsRef.current.offset);
@@ -2608,7 +2611,7 @@ export default function VideoStudio({
       }
       rafRef.current = requestAnimationFrame(tick);
     };
-    let lastLog = 0, lastHeadState = 0;
+    let lastLog = 0, lastHeadState = -1;
     rafRef.current = requestAnimationFrame(tick);
   };
 
@@ -4962,9 +4965,33 @@ export default function VideoStudio({
       dock: all(".dp-track .dp-played", document), dockHeads: all(".dp-track .dp-head", document),
     };
   };
+  /**
+   * Where what the studio shows changes along the song (every clip's start and end on the timeline, the song's lines,
+   * the cuts, the segment): between two of them, only the time moves — drawn straight, no render (see `headSig`).
+   */
+  const playBounds = useRef<number[]>([]);
+  const findBounds = () => {
+    const root = waveRef.current?.closest(".timeline"), cfg = settingsRef.current, out: number[] = [cfg.crop.start, cfg.crop.start + cfg.crop.duration];
+    root?.querySelectorAll<HTMLElement>("[data-a], [data-b], [data-va], [data-vb]").forEach((el) => {
+      for (const k of ["a", "b", "va", "vb"]) { const v = Number(el.dataset[k]); if (el.dataset[k] !== undefined && Number.isFinite(v)) out.push(v); }
+    });
+    for (const c of songCues) out.push(c.start, c.end);
+    for (const c of cfg.cuts ?? []) out.push(c.at);
+    playBounds.current = [...new Set(out)].sort((a, b) => a - b);
+  };
+  /** What the studio shows at `t`: its second on the counter and the stretch between two bounds it is in. */
+  const headSig = (t: number) => {
+    const b = playBounds.current;
+    let lo = 0, hi = b.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (b[m] <= t) lo = m + 1; else hi = m; }
+    return Math.floor(t - settingsRef.current.crop.start) * 65536 + lo;
+  };
+  /** The tenths of the time shown in the timeline's bar: written straight, each frame. */
+  const trTimeRef = useRef<HTMLSpanElement>(null);
   const paintTimeline = (at: number) => { paintWaveRef.current(viewRef.current, at); paintTracks(at); };
   const paintTracks = (at: number) => {
     const els = timelineEls.current;
+    if (trTimeRef.current) { const s = fmtTime(at); if (trTimeRef.current.textContent !== s) trTimeRef.current.textContent = s; }
     if (!els) return;
     // The phone dock's player (the segment's progress), moved the same way.
     const crop = settingsRef.current.crop, f = `${clamp((at - crop.start) / Math.max(0.1, crop.duration), 0, 1) * 100}%`;
@@ -5009,7 +5036,7 @@ export default function VideoStudio({
   };
   // (the tracks laid out again: their slide put back to what is on screen, before it is seen)
   // After every layout (the elements may have changed, and their positions were set back by it): the tracks put back.
-  useLayoutEffect(() => { findTimelineEls(); paintTracks(headRef.current); });
+  useLayoutEffect(() => { findTimelineEls(); findBounds(); paintTracks(headRef.current); });
   /**
    * Where something sits on the tracks, moved by the graphics card (transform, to the sub-pixel) rather than laid out
    * again (left): while the view slides under the playhead, the clips and their text glide instead of shaking.
@@ -7667,7 +7694,7 @@ export default function VideoStudio({
                     onClick={() => (playing ? pause() : void play())}>
                     {videoUrl && !playerReady && !playing ? <span className="spin-dot" aria-hidden /> : <Icon name={playing ? "pause" : "play"} />}
                   </button>
-                  <span className="mono xs tr-time">{fmtTime(head)} <span className="muted">/ {fmtTime(end)}</span></span>
+                  <span className="mono xs tr-time"><span ref={trTimeRef}>{fmtTime(head)}</span> <span className="muted">/ {fmtTime(end)}</span></span>
                   <span className="sep tr-time" />
                   <span className="mono xs tr-range">{mmss(settings.crop.start)} → {mmss(end)}</span>
                   {/* Length of the segment: the usual ones, or the one set on the waveform. */}
