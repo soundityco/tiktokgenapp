@@ -70,6 +70,30 @@ type Angle = AngleLook & { id: string; media: string; blob: Blob; el: HTMLVideoE
   /** Its file here is its Drive working copy (the camera file is on another device). */
   fromCopy: boolean };
 
+/**
+ * A video's Drive copy kept on this device: under the copy's own id, so that it follows its file when two videos swap
+ * places (kept under the video's id before: after a swap, each found the other's copy, fetched its own from the Drive
+ * again and wrote it over the other's). An older one under the video's id is taken (and moved) only if it is that very
+ * copy (same size).
+ */
+async function keptCopy(owner: string, cp: { id: string; size?: number }): Promise<Blob | undefined> {
+  const k = await getMedia(`copy:${cp.id}`).catch(() => undefined);
+  if (k && (!cp.size || k.size === cp.size)) return k;
+  const old = await getMedia(`copy:${owner}`).catch(() => undefined);
+  if (old && cp.size && old.size === cp.size) {
+    await putMedia(`copy:${cp.id}`, old).catch(() => {});
+    void delMedia(`copy:${owner}`).catch(() => {});
+    return old;
+  }
+  return undefined;
+}
+const keepCopy = (cp: { id: string }, blob: Blob) => putMedia(`copy:${cp.id}`, blob).catch(() => {});
+/** A video's kept copy dropped from this device (under its copy's id, and an older one under the video's). */
+function dropKeptCopy(owner: string, cpId?: string | null) {
+  void delMedia(`copy:${owner}`).catch(() => {});
+  if (cpId) void delMedia(`copy:${cpId}`).catch(() => {});
+}
+
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 /** A working copy on its way (shown in the top bar wherever the user is: see Studio). */
 export interface CopyJob { step: "make" | "send"; p: number; clip: string; project: string; label: string; /** In a batch ("Make every Drive copy again"): which one, of how many; the release, and which of how many. */ k?: number; n?: number; release?: string; rk?: number; rn?: number }
@@ -911,9 +935,10 @@ export default function VideoStudio({
           const kept = await getMedia(`video:${media}`).catch(() => undefined);
           // (another file under its key on this device: not its own, never shown in its place)
           const own = kept && c.videoSize && kept.size !== c.videoSize ? undefined : kept;
-          let blob = own ?? (await getMedia(`copy:${c.id}`).catch(() => undefined));
-          if (!blob && c.drive?.copy?.id) {
-            try { blob = (await downloadDriveFile(c.drive.copy.id)) ?? undefined; if (blob) void putMedia(`copy:${c.id}`, blob).catch(() => {}); }
+          const cp = c.drive?.copy;
+          let blob = own ?? (cp ? await keptCopy(c.id, cp) : undefined);
+          if (!blob && cp?.id) {
+            try { blob = (await downloadDriveFile(cp.id)) ?? undefined; if (blob) void keepCopy(cp, blob); }
             catch (e) { console.warn("[takes] Drive copy not fetched", e); }
           }
           if (off) return;
@@ -1467,12 +1492,12 @@ export default function VideoStudio({
   useEffect(() => () => driveAc.current?.abort(), []);
   /** This video's working copy: kept on this device, else fetched from the Drive (and kept). Null when it cannot be. */
   const copyBlob = async (cp: { id: string; size?: number }, gone: () => boolean): Promise<Blob | null> => {
-    const kept = await getMedia(`copy:${clip.id}`);
-    if (kept && (!cp.size || kept.size === cp.size)) return kept; // an older copy (other size) is fetched again
+    const kept = await keptCopy(clip.id, cp);
+    if (kept) return kept; // (an older copy, of another size, is fetched again)
     setDriveJob({ kind: "fetch", p: 0 });
     try {
       const cb = await downloadDriveFileProgress(cp.id, (p) => { if (!gone()) setDriveJob({ kind: "fetch", p }); }, new AbortController().signal);
-      void putMedia(`copy:${clip.id}`, cb).catch(() => {});
+      void keepCopy(cp, cb);
       return cb;
     } catch (e) {
       console.warn("[copy] download failed", e);
@@ -1884,8 +1909,9 @@ export default function VideoStudio({
   useEffect(() => {
     const id = settings.drive?.copy?.id;
     if (!onCopy || !id || !copyShown.current || copyShown.current === id) return;
+    const old = copyShown.current;
     copyShown.current = null;
-    void delMedia(`copy:${clip.id}`).catch(() => {});
+    dropKeptCopy(clip.id, old);
     setOnCopy(false);
     setVideoBlob(null); // the copy finder above fetches the new one
   }, [onCopy, settings.drive?.copy?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2152,7 +2178,7 @@ export default function VideoStudio({
       if (same) {
         fileClip.current = clip.id;
         // Back on the camera file (it was the Drive copy): the original is used again, the copy stays on the Drive.
-        if (onCopy) { setOnCopy(false); void delMedia(`copy:${clip.id}`).catch(() => {}); }
+        if (onCopy) { setOnCopy(false); dropKeptCopy(clip.id, cur.drive?.copy?.id); }
         setVideoBlob(f);
         if (!cur.videoSize) setV({ videoSize: f.size });
         void askPersistentStorage();
@@ -2181,7 +2207,7 @@ export default function VideoStudio({
     stopCopyOf(clip.id);
     if (cur.drive?.copy?.id) void deleteDriveFile(cur.drive.copy.id);
     setOnCopy(false);
-    void delMedia(`copy:${clip.id}`).catch(() => {});
+    dropKeptCopy(clip.id, settingsRef.current.drive?.copy?.id);
     // The light copy and the picture of the previous file go first, so they are never shown for this one.
     posterRef.current = null;
     stillRef.current = null;
@@ -2267,7 +2293,7 @@ export default function VideoStudio({
     stop();
     if (settingsRef.current.drive?.copy?.id) void deleteDriveFile(settingsRef.current.drive.copy.id);
     setOnCopy(false);
-    void delMedia(`copy:${clip.id}`).catch(() => {});
+    dropKeptCopy(clip.id, settingsRef.current.drive?.copy?.id);
     setVideoBlob(null);
     setVideoDur(0);
     // Another video still reads these files: they stay, this one stops reading them (a duplicate: its own key, empty;
@@ -2392,7 +2418,7 @@ export default function VideoStudio({
       await delMedia(`video:${mediaId}`).catch(() => {});
       await delMedia(`poster:${mediaId}`).catch(() => {});
     }
-    await delMedia(`copy:${id}`).catch(() => {});
+    dropKeptCopy(id, copyId);
     await delMedia(`strip:${id}`).catch(() => {});
     await delMedia(`audio:${id}`).catch(() => {});
   };
@@ -4972,7 +4998,7 @@ export default function VideoStudio({
     if (!c.videoSize) { const info = await probeVideo(f); same = !!info.duration && !!c.source?.duration && Math.abs(info.duration - c.source.duration) < 0.05; }
     if (!same) { onToast?.(t("This is not the same camera file ({name}). Pick the original, or use “Replace” for another take.", { name: c.videoName ?? "" })); return; }
     try { await putMedia(`video:${c.media ?? c.id}`, f); } catch { /* private mode */ }
-    void delMedia(`copy:${c.id}`).catch(() => {});
+    dropKeptCopy(c.id, c.drive?.copy?.id);
     if (!c.videoSize) patchTake(c.id, { videoSize: f.size });
     // Its player read again from the file (it may have shown its Drive copy, or nothing).
     const a = anglesRef.current.get(c.id);
@@ -4996,7 +5022,7 @@ export default function VideoStudio({
     // video still reads it.
     const oldKey = c.media ?? c.id;
     if (c.drive?.copy?.id) void deleteDriveFile(c.drive.copy.id);
-    void delMedia(`copy:${id}`).catch(() => {});
+    dropKeptCopy(id, c.drive?.copy?.id);
     if (!clips.some((x) => x.id !== id && (x.media ?? x.id) === oldKey)) void delMedia(`video:${oldKey}`).catch(() => {});
     // (its own key on the device: never the previous file's, another video may still read it)
     const media = uid();
@@ -5037,7 +5063,7 @@ export default function VideoStudio({
     const copyId = c.drive?.copy?.id;
     if (copyId && !rest.some((x) => x.drive?.copy?.id === copyId)) void deleteDriveFile(copyId);
     stopCopyOf(c.id);
-    void delMedia(`copy:${c.id}`).catch(() => {});
+    dropKeptCopy(c.id, c.drive?.copy?.id);
   };
   /** A camera chosen (button or key 1-4): playing, or paused in the middle of a shot, it cuts there to it; paused at a
    *  shot's start (a click on a shot puts the playhead there), the whole shot takes it. */
@@ -5399,7 +5425,7 @@ export default function VideoStudio({
     setV({ trackNames: Object.keys(next).length ? next : undefined });
   };
   const hdName = (icon: React.ComponentProps<typeof Icon>["name"], name: string, key?: string) => (
-    <span className="hd-name" onDoubleClick={key ? () => setTrackRenaming(key) : undefined} title={key ? t("Double click to rename") : undefined}>
+    <span className={"hd-name" + (key ? " can-rename" : "")} onDoubleClick={key ? () => setTrackRenaming(key) : undefined} title={key ? t("Double click to rename") : undefined}>
       <Icon name={icon} size={12} />
       {key && trackRenaming === key
         ? <input className="hd-rename" autoFocus defaultValue={settings.trackNames?.[key] ?? ""} placeholder={name} aria-label={t("Track name")}
@@ -5666,6 +5692,14 @@ export default function VideoStudio({
       // line: both in the multicam, cut there.
       const s0 = rowStart(tr.key);
       act = past ? "swap" : s0 === null ? null : at <= s0 + 0.3 ? "swap" : "multicam";
+    }
+    if (act === "multicam" && track && block) {
+      // The cut: at the clip's start when it is inside the segment, else where it is let go (a take synced from the
+      // song's start, or the base, began with the segment: cut there, the other camera had no shot left, it vanished).
+      const cfg = settingsRef.current, s0 = cfg.crop.start, s1 = s0 + cfg.crop.duration;
+      const pt = w.s + ((x - track.left) / Math.max(1, track.width)) * w.d;
+      const cut = round2(at > s0 + 0.2 && at < s1 - 0.2 ? at : clamp(pt, Math.min(s0 + 0.5, s1 - 0.1), s1 - 0.1));
+      return { ...none, at: cut, cutX: ((cut - w.s) / Math.max(1e-3, w.d)) * track.width + track.left - block.left, act, target: tr.key };
     }
     return { ...none, act, target: act ? tr.key : null };
   };
