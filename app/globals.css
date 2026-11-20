@@ -517,9 +517,11 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 /* Takes of the library: the project's cameras 2 to 4, the import, the release's others (greyed, folded). */
 .takes { display: flex; flex-direction: column; gap: 6px; }
 .takes, .take, .tree-branch > * { min-width: 0; }
-.take { border: 1px solid var(--line-2); border-left: 2px solid var(--cam, var(--line-2)); border-radius: var(--r); }
+.take { border: 1px solid var(--line-2); border-left: 2px solid var(--cam, var(--line-2)); border-radius: var(--r); transition: opacity .18s ease, border-color .18s ease, background-color .18s ease; }
 .take.open { border: 0; }
-.take.open .media.m-film, .clip-card .media.m-film { border-left: 2px solid var(--cam); }
+/* (a take of the release, not in the project, has no colour of its own: its card's tint — with var(--cam) alone the
+   whole left border was dropped, as if cut) */
+.take.open .media.m-film, .clip-card .media.m-film { border-left: 2px solid var(--cam, color-mix(in srgb, var(--kind) 42%, var(--line))); }
 .take-row { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 2px 0 0; font-size: 13px; min-width: 0; }
 .take-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; padding: 0 0 0 10px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .take-more { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 8px; min-width: 0; }
@@ -532,6 +534,11 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .take-row > .warn-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .take.other { opacity: .6; }
 .take.other:hover, .take.other.open, .take.other:focus-within { opacity: 1; }
+/* A take of the release (not in the project): the very card of the project's takes, grey, lit in white when hovered or
+   unfolded (as camera 1) — never the film's violet. */
+.take.other { --cam: var(--line-2); }
+.take.other:hover, .take.other.open, .take.other:focus-within { --cam: var(--accent); }
+.take.other .media.m-film { --kind: var(--cam); }
 .take-import { align-self: flex-start; margin-top: 6px; } /* (12 px from the last take: the videos 6 px apart) */
 /* The project's takes 6 px apart all along (camera 1's card, then the others), its title as far as before. */
 .tree-branch.takes-branch { row-gap: 6px; }
@@ -2939,6 +2946,9 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .tl-hd.hd-hook { --row: var(--blue); }
 .tl-hd.hd-lyrics { --row: var(--lyrics); }
 .tl-hd.hd-audio { --row: var(--text); }
+/* The line picked (a click anywhere in it, or on its header: L locks it whole): its header lit in its colour. */
+.tl-hd { transition: background-color .15s ease; }
+.tl-hd.row-on { background: color-mix(in srgb, var(--row) 16%, var(--raised)); }
 .tl-hd > .hd-name { grid-column: 1; display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--text); }
 .tl-hd > .hd-name svg { flex: none; color: var(--row); }
 .tl-hd > .hd-name.can-rename, .tl-hd > .hd-name.can-rename .truncate { cursor: text; }
