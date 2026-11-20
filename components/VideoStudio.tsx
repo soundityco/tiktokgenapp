@@ -5648,7 +5648,9 @@ export default function VideoStudio({
    */
   type VAct = "swap" | "order" | "multicam" | "over";
   const [vdrag, setVdrag] = useState<null | { from: "base" | "over" | "cam"; id?: string; cam: number; label: string; colour: number; x: number; y: number; w: number; grab: number;
-    el: HTMLElement; x0: number; y0: number; target: string | null; at: number; act: VAct | null; cutX: number }>(null);
+    el: HTMLElement; x0: number; y0: number; target: string | null; at: number; act: VAct | null; cutX: number;
+    /** Synced and locked (or its track locked): carried up or down only, never sideways (its time stays). */
+    fixed?: boolean }>(null);
   const vdragRef = useRef(vdrag);
   vdragRef.current = vdrag;
   /** The video rows on screen, from the top: each one's key (the take over it, or "base") and element. */
@@ -5662,12 +5664,13 @@ export default function VideoStudio({
     return o ? o.offset + clipSpan(o, a && Number.isFinite(a.el.duration) ? a.el.duration : Infinity)[0] : null;
   };
   /** What letting go there would do, the row it is about, and the time its start lands on (its left edge under the pointer). */
-  const landing = (d: { from: "base" | "over" | "cam"; id?: string; grab: number }, x: number, y: number) => {
+  const landing = (d: { from: "base" | "over" | "cam"; id?: string; grab: number; fixed?: boolean; x0?: number }, x: number, y: number) => {
     const block = document.querySelector<HTMLElement>(".video-block")?.getBoundingClientRect();
     // (the time is read on a track, right of the rows' headers; the cut is drawn in the block)
     const track = document.querySelector<HTMLElement>(".video-block .lyric-track")?.getBoundingClientRect() ?? block;
     const w = viewRef.current ?? twRef.current;
-    const left = x - d.grab;
+    // (a locked clip keeps its time: its start read where it was pressed, the cut drawn on its start)
+    const left = (d.fixed && d.x0 !== undefined ? d.x0 : x) - d.grab;
     const at = track ? round2(w.s + ((left - track.left) / Math.max(1, track.width)) * w.d) : 0;
     const none = { at, act: null as VAct | null, target: null as string | null, cutX: block && track ? clamp(left - track.left, 0, track.width) + track.left - block.left : 0 };
     const rows = videoRows();
@@ -5693,14 +5696,6 @@ export default function VideoStudio({
       const s0 = rowStart(tr.key);
       act = past ? "swap" : s0 === null ? null : at <= s0 + 0.3 ? "swap" : "multicam";
     }
-    if (act === "multicam" && track && block) {
-      // The cut: at the clip's start when it is inside the segment, else where it is let go (a take synced from the
-      // song's start, or the base, began with the segment: cut there, the other camera had no shot left, it vanished).
-      const cfg = settingsRef.current, s0 = cfg.crop.start, s1 = s0 + cfg.crop.duration;
-      const pt = w.s + ((x - track.left) / Math.max(1, track.width)) * w.d;
-      const cut = round2(at > s0 + 0.2 && at < s1 - 0.2 ? at : clamp(pt, Math.min(s0 + 0.5, s1 - 0.1), s1 - 0.1));
-      return { ...none, at: cut, cutX: ((cut - w.s) / Math.max(1e-3, w.d)) * track.width + track.left - block.left, act, target: tr.key };
-    }
     return { ...none, act, target: act ? tr.key : null };
   };
   /** A clip pressed and moved goes to another row once it went up or down by half a row (a little sideways first does
@@ -5715,8 +5710,12 @@ export default function VideoStudio({
     const c = from === "over" ? clips.find((q) => q.id === id) : cam > 0 ? clips.find((q) => q.id === settingsRef.current.angles?.[cam - 1]) : clip;
     // Held where it was grabbed (its start stays the same distance left of the pointer).
     const grab = clamp((x0 ?? e.clientX) - r.left, 0, r.width);
-    setVdrag({ from, id, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" && id ? overNo(settingsRef.current, id) : camNo(settingsRef.current, cam),
-      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, id, grab }, e.clientX, e.clientY) });
+    const cur = settingsRef.current, ov = from === "over" && id ? overlayOf(cur, id) : undefined, take = id ? clips.find((q) => q.id === id) : undefined;
+    const fixed = from === "base" ? !!cur.linked || trackLocked("base")
+      : from === "over" ? trackLocked(id ?? "") || (!!take?.linked && take.score !== undefined && !!ov && Math.abs(ov.offset - take.offset) < 0.01)
+      : false;
+    setVdrag({ fixed, from, id, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" && id ? overNo(settingsRef.current, id) : camNo(settingsRef.current, cam),
+      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, id, grab, fixed, x0: x0 ?? e.clientX }, e.clientX, e.clientY) });
   };
   const moveVdrag = (e: React.PointerEvent) => {
     const d = vdragRef.current;
@@ -5732,7 +5731,7 @@ export default function VideoStudio({
     if (!d) return;
     const el = d.el;
     el.classList.add("lifted");
-    el.style.translate = `${d.x - d.x0}px ${d.y - d.y0}px`;
+    el.style.translate = `${d.fixed ? 0 : d.x - d.x0}px ${d.y - d.y0}px`;
     let other: HTMLElement | null = null;
     if ((d.act === "swap" || d.act === "order") && d.target) {
       const rows = videoRows(), row = rows.find((r) => r.key === d.target);
@@ -5777,12 +5776,13 @@ export default function VideoStudio({
       if (d.act === "swap") { swapBase(take); return; }
       if (angles.length >= MAX_CAMS - 1) { onToast?.(t("Up to {n} cameras.", { n: MAX_CAMS })); return; }
       // Both on the base line: the one over it joins the cameras at the place it had (its offset), and a cut is made.
-      const k = angles.length + 1, at = clamp(d.at, segStart, segStart + cur.crop.duration - 0.1);
+      // (at its start, wherever it is: in the segment or not — the multicam track shows the whole of its videos)
+      const k = angles.length + 1, at = round2(clamp(d.at, 0, Math.max(0, (audioBuf?.duration ?? Infinity) - 0.1)));
       patchTake(take.id, { offset: ov.offset, clipIn: ov.clipIn, clipOut: ov.clipOut });
       const cuts = d.from === "over"
         ? [...(cur.cuts ?? []).filter((c) => c.at < at - 0.05), { at, cam: k }]
         // (the base dragged onto the line of one over it: that one first, the base from the drop)
-        : [{ at: Math.min(segStart, cur.cuts?.[0]?.at ?? segStart), cam: k }, { at, cam: 0 }];
+        : [{ at: 0, cam: k }, { at, cam: 0 }];
       setOverLook(null);
       setV({ angles: [...angles, take.id], ...withOverlays(ovs.filter((o) => o.clip !== take.id)), cuts: cuts.sort((a, b) => a.at - b.at) });
       return;
@@ -5992,7 +5992,19 @@ export default function VideoStudio({
     const angles = settings.angles ?? [];
     const used = angles.filter(Boolean).length;
     if (!used) return part === "track" ? videoTrackEl() : null;
-    const shots = used ? shotsOf(settings.cuts, settings.crop.start, end) : [];
+    // Its shots over the whole of its videos (as the video track shows the whole clip), never only the segment: the
+    // video under was cut at the segment's start once in the multicam.
+    const lenOf = (c: VideoSetup) => { const a = anglesRef.current.get(c.id); return a && Number.isFinite(a.el.duration) ? a.el.duration : c.source?.duration ?? 0; };
+    const [bi, bo] = clipSpan(settings, videoDur || settings.source?.duration || 0);
+    let span0 = settings.offset + bi, span1 = settings.offset + bo;
+    for (const id of angles) {
+      const c = clips.find((x) => x.id === id), len = c ? lenOf(c) : 0;
+      if (!c || len <= 0) continue;
+      const [ci, co] = clipSpan(c, len);
+      span0 = Math.min(span0, c.offset + ci); span1 = Math.max(span1, c.offset + co);
+    }
+    span0 = Math.max(0, Math.min(span0, settings.crop.start)); span1 = Math.min(audioBuf?.duration ?? Infinity, Math.max(span1, end));
+    const shots = used ? shotsOf(settings.cuts, span0, span1) : [];
     const sortedCuts = [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at);
     /** Camera `cam` (0-3) from a button: as its key (playing: cut to it now; paused: the shot under the playhead). */
     const pickCam = chooseCam;
@@ -6069,7 +6081,7 @@ export default function VideoStudio({
               );
             })}
             {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); const at = x ? barAt(x.from, x.to) : null; return at !== null ? <span className={"cue-bar-glow cam-glow cam-" + camNo(settings, x!.cam)} data-a={x!.from} data-b={x!.to} style={place(at)} /> : null; })()}
-            {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && onTrack(c.at, c.at) && (
+            {(settings.cuts ?? []).map((c, i) => c.at > span0 && c.at < span1 && onTrack(c.at, c.at) && (
               <span key={"k" + i} className="cam-cut" style={{ ...place(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
                 onPointerDown={(e) => {
@@ -6084,7 +6096,7 @@ export default function VideoStudio({
                   if (!d) return;
                   const cfg = settingsRef.current;
                   const w = viewRef.current ?? twRef.current;
-                  let at = clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, cfg.crop.start, end);
+                  let at = clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, 0, audioBuf?.duration ?? end);
                   // Drawn to the lyrics' lines and the hooks (their start or end) within 8 px, so a cut falls on the
                   // sound; ⌘ / Ctrl held: free.
                   if (!e.metaKey && !e.ctrlKey) {
