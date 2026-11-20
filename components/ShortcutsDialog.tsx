@@ -21,7 +21,7 @@ const SHORTCUTS: { part: string; keys: string[][]; what: string; pair?: boolean 
   { part: "Video", keys: [["⌥", "←"], ["⌥", "→"]], what: "Move the official audio by −0.1 s / +0.1 s (not linked)", pair: true },
   { part: "Video", keys: [["I"], ["O"]], what: "Start / end of the segment at the playhead", pair: true },
   { part: "Video", keys: [["Esc"]], what: "Nothing picked on the timeline" },
-  { part: "Video", keys: [["L"]], what: "Lock / unlock the lyrics line picked" },
+  { part: "Video", keys: [["L"]], what: "Lock / unlock what is picked: the lyrics lines, else the track of the video or the hook" },
   { part: "Video", keys: [["mod", "C"], ["mod", "V"]], what: "Copy the timing of the lines picked / paste it at the playhead", pair: true },
   { part: "Video", keys: [["⌫"]], what: "Delete the hook picked, or turn off the piece of video picked" },
   { part: "Video", keys: [["C"]], what: "Cut the video picked at the playhead (multicam: cut the shot)" },

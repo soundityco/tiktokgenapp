@@ -537,6 +537,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .tree-branch.takes-branch { row-gap: 6px; }
 .tree-branch.takes-branch > .tree-head { margin-bottom: 6px; }
 .clip-strip.folded { display: none; }
+.take-base { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .look-of { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border: 1px solid var(--line-2); border-left: 2px solid var(--cam); border-radius: var(--r); font-size: 13px; min-width: 0; }
 .look-of b { color: var(--cam); }
 .look-of.text-of.is-lyrics { --cam: var(--lyrics); }

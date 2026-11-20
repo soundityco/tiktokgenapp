@@ -3908,8 +3908,10 @@ export default function VideoStudio({
   /** The next placing from scratch drops the locks too (everything placed again). */
   const dropLocks = useRef(false);
   /** A line locked (padlock on its clip) or unlocked: kept as it is when the lyrics are placed again. */
-  const toggleLock = (c: Cue) => {
-    const mine = new Set(c.words), on = !c.words.every((x) => x.lock);
+  const toggleLock = (c: Cue) => toggleLines([c]);
+  /** Lines locked together (all of them, unless they all are: then all unlocked) — L on the lines picked. */
+  const toggleLines = (cs: Cue[]) => {
+    const mine = new Set(cs.flatMap((c) => c.words)), on = !cs.every((c) => c.words.every((x) => x.lock));
     const words = (project.lyricWords ?? []).map((x) => (mine.has(x) ? (on ? { ...x, lock: true as const } : (({ lock: _l, ...rest }) => rest)(x)) : x));
     lyricWordsRef.current = words;
     onProject((p) => ({ ...p, lyricWords: words }));
@@ -5151,16 +5153,17 @@ export default function VideoStudio({
   // Each copy of the column (computer, phone) has its own block; their heights kept up to date between two folds.
   const takesH = useRef(new WeakMap<HTMLElement, number>());
   /** A take unfolded (or none): the blocks' heights noted first, for the slide. */
+  // Each card slides on its own (the one closing, the one opening): two cards changing places kept the column's height,
+  // the branch's slide alone did nothing and the cards jumped.
   const foldTo = (id: string | null) => {
-    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch")) if (!el.style.height) takesH.current.set(el, el.offsetHeight);
+    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch [data-take]")) if (!el.style.height) takesH.current.set(el, el.offsetHeight);
     setTakeOpen(id);
   };
   useLayoutEffect(() => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const undo: (() => void)[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch")) {
+    for (const el of document.querySelectorAll<HTMLElement>(".takes-branch [data-take]")) {
       const before = takesH.current.get(el), after = el.offsetHeight;
-      takesH.current.set(el, after);
       if (!before || before === after || !el.getClientRects().length) continue;
       el.style.height = `${before}px`;
       el.style.overflow = "hidden";
@@ -5174,8 +5177,13 @@ export default function VideoStudio({
       const id = window.setTimeout(done, 300);
       undo.push(() => { window.clearTimeout(id); done(); });
     }
+    // (only a fold asked by a click slides: noted again at the next one)
+    takesH.current = new WeakMap();
     return () => undo.forEach((f) => f());
   }, [takeOpen]);
+  /** A side column never scrolls sideways (the browser did, bringing a clicked card into view: their left edges were
+   *  cut off under the column's edge). */
+  const noSideScroll = (e: React.UIEvent<HTMLElement>) => { if (e.currentTarget.scrollLeft) e.currentTarget.scrollLeft = 0; };
 
   /** The library's takes: the project's cameras 2 to 4 under its own take, the import, then the release's others. */
   /** Camera 1's menu (its line and its card): the same as every other video's, with its own file, copy and removal. */
@@ -5349,7 +5357,7 @@ export default function VideoStudio({
       const cls = "take" + (shown === null ? " other" : " cam-" + shown) + (open ? " open" : "");
       // Unfolded: the same full card as camera 1's (its name, file, what it is, its sync), in place of its line.
       if (open) return (
-        <div key={c.id} className={cls} {...takeDrag(c, cam)} onContextMenu={ctxOn(menu)}>
+        <div key={c.id} data-take={c.id} className={cls} {...takeDrag(c, cam)} onContextMenu={ctxOn(menu)}>
           <MediaTile icon="film" name={c.videoName ?? null} warn={missing} loading={!!job && !job.err} menu={cam === 0 ? false : menu}
             label={<button className="take-label" onClick={toggle} title={t("Fold")}>{shown !== null && <b>{shown + 1}</b>}{shown !== null && <span>·</span>}<span className="truncate">{clipName(c)}</span><Icon name="chevron" size={11} /></button>}
             meta={<>
@@ -5362,7 +5370,7 @@ export default function VideoStudio({
       );
       // Folded: one slim line (all the cameras seen at once), number and colour as on the shots track.
       return (
-        <div key={c.id} className={cls} onContextMenu={ctxOn(menu)}>
+        <div key={c.id} data-take={c.id} className={cls} onContextMenu={ctxOn(menu)}>
         <div className={"take-row" + (job && !job.err ? " shine-box" : "")} {...takeDrag(c, cam)}>
           <button className="take-main" aria-expanded={false}
             title={cam !== null ? t("Show it on the preview and set its colour and framing") : undefined} onClick={toggle}>
@@ -5387,7 +5395,8 @@ export default function VideoStudio({
     // take) with its full card under its line (`strip`), given only once it has a file.
     const nos = numbersOf(settings);
     const rows = [
-      ...(strip ? [{ no: nos[fileKey(clip)] ?? 0, el: <Fragment key="base">{card(clip, 0)}{strip}</Fragment> }] : []),
+      // (its line and its full card in one box: the box slides between the two heights)
+      ...(strip ? [{ no: nos[fileKey(clip)] ?? 0, el: <div key="base" data-take="base" className="take-base">{card(clip, 0)}{strip}</div> }] : []),
       ...angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? { no: nos[fileKey(c)] ?? 0, el: card(c, k + 1) } : null; }),
       ...ovIds.map((id) => { const c = clips.find((x) => x.id === id); return c ? { no: nos[fileKey(c)] ?? 0, el: card(c, null) } : null; }),
     ].filter((r): r is { no: number; el: React.ReactElement | null } => !!r).sort((a, b) => a.no - b.no);
@@ -5591,7 +5600,7 @@ export default function VideoStudio({
       {cur.trackNames?.[key] && <button onClick={() => { close(); renameTrack(key, ""); }}><Icon name="refresh" size={14} />{t("Name back to {name}", { name: "V" + (no + 1) })}</button>}
       <button onClick={() => { close(); if (base) setV({ videoHidden: hidden ? undefined : true }); else patchOverlay(which, { hidden: hidden ? undefined : true }); redraw(); }}>
         <Icon name={hidden ? "eye" : "eye-off"} size={14} />{hidden ? t("Show the video") : t("Hide the video")}</button>
-      <button onClick={() => { close(); toggleTrackLock(lockKey); }}><Icon name={locked ? "unlock" : "lock"} size={14} />{locked ? t("Unlock the track") : t("Lock the track")}</button>
+      <button onClick={() => { close(); toggleTrackLock(lockKey); }}><Icon name={locked ? "unlock" : "lock"} size={14} />{locked ? t("Unlock the track") : t("Lock the track")}<kbd>L</kbd></button>
       <div className="sep" />
       {takeMenuFor(take)(close)}
     </>);
@@ -5663,7 +5672,7 @@ export default function VideoStudio({
     ctxOn((close) => (<>
       <div className="label cap truncate">{h.text.replace(/\n/g, " ") || t("Hook")}</div>
       <button onClick={() => { close(); stop(); setHead(round2(settings.crop.start + h.from)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
-      <button onClick={() => { close(); toggleTrackLock("hooks"); }}><Icon name={trackLocked("hooks") ? "unlock" : "lock"} size={14} />{trackLocked("hooks") ? t("Unlock the track") : t("Lock the track")}</button>
+      <button onClick={() => { close(); toggleTrackLock("hooks"); }}><Icon name={trackLocked("hooks") ? "unlock" : "lock"} size={14} />{trackLocked("hooks") ? t("Unlock the track") : t("Lock the track")}<kbd>L</kbd></button>
       <div className="sep" />
       <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setHooks(hooks.filter((x) => x.id !== h.id)); if (pick === "hook:" + h.id) setPick(null); }}><Icon name="trash" size={14} />{t("Delete this hook")}<kbd>⌫</kbd></button>
     </>))(e);
@@ -6901,8 +6910,16 @@ export default function VideoStudio({
     if (!e.altKey && k.toLowerCase() === "g") { if (videoBlob && settings.format !== "16:9") setAids({ zones: !aids.zones }); return; }
     // Escape: nothing picked any more on the timeline (as in an editor).
     if (k === "Escape" && (pick || multi.length || pickPiece)) { pickNothing(); return; }
-    // L: the line picked locked or unlocked (its padlock); Delete: the hook picked deleted.
-    if (!e.altKey && k.toLowerCase() === "l" && pickedCue && mode !== "word") { e.preventDefault(); toggleLock(pickedCue); return; }
+    // L: what is picked locked or unlocked — the lyrics lines picked (each its padlock, all of them at once), else the
+    // track of the clip picked (a video's line, the hooks').
+    if (!e.altKey && k.toLowerCase() === "l") {
+      const lines = pickedLines(), vid = pickedVideo();
+      if (lines.length && mode !== "word") toggleLines(lines);
+      else if (vid) toggleTrackLock(vid);
+      else if (pick?.startsWith("hook:")) toggleTrackLock("hooks");
+      else return;
+      e.preventDefault(); return;
+    }
     if ((k === "Backspace" || k === "Delete") && pick?.startsWith("hook:") && !trackLocked("hooks")) {
       e.preventDefault(); const id = pick.slice(5); setHooks(hooks.filter((x) => x.id !== id)); setPick(null); return;
     }
@@ -7018,7 +7035,7 @@ export default function VideoStudio({
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} onClose={() => setCtx(null)}>{ctx.render(() => setCtx(null))}</ContextMenu>}
         {/* Left: the library. The release's files (audio, lyrics, this video's camera take), then the text lists
             shared with the carousel (hooks, captions). */}
-        <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")} onContextMenu={ctxOn(libraryMenu)}>
+        <aside className={"col side l video-col-l" + (studioLoading ? " is-loading" : "")} onContextMenu={ctxOn(libraryMenu)} onScroll={noSideScroll}>
           <h2 className="lib-title">{t("Library")}</h2>
           <div className="stack media-list">
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
@@ -8025,7 +8042,7 @@ export default function VideoStudio({
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
         {/* (the clip selected on the timeline decides what the column shows, as in an editor: a text or a hook, its text
             settings; a video clip, the video's — nothing selected, all) */}
-        <aside className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + (pick === "video" ? " focus-video" : pick?.startsWith("text:") || pick?.startsWith("hook:") ? " focus-text" : "")} ref={rightColRef}>
+        <aside onScroll={noSideScroll} className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + (pick === "video" ? " focus-video" : pick?.startsWith("text:") || pick?.startsWith("hook:") ? " focus-text" : "")} ref={rightColRef}>
           <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} tone="video" />
           {/* A text or a hook picked on the timeline (or on the preview): what the column sets, at a glance, as for a video. */}
           {(pick?.startsWith("text:") || pick?.startsWith("hook:")) && (() => {

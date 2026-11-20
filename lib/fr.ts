@@ -293,7 +293,7 @@ export const FR: Record<string, string> = {
   "Copy": "Copier",
   "Copy all": "Tout copier",
   "Nothing picked on the timeline": "Plus rien de sélectionné sur la timeline",
-  "Lock / unlock the lyrics line picked": "Verrouiller / déverrouiller la ligne de paroles choisie",
+  "Lock / unlock what is picked: the lyrics lines, else the track of the video or the hook": "Verrouiller / déverrouiller ce qui est choisi : les lignes de paroles, sinon la piste de la vidéo ou du hook",
   "Copy the timing of the lines picked / paste it at the playhead": "Copier le calage des lignes choisies / le coller à la tête de lecture",
   "Delete the hook picked, or turn off the piece of video picked": "Supprimer le hook choisi, ou désactiver le morceau de vidéo choisi",
   "Cut the video picked at the playhead (multicam: cut the shot)": "Couper la vidéo choisie à la tête de lecture (multicam : couper le plan)",

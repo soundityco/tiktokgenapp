@@ -132,6 +132,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
   const [keysOpen, setKeysOpen] = useState(false);
   /** The app's quick right-click menu, where it was opened (see the app's root below). */
   const [appCtx, setAppCtx] = useState<{ x: number; y: number } | null>(null);
+  /** A side column never scrolls sideways (the browser does, bringing a clicked element into view: edges cut off). */
+  const noSideScroll = (e: React.UIEvent<HTMLElement>) => { if (e.currentTarget.scrollLeft) e.currentTarget.scrollLeft = 0; };
   /** A right click in the library (a list, the lyrics, the column itself): its own menu, in both studios. */
   const [libCtx, setLibCtx] = useState<{ x: number; y: number; render: (close: () => void) => React.ReactNode } | null>(null);
   const libOn = (render: (close: () => void) => React.ReactNode) => (e: React.MouseEvent) => {
@@ -2066,7 +2068,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
         )}
         {studio === "carousel" && (
         <>
-        <aside className="col side l" onContextMenu={libOn((close) => (<>
+        <aside className="col side l" onScroll={noSideScroll} onContextMenu={libOn((close) => (<>
           <div className="label cap">{t("Library")}</div>
           <button onClick={() => { close(); setOverlay({ k: "lyrics" }); }}><Icon name="type" size={14} />{project.lyrics.length ? t("Edit the lyrics") : t("Add the lyrics")}</button>
           <div className="sep" />
@@ -2180,7 +2182,7 @@ export default function Studio({ userName, userImage }: { userName: string; user
           </section>
         </main>
 
-        <aside className="col side r" ref={rightColRef}>
+        <aside className="col side r" ref={rightColRef} onScroll={noSideScroll}>
           <StyleTabs parts={carParts} part={carStyle.part} onPart={carStyle.pick} tone="carousel" />
           <Inspector index={sel} cfg={project.slides[sel]}
             onCfg={(fn) => updSlide(sel, fn)} onApplyAll={applyAll}
