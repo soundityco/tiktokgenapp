@@ -2949,6 +2949,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* The line picked (a click anywhere in it, or on its header: L locks it whole): its header lit in its colour. */
 .tl-hd { transition: background-color .15s ease; }
 .tl-hd.row-on { background: color-mix(in srgb, var(--row) 16%, var(--raised)); }
+/* (a video's line is carried up or down by its header too) */
+.tl-hd.hd-drag { cursor: grab; } .tl-hd.hd-drag button, .tl-hd.hd-drag input { cursor: default; }
 .tl-hd > .hd-name { grid-column: 1; display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--text); }
 .tl-hd > .hd-name svg { flex: none; color: var(--row); }
 .tl-hd > .hd-name.can-rename, .tl-hd > .hd-name.can-rename .truncate { cursor: text; }

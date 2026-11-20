@@ -3217,6 +3217,33 @@ export default function VideoStudio({
     : el.classList.contains("cam-track") || el.classList.contains("video-track") ? "base" : null);
   /** A header's props: clicked, its line is picked (its switches keep their own clicks). */
   const rowHd = (key: string) => ({ onClick: (e: React.MouseEvent) => { if (!(e.target as HTMLElement).closest("button, input")) setRowPick(key); } });
+  /**
+   * A video's line dragged up or down by its header (a second way to do what its clip does: the same carry, swap,
+   * order, multicam), its clip carried up or down only. `key`: "base" or the take over it. Not on its switches.
+   */
+  const hdDrag = useRef<{ key: string; x: number; y: number } | null>(null);
+  const hdDragProps = (key: string) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      e.stopPropagation();
+      if (e.button !== 0 || (e.target as HTMLElement).closest("button, input")) return;
+      hdDrag.current = { key, x: e.clientX, y: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      if (moveVdrag(e)) return;
+      const d = hdDrag.current;
+      if (!d || !vertical(e, { px: d.x, py: d.y })) return;
+      hdDrag.current = null;
+      if (trackLocked(d.key)) return; // (its track locked: as its clip, it stays)
+      const row = document.querySelector<HTMLElement>(d.key === "base" ? ".video-block .video-track:not(.over-track)" : `.video-block .over-track[data-ov="${CSS.escape(d.key)}"]`);
+      const el = row?.querySelector<HTMLElement>(".video-clip");
+      if (!el) return;
+      stop();
+      startVdrag(d.key === "base" ? "base" : "over", 0, el, e, d.x, d.y, d.key === "base" ? undefined : d.key, true);
+    },
+    onPointerUp: () => { hdDrag.current = null; if (vdragRef.current) endVdrag(); },
+    onPointerCancel: () => { hdDrag.current = null; if (vdragRef.current) setVdrag(null); },
+  });
   const waveDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!audioBuf || e.button === 2) return; // (a right click: its menu, the playhead stays)
     if (e.button === 0) pickNothing();
@@ -5610,7 +5637,7 @@ export default function VideoStudio({
       <button onClick={() => { close(); setTrackRenaming(key); }}><Icon name="pencil" size={14} />{t("Rename the track")}</button>
       {cur.trackNames?.[key] && <button onClick={() => { close(); renameTrack(key, ""); }}><Icon name="refresh" size={14} />{t("Name back to {name}", { name: "V" + (no + 1) })}</button>}
       <button onClick={() => { close(); if (base) setV({ videoHidden: hidden ? undefined : true }); else patchOverlay(which, { hidden: hidden ? undefined : true }); redraw(); }}>
-        <Icon name={hidden ? "eye" : "eye-off"} size={14} />{hidden ? t("Show the video") : t("Hide the video")}</button>
+        <Icon name={hidden ? "eye" : "eye-off"} size={14} />{hidden ? t("Show the video") : t("Hide the video")}<kbd>H</kbd></button>
       <button onClick={() => { close(); toggleTrackLock(lockKey); }}><Icon name={locked ? "unlock" : "lock"} size={14} />{locked ? t("Unlock the track") : t("Lock the track")}<kbd>L</kbd></button>
       <div className="sep" />
       {takeMenuFor(take)(close)}
@@ -5774,7 +5801,7 @@ export default function VideoStudio({
       if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setOverLook(null); setPinCam("main"); setPick("video"); pickPieceAt("base", at); }
     };
     return (<>
-        <div className="tl-row"><div className={"tl-hd cam-" + bn + (rowPick === "base" ? " row-on" : "")} {...rowHd("base")} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(videoHdMenu("base"))}>{hdName("film", trackName(settings, fileKey(clip), bn), fileKey(clip))}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
+        <div className="tl-row"><div className={"tl-hd hd-drag cam-" + bn + (rowPick === "base" ? " row-on" : "")} {...rowHd("base")} {...hdDragProps("base")} onContextMenu={ctxOn(videoHdMenu("base"))}>{hdName("film", trackName(settings, fileKey(clip), bn), fileKey(clip))}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
@@ -5933,13 +5960,14 @@ export default function VideoStudio({
     return dy > 16 || (dy > 8 && dy > dx);
   };
   /** Start following a vertical drag (called by a clip's move once it goes more up or down than sideways). */
-  const startVdrag = (from: "base" | "over" | "cam", cam: number, el: HTMLElement, e: React.PointerEvent, x0?: number, y0?: number, id?: string) => {
+  const startVdrag = (from: "base" | "over" | "cam", cam: number, el: HTMLElement, e: React.PointerEvent, x0?: number, y0?: number, id?: string, header = false) => {
     const r = el.getBoundingClientRect();
     const c = from === "over" ? clips.find((q) => q.id === id) : cam > 0 ? clips.find((q) => q.id === settingsRef.current.angles?.[cam - 1]) : clip;
     // Held where it was grabbed (its start stays the same distance left of the pointer).
-    const grab = clamp((x0 ?? e.clientX) - r.left, 0, r.width);
+    // (from the line's header, left of the track: held by its start — carried up or down only, its time kept)
+    const grab = header ? (x0 ?? e.clientX) - r.left : clamp((x0 ?? e.clientX) - r.left, 0, r.width);
     const cur = settingsRef.current, ov = from === "over" && id ? overlayOf(cur, id) : undefined, take = id ? clips.find((q) => q.id === id) : undefined;
-    const fixed = from === "base" ? !!cur.linked || trackLocked("base")
+    const fixed = header ? true : from === "base" ? !!cur.linked || trackLocked("base")
       : from === "over" ? trackLocked(id ?? "") || (!!take?.linked && take.score !== undefined && !!ov && Math.abs(ov.offset - take.offset) < 0.01)
       : false;
     setVdrag({ fixed, from, id, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" && id ? overNo(settingsRef.current, id) : camNo(settingsRef.current, cam),
@@ -6198,7 +6226,7 @@ export default function VideoStudio({
       if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setPinCam(null); setOverLook(o.clip); setPick("video"); pickPieceAt(o.clip, at); }
     };
     return (<>
-        <div className="tl-row" key={o.clip}><div className={"tl-hd cam-" + no + (rowPick === o.clip ? " row-on" : "")} {...rowHd(o.clip)} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(videoHdMenu(o.clip))}>{hdName("film", trackName(settings, takeKey(o.clip), no), takeKey(o.clip))}{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
+        <div className="tl-row" key={o.clip}><div className={"tl-hd hd-drag cam-" + no + (rowPick === o.clip ? " row-on" : "")} {...rowHd(o.clip)} {...hdDragProps(o.clip)} onContextMenu={ctxOn(videoHdMenu(o.clip))}>{hdName("film", trackName(settings, takeKey(o.clip), no), takeKey(o.clip))}{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
             <Menu float trigger={(_, toggle) => (
@@ -6930,11 +6958,25 @@ export default function VideoStudio({
       if (lines.length && mode !== "word") toggleLines(lines);
       else if (vid) toggleTrackLock(vid);
       else if (pick?.startsWith("hook:")) toggleTrackLock("hooks");
-      // (a line picked as a whole: a click in it, anywhere, or on its header)
+      // (a line picked as a whole: a click in it, anywhere, or on its header — see H for its eye)
       else if (rowPick === "lyrics" && mode !== "word" && (project.lyricWords?.length ?? 0) > 0) toggleAllLocks(!(project.lyricWords ?? []).every((x) => x.lock));
       else if (rowPick && rowPick !== "lyrics") toggleTrackLock(rowPick);
       else return;
       e.preventDefault(); return;
+    }
+    // H: the eye of what is picked — the video picked (or its line), the hooks, the lyrics.
+    if (!e.altKey && k.toLowerCase() === "h") {
+      const vid = pickedVideo() ?? (rowPick && rowPick !== "hooks" && rowPick !== "lyrics" ? rowPick : null);
+      const what = vid ?? (pick?.startsWith("hook:") || rowPick === "hooks" ? "hooks" : pick?.startsWith("text:") || rowPick === "lyrics" ? "lyrics" : null);
+      if (!what) return;
+      e.preventDefault();
+      const cur = settingsRef.current;
+      if (what === "hooks") setV({ showHooks: cur.showHooks === false });
+      else if (what === "lyrics") setV({ captions: !cur.captions });
+      else if (what === "base") setV({ videoHidden: cur.videoHidden ? undefined : true });
+      else { const o = overlayOf(cur, what); if (o) patchOverlay(what, { hidden: o.hidden ? undefined : true }); }
+      requestAnimationFrame(() => drawAt(headRef.current));
+      return;
     }
     if ((k === "Backspace" || k === "Delete") && pick?.startsWith("hook:") && !trackLocked("hooks")) {
       e.preventDefault(); const id = pick.slice(5); setHooks(hooks.filter((x) => x.id !== id)); setPick(null); return;

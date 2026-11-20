@@ -292,6 +292,7 @@ export const FR: Record<string, string> = {
   "Copied": "Copié",
   "Copy": "Copier",
   "Copy all": "Tout copier",
+  "Hide / show what is picked: the video (or its line), the hooks, the lyrics": "Masquer / afficher ce qui est choisi : la vidéo (ou sa ligne), les hooks, les paroles",
   "Nothing picked on the timeline": "Plus rien de sélectionné sur la timeline",
   "Lock / unlock what is picked: the lyrics lines, else the track of the video or the hook": "Verrouiller / déverrouiller ce qui est choisi : les lignes de paroles, sinon la piste de la vidéo ou du hook",
   "Copy the timing of the lines picked / paste it at the playhead": "Copier le calage des lignes choisies / le coller à la tête de lecture",
