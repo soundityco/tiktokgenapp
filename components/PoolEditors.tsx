@@ -1,7 +1,7 @@
 "use client";
 import { isLineList } from "@/lib/defaults";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { byTagName, compareTexts, hookKey, itemTags, joinCaptions, poolTags, sortLines, splitCaptions, tagGroups, textItems } from "@/lib/generate";
+import { addTexts, byTagName, compareTexts, hookKey, itemTags, joinCaptions, poolTags, removeText, rewriteText, sortLines, splitCaptions, tagGroups, textItems } from "@/lib/generate";
 import { currentRelease, isReleaseTag, RELEASE_TAG, releasesKnown, THEMES, themeLabel } from "@/lib/themes";
 import { modelWork, sortWithModel } from "@/lib/themeAI";
 import { loadDriveImage } from "@/lib/drive";
@@ -114,6 +114,26 @@ function TagScroll({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** A text of a list, edited where it is shown (a click: typed in place; Enter or leaving it: saved, its tags and release
+ *  kept; Escape: as it was). */
+function EditableText({ text, onSave }: { text: string; onSave: (to: string) => void }) {
+  const { t } = useT();
+  const [editing, setEditing] = useState(false);
+  if (editing) return (
+    <input className="input sm grow text-edit" autoFocus defaultValue={text} aria-label={t("Edit this text")}
+      // (the caret at the end, nothing selected: typing never wipes the text by mistake)
+      onFocus={(e) => { const n = e.currentTarget.value.length; e.currentTarget.setSelectionRange(n, n); }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); else if (e.key === "Escape") { setEditing(false); } }}
+      onBlur={(e) => { const v = e.currentTarget.value; setEditing(false); if (v.trim() !== text.trim()) onSave(v); }} />
+  );
+  return <span className="grow truncate text-cell" title={t("Click to edit")} onClick={() => setEditing(true)}>{text.replace(/\|/g, " ")}</span>;
+}
+/** A text's trash at the end of its row (seen on hover). */
+function RemoveText({ onRemove }: { onRemove: () => void }) {
+  const { t } = useT();
+  return <button className="btn icon sm quiet row-del" aria-label={t("Delete this text")} title={t("Delete this text")} onClick={onRemove}><Icon name="trash" size={13} /></button>;
+}
+
 /** A hooks list by release: the hooks for every release, then the ones kept for each release; each one moved by its menu. */
 function ReleasesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: TextPool) => TextPool) => void }) {
   const { t } = useT();
@@ -133,15 +153,16 @@ function ReleasesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: T
       <p className="muted xs">{t("A hook kept for a release is drawn there only (another release can still tick its tag to draw it).")}</p>
       {groups.map((g) => (
         <section key={g.id || "all"} className="theme-group">
-          <h4 className={"label row tag-head" + (g.id ? " is-release" : "")}>{g.id && <Icon name="pin" size={11} />}<span>{g.name}</span> <span className="muted">· {g.items.length}</span>{g.id === open && <span className="muted"> · {t("this one")}</span>}</h4>
+          <h4 className={"label row tag-head" + (g.id ? " is-release" : "")}>{g.id && <Icon name="disc" size={11} />}<span>{g.name}</span> <span className="muted">· {g.items.length}</span>{g.id === open && <span className="muted"> · {t("this one")}</span>}</h4>
           {!g.items.length && <p className="muted xs">{t("No hook kept for it yet: move one here with its menu.")}</p>}
           {g.items.map((x) => (
             <div key={x} className="row nowrap theme-item">
-              <span className="grow truncate" title={x}>{x.replace(/\|/g, " ")}</span>
+              <EditableText text={x} onSave={(to) => onChange((p) => rewriteText(p, x, to))} />
               <Select className="input sm rel-pick" value={of(x)} onChange={(e) => setOnly(x, e.target.value)} aria-label={t("For which release")}>
                 <option value="">{t("Every release")}</option>
                 {releases.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </Select>
+              <RemoveText onRemove={() => onChange((p) => removeText(p, x))} />
             </div>
           ))}
         </section>
@@ -199,7 +220,8 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
     } finally { setAi(null); }
   };
   // Already sorted by the model once: what is left is sorted as soon as the view opens.
-  useEffect(() => { if (missing.length) void runAi(missing); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // (and the texts added later, as they come: pasted in the box above)
+  useEffect(() => { if (missing.length) void runAi(missing); }, [missing.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const sorted = !!(pool.aiTags || pool.aiThemes) && !missing.length;
 
   return (
@@ -230,7 +252,7 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
           </h4>
           {g.items.map((i) => (
             <div key={i} className="row nowrap theme-item">
-              <span className="grow truncate" title={items[i]}>{items[i].replace(/\|/g, " ")}</span>
+              <EditableText text={items[i]} onSave={(to) => onChange((p) => rewriteText(p, items[i], to))} />
               <TagScroll>
                 {tagsNow[i].filter(Boolean).map((tag) => (
                   <button key={tag} className={"tag-chip" + (isReleaseTag(tag) ? " release" : "")} title={isReleaseTag(tag) ? t("Kept for this release only: click to offer it in every release") : t("Remove this tag")}
@@ -279,13 +301,14 @@ function ThemesView({ pool, onChange }: { pool: TextPool; onChange: (fn: (t: Tex
                   <button className={"btn icon sm quiet pin-release" + (mine ? " on" : other ? " other" : "")} aria-pressed={mine}
                     title={mine ? t("Kept for “{name}” only: click to offer it in every release", { name }) : t("Keep it for “{name}” only (the other releases never draw it)", { name })}
                     aria-label={mine ? t("Kept for “{name}” only: click to offer it in every release", { name }) : t("Keep it for “{name}” only (the other releases never draw it)", { name })}
-                    onClick={() => setOnly(items[i], mine ? null : open)}><Icon name="pin" size={13} /></button>
+                    onClick={() => setOnly(items[i], mine ? null : open)}><Icon name="disc" size={13} /></button>
                 );
               })()}
               {pool.tags?.[hookKey(items[i])] !== undefined && (
                 <button className="btn sm quiet" title={t("Back to the tag found automatically")}
                   onClick={() => onChange((x) => { const tg = { ...(x.tags ?? {}) }; delete tg[hookKey(items[i])]; return { ...x, tags: tg }; })}>{t("Auto")}</button>
               )}
+              <RemoveText onRemove={() => onChange((p) => removeText(p, items[i]))} />
             </div>
           ))}
         </section>
@@ -299,7 +322,11 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
   const { pool } = p;
   const file = useRef<HTMLInputElement>(null);
   const [imports, setImports] = useState(0); // a .txt added: the captions boxes are read again
-  const [view, setView] = useState<"text" | "themes" | "releases">(p.byTag ? "themes" : "text");
+  // A list of lines (hooks, texts) is read and edited by tag, or by release; texts come in through the box above. The
+  // whole text as one field was the same list twice.
+  const [view, setView] = useState<"themes" | "releases">("themes");
+  const [paste, setPaste] = useState("");
+  const add = () => { const pasted = paste; p.onChange((x) => addTexts(x, pasted).pool); setPaste(""); };
   // A hooks list is kept in alphabetical order: when it opens, after an import, when its text field is left (never
   // while typing: the line would jump away). The order changes nothing to the draws (random).
   const tidy = () => { if (pool.kind === "hooks" && sortLines(pool.text) !== pool.text) p.onChange((x) => ({ ...x, text: sortLines(x.text) })); };
@@ -321,18 +348,26 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
       <label className="field">{t("Role")}
         <RoleSelect value={pool.kind} onChange={(kind) => p.onChange((x) => ({ ...x, kind }))} />
       </label>
-      {isLineList(pool) && n > 1 && (
+      {/* Texts in: one or several pasted (one per line), sorted into their tags at once. */}
+      {isLineList(pool) && (
+        <div className="add-texts">
+          <textarea className="input" rows={Math.min(6, Math.max(2, paste.split("\n").length))} value={paste} onChange={(e) => setPaste(e.target.value)}
+            aria-label={t("Add texts")} placeholder={t("Paste one or several texts, one per line: they are sorted into their tags. Use | to force a line break on the slide.")}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); add(); } }} />
+          <button className="btn sm primary" disabled={!paste.trim()} onClick={add}><Icon name="plus" size={13} />{t("Add")}</button>
+        </div>
+      )}
+      {isLineList(pool) && n > 0 && (
         <div className="row seg-tabs" role="tablist">
-          <button role="tab" aria-selected={view === "text"} className={"btn sm" + (view === "text" ? " on" : "")} onClick={() => setView("text")}>{t("Texts")}</button>
           <button role="tab" aria-selected={view === "themes"} className={"btn sm" + (view === "themes" ? " on" : "")} onClick={() => setView("themes")}>{t("By tag")}</button>
           {pool.kind === "hooks" && <button role="tab" aria-selected={view === "releases"} className={"btn sm" + (view === "releases" ? " on" : "")} onClick={() => setView("releases")}>{t("By release")}</button>}
 
         </div>
       )}
-      {pool.kind === "hooks" && view === "releases" && n > 1 ? (
-        <ReleasesView pool={pool} onChange={p.onChange} />
-      ) : isLineList(pool) && view === "themes" && n > 1 ? (
-        <ThemesView pool={pool} onChange={p.onChange} />
+      {isLineList(pool) ? (
+        n === 0 ? <p className="muted xs">{t("No text yet: paste them above.")}</p>
+          : pool.kind === "hooks" && view === "releases" ? <ReleasesView pool={pool} onChange={p.onChange} />
+          : <ThemesView pool={pool} onChange={p.onChange} />
       ) : pool.kind === "captions" ? (
         <CaptionsEditor key={`${pool.id}:${imports}`} text={pool.text} onText={(text) => p.onChange((x) => ({ ...x, text }))} />
       ) : (
@@ -340,11 +375,6 @@ export function TextPoolEditor(p: Common & { pool: TextPool; onChange: (fn: (t: 
           onBlur={() => { if (pool.kind === "hooks") tidy(); }}
           placeholder={isLineList(pool) ? t("One text per line. Use | to force a line break on the slide.")
             : t("Paste the whole text. It is placed on the slide line by line, exactly as typed.")} />
-      )}
-      {/* (where a hook is kept for one release: the pin of each hook, in the tags' view) */}
-      {pool.kind === "hooks" && view === "text" && n > 1 && (
-        <p className="muted xs row" style={{ gap: 6 }}><Icon name="pin" size={12} />{t("To keep a hook for one release only: “By release”, or its pin in “By tag”.")}
-          <button className="link" onClick={() => setView("releases")}>{t("By release")}</button></p>
       )}
       {perf.length > 0 && (
         <details className="sec">

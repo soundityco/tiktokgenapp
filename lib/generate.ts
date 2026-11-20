@@ -240,6 +240,59 @@ export function poolTags(pool: TextPool): string[][] {
     return list.length ? list : [""];
   });
 }
+/** What a list keeps under each text's key: moved with the text when it is rewritten, dropped with it. */
+const KEYED = ["tags", "themes", "aiTags", "aiThemes", "only", "views"] as const;
+/**
+ * A text of a list rewritten in place: its line replaced; its tags, theme, release and views follow it (the model's
+ * tags too, until it reads it again). Empty: the text is taken out.
+ */
+export function rewriteText(pool: TextPool, from: string, to: string): TextPool {
+  const next = to.replace(/\s*\n\s*/g, " ").trim();
+  if (!next) return removeText(pool, from);
+  if (next === from) return pool;
+  const lines = pool.text.split("\n"), at = lines.findIndex((l) => l.trim() === from.trim());
+  if (at < 0) return pool;
+  lines[at] = next;
+  const kf = hookKey(from), kt = hookKey(next);
+  const out: TextPool = { ...pool, text: pool.kind === "hooks" ? sortLines(lines.join("\n")) : lines.join("\n") };
+  if (kf !== kt) for (const f of KEYED) {
+    const m = pool[f] as Record<string, unknown> | undefined;
+    if (!m || !(kf in m)) continue;
+    const c = { ...m };
+    if (!(kt in c)) c[kt] = c[kf];
+    delete c[kf];
+    (out as unknown as Record<string, unknown>)[f] = c;
+  }
+  return out;
+}
+/** A text taken out of a list, with what was kept under its key (unless the same text is still there). */
+export function removeText(pool: TextPool, text: string): TextPool {
+  const lines = pool.text.split("\n"), at = lines.findIndex((l) => l.trim() === text.trim());
+  if (at < 0) return pool;
+  lines.splice(at, 1);
+  const out: TextPool = { ...pool, text: lines.join("\n") };
+  const k = hookKey(text);
+  if (textItems(out).some((x) => hookKey(x) === k)) return out;
+  for (const f of KEYED) {
+    const m = pool[f] as Record<string, unknown> | undefined;
+    if (!m || !(k in m)) continue;
+    const c = { ...m }; delete c[k];
+    (out as unknown as Record<string, unknown>)[f] = c;
+  }
+  return out;
+}
+/** Texts pasted (one per line), the ones not in the list yet added (a hooks list stays in alphabetical order). */
+export function addTexts(pool: TextPool, pasted: string): { pool: TextPool; added: string[] } {
+  const have = new Set(textItems(pool).map(hookKey)), added: string[] = [];
+  for (const l of pasted.split("\n").map((x) => x.trim()).filter(Boolean)) {
+    const k = hookKey(l);
+    if (have.has(k)) continue;
+    have.add(k); added.push(l);
+  }
+  if (!added.length) return { pool, added };
+  const text = [pool.text.replace(/\s+$/, ""), ...added].filter(Boolean).join("\n");
+  return { pool: { ...pool, text: pool.kind === "hooks" ? sortLines(text) : text }, added };
+}
 /** Alphabetical order, the French way: no case, no accents, no punctuation (quotes, "POV :"), 2 before 10. */
 const collator = new Intl.Collator("fr", { sensitivity: "base", numeric: true, ignorePunctuation: true });
 export const compareTexts = (a: string, b: string) => collator.compare(a.replace(/\|/g, " ").trim(), b.replace(/\|/g, " ").trim());

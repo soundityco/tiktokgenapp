@@ -3115,3 +3115,14 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 .theme-item > .tag-chips { max-width: none; }
 .theme-item .rel-pick { width: 190px; flex: none; }
 .tag-head.is-release { color: var(--lyrics); gap: 6px; }
+
+/* A list's texts: pasted in the box at the top, edited where they are shown (a click), deleted by their trash. */
+.add-texts { display: flex; gap: var(--s2); align-items: flex-end; }
+.add-texts textarea { flex: 1; min-width: 0; resize: vertical; }
+.theme-item .text-cell { cursor: text; }
+.theme-item .text-cell:hover { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.theme-item .text-edit { min-width: 0; }
+.theme-item .row-del { flex: none; color: var(--faint); opacity: 0; transition: opacity .12s ease; }
+.theme-item:hover .row-del, .theme-item .row-del:focus-visible { opacity: 1; }
+.theme-item .row-del:hover { color: var(--danger); }
+@media (hover: none) { .theme-item .row-del { opacity: 1; } }
