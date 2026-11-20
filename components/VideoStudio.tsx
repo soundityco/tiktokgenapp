@@ -15,11 +15,11 @@ import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectF
 import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, litWords, TextBox, visibleRegion, zoomPic } from "@/lib/render";
-import { buildGradeLut, convertsFootage, type CubeLut, drawLook, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
+import { buildGradeLut, convertsFootage, type CubeLut, drawLook, finishGrade, finishOf, finishOn, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { PROBE_VERSION, probeVideo } from "@/lib/probe";
 import { followLists, hookLink, itemTags, keptElsewhere, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
-import ColorGrade, { knownLuts, lastLut, rememberLut, sameLut } from "./ColorGrade";
+import ColorGrade, { FinishParts, knownLuts, lastLut, rememberLut, sameLut } from "./ColorGrade";
 import { AUDIO_KBPS, exportMp4, exportSettings, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
@@ -140,7 +140,7 @@ const LYRICS_ALIGN_V = 4;
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "trackLocks", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 /** The part of the camera file shown (seconds in the file, `len` its length): trimmed on the video track, else all. */
@@ -1203,7 +1203,6 @@ export default function VideoStudio({
           drawPictureAt(g, pic.src, pic.w, pic.h, x + (w * (1 - k)) / 2, y + (h * (1 - k)) / 2, s * k, pic.part);
           g.restore();
         }
-        if (!raw && lookGrade) drawLook(g, W, H, lookGrade, Math.round(time * GRAIN_FPS));
         if (preview?.keep && !raw && !angle) keepPoster(g.canvas);
       } else if (preview && posterRef.current) g.drawImage(posterRef.current, 0, 0, W, H);
     }
@@ -1251,6 +1250,9 @@ export default function VideoStudio({
       }
     }
     overlayBoxes.current = boxes;
+    // The post's finish (effects, vignette, grain): once, on the whole picture — the video under, the multicam's shot,
+    // the ones over it —, never a video's own (a camera's vignette jumped in at each cut).
+    if (!raw) { const fin = finishOf(cfg); if (finishOn(fin)) drawLook(g, W, H, finishGrade(fin), Math.round(time * GRAIN_FPS)); }
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
     drawMatte(g, W, H, matte);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
@@ -6617,7 +6619,7 @@ export default function VideoStudio({
               grader.setLut(ang.lut, 33);
               const done = grader.grade({ src: cv, w: cv.width, h: cv.height }, { x: 0, y: 0, w: cv.width, h: cv.height }, cv.width, cv.height);
               g.drawImage(done.src, 0, 0);
-              drawLook(g, cv.width, cv.height, { ...ang.grade, grain: 0 }, 0);
+              drawLook(g, cv.width, cv.height, { ...finishGrade(finishOf(settings)), grain: 0 }, 0);
             }
             out.push(cv.toDataURL("image/jpeg", 0.82));
             if (!off && !wait) setStrip([...out]);
@@ -6630,7 +6632,7 @@ export default function VideoStudio({
             grader.setLut(videoLut.current, 33);
             const done = grader.grade({ src: cv, w: cv.width, h: cv.height }, { x: 0, y: 0, w: cv.width, h: cv.height }, cv.width, cv.height);
             g.drawImage(done.src, 0, 0);
-            drawLook(g, cv.width, cv.height, { ...gradeNow, grain: 0 }, 0);
+            drawLook(g, cv.width, cv.height, { ...finishGrade(finishOf(settings)), grain: 0 }, 0);
           }
           out.push(cv.toDataURL("image/jpeg", 0.82));
           // Each picture takes its place as soon as it is made (the strip is at its full height from the start).
@@ -8493,6 +8495,13 @@ export default function VideoStudio({
                 }}
                 library={lutChoices} onRemoveLut={onRemoveLut}
                 onImported={(l) => { lutSent.current.delete(l.id); onLutLibrary?.((cur) => (cur.some((x) => x.id === l.id) ? cur.map((x) => (x.id === l.id ? l : x)) : [...cur, l])); }} />
+            {/* The post's finish: effects, vignette and grain on the whole picture (every video of it, the multicam's
+                shots, the ones over it), never a video's own — the colour above is. Said so in its title. */}
+            <div className="post-finish stack">
+              <div className="row col-head"><span className="label">{t("Post finish")}</span><span className="badge post-badge">{t("Whole post")}</span>
+                <Hint text={t("Effects, vignette and grain: once, on the whole picture of the post — every video of it (the multicam's shots, the videos over it). The colour above is the video's own.")} /></div>
+              <FinishParts look={finishOf(settings)} onChange={(f) => { setV({ finish: f }); requestAnimationFrame(() => drawAt(headRef.current)); }} />
+            </div>
                       </div>
           {/* How the video file is made: the settings recommended for TikTok and Instagram (at the take's own rate), shown;
               "Change" unfolds the user's own (for every video of the account). */}

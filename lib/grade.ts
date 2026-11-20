@@ -10,7 +10,7 @@
  * Vignette and grain depend on the position in the picture: they are drawn on the frame (see drawLook).
  */
 
-import type { LutInput, LutRef, PhotoAdjust, VideoGrade, Wheel, WheelId } from "./types";
+import type { FinishLook, LutInput, LutRef, PhotoAdjust, VideoGrade, Wheel, WheelId } from "./types";
 import { drawEffects, effectsOn, type Effects } from "./effectsGL";
 
 /** The grade's Black Mist and Haze, their defaults filled in. */
@@ -34,6 +34,25 @@ export const PROFILES: { id: CameraProfile; label: string }[] = [
 
 export const NEUTRAL_GRADE: VideoGrade = {
   profile: "slog3-cine", exposure: 0, contrast: 1, temp: 0, tint: 0, sat: 1, vignette: 0, vignetteSize: 50, grain: 0, grainSize: 1,
+};
+
+/** What a grade holds of a finish (the post's: lib/types FinishLook). */
+const FINISH_KEYS = ["mist", "mistSize", "mistThreshold", "halation", "halationSize", "halationThreshold", "haze", "hazeHeight", "hazeTone", "vignette", "vignetteSize", "grain", "grainSize"] as const;
+/** The post's finish: its own, else the one in the video under's grade (older projects), else none. */
+export function finishOf(s: { finish?: FinishLook; grade?: VideoGrade }): FinishLook {
+  if (s.finish) return s.finish;
+  const g = s.grade;
+  if (!g || g.off) return {};
+  const out: Record<string, unknown> = {};
+  for (const k of FINISH_KEYS) if (g[k] !== undefined) out[k] = g[k];
+  return { ...(out as FinishLook), bypass: g.bypass?.effects || g.bypass?.finish ? { effects: g.bypass.effects, finish: g.bypass.finish } : undefined };
+}
+/** A finish as a grade (to draw it: drawLook — its colours neutral, only its effects, vignette and grain). */
+export const finishGrade = (f: FinishLook): VideoGrade => ({ ...NEUTRAL_GRADE, ...f, bypass: f.bypass });
+/** Does a finish change the picture at all? */
+export const finishOn = (f: FinishLook) => {
+  const g = effectiveGrade(finishGrade(f));
+  return (g.vignette ?? 0) > 0 || (g.grain ?? 0) > 0 || (g.mist ?? 0) > 0 || (g.halation ?? 0) > 0 || (g.haze ?? 0) > 0;
 };
 
 export interface CubeLut { size: number; data: Float32Array; min: [number, number, number]; max: [number, number, number] }

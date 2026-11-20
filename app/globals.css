@@ -3126,3 +3126,7 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 .theme-item:hover .row-del, .theme-item .row-del:focus-visible { opacity: 1; }
 .theme-item .row-del:hover { color: var(--danger); }
 @media (hover: none) { .theme-item .row-del { opacity: 1; } }
+
+/* The post's finish under the video's colour: its own title and a « Whole post » badge (never the video's). */
+.post-finish { margin-top: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line); }
+.post-badge { height: 18px; padding: 0 7px; font-size: 10px; color: var(--text); border-color: var(--line-2); }

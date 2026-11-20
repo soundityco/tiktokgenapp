@@ -374,9 +374,17 @@ export interface VideoSourceInfo {
   fps?: number;
 }
 
+/** The post's finish (Black Mist, Halation, Haze, vignette, grain): once, on the whole picture — every video of it
+ *  (the one under, the multicam's shots, the ones over it) —, never a video's own (it jumped at each cut). */
+export type FinishLook = Pick<VideoGrade, "mist" | "mistSize" | "mistThreshold" | "halation" | "halationSize" | "halationThreshold" | "haze" | "hazeHeight" | "hazeTone">
+  & Partial<Pick<VideoGrade, "vignette" | "vignetteSize" | "grain" | "grainSize">> & { bypass?: { effects?: boolean; finish?: boolean } };
+
 export interface VideoSettings {
   /** Each video's number in the project (0-based, its colour), by file (`media`): kept wherever it goes on the timeline. */
   videoNos?: Record<string, number>;
+  /** The post's finish (effects, vignette, grain), on the whole picture. None: the one of the video under's grade (older
+   *  projects: the same picture as before). */
+  finish?: FinishLook;
   /** The names given to the video tracks in their header, by file (else « V » and the number). */
   trackNames?: Record<string, string>;
   /** Multicam: the other videos of the release used as cameras 2 to 4 (their own sync, framing and grade). */

@@ -1,12 +1,12 @@
 "use client";
 import { useState } from "react";
 import { uid } from "@/lib/defaults";
-import { effectsOf, guessLutInput, lutInputOf, NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
+import { effectsOf, finishGrade, guessLutInput, lutInputOf, NEUTRAL_GRADE, parseCube, PROFILES, wheelsOn } from "@/lib/grade";
 import ColorWheels from "./ColorWheels";
 import { effectsOn } from "@/lib/effectsGL";
 import { useT } from "@/lib/i18n";
 import { putMedia } from "@/lib/idb";
-import type { GradePreset, LutInput, LutRef, VideoGrade } from "@/lib/types";
+import type { FinishLook, GradePreset, LutInput, LutRef, VideoGrade } from "@/lib/types";
 import { Modal, Range, Section, Select, Hint, Switch } from "./ui";
 import Icon from "./Icon";
 import { presetNamed } from "./TextControls";
@@ -265,49 +265,6 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
         </Section>
       )}
 
-      <Section id="color-effects" title={<>{t("Effects")}{off("effects") ? <span className="sec-sub"> · {t("off")}</span> : effectsOn(g) && <span className="sec-sub"> · {t("on")}</span>}{partSwitch("effects")}</>} open={false}>
-        <div className="row" style={{ gap: 6 }}>{t("Black Mist")}<Hint text={t("A diffusion filter, as a Black Mist on the lens: part of the light spreads around it, a glow next to the lights, softer highlights and contrast.")} /></div>
-        <Range label={t("Strength")} value={fx.mist} display={`${fx.mist}`} min={0} max={100}
-          onChange={(v) => set({ mist: v })} onReset={() => set({ mist: 0 })} />
-        {fx.mist > 0 && (<>
-          <Range label={t("Glow size")} value={fx.mistSize} display={`${fx.mistSize}`} min={0} max={100}
-            onChange={(v) => set({ mistSize: v })} onReset={() => set({ mistSize: 50 })} />
-          <Range label={t("Threshold")} value={fx.mistThreshold} display={`${fx.mistThreshold}`} min={0} max={100}
-            onChange={(v) => set({ mistThreshold: v })} onReset={() => set({ mistThreshold: 40 })} />
-        </>)}
-        <div className="row" style={{ gap: 6 }}>{t("Halation")}<Hint text={t("As on film: a red-orange fringe around the strongest lights (a lamp, the sun, a reflection).")} /></div>
-        <Range label={t("Strength")} value={fx.halation} display={`${fx.halation}`} min={0} max={100}
-          onChange={(v) => set({ halation: v })} onReset={() => set({ halation: 0 })} />
-        {fx.halation > 0 && (<>
-          <Range label={t("Size")} value={fx.halationSize} display={`${fx.halationSize}`} min={0} max={100}
-            onChange={(v) => set({ halationSize: v })} onReset={() => set({ halationSize: 40 })} />
-          <Range label={t("Threshold")} value={fx.halationThreshold} display={`${fx.halationThreshold}`} min={0} max={100}
-            onChange={(v) => set({ halationThreshold: v })} onReset={() => set({ halationThreshold: 70 })} />
-        </>)}
-        <div className="row" style={{ gap: 6 }}>{t("Haze")}<Hint text={t("A cinematic fog: denser towards the top of the frame and over the bright, flat parts (sky, background), lit by the scene's own light.")} /></div>
-        <Range label={t("Density")} value={fx.haze} display={`${fx.haze}`} min={0} max={100}
-          onChange={(v) => set({ haze: v })} onReset={() => set({ haze: 0 })} />
-        {fx.haze > 0 && (<>
-          <Range label={t("Towards the top")} value={fx.hazeHeight} display={`${fx.hazeHeight}`} min={0} max={100}
-            onChange={(v) => set({ hazeHeight: v })} onReset={() => set({ hazeHeight: 60 })} />
-          <Range label={t("Tone")} value={fx.hazeTone} display={`${fx.hazeTone > 0 ? "+" : ""}${fx.hazeTone}`} min={-100} max={100}
-            onChange={(v) => set({ hazeTone: v })} onReset={() => set({ hazeTone: 0 })} />
-        </>)}
-      </Section>
-      <Section id="color-finish" title={<>{t("Finish")}{off("finish") && <span className="sec-sub"> · {t("off")}</span>}{partSwitch("finish")}</>} open={false}>
-        <Range label={t("Vignette")} value={g.vignette} display={`${g.vignette}`} min={0} max={100}
-          onChange={(v) => set({ vignette: v })} onReset={() => set({ vignette: 0 })} />
-        {g.vignette > 0 && (
-          <Range label={t("Vignette size")} value={g.vignetteSize} display={`${g.vignetteSize}`} min={0} max={100}
-            onChange={(v) => set({ vignetteSize: v })} onReset={() => set({ vignetteSize: 50 })} />
-        )}
-        <Range label={t("Grain")} value={g.grain} display={`${g.grain}`} min={0} max={100}
-          onChange={(v) => set({ grain: v })} onReset={() => set({ grain: 0 })} />
-        {g.grain > 0 && (
-          <Range label={t("Grain size")} value={g.grainSize} display={num(g.grainSize, 1)} min={1} max={4} step={0.5}
-            onChange={(v) => set({ grainSize: v })} onReset={() => set({ grainSize: 1 })} />
-        )}
-      </Section>
 
     </div>
   );
@@ -360,6 +317,73 @@ function GradePresets({ presets, current, onSave, onApply, onDelete }: {
         );
       })}
       <p className="muted xs">{t("A preset keeps the whole grade: the camera profile, the output LUT, the settings and the wheels.")}</p>
+    </div>
+  );
+}
+
+/**
+ * The post's effects and finish (Black Mist, Halation, Haze; vignette, grain): once on the whole picture, every video of
+ * the post (the multicam's shots, the ones over it) — set here for the post, never a video's own.
+ */
+export function FinishParts({ look, onChange }: { look: FinishLook; onChange: (f: FinishLook) => void }) {
+  const { t, lang } = useT();
+  const g = finishGrade(look);
+  const set = (patch: Partial<VideoGrade>) => onChange({ ...look, ...patch });
+  type Part = "effects" | "finish";
+  const off = (p: Part) => !!look.bypass?.[p];
+  const partSwitch = (p: Part) => (
+    <span className="sec-switch" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} onKeyDown={(e) => e.stopPropagation()}>
+      <Switch checked={!off(p)} title={off(p) ? t("Turned off: click to turn it back on") : t("On: click to turn this part off")}
+        onChange={(v) => onChange({ ...look, bypass: { ...look.bypass, [p]: !v } })} />
+    </span>
+  );
+  const fx = effectsOf(g);
+  const num = (v: number, d: number) => v.toFixed(d).replace(".", lang === "fr" ? "," : ".");
+  return (
+    <div className="cg-parts">
+      <Section id="color-effects" title={<>{t("Effects")}{off("effects") ? <span className="sec-sub"> · {t("off")}</span> : effectsOn(g) && <span className="sec-sub"> · {t("on")}</span>}{partSwitch("effects")}</>} open={false}>
+        <div className="row" style={{ gap: 6 }}>{t("Black Mist")}<Hint text={t("A diffusion filter, as a Black Mist on the lens: part of the light spreads around it, a glow next to the lights, softer highlights and contrast.")} /></div>
+        <Range label={t("Strength")} value={fx.mist} display={`${fx.mist}`} min={0} max={100}
+          onChange={(v) => set({ mist: v })} onReset={() => set({ mist: 0 })} />
+        {fx.mist > 0 && (<>
+          <Range label={t("Glow size")} value={fx.mistSize} display={`${fx.mistSize}`} min={0} max={100}
+            onChange={(v) => set({ mistSize: v })} onReset={() => set({ mistSize: 50 })} />
+          <Range label={t("Threshold")} value={fx.mistThreshold} display={`${fx.mistThreshold}`} min={0} max={100}
+            onChange={(v) => set({ mistThreshold: v })} onReset={() => set({ mistThreshold: 40 })} />
+        </>)}
+        <div className="row" style={{ gap: 6 }}>{t("Halation")}<Hint text={t("As on film: a red-orange fringe around the strongest lights (a lamp, the sun, a reflection).")} /></div>
+        <Range label={t("Strength")} value={fx.halation} display={`${fx.halation}`} min={0} max={100}
+          onChange={(v) => set({ halation: v })} onReset={() => set({ halation: 0 })} />
+        {fx.halation > 0 && (<>
+          <Range label={t("Size")} value={fx.halationSize} display={`${fx.halationSize}`} min={0} max={100}
+            onChange={(v) => set({ halationSize: v })} onReset={() => set({ halationSize: 40 })} />
+          <Range label={t("Threshold")} value={fx.halationThreshold} display={`${fx.halationThreshold}`} min={0} max={100}
+            onChange={(v) => set({ halationThreshold: v })} onReset={() => set({ halationThreshold: 70 })} />
+        </>)}
+        <div className="row" style={{ gap: 6 }}>{t("Haze")}<Hint text={t("A cinematic fog: denser towards the top of the frame and over the bright, flat parts (sky, background), lit by the scene's own light.")} /></div>
+        <Range label={t("Density")} value={fx.haze} display={`${fx.haze}`} min={0} max={100}
+          onChange={(v) => set({ haze: v })} onReset={() => set({ haze: 0 })} />
+        {fx.haze > 0 && (<>
+          <Range label={t("Towards the top")} value={fx.hazeHeight} display={`${fx.hazeHeight}`} min={0} max={100}
+            onChange={(v) => set({ hazeHeight: v })} onReset={() => set({ hazeHeight: 60 })} />
+          <Range label={t("Tone")} value={fx.hazeTone} display={`${fx.hazeTone > 0 ? "+" : ""}${fx.hazeTone}`} min={-100} max={100}
+            onChange={(v) => set({ hazeTone: v })} onReset={() => set({ hazeTone: 0 })} />
+        </>)}
+      </Section>
+      <Section id="color-finish" title={<>{t("Finish")}{off("finish") && <span className="sec-sub"> · {t("off")}</span>}{partSwitch("finish")}</>} open={false}>
+        <Range label={t("Vignette")} value={g.vignette} display={`${g.vignette}`} min={0} max={100}
+          onChange={(v) => set({ vignette: v })} onReset={() => set({ vignette: 0 })} />
+        {g.vignette > 0 && (
+          <Range label={t("Vignette size")} value={g.vignetteSize} display={`${g.vignetteSize}`} min={0} max={100}
+            onChange={(v) => set({ vignetteSize: v })} onReset={() => set({ vignetteSize: 50 })} />
+        )}
+        <Range label={t("Grain")} value={g.grain} display={`${g.grain}`} min={0} max={100}
+          onChange={(v) => set({ grain: v })} onReset={() => set({ grain: 0 })} />
+        {g.grain > 0 && (
+          <Range label={t("Grain size")} value={g.grainSize} display={num(g.grainSize, 1)} min={1} max={4} step={0.5}
+            onChange={(v) => set({ grainSize: v })} onReset={() => set({ grainSize: 1 })} />
+        )}
+      </Section>
     </div>
   );
 }
