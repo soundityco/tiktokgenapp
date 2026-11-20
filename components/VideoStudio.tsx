@@ -6002,6 +6002,9 @@ export default function VideoStudio({
     const moved: HTMLElement[] = [];
     const move = (c: HTMLElement, x: number, y: number) => {
       c.style.translate = `${x}px ${y}px`;
+      // (the playing clip's glow, a bar on its track: carried with it, never switched off while dragging)
+      const glow = c.closest(".lyric-track")?.querySelector<HTMLElement>(".cue-bar-glow");
+      if (glow) { glow.style.translate = `${x}px ${y}px`; glow.classList.toggle("shifted", c.classList.contains("shifted")); moved.push(glow); }
       const hd = d.header ? c.closest(".tl-row")?.querySelector<HTMLElement>(".tl-hd") : null;
       if (hd) { hd.style.translate = `0 ${y}px`; hd.classList.add("hd-moving"); if (c === el) hd.classList.add("hd-lifted"); moved.push(hd); }
     };
@@ -6039,7 +6042,7 @@ export default function VideoStudio({
       el.classList.remove("lifted", "shifted"); el.style.translate = "";
       if (other) { other.classList.remove("shifted"); other.style.translate = ""; }
       for (const c of pushed) { c.classList.remove("shifted"); c.style.translate = ""; }
-      for (const h of moved) { h.style.translate = ""; h.classList.remove("hd-moving", "hd-lifted"); }
+      for (const h of moved) { h.style.translate = ""; h.classList.remove("hd-moving", "hd-lifted", "shifted"); }
     };
   }, [vdrag]);
   /**

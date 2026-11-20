@@ -3000,7 +3000,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* A video clip carried up or down (the clip itself, as in CapCut): it follows the pointer over the other rows, held by
    the video block; the one it would change places with slides into its row. Each video clip has its number. */
 .video-block.dragging { clip-path: inset(-400px -6px); } /* (held on the sides only: it can go above or under the block) */
-.video-block.dragging .cue-bar-glow { display: none; }
+/* (the playing clip's glow is carried with its clip, VideoStudio: `move`) */
+.video-block .cue-bar-glow.shifted { transition: translate .16s ease; }
 .video-block.dragging .lyric-track { overflow: visible; }
 .video-block .lyric-track:has(.lifted) { z-index: 5; }
 /* A video clip cut, a piece of it turned off (as in Premiere): the cuts as thin lines, the off pieces greyed and hatched;
