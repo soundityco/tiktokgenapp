@@ -3286,9 +3286,13 @@ export default function VideoStudio({
    * the right column sets it (colour, framing, finish…). "base": the video under (a multicam: the shot under the
    * playhead), else the take over it.
    */
-  const pickVideoRow = (key: string) => {
+  const pickVideoRow = (key: string, cam?: string) => {
     setPick("video"); setPickPiece(null); setMulti([]);
-    if (key === "base") { setOverLook(null); setPinCam((settingsRef.current.angles ?? []).some(Boolean) ? null : "main"); }
+    // (a shot of the multicam clicked: its camera's video pinned — the column sets that video, playing or not)
+    const k = cam === undefined ? -1 : Number(cam), angles = settingsRef.current.angles ?? [];
+    if (key === "base" && k >= 0) { setOverLook(null); setPinCam(null); setShotLook(k === 0 ? "main" : angles[k - 1] ?? null); return; }
+    setShotLook(null);
+    if (key === "base") { setOverLook(null); setPinCam(angles.some(Boolean) ? null : "main"); }
     else { setPinCam(null); setOverLook(key); }
   };
   const isVideoRow = (key: string | null): key is string => !!key && key !== "hooks" && key !== "lyrics";
@@ -3371,7 +3375,7 @@ export default function VideoStudio({
    * Lyrics and hook tracks: drag anywhere to move the playhead; a click on a caption goes to its start,
    * a click elsewhere puts the playhead there. `onCue`: also called for a click on a caption.
    */
-  const scrubRef = useRef<{ px: number; at: number | null; pick: string | null; moved: boolean;
+  const scrubRef = useRef<{ px: number; at: number | null; pick: string | null; moved: boolean; cam?: string;
     /** A line grabbed by its body (as a clip in an editor: moved whole, its length kept): which, and the lines then. */
     mv?: { i: number; cues: Cue[]; words: LyricWord[]; w: { s: number; d: number }; width: number } } | null>(null);
   const scrub = (onCue?: () => void) => {
@@ -3388,7 +3392,7 @@ export default function VideoStudio({
         stop();
         e.currentTarget.setPointerCapture(e.pointerId);
         const cue = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
-        scrubRef.current = { px: e.clientX, at: cue ? Number(cue.dataset.at) : null, pick: cue?.dataset.pick ?? null, moved: false };
+        scrubRef.current = { px: e.clientX, at: cue ? Number(cue.dataset.at) : null, pick: cue?.dataset.pick ?? null, moved: false, cam: cue?.dataset.cam };
         // A line's body: dragged, the line moves whole (the segment's lines or the song's, outside it).
         const line = (e.target as HTMLElement).closest<HTMLElement>("[data-mv]");
         if (line && mode !== "word") {
@@ -3442,7 +3446,8 @@ export default function VideoStudio({
         }
         // (on a video's line, empty or a shot of the multicam: that video picked — the right column sets it)
         const rk = rowKeyOf(e.currentTarget), vrow = isVideoRow(rk) ? rk : null;
-        if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); setMulti([]); onCue?.(); if (!d.pick && vrow) pickVideoRow(vrow); }
+        // (a shot of the multicam: its own video set in the column — the clip's, never the line's)
+        if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); setMulti([]); onCue?.(); if (!d.pick && vrow) pickVideoRow(vrow, d.cam); }
         else { setHead(timeOf(e.currentTarget, e.clientX)); pickNothing(); if (vrow) pickVideoRow(vrow); }
       },
       onPointerCancel: () => { scrubRef.current = null; },
@@ -4675,7 +4680,12 @@ export default function VideoStudio({
   // ---- multicam: the camera the right column sets (colour, effects, framing) = the one on the paused preview: a take
   //      pinned from the library, else the shot under the playhead. Kept in the take (every project using it). ----
   const shotTake = (() => { const k = camAt(settings.cuts, head); return k > 0 ? settings.angles?.[k - 1] ?? null : null; })();
-  const lookId = pinCam ?? (playing ? null : shotTake);
+  /**
+   * The video of the multicam's shot clicked (its id, "main" camera 1): the one the right column sets, the clip's —
+   * playing or not, whatever shot is under the playhead. Never what the preview shows (that is `pinCam`'s).
+   */
+  const [shotLook, setShotLook] = useState<string | null>(null);
+  const lookId = pinCam ?? shotLook ?? (playing ? null : shotTake);
   // The video over it, picked on the preview or its track: the right column sets its take (colour, framing…).
   // (the take of the one picked; none: the column sets the video under them)
   const [overLook, setOverLook] = useState<string | null>(null);
@@ -4683,7 +4693,7 @@ export default function VideoStudio({
   const [pick, setPick] = useState<string | null>(null);
   const ovSel = overlayOf(settings, overLook);
   const ovTake = ovSel ? clips.find((c) => c.id === ovSel.clip) : undefined;
-  useEffect(() => { if (pinCam) setOverLook(null); }, [pinCam]);
+  useEffect(() => { if (pinCam) { setOverLook(null); setShotLook(null); } }, [pinCam]);
   useEffect(() => { if (overLook && !overlayOf(settings, overLook)) setOverLook(null); }, [settings.overlays, settings.overlay, settings.angles]); // eslint-disable-line react-hooks/exhaustive-deps
   const camTake = ovTake ?? (lookId && lookId !== "main" && settings.angles?.includes(lookId) ? clips.find((c) => c.id === lookId) : undefined);
   const camTakeRef = useRef(camTake);
@@ -6182,6 +6192,8 @@ export default function VideoStudio({
         : [{ at: 0, cam: k }, { at, cam: 0 }];
       setOverLook(null);
       setV({ angles: [...angles, take.id], ...withOverlays(ovs.filter((o) => o.clip !== take.id)), cuts: cuts.sort((a, b) => a.at - b.at) });
+      // (the video just put in the multicam is the one the column sets: never camera 1's grade shown for it)
+      setPick("video"); setPinCam(null); setShotLook(d.from === "over" ? take.id : "main");
       return;
     }
     // A shot of the multicam: on its own track, just above the row it was dropped on (above the block: on top).
@@ -6471,7 +6483,7 @@ export default function VideoStudio({
               const own = x.cut >= 0 && Math.abs(sortedCuts[x.cut].at - x.from) < 1e-3 ? sortedCuts[x.cut] : null;
               const go = () => { stop(); setPinCam(null); setPick("video"); setHead(round2(x.from + 0.01)); };
               return (
-                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + camNo(settings, x.cam) + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from} data-a={x.from} data-b={x.to}
+                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + camNo(settings, x.cam) + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-cam={x.cam} data-at={x.from} data-a={x.from} data-b={x.to}
                   // Pulled up (as in CapCut): this camera leaves the cuts and goes over the video, on its own track.
                   onPointerDown={(e) => { if (e.button === 2) e.stopPropagation(); if (e.button === 0 && !trackLocked("base")) liftRef.current = { x: e.clientX, y: e.clientY, cam: x.cam, el: e.currentTarget }; }}
                   // (right click: the cameras' sound)
