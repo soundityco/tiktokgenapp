@@ -27,7 +27,9 @@ export default function ColumnGrips({ studio }: { studio: string }) {
   const { t } = useT();
   const [widths, setWidths] = useState<Widths>({ ...BASE });
   const [box, setBox] = useState<{ x0: number; x1: number; top: number; h: number } | null>(null);
-  const drag = useRef<{ side: Side; x: number; w: number; other: number } | null>(null);
+  // (while dragging, nothing goes through React: the width is written at once and the grip follows the column's edge in
+  // the same frame — through a render per move, the grip came a frame late and the edge shook against the pointer)
+  const drag = useRef<{ side: Side; x: number; w: number; other: number; now: number; el: HTMLElement; left: number; right: number; raf: number; px: number } | null>(null);
   const [active, setActive] = useState<Side | null>(null);
 
   // The widths kept in this browser.
@@ -70,21 +72,39 @@ export default function ColumnGrips({ studio }: { studio: string }) {
         if (e.button !== 0) return;
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = { side, x: e.clientX, w: widths[side], other: widths[side === "l" ? "r" : "l"] };
+        const grid = document.querySelector<HTMLElement>(studio === "video" ? ".main .video-shell" : ".main")?.getBoundingClientRect();
+        drag.current = { side, x: e.clientX, w: widths[side], other: widths[side === "l" ? "r" : "l"], now: widths[side], el: e.currentTarget,
+          left: grid?.left ?? 0, right: grid?.right ?? window.innerWidth, raf: 0, px: e.clientX };
         setActive(side);
         document.documentElement.classList.add("col-resizing");
       }}
       onPointerMove={(e) => {
         const d = drag.current;
         if (!d) return;
-        const dx = (e.clientX - d.x) * (d.side === "l" ? 1 : -1);
-        // (the board in the middle keeps its room)
-        const room = window.innerWidth - d.other - CENTER_MIN;
-        const w = fit(d.side, Math.min(d.w + dx, Math.max(BASE[d.side], room)));
-        if (w !== widths[d.side]) set({ ...widths, [d.side]: w });
+        d.px = e.clientX;
+        // (one write per frame, whatever the mouse's rate)
+        if (d.raf) return;
+        d.raf = requestAnimationFrame(() => {
+          d.raf = 0;
+          const dx = (d.px - d.x) * (d.side === "l" ? 1 : -1);
+          // (the board in the middle keeps its room)
+          const room = window.innerWidth - d.other - CENTER_MIN;
+          const w = fit(d.side, Math.min(d.w + dx, Math.max(BASE[d.side], room)));
+          if (w === d.now) return;
+          d.now = w;
+          apply(d.side === "l" ? { l: w, r: d.other } : { l: d.other, r: w });
+          d.el.style.left = `${d.side === "l" ? d.left + w : d.right - w}px`;
+        });
       }}
-      onPointerUp={() => { if (!drag.current) return; drag.current = null; setActive(null); document.documentElement.classList.remove("col-resizing"); save(widths); }}
-      onPointerCancel={() => { drag.current = null; setActive(null); document.documentElement.classList.remove("col-resizing"); }}
+      onPointerUp={() => {
+        const d = drag.current;
+        if (!d) return;
+        cancelAnimationFrame(d.raf);
+        drag.current = null; setActive(null); document.documentElement.classList.remove("col-resizing");
+        const w = d.side === "l" ? { l: d.now, r: d.other } : { l: d.other, r: d.now };
+        setWidths(w); save(w);
+      }}
+      onPointerCancel={() => { const d = drag.current; if (d) cancelAnimationFrame(d.raf); drag.current = null; setActive(null); document.documentElement.classList.remove("col-resizing"); }}
       onDoubleClick={() => { const w = { ...widths, [side]: BASE[side] }; set(w); save(w); }} />
   );
   return <>{grip("l")}{grip("r")}</>;

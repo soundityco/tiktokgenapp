@@ -515,7 +515,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .take-row > :not(.take-main) { flex: none; }
 .take-row > .warn-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .take.other { opacity: .6; }
-.take.other:hover, .take.other.open { opacity: 1; }
+.take.other:hover, .take.other.open, .take.other:focus-within { opacity: 1; }
 .take-import { align-self: flex-start; margin-top: 6px; } /* (12 px from the last take: the videos 6 px apart) */
 /* The project's takes 6 px apart all along (camera 1's card, then the others), its title as far as before. */
 .tree-branch.takes-branch { row-gap: 6px; }
@@ -3030,4 +3030,6 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .col-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: var(--text); opacity: 0; transition: opacity .12s ease; }
 .col-grip:hover::after, .col-grip.on::after { opacity: .35; }
 html.col-resizing, html.col-resizing * { cursor: col-resize !important; user-select: none !important; }
+/* (while a column is resized: nothing eases behind the pointer, the layout follows it in the same frame) */
+html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { transition: none !important; }
 @media (hover: none), (max-width: 1000px) { .col-grip { display: none; } }

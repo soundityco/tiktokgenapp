@@ -292,6 +292,8 @@ export const FR: Record<string, string> = {
   "Copied": "Copié",
   "Copy": "Copier",
   "Copy all": "Tout copier",
+  "“{name}” deleted.": "« {name} » supprimée.",
+  "“{name}” is deleted: its file on this device and its Drive copy are erased, and the projects using it lose it. The other videos, the audio and the lyrics stay as they are.": "« {name} » est supprimée : son fichier sur cet appareil et sa copie Drive sont effacés, et les projets qui s'en servent la perdent. Les autres vidéos, l'audio et les paroles restent tels quels.",
   "Open the list": "Ouvrir la liste",
   "Video {n} taken out of the project: it waits in the release's other takes.": "Vidéo {n} retirée du projet : elle attend dans les autres prises de la release.",
   "Rename the track": "Renommer la piste",

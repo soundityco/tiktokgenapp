@@ -5194,14 +5194,16 @@ export default function VideoStudio({
     <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
     {/* Out of the project, as any other video (V2, V3…): the one above it becomes the one under, it waits in the
         release's other takes. */}
-    {settings.videoName && <><div className="sep" /><button onClick={() => { close(); takeOutBase(); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button></>}
+    {settings.videoName && <><div className="sep" /><button onClick={() => { close(); takeOutBase(); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button>
+      <div className="sep" />
+      <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setAskDel(clip); }}><Icon name="trash" size={14} />{t("Delete this video")}</button></>}
   </>);
   /**
    * The video under taken out of the project, as the ones over it can be: another video of the project takes its place
    * (the one just above it; in a multicam, camera 2), and its file waits in the release's other takes (never deleted).
    * Alone, it becomes a take of the release and the project has no video any more.
    */
-  const takeOutBase = () => {
+  const takeOutBase = (quiet = false) => {
     const cur = settingsRef.current, ovs = overlaysOf(cur), angles = (cur.angles ?? []).filter(Boolean);
     syncRef.current?.abort(); stop();
     const no = baseNo(cur) + 1;
@@ -5226,8 +5228,63 @@ export default function VideoStudio({
       setHead(settingsRef.current.crop.start);
       onSaveNow();
     }
-    onToast?.(t("Video {n} taken out of the project: it waits in the release's other takes.", { n: no }));
+    if (!quiet) onToast?.(t("Video {n} taken out of the project: it waits in the release's other takes.", { n: no }));
   };
+  /** A video asked to be deleted (its ⋯, its right click: every video, the same). */
+  const [askDel, setAskDel] = useState<VideoSetup | null>(null);
+  /** The video under being deleted: its file taken out of the project first, then deleted once it is a take. */
+  const pendingDel = useRef<string | null>(null);
+  /** A project without one of its takes (a camera of its multicam or a video over it): its cuts kept on the others. */
+  const withoutTake = (x: VideoSetup, id: string): VideoSetup => {
+    const angles = [...(x.angles ?? [])], k = angles.indexOf(id);
+    let next: VideoSetup = x;
+    if (k >= 0) {
+      angles.splice(k, 1);
+      const cuts = x.cuts?.map((c) => (c.cam === k + 1 ? { ...c, cam: 0 } : c.cam > k + 1 ? { ...c, cam: c.cam - 1 } : c));
+      next = { ...next, angles: angles.length ? angles : undefined, cuts: angles.length ? cuts : undefined };
+    }
+    const ovs = overlaysOf(next);
+    if (ovs.some((o) => o.clip === id)) next = { ...next, ...withOverlays(ovs.filter((o) => o.clip !== id)) };
+    return next;
+  };
+  /**
+   * A video deleted, wherever it is: out of every project that uses it (camera or over a video), then its file on this
+   * device and its Drive copy (unless another video reads them). The video under of this project: the one above takes
+   * its place first. Another project's own video: that project stays, without a video.
+   */
+  const deleteVideo = (c: VideoSetup) => {
+    stop();
+    if (c.id === clip.id) {
+      if (!settingsRef.current.videoName) return;
+      pendingDel.current = mediaId;
+      takeOutBase(true);
+      return;
+    }
+    if (pinCam === c.id) setPinCam(null);
+    if (overLook === c.id) setOverLook(null);
+    onProject((p) => ({ ...p, videos: clipsOf(p).map((x) => (x.id === c.id ? x : withoutTake(x, c.id))) }));
+    if (c.takeOnly) deleteTake(c);
+    else {
+      // (another project's own video: that project keeps its lyrics, hooks and versions, without a camera file)
+      const media = c.media ?? c.id, rest = clips.filter((x) => x.id !== c.id);
+      patchTake(c.id, { media: uid(), videoName: undefined, videoSize: undefined, source: undefined, drive: undefined, offset: 0, score: undefined, musicStart: undefined,
+        musicEnd: undefined, anchors: undefined, takes: undefined, linked: false, clipIn: undefined, clipOut: undefined, splits: undefined, offParts: undefined });
+      if (!rest.some((x) => (x.media ?? x.id) === media)) { void delMedia(`video:${media}`).catch(() => {}); void delMedia(`poster:${media}`).catch(() => {}); }
+      const copyId = c.drive?.copy?.id;
+      if (copyId && !rest.some((x) => x.drive?.copy?.id === copyId)) void deleteDriveFile(copyId);
+      stopCopyOf(c.id);
+      dropKeptCopy(c.id, copyId);
+      onSaveNow();
+    }
+    onToast?.(t("“{name}” deleted.", { name: c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c) }));
+  };
+  // (the video under, now a take of the release: deleted as any take)
+  useEffect(() => {
+    const m = pendingDel.current;
+    if (!m) return;
+    const take = clips.find((x) => x.takeOnly && x.id !== clip.id && (x.media ?? x.id) === m);
+    if (take) { pendingDel.current = null; deleteVideo(take); }
+  }, [clips]); // eslint-disable-line react-hooks/exhaustive-deps
   /**
    * A take's menu (its ⋯ in the library, its line's header and its right click): what it can do by where it is — over
    * the video, a camera of the multicam, or not in the project —, camera 1 its own (`baseMenu`).
@@ -5252,12 +5309,9 @@ export default function VideoStudio({
         {copyJob?.clip === c.id && <button onClick={() => { close(); copyAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the Drive copy")}</button>}
         <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
         {(isOver || (cam !== null && cam > 0)) && <><div className="sep" /><button onClick={() => { close(); stop(); if (isOver) patchOverlay(c.id, null); else removeAngle(i); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button></>}
-        {c.takeOnly && <>
-          <div className="sep" />
-          <button className="danger" style={{ color: "var(--danger)" }} disabled={usedAsCamera(c.id)}
-            title={usedAsCamera(c.id) ? t("A project uses it as a camera.") : undefined}
-            onClick={() => { close(); deleteTake(c); }}><Icon name="trash" size={14} />{t("Delete this take")}</button>
-        </>}
+        {/* Every video can be deleted, wherever it is (asked first): the same right for all of them. */}
+        <div className="sep" />
+        <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setAskDel(c); }}><Icon name="trash" size={14} />{t("Delete this video")}</button>
     </>);
   };
   /** The project's videos, in the order of their numbers (`strip`: camera 1's full card, under its line). */
@@ -5323,7 +5377,8 @@ export default function VideoStudio({
             : c.score === undefined ? <span className="muted xs take-free" title={t("Not synced")}>—</span>
             : <Icon name="check" size={12} />}
           {cam === null && !isOver && room && <button className="btn icon sm quiet" aria-label={t("Add to the project")} title={t("Add to the project")} onClick={() => putOverlay(c)}><Icon name="plus" size={12} /></button>}
-          {<Menu float trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
+          {/* (portal: drawn out of the line — a take of the release is dimmed until hovered, its menu was dimmed with it) */}
+          {<Menu float portal trigger={(_, tg) => <button className="btn icon sm quiet" aria-label={t("Options")} onClick={tg}><Icon name="more" size={14} /></button>}>{menu}</Menu>}
         </div>
         </div>
       );
@@ -8254,6 +8309,11 @@ export default function VideoStudio({
         <PromptDialog title={t("Rename this version")} label={t("Name")} confirmLabel={t("Rename")}
           initial={(() => { const v = audioVersionsOf(release).find((x) => x.id === renamingAudio); return v ? audioLabel(v) : ""; })()}
           onSubmit={(v) => { const id = renamingAudio; setRenamingAudio(null); onRelease((p) => renameAudio(p, id, v)); onSaveNow(); }} onClose={() => setRenamingAudio(null)} />
+      )}
+      {askDel && (
+        <ConfirmDialog danger title={t("Delete this video")} confirmLabel={t("Delete")}
+          message={t("“{name}” is deleted: its file on this device and its Drive copy are erased, and the projects using it lose it. The other videos, the audio and the lyrics stay as they are.", { name: askDel.videoName?.replace(/\.[^.]+$/, "") ?? clipName(askDel) })}
+          onConfirm={() => { const c = askDel; setAskDel(null); deleteVideo(c); }} onClose={() => setAskDel(null)} />
       )}
       {clipDialog === "delete" && (
         <ConfirmDialog danger title={t("Delete this video")} confirmLabel={t("Delete")}
