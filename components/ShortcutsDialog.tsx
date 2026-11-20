@@ -20,6 +20,14 @@ const SHORTCUTS: { part: string; keys: string[][]; what: string; pair?: boolean 
   { part: "Video", keys: [["←"], ["→"]], what: "Previous / next lyric line", pair: true },
   { part: "Video", keys: [["⌥", "←"], ["⌥", "→"]], what: "Move the official audio by −0.1 s / +0.1 s (not linked)", pair: true },
   { part: "Video", keys: [["I"], ["O"]], what: "Start / end of the segment at the playhead", pair: true },
+  { part: "Video", keys: [["Esc"]], what: "Nothing picked on the timeline" },
+  { part: "Video", keys: [["L"]], what: "Lock / unlock the lyrics line picked" },
+  { part: "Video", keys: [["mod", "C"], ["mod", "V"]], what: "Copy the timing of the lines picked / paste it at the playhead", pair: true },
+  { part: "Video", keys: [["⌫"]], what: "Delete the hook picked, or turn off the piece of video picked" },
+  { part: "Video", keys: [["C"]], what: "Cut the video picked at the playhead (multicam: cut the shot)" },
+  { part: "Video", keys: [["⇧", "E"]], what: "Turn the piece of video under the playhead off or on" },
+  { part: "Video", keys: [["1"], ["2"], ["3"], ["4"]], what: "Multicam: camera 1 … camera 4" },
+  { part: "Both studios", keys: [["mod", "S"]], what: "Save now" },
 ];
 
 /** The shortcuts, from the account menu. */

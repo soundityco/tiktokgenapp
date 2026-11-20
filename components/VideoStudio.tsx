@@ -5647,7 +5647,7 @@ export default function VideoStudio({
       const lk = lockedCue(c);
       return (<>
         <div className="label cap truncate">{c.text.replace(/\n/g, " ")}</div>
-        <button disabled={mode === "word"} onClick={() => { close(); toggleLock(c); }}><Icon name={lk ? "unlock" : "lock"} size={14} />{lk ? t("Unlock this line") : t("Lock this line")}</button>
+        <button disabled={mode === "word"} onClick={() => { close(); toggleLock(c); }}><Icon name={lk ? "unlock" : "lock"} size={14} />{lk ? t("Unlock this line") : t("Lock this line")}<kbd>L</kbd></button>
         <button onClick={() => { close(); stop(); setHead(round2(c.start)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
         <div className="sep" />
         <button onClick={() => { close(); timingFns.current.copy(); }}><Icon name="copy" size={14} />{multi.length ? t("Copy the timing of the lines") : t("Copy the timing")}<kbd>⌘C</kbd></button>
@@ -5665,7 +5665,7 @@ export default function VideoStudio({
       <button onClick={() => { close(); stop(); setHead(round2(settings.crop.start + h.from)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
       <button onClick={() => { close(); toggleTrackLock("hooks"); }}><Icon name={trackLocked("hooks") ? "unlock" : "lock"} size={14} />{trackLocked("hooks") ? t("Unlock the track") : t("Lock the track")}</button>
       <div className="sep" />
-      <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setHooks(hooks.filter((x) => x.id !== h.id)); if (pick === "hook:" + h.id) setPick(null); }}><Icon name="trash" size={14} />{t("Delete this hook")}</button>
+      <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); setHooks(hooks.filter((x) => x.id !== h.id)); if (pick === "hook:" + h.id) setPick(null); }}><Icon name="trash" size={14} />{t("Delete this hook")}<kbd>⌫</kbd></button>
     </>))(e);
   };
   /** The timeline's right click where no clip is: the playback, the segment, the loop, a timing to paste. */
@@ -6048,7 +6048,19 @@ export default function VideoStudio({
   // is already on the timeline (moved there, on its track), and its line is only clicked (shown, set, unfolded).
   const takeDrag = (c: VideoSetup, _cam: number | null) => c.id === clip.id || (settings.angles ?? []).includes(c.id) || !!overlayOf(settings, c.id) ? {} : {
     draggable: true,
-    onDragStart: (e: React.DragEvent) => { e.dataTransfer.setData("text/x-raw-take", c.id); e.dataTransfer.effectAllowed = "move"; setDragTake(c.id); },
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData("text/x-raw-take", c.id); e.dataTransfer.effectAllowed = "move"; setDragTake(c.id);
+      // Carried as a clip of the timeline (its colour: the number it gets in the project), not the browser's faded copy
+      // of the library's line.
+      const used = new Set(Object.values(numbersOf(settings)));
+      let no = 0; while (used.has(no) && no < MAX_CAMS - 1) no++;
+      const g = document.createElement("div");
+      g.className = "drag-ghost cam-" + no;
+      g.textContent = `${no + 1} · ${c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}`;
+      document.body.appendChild(g);
+      e.dataTransfer.setDragImage(g, 18, g.offsetHeight / 2);
+      window.setTimeout(() => g.remove(), 0);
+    },
     onDragEnd: () => { setDragTake(null); setDropRow(null); setDropAt(null); },
   };
   const rowOf = (e: React.DragEvent<HTMLElement>): "over" | "main" => {
@@ -6887,6 +6899,13 @@ export default function VideoStudio({
     // The list of them all: ShortcutsDialog. F and G need the video only (in the full screen, F closes it: FullView).
     if (!e.altKey && k.toLowerCase() === "f") { if (videoBlob && !full) { e.preventDefault(); toggleFull(true); } return; }
     if (!e.altKey && k.toLowerCase() === "g") { if (videoBlob && settings.format !== "16:9") setAids({ zones: !aids.zones }); return; }
+    // Escape: nothing picked any more on the timeline (as in an editor).
+    if (k === "Escape" && (pick || multi.length || pickPiece)) { pickNothing(); return; }
+    // L: the line picked locked or unlocked (its padlock); Delete: the hook picked deleted.
+    if (!e.altKey && k.toLowerCase() === "l" && pickedCue && mode !== "word") { e.preventDefault(); toggleLock(pickedCue); return; }
+    if ((k === "Backspace" || k === "Delete") && pick?.startsWith("hook:") && !trackLocked("hooks")) {
+      e.preventDefault(); const id = pick.slice(5); setHooks(hooks.filter((x) => x.id !== id)); setPick(null); return;
+    }
     if (!audioBuf) return;
     if (k === " ") { e.preventDefault(); if (playing) pause(); else void play(); }
     else if ((k === "ArrowLeft" || k === "ArrowRight") && e.altKey) {

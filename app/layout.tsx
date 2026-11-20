@@ -3,6 +3,7 @@ import "./globals.css";
 import { I18nProvider } from "@/lib/i18n";
 import InstallApp from "@/components/InstallApp";
 import PointerHabits from "@/components/PointerHabits";
+import Tooltips from "@/components/Tooltips";
 
 export const metadata: Metadata = {
   title: "RAW by aurare",
@@ -17,10 +18,16 @@ export const metadata: Metadata = {
 // white flash before the styles).
 export const viewport: Viewport = { themeColor: "#08080a", colorScheme: "dark", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
+const FIRST_FONTS = ["tiktok-sans-latin-wght-normal.woff2", "jetbrains-mono-latin-wght-normal.woff2", "instrument-serif-latin-400-normal.woff2", "instrument-serif-latin-400-italic.woff2"];
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body><I18nProvider>{children}</I18nProvider><InstallApp /><PointerHabits /></body>
+      {/* The first screen's fonts, fetched with the page (see globals.css): no text jumping once they arrive. */}
+      <head>
+        {FIRST_FONTS.map((f) => <link key={f} rel="preload" href={`/fonts/${f}`} as="font" type="font/woff2" crossOrigin="anonymous" />)}
+      </head>
+      <body><I18nProvider>{children}</I18nProvider><InstallApp /><PointerHabits /><Tooltips /></body>
     </html>
   );
 }
