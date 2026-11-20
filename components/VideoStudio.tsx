@@ -899,9 +899,13 @@ export default function VideoStudio({
   const takeKey = (id: string) => { const c = clips.find((x) => x.id === id); return c ? fileKey(c) : id; };
   const numbersOf = (s: VideoSettings): Record<string, number> => {
     const keys = [fileKey(clip), ...(s.angles ?? []).filter(Boolean).map(takeKey), ...overlaysOf(s).map((o) => takeKey(o.clip))];
-    const old = s.videoNos ?? {}, out: Record<string, number> = {}, used = new Set<number>();
-    for (const k of keys) { const n = old[k]; if (n !== undefined && n >= 0 && n < MAX_CAMS && !used.has(n)) { out[k] = n; used.add(n); } }
-    for (const k of keys) { if (out[k] !== undefined) continue; let n = 0; while (used.has(n)) n++; out[k] = Math.min(n, MAX_CAMS - 1); used.add(n); }
+    // (kept in the order they came in, closed up: a video taken out or deleted leaves no gap — V1 and V4 left become V1
+    // and V2, their colours in that order; the names given to the tracks stay with their files)
+    const old = s.videoNos ?? {}, out: Record<string, number> = {};
+    const kept = [...new Set(keys)].filter((k) => old[k] !== undefined).sort((a, b) => old[a] - old[b]);
+    kept.forEach((k, i) => { out[k] = i; });
+    let n = kept.length;
+    for (const k of keys) if (out[k] === undefined) out[k] = Math.min(n++, MAX_CAMS - 1);
     return out;
   };
   numbersFn.current = numbersOf;
@@ -915,6 +919,8 @@ export default function VideoStudio({
   const trackName = (s: VideoSettings, key: string, no: number) => s.trackNames?.[key]?.trim() || "V" + (no + 1);
   /** Videos in the project: camera 1, the cameras, the ones over it (4 at most). */
   const videosIn = (s: VideoSettings) => 1 + (s.angles ?? []).filter(Boolean).length + overlaysOf(s).length;
+  /** Takes just imported, read from the files picked while they are written to the device (`video:<id>`). */
+  const pendingTakeFiles = useRef(new Map<string, Blob>());
   const ovClips = overlaysOf(settings).map((o) => clips.find((c) => c.id === o.clip)).filter((c): c is VideoSetup => !!c);
   const angleClips = [...(settings.angles ?? []).map((id) => clips.find((c) => c.id === id && c.id !== clip.id) ?? null), ...ovClips];
   // What a camera needs (its file, its offset, framing and grade): read again when one of them changes.
@@ -932,7 +938,7 @@ export default function VideoStudio({
         let a = map.get(c.id);
         if (!a || a.media !== media) {
           // The camera file on this device, else its Drive working copy kept here, else that copy fetched from the Drive.
-          const kept = await getMedia(`video:${media}`).catch(() => undefined);
+          const kept = pendingTakeFiles.current.get(media) ?? await getMedia(`video:${media}`).catch(() => undefined);
           // (another file under its key on this device: not its own, never shown in its place)
           const own = kept && c.videoSize && kept.size !== c.videoSize ? undefined : kept;
           const cp = c.drive?.copy;
@@ -2224,8 +2230,9 @@ export default function VideoStudio({
     setHead(settingsRef.current.crop.start);
     void askPersistentStorage();
     void describeVideo(f, true);
-    try { await putMedia(`video:${media ?? clip.id}`, f); } catch { /* private mode: keep it in memory */ }
     onSaveNow();
+    // (written to the device meanwhile: gigabytes take seconds, the video is shown from the file picked)
+    void putMedia(`video:${media ?? clip.id}`, f).catch(() => { /* private mode: keep it in memory */ });
   };
 
   /**
@@ -2415,6 +2422,8 @@ export default function VideoStudio({
     const vids = files.filter(isVideoFile);
     if (!vids.length) return;
     const hasOwn = !!settingsRef.current.videoName || !!videoBlob;
+    // (the first under — set at once, its file written to the device meanwhile —, then the others over it: never one
+    // after the other's gigabytes written; the others not before it, a project without a video of its own holds none)
     if (!hasOwn) await pickVideo(vids[0]);
     const rest = hasOwn ? vids : vids.slice(1);
     if (rest.length) await importTakes(rest);
@@ -3215,11 +3224,22 @@ export default function VideoStudio({
   const [rowPick, setRowPick] = useState<string | null>(null);
   const rowKeyOf = (el: HTMLElement): string | null => el.dataset.ov ?? (el.classList.contains("hook-track") ? "hooks" : el.classList.contains("lyrics-track") ? "lyrics"
     : el.classList.contains("cam-track") || el.classList.contains("video-track") ? "base" : null);
+  /**
+   * A video's line picked (its header, or a click anywhere on its track): that video picked as by a click on its clip —
+   * the right column sets it (colour, framing, finish…). "base": the video under (a multicam: the shot under the
+   * playhead), else the take over it.
+   */
+  const pickVideoRow = (key: string) => {
+    setPick("video"); setPickPiece(null); setMulti([]);
+    if (key === "base") { setOverLook(null); setPinCam((settingsRef.current.angles ?? []).some(Boolean) ? null : "main"); }
+    else { setPinCam(null); setOverLook(key); }
+  };
+  const isVideoRow = (key: string | null): key is string => !!key && key !== "hooks" && key !== "lyrics";
   /** A header's props: clicked, its line is picked (its switches keep their own clicks). */
   const rowHd = (key: string) => ({ onClick: (e: React.MouseEvent) => {
     // (the click that ends a drag by the header: the line was picked on press, and follows its video)
     if (hdDragged.current) { hdDragged.current = false; return; }
-    if (!(e.target as HTMLElement).closest("button, input")) setRowPick(key);
+    if (!(e.target as HTMLElement).closest("button, input")) { setRowPick(key); if (isVideoRow(key)) pickVideoRow(key); }
   } });
   const hdDragged = useRef(false);
   /**
@@ -3231,7 +3251,7 @@ export default function VideoStudio({
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
       e.stopPropagation();
       if (e.button !== 0 || (e.target as HTMLElement).closest("button, input")) return;
-      setRowPick(key); // (pressed: its line picked at once, dragged or not)
+      setRowPick(key); pickVideoRow(key); // (pressed: its line and its video picked at once, dragged or not)
       hdDragged.current = false;
       hdDrag.current = { key, x: e.clientX, y: e.clientY };
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -3242,7 +3262,7 @@ export default function VideoStudio({
       if (!d || !vertical(e, { px: d.x, py: d.y })) return;
       hdDrag.current = null;
       hdDragged.current = true;
-      if (trackLocked(d.key)) return; // (its track locked: as its clip, it stays)
+      if (trackLocked(d.key)) { lockedTried(d.key); return; } // (its track locked: as its clip, it stays — said)
       const row = document.querySelector<HTMLElement>(d.key === "base" ? ".video-block .video-track:not(.over-track)" : `.video-block .over-track[data-ov="${CSS.escape(d.key)}"]`);
       const el = row?.querySelector<HTMLElement>(".video-clip");
       if (!el) return;
@@ -3363,8 +3383,10 @@ export default function VideoStudio({
           setMulti((m) => (m.includes(k) ? m.filter((x) => x !== k) : [...m, k]));
           return;
         }
-        if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); setMulti([]); onCue?.(); }
-        else { setHead(timeOf(e.currentTarget, e.clientX)); pickNothing(); }
+        // (on a video's line, empty or a shot of the multicam: that video picked — the right column sets it)
+        const rk = rowKeyOf(e.currentTarget), vrow = isVideoRow(rk) ? rk : null;
+        if (d.at !== null) { setHead(round2(d.at)); setPick(d.pick); setMulti([]); onCue?.(); if (!d.pick && vrow) pickVideoRow(vrow); }
+        else { setHead(timeOf(e.currentTarget, e.clientX)); pickNothing(); if (vrow) pickVideoRow(vrow); }
       },
       onPointerCancel: () => { scrubRef.current = null; },
     };
@@ -4994,7 +5016,11 @@ export default function VideoStudio({
       made.splice(0, made.length, ...made.filter((m) => !known(m.f)));
     }
     if (!made.length) return;
-    for (const m of made) await putMedia(`video:${m.c.id}`, m.f).catch(() => {});
+    // On the timeline at once, read from the files picked; written to the device meanwhile (gigabytes: seconds each).
+    for (const m of made) pendingTakeFiles.current.set(m.c.id, m.f);
+    void (async () => {
+      for (const m of made) { await putMedia(`video:${m.c.id}`, m.f).catch(() => {}); pendingTakeFiles.current.delete(m.c.id); }
+    })();
     // Imported = wanted on the timeline: each on its own track over the video, on top of the others (4 videos at most;
     // the others wait with the release's other takes). Dragged afterwards wherever wanted (under, multicam…).
     const now = settingsRef.current;
@@ -5588,6 +5614,19 @@ export default function VideoStudio({
   );
   /** A track locked in its header (as in Premiere): its clips are not moved nor trimmed (clicked: still selected). */
   const trackLocked = (key: string) => !!settings.trackLocks?.includes(key);
+  /**
+   * A locked track's clip (or its header) dragged: nothing moves, as in an editor — but it says why: a word, and the
+   * padlock of that track blinks (once per gesture).
+   */
+  const [lockFlash, setLockFlash] = useState<string | null>(null);
+  const lockedTold = useRef<string | null>(null);
+  const lockedTried = (key: string) => {
+    if (lockedTold.current === key) return;
+    lockedTold.current = key;
+    setLockFlash(key);
+    window.setTimeout(() => { setLockFlash((k) => (k === key ? null : k)); lockedTold.current = null; }, 900);
+    onToast?.(t("This track is locked: open its padlock (on the left) to move it."));
+  };
   const toggleTrackLock = (key: string) => {
     const on = !!settingsRef.current.trackLocks?.includes(key), l = (settingsRef.current.trackLocks ?? []).filter((x) => x !== key);
     setV({ trackLocks: on ? (l.length ? l : undefined) : [...l, key] });
@@ -5595,7 +5634,7 @@ export default function VideoStudio({
   const trackLockEl = (key: string) => {
     const on = trackLocked(key);
     return (
-      <button className={"btn icon sm quiet track-lock" + (on ? " on" : "")} aria-pressed={on}
+      <button className={"btn icon sm quiet track-lock" + (on ? " on" : "") + (lockFlash === key ? " flash" : "")} aria-pressed={on}
         aria-label={on ? t("Unlock the track") : t("Lock the track")}
         title={on ? t("Track locked: its clips are not moved nor trimmed. Click to unlock it.") : t("Lock the track: its clips are not moved nor trimmed")}
         onClick={() => toggleTrackLock(key)}>
@@ -5768,7 +5807,8 @@ export default function VideoStudio({
     const move = (e: React.PointerEvent<HTMLElement>) => {
       if (moveVdrag(e)) return;
       const d = clipDrag.current;
-      if (!d || trackLocked("base")) return; // (its track locked: a click only)
+      if (!d) return;
+      if (trackLocked("base")) { if (Math.hypot(e.clientX - d.px, e.clientY - d.py) > 6) lockedTried("base"); return; } // (its track locked: a click only, said)
       // Up or down more than sideways: the clip is carried to another row (multicam, over or under another video).
       if (d.mode === "move" && vertical(e, d)) {
         clipDrag.current = null;
@@ -6211,7 +6251,8 @@ export default function VideoStudio({
     const move = (e: React.PointerEvent<HTMLElement>) => {
       if (moveVdrag(e)) return;
       const d = ovDrag.current;
-      if (!d || trackLocked(o.clip)) return; // (its track locked: a click only)
+      if (!d) return;
+      if (trackLocked(o.clip)) { if (Math.hypot(e.clientX - d.px, e.clientY - (d.py ?? e.clientY)) > 6) lockedTried(o.clip); return; } // (its track locked: a click only, said)
       // Up or down more than sideways: carried to another row (the base line: multicam; under it: it becomes the base).
       if (d.mode === "move" && d.py !== undefined && d.el && vertical(e, { px: d.px, py: d.py })) {
         ovDrag.current = null;

@@ -292,6 +292,7 @@ export const FR: Record<string, string> = {
   "Copied": "Copié",
   "Copy": "Copier",
   "Copy all": "Tout copier",
+  "This track is locked: open its padlock (on the left) to move it.": "Cette piste est verrouillée : ouvre son cadenas (à gauche) pour la déplacer.",
   "New track": "Nouvelle piste",
   "Hide / show what is picked: the video (or its line), the hooks, the lyrics": "Masquer / afficher ce qui est choisi : la vidéo (ou sa ligne), les hooks, les paroles",
   "Nothing picked on the timeline": "Plus rien de sélectionné sur la timeline",

@@ -359,6 +359,8 @@ export function drawStyledText(
     y += L.lh;
   });
   type Placed = { line: string; lx: number; ly: number };
+  // (lit captions with a shadow: the phrase's shadow drawn once, whole and steady, under letters drawn without one)
+  let noShadow = false;
   // Drawn in layers over all the lines, never line by line: every line's box first, then every outline, then the
   // letters (a line's box or outline drawn after the line above covered its letters where the lines come close).
   const layer = (kind: "box" | "stroke" | "fill", { line, lx, ly }: Placed) => {
@@ -381,7 +383,7 @@ export function drawStyledText(
       paintText(ctx, line, lx, ly, "stroke");
       return;
     }
-    if (st.look === "shadow") {
+    if (st.look === "shadow" && !noShadow) {
       ctx.shadowColor = withAlpha(st.accent, (st.shadowOpacity ?? 100) / 100);
       ctx.shadowBlur = L.size * (st.shadowBlur ?? 35) / 100;
       ctx.shadowOffsetX = L.size * (st.shadowX ?? 0) / 100;
@@ -406,6 +408,23 @@ export function drawStyledText(
   };
   if (!lit) paintAll(placed);
   else {
+    // A shadow never lit with the words: cut with them, it made a hard edge where the lit part ended (and a softer mask
+    // would bite into the next letters). Drawn once for the whole phrase, at its own strength; the letters (dimmed, then
+    // lit up to where it is sung) go over it without one. (The shadow alone: the letters drawn far off the frame, their
+    // shadow brought back by its offset, in the canvas' pixels.)
+    if (st.look === "shadow") {
+      const m = ctx.getTransform(), shift = (W + bw) * 3;
+      ctx.save();
+      ctx.shadowColor = withAlpha(st.accent, (st.shadowOpacity ?? 100) / 100);
+      ctx.shadowBlur = L.size * (st.shadowBlur ?? 35) / 100;
+      ctx.shadowOffsetX = L.size * (st.shadowX ?? 0) / 100 + shift * m.a;
+      ctx.shadowOffsetY = L.size * (st.shadowY ?? 5) / 100 + shift * m.b;
+      ctx.fillStyle = "#000";
+      ctx.textAlign = "left";
+      for (const p of placed) paintText(ctx, p.line, p.lx - shift, p.ly, "fill");
+      ctx.restore();
+      noShadow = true;
+    }
     // The whole phrase, dimmed; then each line again, whole look, up to where it is sung (a clip on the line).
     ctx.save();
     ctx.globalAlpha *= clamp(lit.dim, 0, 1);

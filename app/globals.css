@@ -2956,7 +2956,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .tl-hd { transition: background-color .15s ease; }
 .tl-hd.row-on { background: color-mix(in srgb, var(--row) 16%, var(--raised)); }
 /* (a video's line is carried up or down by its header too) */
-.tl-hd.hd-drag { cursor: grab; } .tl-hd.hd-drag button, .tl-hd.hd-drag input { cursor: default; }
+.tl-hd.hd-drag { cursor: grab; } .tl-hd.hd-drag button { cursor: pointer; } .tl-hd.hd-drag input { cursor: text; }
 .tl-hd > .hd-name { grid-column: 1; display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--text); }
 .tl-hd > .hd-name svg { flex: none; color: var(--row); }
 .tl-hd > .hd-name .can-rename { cursor: text; }
@@ -3083,3 +3083,8 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 .drag-ghost { position: fixed; top: -200px; left: -600px; max-width: 260px; height: 26px; padding: 0 10px 0 12px; display: flex; align-items: center;
   border-radius: 4px; border: 1px solid var(--cam); border-left-width: 3px; background: color-mix(in srgb, var(--cam) 26%, var(--bg)); color: var(--text);
   font: 600 12px/1 var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A locked track tried (a clip or its header dragged): its padlock blinks. */
+.track-lock.flash { animation: lock-flash .3s ease 3; }
+@keyframes lock-flash { 50% { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .track-lock.flash { animation: none; color: var(--warn); } }
