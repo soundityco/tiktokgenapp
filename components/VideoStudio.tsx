@@ -5268,7 +5268,7 @@ export default function VideoStudio({
       if (open) return (
         <div key={c.id} className={cls} {...takeDrag(c, cam)}>
           <MediaTile icon="film" name={c.videoName ?? null} warn={missing} loading={!!job && !job.err} menu={cam === 0 ? false : menu}
-            label={<button className="take-label" onClick={toggle} title={t("Fold")}>{shown !== null && <b>{shown + 1}</b>}{shown !== null && " · "}{clipName(c)} <Icon name="chevron" size={11} /></button>}
+            label={<button className="take-label" onClick={toggle} title={t("Fold")}>{shown !== null && <b>{shown + 1}</b>}{shown !== null && <span>·</span>}<span className="truncate">{clipName(c)}</span><Icon name="chevron" size={11} /></button>}
             meta={<>
               {c.source?.duration ? <span className="mono">{fmtLength(c.source.duration)}</span> : null}
               {c.source && <span className="row" style={{ gap: 4 }}>{colourTag(c.source)}<Hint text={sourceNote(c.source)} /></span>}
@@ -6876,7 +6876,7 @@ export default function VideoStudio({
                 const missing = !videoBlob && !!settings.videoName;
                 return (
                   <MediaTile icon="film" name={settings.videoName ?? null}
-                    label={settings.videoName ? <button className={"take-label cam-" + baseNo(settings)} onClick={() => foldTo(null)} title={t("Fold")}><b>{baseNo(settings) + 1}</b> · {settings.videoName.replace(/\.[^.]+$/, "")} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                    label={settings.videoName ? <button className={"take-label cam-" + baseNo(settings)} onClick={() => foldTo(null)} title={t("Fold")}><b>{baseNo(settings) + 1}</b><span>·</span><span className="truncate">{settings.videoName.replace(/\.[^.]+$/, "")}</span><Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
                     meta={settings.videoName && (missing
                       ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
                       : <>

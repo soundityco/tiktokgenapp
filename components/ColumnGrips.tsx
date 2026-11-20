@@ -4,19 +4,19 @@ import { useT } from "@/lib/i18n";
 
 /**
  * The library (left) and settings (right) columns widened by dragging their inner edge, as in Photoshop: never
- * narrower than their usual width, at most `GROW` px wider, the board in the middle keeping `CENTER_MIN` px. The widths
+ * narrower than their usual width, at most `MAX` px wide (320 both), the board in the middle keeping `CENTER_MIN` px. The widths
  * are this browser's (`tktgen-col-widths`), the same for both studios; a double click puts the usual width back.
  * Computer only: the grips show only while the studio has its three columns.
  */
 const BASE = { l: 240, r: 288 } as const;
-const GROW = 80;
+const MAX = { l: 320, r: 320 } as const;
 const CENTER_MIN = 560;
 const KEY = "tktgen-col-widths";
 
 type Side = "l" | "r";
 type Widths = { l: number; r: number };
 
-const fit = (side: Side, w: number) => Math.round(Math.min(BASE[side] + GROW, Math.max(BASE[side], w)));
+const fit = (side: Side, w: number) => Math.round(Math.min(MAX[side], Math.max(BASE[side], w)));
 const apply = (w: Widths) => {
   const s = document.documentElement.style;
   if (w.l > BASE.l) s.setProperty("--col-l", `${w.l}px`); else s.removeProperty("--col-l");

@@ -52,6 +52,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* An app, not a page: nothing gets selected by a click, a drag or a long press (nor the phone's callout over a picture),
    except where text is typed or meant to be copied (fields, an error message, the legal pages). */
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* Software habits: the arrow everywhere (the text cursor only where text is typed), digits of one width (counters and
+   times never jitter), no ghost of a picture or a link dragged by mistake, no rubber band nor swipe back at the page's
+   edges, a column scrolled to its end never scrolls the page. */
+body { cursor: default; font-variant-numeric: tabular-nums; overscroll-behavior: none; }
+html { overscroll-behavior: none; }
+input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]), textarea, [contenteditable="true"] { cursor: text; }
+img, a { -webkit-user-drag: none; }
+.col { overscroll-behavior: contain; }
 input, textarea, [contenteditable="true"], .error-text, .prose { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 /* Used with the pointer (PointerHabits): no focus ring after a click or a tap, anywhere; Tab brings them back. */
 html.by-pointer :focus-visible { outline: none !important; }
@@ -70,6 +78,12 @@ a { color: inherit; }
 /* ---------- Buttons: primary / default / quiet ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: var(--h); padding: 0 14px; border-radius: var(--r); border: 1px solid var(--line-2); background: transparent; font-weight: 500; white-space: nowrap; cursor: pointer; }
 .btn:hover:not(:disabled) { background: var(--raised); border-color: #3b3b46; }
+/* Pressed: answered at once, as a physical button (no transition, nothing moves). */
+.btn:active:not(:disabled) { background: var(--line); border-color: var(--line-2); }
+.btn.primary:active:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, var(--bg)); border-color: color-mix(in srgb, var(--accent) 86%, var(--bg)); }
+.btn.quiet:not(.danger):active:not(:disabled) { background: var(--line); }
+.btn.danger:active:not(:disabled) { background: color-mix(in srgb, var(--danger) 28%, transparent); }
+.menu button:active:not(:disabled) { background: var(--line); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .btn.primary:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
 .btn.quiet { border-color: transparent; color: var(--muted); }
@@ -520,6 +534,7 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .look-of > .btn { margin-left: auto; }
 .take-label { display: inline-flex; align-items: center; gap: 4px; padding: 0; background: none; border: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .take-label b { color: var(--cam); }
+.take-label { max-width: 100%; min-width: 0; } .take-label > b, .take-label > span:not(.truncate), .take-label > svg { flex: none; } .take-label > .truncate { min-width: 0; }
 .take-label svg { transform: rotate(180deg); }
 .takes-more > summary { cursor: pointer; padding: 6px 0; font-size: var(--fs-xs); color: var(--muted); list-style: none; }
 .takes-more > summary::before { content: "▸ "; }

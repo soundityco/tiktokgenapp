@@ -1150,9 +1150,11 @@ export default function Studio({ userName, userImage }: { userName: string; user
       // Only where text is typed does the field keep its own undo; after a slider, a colour, a checkbox, the app's.
       const typing = el.tagName === "TEXTAREA" || el.isContentEditable
         || (el.tagName === "INPUT" && /^(text|search|email|url|number|password|tel)?$/.test((el as HTMLInputElement).type));
-      if (typing) return;
       if (!(e.metaKey || e.ctrlKey)) return;
       const key = e.key.toLowerCase();
+      // ⌘S: saved now (as in any software), never the browser's « Save page as… » — in a text field too.
+      if (key === "s" && !e.shiftKey && !e.altKey) { e.preventDefault(); void flushRef.current(); return; }
+      if (typing) return;
       if (key === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       else if (key === "y") { e.preventDefault(); redo(); }
     };

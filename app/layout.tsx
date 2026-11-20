@@ -13,7 +13,9 @@ export const metadata: Metadata = {
   verification: { google: "BQ3-MxnDZrpy5NSr_JF-jjRk3JXlPjV9lFkdp7r82jU" },
 };
 // viewportFit: the app fills the whole screen of a phone (under the notch), its bars keep clear of it.
-export const viewport: Viewport = { themeColor: "#08080a", width: "device-width", initialScale: 1, viewportFit: "cover" };
+// colorScheme dark: the browser paints its own background, scrollbars and controls dark from the very first frame (no
+// white flash before the styles).
+export const viewport: Viewport = { themeColor: "#08080a", colorScheme: "dark", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
