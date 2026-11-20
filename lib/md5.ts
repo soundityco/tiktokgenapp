@@ -76,7 +76,7 @@ export function md5(bytes: Uint8Array): string {
 /** MD5 of a file read 4 MB at a time: never the whole file in memory, never the page frozen while it counts. */
 export async function md5Blob(blob: Blob): Promise<string> {
   const m = new Md5();
-  const STEP = 4 * 1024 * 1024;
+  const STEP = 1024 * 1024; // (small steps: a frame of the playing video is never held up)
   for (let at = 0; at < blob.size; at += STEP) {
     m.update(new Uint8Array(await blob.slice(at, at + STEP).arrayBuffer()));
     await new Promise((r) => setTimeout(r, 0)); // let a frame of the video be drawn

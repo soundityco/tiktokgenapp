@@ -88,6 +88,8 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
   const t0 = performance.now();
   const RATE = 48000;
   let pcm: Float32Array<ArrayBuffer> | null = null;
+  // (the sound is read by ffmpeg, heavy for a moment: never while the video plays)
+  for (let w = hold?.(); w; w = hold?.()) await w;
   try {
     const raw = await ffmpegAlone(file, ["-t", to.toFixed(3), "-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "2", "-ar", String(RATE), "-f", "f32le", "sound.raw"],
       "sound.raw", Math.max(0.1, to), (p) => onProgress(p * 0.08), signal);

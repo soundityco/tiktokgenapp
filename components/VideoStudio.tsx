@@ -1670,12 +1670,16 @@ export default function VideoStudio({
       // The device's video chip first (seconds), ffmpeg when it cannot (minutes).
       const t0 = performance.now();
       // The progress redraws the studio: once per percent, not once per picture (that made the playback stutter).
-      const every = (step: CopyJob["step"]) => { let shown = -1; return (p: number) => { const n = Math.floor(p * 100); if (n !== shown) { shown = n; setCopyJob({ step, p, ...job }); } }; };
+      // (and never while the video plays: a render of the whole studio then held up a frame — shown again once paused)
+      const every = (step: CopyJob["step"]) => { let shown = -1; return (p: number) => { const n = Math.floor(p * 100); if (n !== shown && !playingRef.current) { shown = n; setCopyJob({ step, p, ...job }); } }; };
       const onP = every("make");
       // While the video plays, the copy leaves the video chip to the player (it goes on once paused).
       const whilePlaying = () => !playingRef.current ? undefined : new Promise<void>((resolve) => {
         const id = window.setInterval(() => { if (!playingRef.current || ac.signal.aborted) { clearInterval(id); resolve(); } }, 250);
       });
+      // Never started, nor a heavy step begun, while the video plays: the playback first (it lagged during a copy).
+      const untilPaused = async () => { for (let w = whilePlaying(); w && !ac.signal.aborted; w = whilePlaying()) await w; if (ac.signal.aborted) throw new DOMException("stopped", "AbortError"); };
+      await untilPaused();
       let copy: Blob | null = null, chip = false;
       try {
         const fast = await fastWorkCopy(blob, plan, from, to, onP, ac.signal, whilePlaying);
@@ -1684,7 +1688,9 @@ export default function VideoStudio({
         if (ac.signal.aborted) throw e;
         console.warn("[copy] video chip failed, ffmpeg instead", e);
       }
+      if (!copy) await untilPaused();
       copy ??= await makeWorkCopy(blob, plan, from, to, onP, ac.signal);
+      await untilPaused();
       const tMade = performance.now();
       setCopyJob({ step: "send", p: 0, ...job });
       const id = await uploadToDrive(copy, name, every("send"), ac.signal, "video/mp4",
