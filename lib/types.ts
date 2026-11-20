@@ -372,6 +372,10 @@ export interface VideoSourceInfo {
 }
 
 export interface VideoSettings {
+  /** Each video's number in the project (0-based, its colour), by file (`media`): kept wherever it goes on the timeline. */
+  videoNos?: Record<string, number>;
+  /** The names given to the video tracks in their header, by file (else « V » and the number). */
+  trackNames?: Record<string, string>;
   /** Multicam: the other videos of the release used as cameras 2 to 4 (their own sync, framing and grade). */
   angles?: string[];
   /** Multicam cuts (lib/multicam): from this official time on, this camera (0 = this video). */

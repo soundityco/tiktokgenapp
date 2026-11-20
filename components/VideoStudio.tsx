@@ -663,7 +663,11 @@ export default function VideoStudio({
     } catch { /* no audio output */ }
   };
 
+  /** `numbersOf` of the latest render (set below): the videos' numbers kept before the tracks change. */
+  const numbersFn = useRef<(s: VideoSettings) => Record<string, number>>(() => ({}));
   const setV = useCallback((patch: Partial<Omit<VideoSetup, "id" | "name">>) => {
+    // The tracks change (a video added, taken out, moved): each video's number is written first, so that it keeps it.
+    if (("angles" in patch || "overlays" in patch || "overlay" in patch) && !("videoNos" in patch)) patch = { ...patch, videoNos: numbersFn.current(settingsRef.current) };
     onProject((p) => {
       const list = clipsOf(p);
       const target = list.find((c) => c.id === clip.id) ?? list[0];
@@ -861,8 +865,30 @@ export default function VideoStudio({
     if (patch && (patch.x !== undefined || patch.y !== undefined || patch.w !== undefined) && list.find((o) => o.clip === id)?.full) patch = { ...patch, full: undefined };
     setV(withOverlays(patch ? list.map((o) => (o.clip === id ? { ...o, ...patch } : o)) : list.filter((o) => o.clip !== id)));
   };
-  /** Its number's colour (0-based): after the cameras, from the bottom up. */
-  const overNo = (s: VideoSettings, id: string) => Math.min(MAX_CAMS - 1, (s.angles ?? []).filter(Boolean).length + 1 + Math.max(0, overlaysOf(s).findIndex((o) => o.clip === id)));
+  /**
+   * Each video of the project keeps its number (0-based, its colour: white, violet, green, pink) wherever it goes on
+   * the timeline: given in the order the videos came in (`VideoSettings.videoNos`, by file: a swap moves the file, its
+   * number with it). Missing ones (older projects) take the lowest free number, in the order of the tracks: the same
+   * numbers as before.
+   */
+  const fileKey = (c: Pick<VideoSetup, "id" | "media">) => c.media ?? c.id;
+  const takeKey = (id: string) => { const c = clips.find((x) => x.id === id); return c ? fileKey(c) : id; };
+  const numbersOf = (s: VideoSettings): Record<string, number> => {
+    const keys = [fileKey(clip), ...(s.angles ?? []).filter(Boolean).map(takeKey), ...overlaysOf(s).map((o) => takeKey(o.clip))];
+    const old = s.videoNos ?? {}, out: Record<string, number> = {}, used = new Set<number>();
+    for (const k of keys) { const n = old[k]; if (n !== undefined && n >= 0 && n < MAX_CAMS && !used.has(n)) { out[k] = n; used.add(n); } }
+    for (const k of keys) { if (out[k] !== undefined) continue; let n = 0; while (used.has(n)) n++; out[k] = Math.min(n, MAX_CAMS - 1); used.add(n); }
+    return out;
+  };
+  numbersFn.current = numbersOf;
+  /** The number of a take of the project (a camera or one over the video). */
+  const overNo = (s: VideoSettings, id: string) => numbersOf(s)[takeKey(id)] ?? 0;
+  /** The number of the video under (its own file). */
+  const baseNo = (s: VideoSettings) => numbersOf(s)[fileKey(clip)] ?? 0;
+  /** Camera k of the multicam (0: the video under, k: `angles[k - 1]`). */
+  const camNo = (s: VideoSettings, k: number) => (k === 0 ? baseNo(s) : overNo(s, (s.angles ?? [])[k - 1] ?? ""));
+  /** A track's name in its header: the one given (double click), else « V » and its number. */
+  const trackName = (s: VideoSettings, key: string, no: number) => s.trackNames?.[key]?.trim() || "V" + (no + 1);
   /** Videos in the project: camera 1, the cameras, the ones over it (4 at most). */
   const videosIn = (s: VideoSettings) => 1 + (s.angles ?? []).filter(Boolean).length + overlaysOf(s).length;
   const ovClips = overlaysOf(settings).map((o) => clips.find((c) => c.id === o.clip)).filter((c): c is VideoSetup => !!c);
@@ -3545,10 +3571,10 @@ export default function VideoStudio({
     }
     if (camTake) {
       const a = anglesRef.current.get(camTake.id), len = a && Number.isFinite(a.el.duration) ? a.el.duration : camTake.source?.duration ?? 0;
-      return { off: camTake.offset, ci: 0, co: len, cam: Math.max(0, (settings.angles ?? []).indexOf(camTake.id) + 1) };
+      return { off: camTake.offset, ci: 0, co: len, cam: overNo(settings, camTake.id) };
     }
     const [i, o] = clipSpan(settings, videoDur);
-    return { off: settings.offset, ci: i, co: o, cam: 0 };
+    return { off: settings.offset, ci: i, co: o, cam: baseNo(settings) };
   };
   /** Desktop: one playhead crosses the whole timeline (the phone keeps one per line, the waveform's in it). */
   const wideTimeline = () => typeof window !== "undefined" && window.matchMedia("(min-width: 641px)").matches;
@@ -5157,7 +5183,8 @@ export default function VideoStudio({
     <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
     {videoBlob && <><div className="sep" /><button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); void removeVideo(); }}><Icon name="trash" size={14} />{t("Remove video")}</button></>}
   </>);
-  const takesEl = (part: "first" | "rest") => {
+  /** The project's videos, in the order of their numbers (`strip`: camera 1's full card, under its line). */
+  const takesEl = (strip?: React.ReactNode) => {
     const angles = (settings.angles ?? []).filter(Boolean);
     // The videos over it are the project's takes too (listed with them, not with the release's others).
     const ovIds = overlaysOf(settings).map((o) => o.clip);
@@ -5209,7 +5236,7 @@ export default function VideoStudio({
         </>}
       </>);
       // The one over it: numbered and coloured as the next camera (as on its track).
-      const shown = isOver ? overNo(settings, c.id) : cam;
+      const shown = cam === 0 ? baseNo(settings) : isOver || (cam !== null && cam > 0) ? overNo(settings, c.id) : null;
       const cls = "take" + (shown === null ? " other" : " cam-" + shown) + (open ? " open" : "");
       // Unfolded: the same full card as camera 1's (its name, file, what it is, its sync), in place of its line.
       if (open) return (
@@ -5246,12 +5273,17 @@ export default function VideoStudio({
         </div>
       );
     };
-    // Camera 1 (the project's own take): its line when another one is unfolded (its full card above otherwise).
-    if (part === "first") { const one = card(clip, 0); return one && <div className="takes">{one}</div>; }
+    // Each video at its number's place (1, 2, 3, 4: wherever it is on the timeline); camera 1 (the project's own
+    // take) with its full card under its line (`strip`), given only once it has a file.
+    const nos = numbersOf(settings);
+    const rows = [
+      ...(strip ? [{ no: nos[fileKey(clip)] ?? 0, el: <Fragment key="base">{card(clip, 0)}{strip}</Fragment> }] : []),
+      ...angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? { no: nos[fileKey(c)] ?? 0, el: card(c, k + 1) } : null; }),
+      ...ovIds.map((id) => { const c = clips.find((x) => x.id === id); return c ? { no: nos[fileKey(c)] ?? 0, el: card(c, null) } : null; }),
+    ].filter((r): r is { no: number; el: React.ReactElement | null } => !!r).sort((a, b) => a.no - b.no);
     return (
       <div className="takes">
-        {angles.map((id, k) => { const c = clips.find((x) => x.id === id); return c ? card(c, k + 1) : null; })}
-        {ovIds.map((id) => { const c = clips.find((x) => x.id === id); return c ? card(c, null) : null; })}
+        {rows.map((r) => r.el)}
         <button className="btn sm take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
           <Icon name="plus" size={14} />{t("Import takes")}
         </button>
@@ -5359,7 +5391,24 @@ export default function VideoStudio({
     setClipMenu({ x: e.clientX, y: e.clientY, which, t: at });
   };
   /** A line's name in its header: its kind's icon and a short name, after a stripe of its colour. */
-  const hdName = (icon: React.ComponentProps<typeof Icon>["name"], name: string) => <span className="hd-name"><Icon name={icon} size={12} /><span className="truncate">{name}</span></span>;
+  /** A video track's header name: `key` (its file) given, renamed by a double click (empty: « V » and its number again). */
+  const [trackRenaming, setTrackRenaming] = useState<string | null>(null);
+  const renameTrack = (key: string, name: string) => {
+    const next = { ...settingsRef.current.trackNames };
+    if (name.trim()) next[key] = name.trim().slice(0, 40); else delete next[key];
+    setV({ trackNames: Object.keys(next).length ? next : undefined });
+  };
+  const hdName = (icon: React.ComponentProps<typeof Icon>["name"], name: string, key?: string) => (
+    <span className="hd-name" onDoubleClick={key ? () => setTrackRenaming(key) : undefined} title={key ? t("Double click to rename") : undefined}>
+      <Icon name={icon} size={12} />
+      {key && trackRenaming === key
+        ? <input className="hd-rename" autoFocus defaultValue={settings.trackNames?.[key] ?? ""} placeholder={name} aria-label={t("Track name")}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") e.currentTarget.blur(); else if (e.key === "Escape") setTrackRenaming(null); }}
+            onBlur={(e) => { if (trackRenaming === key) renameTrack(key, e.currentTarget.value); setTrackRenaming(null); }} />
+        : <span className="truncate">{name}</span>}
+    </span>
+  );
   /** A track locked in its header (as in Premiere): its clips are not moved nor trimmed (clicked: still selected). */
   const trackLocked = (key: string) => !!settings.trackLocks?.includes(key);
   const trackLockEl = (key: string) => {
@@ -5409,6 +5458,7 @@ export default function VideoStudio({
     const lost = !videoBlob && !fileLooking && !!settings.videoName && !!settings.source?.duration;
     if ((!waiting && !lost && (!videoBlob || videoDur <= 0)) || !audioBuf) return null;
     const len: number = waiting || lost ? settings.source?.duration ?? 0 : onCopy && settings.source?.duration ? settings.source.duration : videoDur;
+    const bn = baseNo(settings);
     const [ci, co] = clipSpan(settings, len);
     const a = settings.offset + ci, b = settings.offset + co;
     const locked = !!settings.linked;
@@ -5470,7 +5520,7 @@ export default function VideoStudio({
       if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setOverLook(null); setPinCam("main"); setPick("video"); pickPieceAt("base", at); }
     };
     return (<>
-        <div className="tl-row"><div className="tl-hd cam-0" onPointerDown={(e) => e.stopPropagation()}>{hdName("film", "V1")}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
+        <div className="tl-row"><div className={"tl-hd cam-" + bn} onPointerDown={(e) => e.stopPropagation()}>{hdName("film", trackName(settings, fileKey(clip), bn), fileKey(clip))}{eyeEl(!!settings.videoHidden, () => setV({ videoHidden: settings.videoHidden ? undefined : true }))}{trackLockEl("base")}</div><div className={"lyric-track video-track" + (settings.videoHidden ? " is-hidden" : "")} role="group" aria-label={t("Video")} {...scrub()}>
           {/* At the track's end, as in CapCut: the clip's own sound (a slider opens from the speaker), and the whole
               video back when it was trimmed. They stay put while the track slides. */}
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
@@ -5496,13 +5546,13 @@ export default function VideoStudio({
           </div>
           <div className="track-content">
             {onTrack(a, b) && (
-              <div className={"cue video-clip cam-0" + (lost ? " missing" : "") + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake && pickPiece?.which !== "base" ? " sel" : "")}
+              <div className={"cue video-clip cam-" + bn + (lost ? " missing" : "") + (locked ? " locked" : "") + (head >= a && head < b ? " on" : "") + (pick === "video" && !camTake && pickPiece?.which !== "base" ? " sel" : "")}
                 style={{ ...place(a), width: wFull(a, b) }} data-va={a} data-vb={b}
                 title={locked ? t("Locked to the audio (synced): unlock it to slide or trim the video freely.") : t("Drag to slide the video along the track, its edges to trim it.")}
                 onPointerDown={down("move")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { clipDrag.current = null; }} onContextMenu={clipCtx("base")} {...holdMenu("base")}>
                 <span className="clip-edge in" onPointerDown={down("in")} />
                 <span className="vc-name">
-                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">1</b>
+                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b className="vc-no">{bn + 1}</b>
                   {/* Its sync with the audio (a chain): shown here, set by the chain above the tracks (the master of the sync). */}
                   {settings.score !== undefined && <span className="clip-lock" title={syncTitle(locked)}><Icon name={locked ? "link" : "link-off"} size={11} /></span>}
                   {waiting ? <span className="truncate shine">{t("Loading…")}</span>
@@ -5512,8 +5562,8 @@ export default function VideoStudio({
                 <span className="clip-edge out" onPointerDown={down("out")} />
               </div>
             )}
-            {partsEl(settings, settings.offset, ci, co, 0, "base")}
-            {head >= a && head < b && barAt(a, b) !== null && <span className="cue-bar-glow cam-glow cam-0" data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
+            {partsEl(settings, settings.offset, ci, co, bn, "base")}
+            {head >= a && head < b && barAt(a, b) !== null && <span className={"cue-bar-glow cam-glow cam-" + bn} data-a={a} data-b={b} style={place(barAt(a, b)!)} />}
             <span className="lyric-head" style={{ ...place(clamp(head, Math.max(settings.crop.start, tw.s), Math.min(end, tw.s + tw.d))) }} />
           </div>
         </div></div>
@@ -5562,7 +5612,7 @@ export default function VideoStudio({
       place = { ...withOverlays(overlaysOf(cur).map((o) => (o.clip === x.id ? { ...o, ...boxOr(base.box, true), offset: base.offset, clipIn: base.clipIn, clipOut: base.clipOut, splits: cur.splits, offParts: cur.offParts, hidden: cur.videoHidden || undefined } : o))),
         videoHidden: ov.hidden || undefined };
     }
-    onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, ...theirs, ...place, ...more } : c.id === x.id ? { ...c, ...mine } : c)) }));
+    onProject((p) => ({ ...p, videos: clipsOf(p).map((c) => (c.id === clip.id ? { ...c, ...theirs, ...place, videoNos: numbersOf(cur), ...more } : c.id === x.id ? { ...c, ...mine } : c)) }));
     onSaveNow();
   };
   /**
@@ -5631,7 +5681,7 @@ export default function VideoStudio({
     const c = from === "over" ? clips.find((q) => q.id === id) : cam > 0 ? clips.find((q) => q.id === settingsRef.current.angles?.[cam - 1]) : clip;
     // Held where it was grabbed (its start stays the same distance left of the pointer).
     const grab = clamp((x0 ?? e.clientX) - r.left, 0, r.width);
-    setVdrag({ from, id, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" && id ? overNo(settingsRef.current, id) : cam,
+    setVdrag({ from, id, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" && id ? overNo(settingsRef.current, id) : camNo(settingsRef.current, cam),
       x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, id, grab }, e.clientX, e.clientY) });
   };
   const moveVdrag = (e: React.PointerEvent) => {
@@ -5855,7 +5905,7 @@ export default function VideoStudio({
       if (d && !d.moved) { const at = d.s + clamp((e.clientX - d.left) / Math.max(1, d.width), 0, 1) * d.d; setHead(inSeg(at)); setPinCam(null); setOverLook(o.clip); setPick("video"); pickPieceAt(o.clip, at); }
     };
     return (<>
-        <div className="tl-row" key={o.clip}><div className={"tl-hd cam-" + no} onPointerDown={(e) => e.stopPropagation()}>{hdName("film", "V" + (no + 1))}{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
+        <div className="tl-row" key={o.clip}><div className={"tl-hd cam-" + no} onPointerDown={(e) => e.stopPropagation()}>{hdName("film", trackName(settings, takeKey(o.clip), no), takeKey(o.clip))}{eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}{trackLockEl(o.clip)}</div><div className={"lyric-track video-track over-track" + (o.hidden ? " is-hidden" : "")} data-ov={o.clip} role="group" aria-label={t("Video over it")} {...scrub()}>
           <div className="track-tools" onPointerDown={(e) => e.stopPropagation()}>
             {eyeEl(!!o.hidden, () => setO({ hidden: o.hidden ? undefined : true }))}
             <Menu float trigger={(_, toggle) => (
@@ -5964,16 +6014,16 @@ export default function VideoStudio({
               const own = x.cut >= 0 && Math.abs(sortedCuts[x.cut].at - x.from) < 1e-3 ? sortedCuts[x.cut] : null;
               const go = () => { stop(); setPinCam(null); setPick("video"); setHead(round2(x.from + 0.01)); };
               return (
-                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + x.cam + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from} data-a={x.from} data-b={x.to}
+                <div key={i} role="button" tabIndex={0} className={"cue cam-shot cam-" + camNo(settings, x.cam) + (head >= x.from - 1e-3 && head < x.to ? " on" : "")} data-at={x.from} data-a={x.from} data-b={x.to}
                   // Pulled up (as in CapCut): this camera leaves the cuts and goes over the video, on its own track.
                   onPointerDown={(e) => { if (e.button === 2) e.stopPropagation(); if (e.button === 0 && !trackLocked("base")) liftRef.current = { x: e.clientX, y: e.clientY, cam: x.cam, el: e.currentTarget }; }}
                   // (right click: the cameras' sound)
                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setClipMenu({ x: e.clientX, y: e.clientY, which: "cams", t: 0 }); }}
 
                   style={{ ...place(x.from), width: wFull(x.from, x.to) }}
-                  title={`${x.cam + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
+                  title={`${camNo(settings, x.cam) + 1} · ${a ? a.videoName ?? clipName(a) : "?"}`}
                   onKeyDown={(e) => { if (e.key === "Enter") go(); }}>
-                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b>{x.cam + 1}</b> {a ? a.videoName?.replace(/\.[^.]+$/, "") ?? clipName(a) : ""}
+                  <span className="cue-ico" aria-hidden><Icon name="film" size={11} /></span><b>{camNo(settings, x.cam) + 1}</b> {a ? a.videoName?.replace(/\.[^.]+$/, "") ?? clipName(a) : ""}
                   {own && (
                     <button className="shot-x" aria-label={t("Remove this cut")} title={t("Remove this cut: the shot joins the one on its left")}
                       onPointerDown={(e) => e.stopPropagation()}
@@ -5984,7 +6034,7 @@ export default function VideoStudio({
                 </div>
               );
             })}
-            {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); const at = x ? barAt(x.from, x.to) : null; return at !== null ? <span className={"cue-bar-glow cam-glow cam-" + x!.cam} data-a={x!.from} data-b={x!.to} style={place(at)} /> : null; })()}
+            {(() => { const x = shots.find((q) => head >= q.from - 1e-3 && head < q.to); const at = x ? barAt(x.from, x.to) : null; return at !== null ? <span className={"cue-bar-glow cam-glow cam-" + camNo(settings, x!.cam)} data-a={x!.from} data-b={x!.to} style={place(at)} /> : null; })()}
             {(settings.cuts ?? []).map((c, i) => c.at > settings.crop.start && c.at < end && onTrack(c.at, c.at) && (
               <span key={"k" + i} className="cam-cut" style={{ ...place(c.at) }} title={t("Drag to move this cut (it sticks to the lyrics, ⌘ to move it freely), double-click to remove it")}
                 onDoubleClick={(e) => { e.stopPropagation(); setV({ cuts: (settingsRef.current.cuts ?? []).filter((x) => x !== c && Math.abs(x.at - c.at) > 1e-6) }); }}
@@ -6022,8 +6072,8 @@ export default function VideoStudio({
         <div className="row cams-row">
           <span className="label">{t("Edit")}<Hint text={t("Multicam edit: other videos of the release, synced on the same audio. Playing, keys 1 to 4 cut to a camera; paused, they change the shot under the playhead, C cuts it in two, Delete removes its cut. Drag a cut to move it.")} /></span>
           {[0, ...angles.map((_, k) => k + 1)].filter((k) => k === 0 || angles[k - 1]).map((k) => (
-            <button key={k} className={"btn sm cam-btn cam-" + k + (camNow === k ? " on" : "")} onClick={() => pickCam(k)}
-              title={t("Camera {n}: cut to it here (at a shot's start: the whole shot)", { n: k + 1 }) + ` (${k + 1})`}>{k + 1}</button>
+            <button key={k} className={"btn sm cam-btn cam-" + camNo(settings, k) + (camNow === k ? " on" : "")} onClick={() => pickCam(k)}
+              title={t("Camera {n}: cut to it here (at a shot's start: the whole shot)", { n: camNo(settings, k) + 1 }) + ` (${camNo(settings, k) + 1})`}>{camNo(settings, k) + 1}</button>
           ))}
           <span className="muted xs">{t("A camera cuts to it at the playhead; at a shot's start, the whole shot.")}</span>
         </div>
@@ -6593,7 +6643,9 @@ export default function VideoStudio({
       const cfg = settingsRef.current;
       // By the key's place (Digit1…, the keypad too): on an AZERTY keyboard the top row gives & é " ' without Shift.
       const dig = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
-      const cam = dig ? Number(dig[1]) - 1 : -1;
+      // (the key is the video's number: the camera that shows that video)
+      const want = dig ? Number(dig[1]) - 1 : -1;
+      const cam = want < 0 ? -1 : [0, ...(cfg.angles ?? []).map((_, j) => j + 1)].find((j) => (j === 0 || cfg.angles?.[j - 1]) && camNo(cfg, j) === want) ?? want;
       if (cam >= 0) {
         if (cam > 0 && !cfg.angles?.[cam - 1]) return;
         e.preventDefault();
@@ -6748,58 +6800,61 @@ export default function VideoStudio({
             <div className="tree-head" title={t("Camera 1 is the project's own take; up to 3 more for a multicam edit.")}>
               <span className="label">{t("Project takes")}</span>
             </div>
-            {settings.videoName && takesEl("first")}
             {/* Camera 1's card (its file, Drive copy, sync…): unfolded from its line, or always while it has no file. */}
-            <div className={"clip-strip" + (settings.videoName && takeOpen !== clip.id ? " folded" : "")}>
-            <div className="clip-card cam-0">
             {(() => {
-              const d = settings.drive ?? {};
-              const src = videoBlob ? settings.source : undefined;
-              const note = src && sourceNote(src);
-              const missing = !videoBlob && !!settings.videoName;
-              return (
-                <MediaTile icon="film" name={settings.videoName ?? null}
-                  label={settings.videoName ? <button className="take-label cam-0" onClick={() => foldTo(null)} title={t("Fold")}><b>1</b> · {settings.videoName.replace(/\.[^.]+$/, "")} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
-                  meta={settings.videoName && (missing
-                    ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
-                    : <>
-                      {videoDur > 0 ? <span className="mono">{fmtLength(onCopy && src?.duration ? src.duration : videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
-                      {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
-                      {d.originalId && !onCopy && <span>Drive</span>}
-                      {/* The copy of the take: the same words as under the preview. */}
-                      {copyStatusEl(true)}
-                    </>)}
-                  menu={settings.videoName ? baseMenu : undefined}>
-                  {!settings.videoName && (
-                    <div className="row"><button className="btn sm" onClick={() => document.getElementById("video-file")?.click()}>{t("From this computer")}</button></div>
-                  )}
-                  {missing && (
-                    <div className="row">
-                      {d.originalId && <button className="btn sm primary" disabled={!!driveJob} onClick={() => void fetchOriginal()}>{t("Get it on this device")}</button>}
-                      <button className="btn sm" onClick={() => document.getElementById("video-file")?.click()}>{t("Pick it again")}</button>
-                    </div>
-                  )}
-                </MediaTile>
+              const strip = (
+              <div className={"clip-strip" + (settings.videoName && takeOpen !== clip.id ? " folded" : "")}>
+              <div className={"clip-card cam-" + baseNo(settings)}>
+              {(() => {
+                const d = settings.drive ?? {};
+                const src = videoBlob ? settings.source : undefined;
+                const note = src && sourceNote(src);
+                const missing = !videoBlob && !!settings.videoName;
+                return (
+                  <MediaTile icon="film" name={settings.videoName ?? null}
+                    label={settings.videoName ? <button className={"take-label cam-" + baseNo(settings)} onClick={() => foldTo(null)} title={t("Fold")}><b>{baseNo(settings) + 1}</b> · {settings.videoName.replace(/\.[^.]+$/, "")} <Icon name="chevron" size={11} /></button> : clipName(clip)} warn={missing} loading={(!!videoBlob && (!videoDur || !playerReady)) || !!driveJob}
+                    meta={settings.videoName && (missing
+                      ? <span>{d.originalId ? t("On your Drive, not here.") : t("Not in this browser: pick it again.")}</span>
+                      : <>
+                        {videoDur > 0 ? <span className="mono">{fmtLength(onCopy && src?.duration ? src.duration : videoDur)}</span> : videoBlob && <span className="shine">{t("Opening the camera video…")}</span>}
+                        {src && <span className="row" style={{ gap: 4 }}>{src.colour === "log" ? "LOG" : src.colour === "hdr" ? "HDR" : src.colour === "sdr" ? "SDR" : "?"}{note && <Hint text={note} />}</span>}
+                        {d.originalId && !onCopy && <span>Drive</span>}
+                        {/* The copy of the take: the same words as under the preview. */}
+                        {copyStatusEl(true)}
+                      </>)}
+                    menu={settings.videoName ? baseMenu : undefined}>
+                    {!settings.videoName && (
+                      <div className="row"><button className="btn sm" onClick={() => document.getElementById("video-file")?.click()}>{t("From this computer")}</button></div>
+                    )}
+                    {missing && (
+                      <div className="row">
+                        {d.originalId && <button className="btn sm primary" disabled={!!driveJob} onClick={() => void fetchOriginal()}>{t("Get it on this device")}</button>}
+                        <button className="btn sm" onClick={() => document.getElementById("video-file")?.click()}>{t("Pick it again")}</button>
+                      </div>
+                    )}
+                  </MediaTile>
+                );
+              })()}
+              {driveErr && <p className="notice bad xs">{driveErr}</p>}
+              {/* On the copy: it holds the passage it was made for (+2 s). Moved past it, the pictures are not on this device. */}
+              {onCopy && settings.drive?.copy && (() => {
+                const cp = settings.drive.copy, segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
+                // Only where the copy is shorter than the take: past the take's own end, the take itself stops (notice below).
+                const take = settings.source?.duration ?? Infinity;
+                return (segS < cp.from - 0.05 && cp.from > 0.05) || (segE > cp.to + 0.05 && cp.to < take - 0.05)
+                  ? <p className="notice warn xs">{t("The Drive copy holds {from} to {to} of the take: past it, there are no pictures on this device. Make the passage longer on the device that has the camera file (its copy follows), or pick the camera file here.", { from: fmtTime(cp.from), to: fmtTime(cp.to) })}</p>
+                  : null;
+              })()}
+              {/* Really past the take's end: more than 0.1 s (a few frames; the length read at import and the player's can
+                  differ by a few hundredths, and a segment stuck to the video's end is not past it). On the copy, the take's own. */}
+              {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + (onCopy && settings.source?.duration ? settings.source.duration : Math.max(videoDur, settings.source?.duration ?? 0)) + 0.1 && (
+                <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
+              )}
+              </div>
+              </div>
               );
+              return settings.videoName ? takesEl(strip) : <>{strip}{takesEl()}</>;
             })()}
-            {driveErr && <p className="notice bad xs">{driveErr}</p>}
-            {/* On the copy: it holds the passage it was made for (+2 s). Moved past it, the pictures are not on this device. */}
-            {onCopy && settings.drive?.copy && (() => {
-              const cp = settings.drive.copy, segS = settings.crop.start - settings.offset, segE = segS + settings.crop.duration;
-              // Only where the copy is shorter than the take: past the take's own end, the take itself stops (notice below).
-              const take = settings.source?.duration ?? Infinity;
-              return (segS < cp.from - 0.05 && cp.from > 0.05) || (segE > cp.to + 0.05 && cp.to < take - 0.05)
-                ? <p className="notice warn xs">{t("The Drive copy holds {from} to {to} of the take: past it, there are no pictures on this device. Make the passage longer on the device that has the camera file (its copy follows), or pick the camera file here.", { from: fmtTime(cp.from), to: fmtTime(cp.to) })}</p>
-                : null;
-            })()}
-            {/* Really past the take's end: more than 0.1 s (a few frames; the length read at import and the player's can
-                differ by a few hundredths, and a segment stuck to the video's end is not past it). On the copy, the take's own. */}
-            {settings.videoName && videoDur > 0 && settings.crop.start + settings.crop.duration > settings.offset + (onCopy && settings.source?.duration ? settings.source.duration : Math.max(videoDur, settings.source?.duration ?? 0)) + 0.1 && (
-              <p className="notice warn xs">{t("Video stops before the segment ends: extend it or change the offset.")}</p>
-            )}
-            </div>
-            </div>
-            {takesEl("rest")}
             </div>
           </div>
           <div className="lib-desk">{library}</div>
@@ -7290,7 +7345,7 @@ export default function VideoStudio({
                     const shown = versions[at];
                     return (
                       <Menu float left trigger={(open, toggle) => (
-                        <button className={"btn sm ver-pick" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={() => { setRenaming(null); toggle(); }}>
+                        <button className={"btn sm ver-pick" + (open ? " on" : "")} aria-haspopup="menu" aria-expanded={open} onClick={() => { setTrackRenaming(null); toggle(); }}>
                           {shown ? versionName(shown, at) : t("Version {x}", { x: "A" })}
                           <span className="mono xs muted">{mmss(settings.crop.start)}–{mmss(settings.crop.start + settings.crop.duration)}</span>
                           <Icon name="chevron" size={12} />
@@ -7306,8 +7361,8 @@ export default function VideoStudio({
                               <div key={id} className={"ver-line" + (on ? " on" : "")}>
                                 {renaming === id ? (
                                   <input className="input sm ver-name" autoFocus defaultValue={v?.name ?? ""} placeholder={label} aria-label={t("Rename")}
-                                    onBlur={(e) => (v ? (renameVersion(v.id, e.target.value), setRenaming(null)) : nameSolo(e.target.value))}
-                                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") { if (v) { renameVersion(v.id, e.currentTarget.value); setRenaming(null); } else nameSolo(e.currentTarget.value); } if (e.key === "Escape") setRenaming(null); }} />
+                                    onBlur={(e) => (v ? (renameVersion(v.id, e.target.value), setTrackRenaming(null)) : nameSolo(e.target.value))}
+                                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") { if (v) { renameVersion(v.id, e.currentTarget.value); setTrackRenaming(null); } else nameSolo(e.currentTarget.value); } if (e.key === "Escape") setTrackRenaming(null); }} />
                                 ) : (
                                   <button className="ver-main" role="menuitemradio" aria-checked={on} onClick={() => { close(); if (v) switchVersion(v.id); }}>
                                     <Icon name="check" size={12} />{label}
@@ -7700,8 +7755,8 @@ export default function VideoStudio({
             const k = camTake && !ovTake ? (settings.angles ?? []).indexOf(camTake.id) + 1 : 0;
             const c = camTake ?? clip;
             return (
-              <div className={"look-of cam-" + (ovTake ? overNo(settings, ovTake.id) : k)}>
-                <span className="xs muted">{t("Settings of")}</span> <b>{ovTake ? overNo(settings, ovTake.id) + 1 : k + 1}</b> <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
+              <div className={"look-of cam-" + (ovTake ? overNo(settings, ovTake.id) : camNo(settings, k))}>
+                <span className="xs muted">{t("Settings of")}</span> <b>{ovTake ? overNo(settings, ovTake.id) + 1 : camNo(settings, k) + 1}</b> <span className="take-name">{c.videoName?.replace(/\.[^.]+$/, "") ?? clipName(c)}</span>
                 <Hint text={t("Each video has its own colour, effects, framing, bars and progressive zoom: those of the camera on the preview, or of the video over it once clicked (on the preview or its track). Click a take in the library or a shot in the timeline to set another one. Kept in the take.")} />
               </div>
             );

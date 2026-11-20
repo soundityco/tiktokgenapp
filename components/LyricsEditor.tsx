@@ -32,6 +32,13 @@ export default function LyricsEditor({ name, lyrics, song, synced, onChange, onC
   const [over, setOver] = useState<number | null>(null);
   const areas = useRef(new Map<string, HTMLTextAreaElement>());
   const [askDelete, setAskDelete] = useState<string | null>(null);
+  /** What was just copied: "all" or a section's id (the button says « Copié » for a moment). */
+  const [copied, setCopied] = useState<string | null>(null);
+  const sectionText = (l: LyricSection) => [l.name.trim(), l.text.trim()].filter(Boolean).join("\n");
+  const copy = async (what: string, text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(what); window.setTimeout(() => setCopied((c) => (c === what ? null : c)), 1400); } catch { /* not allowed */ }
+  };
+  const allText = lyrics.filter((l) => l.name.trim() || l.text.trim()).map(sectionText).join("\n\n");
 
   const set = (id: string, patch: Partial<LyricSection>) => onChange(lyrics.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const cutSong = () => {
@@ -105,6 +112,8 @@ export default function LyricsEditor({ name, lyrics, song, synced, onChange, onC
                 <span className="idx">{String(i + 1).padStart(2, "0")}</span>
                 <input className="input grow" value={l.name} aria-label={t("Section name")} onChange={(e) => set(l.id, { name: e.target.value })} />
                 <button className="btn quiet icon sm" style={{ transform: "rotate(180deg)" }} title={t("Move up")} aria-label={t("Move up")} disabled={i === 0} onClick={() => move(i, i - 1)}><Icon name="chevron" size={14} /></button>
+                <button className="btn quiet icon sm" title={copied === l.id ? t("Copied") : t("Copy the section")} aria-label={t("Copy the section")}
+                  disabled={!l.text.trim() && !l.name.trim()} onClick={() => void copy(l.id, sectionText(l))}><Icon name={copied === l.id ? "check" : "copy"} size={14} /></button>
                 <button className="btn quiet icon sm danger" aria-label={t("Delete section")} title={t("Delete section")}
                   onClick={() => (synced && l.text.trim() ? setAskDelete(l.id) : onChange(lyrics.filter((x) => x.id !== l.id)))}><Icon name="trash" size={14} /></button>
               </div>
@@ -130,6 +139,9 @@ export default function LyricsEditor({ name, lyrics, song, synced, onChange, onC
       <div className="modal-foot">
         <button className="btn left" onClick={() => onChange([...lyrics, { id: uid(), name: names[lyrics.length] ?? t("Section {n}", { n: lyrics.length + 1 }), text: "" }])}>
           <Icon name="plus" size={14} />{t("Add a section")}
+        </button>
+        <button className="btn" disabled={!allText} title={t("Copy every section with its name, to paste them elsewhere")} onClick={() => void copy("all", allText)}>
+          <Icon name={copied === "all" ? "check" : "copy"} size={14} />{copied === "all" ? t("Copied") : t("Copy all")}
         </button>
         <button className="btn primary" onClick={finish}>{t("Done")}</button>
       </div>

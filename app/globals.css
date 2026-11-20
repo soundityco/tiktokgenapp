@@ -2909,6 +2909,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .tl-hd.hd-audio { --row: var(--text); }
 .tl-hd > .hd-name { grid-column: 1; display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--text); }
 .tl-hd > .hd-name svg { flex: none; color: var(--row); }
+.tl-hd .hd-rename { min-width: 0; width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 4px; outline: none; }
 .tl-hd > .track-eye { grid-column: 2; }
 .tl-hd > .track-lock { grid-column: 3; }
 .tl-hd .btn.icon.sm { width: 24px; height: 24px; color: var(--faint); border-color: transparent; background: none; box-shadow: none; }
