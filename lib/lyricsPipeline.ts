@@ -66,7 +66,7 @@ export async function placeByAlignment(buf: AudioBuffer, written: string, h: Pla
   const french = looksFrench(splitWords(written).map((x) => faNorm(x.w)));
   /** The rules that need no speech model: after a cut in the production, lines piled up, a chorus copied and pasted. */
   const finish = async (w: LyricWord[]) => {
-    const placed = shiftAliased(spreadPacked(afterBreaks(w, silencesOf(buf))), em);
+    const placed = await placeByTwinSound(buf, shiftAliased(spreadPacked(afterBreaks(w, silencesOf(buf))), em));
     return inLines(markUnsure(placed, await applyRepeat(buf, em, placed, french)), em, french);
   };
   // The relay: passages the alignment hardly heard (a hook or a chorus drowned in effects), with lines piled up
@@ -415,6 +415,87 @@ export function shiftAliased(words: LyricWord[], em: Emissions): LyricWord[] {
     first.forEach((i, k) => { next[i] = { ...next[i], s: again[k].s + f0 * FRAME, e: again[k].e + f0 * FRAME, conf: again[k].conf, doubt: again[k].doubt }; });
     console.debug(`[align] a block sung ${rep.times} times was one copy late: moved back (its first copy now at ${next[first[0]].s.toFixed(1)} s)`);
     out = next;
+  }
+  return out;
+}
+
+/**
+ * Lines hardly heard (a run of at least 2, mean confidence < TWIN_DEAF) whose very lines are sung elsewhere and heard
+ * there (mean ≥ TWIN_HEARD): the run is placed where the sound is most like its twin's (log-mel cosine, every start
+ * tried in the free span between the line before the run and the one after it), with the twin's rhythm, word for word;
+ * only when that place stands out (best ≥ TWIN_MIN and clearly above the span's median, TWIN_GAP). Target: August27's
+ * intro (sung 3.1–13 s, placed at 18.5 s piled before the verse), whose twin is the bridge (placed right by shiftAliased).
+ */
+const TWIN_DEAF = 0.12, TWIN_HEARD = 0.12, TWIN_MIN = 0.25, TWIN_GAP = 0.25, FR = 0.02;
+const LEAD = /^(?:and|but|so|cause|coz|cuz|oh|yeah|et|mais|car|donc|alors|puis)\s+/;
+
+export async function placeByTwinSound(buf: AudioBuffer, words: LyricWord[]): Promise<LyricWord[]> {
+  const lineOf: number[][] = [];
+  words.forEach((w, i) => { const l = lineOf[lineOf.length - 1]; if (l && words[l[0]].line === w.line) l.push(i); else lineOf.push([i]); });
+  // (word by word: norm takes the spaces out, and "And I don't care" must read as "I don't care")
+  const key = (l: number[]) => { const n = l.map((i) => norm(words[i].w)).filter(Boolean).join(" "); return n.replace(LEAD, "") || n; };
+  const conf = (l: number[]) => l.reduce((a, i) => a + (words[i].conf ?? 0), 0) / l.length;
+  const keys = lineOf.map(key), confs = lineOf.map(conf);
+  const free = (l: number[]) => l.every((i) => !words[i].lock && !words[i].manual);
+  let out = words;
+  for (let a = 0; a < lineOf.length; a++) {
+    if (!(confs[a] < TWIN_DEAF) || !free(lineOf[a])) continue;
+    let z = a;
+    while (z + 1 < lineOf.length && confs[z + 1] < TWIN_DEAF && free(lineOf[z + 1])) z++;
+    if (z - a + 1 < 2) continue;
+    // the twin: the same lines in a row, heard, for the longest run from its start that has one (the run may go on
+    // with lines sung only there)
+    let twin = -1, n = z - a + 1;
+    for (; n >= 2 && twin < 0; n--) {
+      for (let b = 0; b + n <= lineOf.length && twin < 0; b++) {
+        if (b + n > a && b <= a + n - 1) continue;
+        let ok = true;
+        for (let q = 0; q < n && ok; q++) ok = keys[b + q] === keys[a + q];
+        if (ok && lineOf.slice(b, b + n).reduce((s, l) => s + conf(l), 0) / n >= TWIN_HEARD) twin = b;
+      }
+    }
+    n++;
+    if (twin < 0) { a = z; continue; }
+    const last = a + n - 1;
+    const tw = lineOf.slice(twin, twin + n).flat();
+    const T0 = out[tw[0]].s, T1 = out[tw[tw.length - 1]].e, L = T1 - T0;
+    const prev = a > 0 ? lineOf[a - 1] : null, next = last + 1 < lineOf.length ? lineOf[last + 1] : null;
+    const w0 = prev ? out[prev[prev.length - 1]].e : 0, w1 = next ? out[next[0]].s : buf.duration;
+    if (w1 - w0 < L * 0.9 || L < 1) { a = last; continue; }
+    const fT = melFrames(await prepareAudio(buf, T0, T1)), fW = melFrames(await prepareAudio(buf, w0, w1));
+    const sims: number[] = [];
+    for (let o = 0; o + fT.length <= fW.length; o++) {
+      let s = 0, c = 0;
+      for (let f = 0; f < fT.length; f += 2) { // (every other frame: plenty, twice faster)
+        const x = fT[f], y = fW[o + f];
+        if (!x || !y) continue;
+        let xy = 0, xx = 0, yy = 0;
+        for (let d = 0; d < x.length; d++) { xy += x[d] * y[d]; xx += x[d] * x[d]; yy += y[d] * y[d]; }
+        s += xy / Math.sqrt(xx * yy + 1e-9); c++;
+      }
+      sims.push(c ? s / c : -1);
+    }
+    if (!sims.length) { a = last; continue; }
+    const best = sims.reduce((m, v, i) => (v > sims[m] ? i : m), 0), sorted = [...sims].sort((p, q) => p - q), med = sorted[sorted.length >> 1];
+    console.debug(`[align] twin by sound: lines ${a}–${last}, twin ${twin}, best ${sims[best].toFixed(2)} at ${(w0 + best * FR).toFixed(1)} s, median ${med.toFixed(2)}`);
+    if (sims[best] < TWIN_MIN || sims[best] - med < TWIN_GAP) { a = last; continue; }
+    const shift = w0 + best * FR - T0, next2 = out.slice();
+    // line by line: its words on the twin's, one for one (a linking word at the head of the twin's line aside); else in
+    // the twin line's rhythm
+    for (let q = 0; q < n; q++) {
+      const mine = lineOf[a + q], theirs0 = lineOf[twin + q];
+      const theirs = theirs0.length === mine.length + 1 && LEAD.test(norm(out[theirs0[0]].w) + " ") ? theirs0.slice(1) : theirs0;
+      const ts = out[theirs[0]].s + shift, te = out[theirs[theirs.length - 1]].e + shift;
+      mine.forEach((i, k) => {
+        const src = theirs.length === mine.length ? out[theirs[k]] : null;
+        const s0 = src ? src.s + shift : ts + ((te - ts) * k) / mine.length, e0 = src ? src.e + shift : ts + ((te - ts) * (k + 1)) / mine.length;
+        next2[i] = { ...next2[i], s: s0, e: e0, conf: out[theirs[0]].conf, doubt: undefined, sy: src?.sy };
+      });
+    }
+    out = next2;
+    a = last;
+    continue;
+    a = z;
   }
   return out;
 }
