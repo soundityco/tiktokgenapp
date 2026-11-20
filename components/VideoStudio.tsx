@@ -5733,7 +5733,23 @@ export default function VideoStudio({
     el.classList.add("lifted");
     el.style.translate = `${d.fixed ? 0 : d.x - d.x0}px ${d.y - d.y0}px`;
     let other: HTMLElement | null = null;
-    if ((d.act === "swap" || d.act === "order") && d.target) {
+    const pushed: HTMLElement[] = [];
+    if (d.act === "order" && d.target) {
+      // Between videos over it: inserted at the row aimed at, the ones in between move one row towards where it was
+      // (V4 dropped at V2's row: V2 and V3 go up over it), as in CapCut.
+      const rows = videoRows(), mine = el.closest(".lyric-track");
+      const me = rows.findIndex((r) => r.el === mine), to = rows.findIndex((r) => r.key === d.target);
+      if (me >= 0 && to >= 0 && me !== to) {
+        const dir = Math.sign(me - to);
+        for (let k = to; k !== me; k += dir) {
+          const c = rows[k].el.querySelector<HTMLElement>(".video-clip");
+          if (!c) continue;
+          c.classList.add("shifted"); c.style.translate = `0 ${rows[k + dir].r.top - rows[k].r.top}px`;
+          pushed.push(c);
+        }
+        el.classList.add("shifted"); el.style.translate = `0 ${rows[to].r.top - rows[me].r.top}px`;
+      }
+    } else if (d.act === "swap" && d.target) {
       const rows = videoRows(), row = rows.find((r) => r.key === d.target);
       other = row?.el.querySelector<HTMLElement>(".video-clip, .cam-shot.on") ?? null;
       const mine = el.closest(".lyric-track");
@@ -5747,6 +5763,7 @@ export default function VideoStudio({
     return () => {
       el.classList.remove("lifted", "shifted"); el.style.translate = "";
       if (other) { other.classList.remove("shifted"); other.style.translate = ""; }
+      for (const c of pushed) { c.classList.remove("shifted"); c.style.translate = ""; }
     };
   }, [vdrag]);
   /**
@@ -5765,8 +5782,9 @@ export default function VideoStudio({
       if (d.act === "order") {
         const a = ovs.findIndex((o) => o.clip === d.id), b = ovs.findIndex((o) => o.clip === d.target);
         if (a < 0 || b < 0) return;
-        const list = [...ovs];
-        [list[a], list[b]] = [list[b], list[a]];
+        // (taken out and put at the row aimed at: the ones in between move by one row, never a swap of two)
+        const list = [...ovs], [moved] = list.splice(a, 1);
+        list.splice(b, 0, moved);
         setV(withOverlays(list));
         return;
       }
