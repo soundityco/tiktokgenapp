@@ -1678,7 +1678,9 @@ export default function VideoStudio({
       const onP = every("make");
       // While the video plays, the copy goes on at a gentler pace (a short breath before each picture it decodes): the
       // player keeps the video chip first, both run at once (it used to wait for the pause).
-      const whilePlaying = () => (playingRef.current && !ac.signal.aborted ? new Promise<void>((r) => setTimeout(r, 25)) : undefined);
+      // (one picture every 100 ms while playing — about 10 a second: a 4K 10-bit take decoded at full pace made the
+      // playback lag; full speed again once paused)
+      const whilePlaying = () => (playingRef.current && !ac.signal.aborted ? new Promise<void>((r) => setTimeout(r, 100)) : undefined);
       let copy: Blob | null = null, chip = false;
       try {
         const fast = await fastWorkCopy(blob, plan, from, to, onP, ac.signal, whilePlaying);

@@ -208,7 +208,7 @@ export async function fastWorkCopy(file: Blob, plan: CopyPlan, from: number, to:
       }
       // (the video playing: fewer pictures in flight and a breath before each one — the copy goes on, the player first)
       const gentle = hold?.();
-      if (fed < work.length && dec.decodeQueueSize < (gentle ? 2 : 6) && pending.length < (gentle ? 3 : 8)) {
+      if (fed < work.length && dec.decodeQueueSize < (gentle ? 1 : 6) && pending.length < (gentle ? 1 : 8)) {
         if (gentle) await gentle;
         if (readyAt >= ready_.length) { ready_ = await next!; readyAt = 0; next = fed + ready_.length < work.length ? read(fed + ready_.length, BATCH) : null; }
         const s = work[fed++];
