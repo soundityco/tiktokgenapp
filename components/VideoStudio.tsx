@@ -3216,7 +3216,12 @@ export default function VideoStudio({
   const rowKeyOf = (el: HTMLElement): string | null => el.dataset.ov ?? (el.classList.contains("hook-track") ? "hooks" : el.classList.contains("lyrics-track") ? "lyrics"
     : el.classList.contains("cam-track") || el.classList.contains("video-track") ? "base" : null);
   /** A header's props: clicked, its line is picked (its switches keep their own clicks). */
-  const rowHd = (key: string) => ({ onClick: (e: React.MouseEvent) => { if (!(e.target as HTMLElement).closest("button, input")) setRowPick(key); } });
+  const rowHd = (key: string) => ({ onClick: (e: React.MouseEvent) => {
+    // (the click that ends a drag by the header: the line was picked on press, and follows its video)
+    if (hdDragged.current) { hdDragged.current = false; return; }
+    if (!(e.target as HTMLElement).closest("button, input")) setRowPick(key);
+  } });
+  const hdDragged = useRef(false);
   /**
    * A video's line dragged up or down by its header (a second way to do what its clip does: the same carry, swap,
    * order, multicam), its clip carried up or down only. `key`: "base" or the take over it. Not on its switches.
@@ -3226,6 +3231,8 @@ export default function VideoStudio({
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
       e.stopPropagation();
       if (e.button !== 0 || (e.target as HTMLElement).closest("button, input")) return;
+      setRowPick(key); // (pressed: its line picked at once, dragged or not)
+      hdDragged.current = false;
       hdDrag.current = { key, x: e.clientX, y: e.clientY };
       e.currentTarget.setPointerCapture(e.pointerId);
     },
@@ -3234,6 +3241,7 @@ export default function VideoStudio({
       const d = hdDrag.current;
       if (!d || !vertical(e, { px: d.x, py: d.y })) return;
       hdDrag.current = null;
+      hdDragged.current = true;
       if (trackLocked(d.key)) return; // (its track locked: as its clip, it stays)
       const row = document.querySelector<HTMLElement>(d.key === "base" ? ".video-block .video-track:not(.over-track)" : `.video-block .over-track[data-ov="${CSS.escape(d.key)}"]`);
       const el = row?.querySelector<HTMLElement>(".video-clip");
@@ -5567,14 +5575,15 @@ export default function VideoStudio({
     setV({ trackNames: Object.keys(next).length ? next : undefined });
   };
   const hdName = (icon: React.ComponentProps<typeof Icon>["name"], name: string, key?: string) => (
-    <span className={"hd-name" + (key ? " can-rename" : "")} onDoubleClick={key ? () => setTrackRenaming(key) : undefined} title={key ? t("Double click to rename") : undefined}>
+    // (the name only renames — its text, not the icon nor the rest of the header, which carries the line)
+    <span className="hd-name">
       <Icon name={icon} size={12} />
       {key && trackRenaming === key
         ? <input className="hd-rename" autoFocus defaultValue={settings.trackNames?.[key] ?? ""} placeholder={name} aria-label={t("Track name")}
             onFocus={(e) => e.currentTarget.select()}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") e.currentTarget.blur(); else if (e.key === "Escape") setTrackRenaming(null); }}
             onBlur={(e) => { if (trackRenaming === key) renameTrack(key, e.currentTarget.value); setTrackRenaming(null); }} />
-        : <span className="truncate">{name}</span>}
+        : <span className={"truncate" + (key ? " can-rename" : "")} onDoubleClick={key ? () => setTrackRenaming(key) : undefined} title={key ? t("Double click to rename") : undefined}>{name}</span>}
     </span>
   );
   /** A track locked in its header (as in Premiere): its clips are not moved nor trimmed (clicked: still selected). */
@@ -5905,7 +5914,9 @@ export default function VideoStudio({
   const [vdrag, setVdrag] = useState<null | { from: "base" | "over" | "cam"; id?: string; cam: number; label: string; colour: number; x: number; y: number; w: number; grab: number;
     el: HTMLElement; x0: number; y0: number; target: string | null; at: number; act: VAct | null; cutX: number;
     /** Synced and locked (or its track locked): carried up or down only, never sideways (its time stays). */
-    fixed?: boolean }>(null);
+    fixed?: boolean;
+    /** Taken by its line's header: the whole line moves (header and clip), never into a multicam. */
+    header?: boolean }>(null);
   const vdragRef = useRef(vdrag);
   vdragRef.current = vdrag;
   /** The video rows on screen, from the top: each one's key (the take over it, or "base") and element. */
@@ -5919,7 +5930,7 @@ export default function VideoStudio({
     return o ? o.offset + clipSpan(o, a && Number.isFinite(a.el.duration) ? a.el.duration : Infinity)[0] : null;
   };
   /** What letting go there would do, the row it is about, and the time its start lands on (its left edge under the pointer). */
-  const landing = (d: { from: "base" | "over" | "cam"; id?: string; grab: number; fixed?: boolean; x0?: number }, x: number, y: number) => {
+  const landing = (d: { from: "base" | "over" | "cam"; id?: string; grab: number; fixed?: boolean; x0?: number; header?: boolean }, x: number, y: number) => {
     const block = document.querySelector<HTMLElement>(".video-block")?.getBoundingClientRect();
     // (the time is read on a track, right of the rows' headers; the cut is drawn in the block)
     const track = document.querySelector<HTMLElement>(".video-block .lyric-track")?.getBoundingClientRect() ?? block;
@@ -5949,7 +5960,8 @@ export default function VideoStudio({
       // The base and one over it: past the middle, or on the other's start, they change places; further along the other's
       // line: both in the multicam, cut there.
       const s0 = rowStart(tr.key);
-      act = past ? "swap" : s0 === null ? null : at <= s0 + 0.3 ? "swap" : "multicam";
+      // (a whole line, carried by its header: it changes places, never a multicam)
+      act = past ? "swap" : d.header ? null : s0 === null ? null : at <= s0 + 0.3 ? "swap" : "multicam";
     }
     return { ...none, act, target: act ? tr.key : null };
   };
@@ -5970,8 +5982,8 @@ export default function VideoStudio({
     const fixed = header ? true : from === "base" ? !!cur.linked || trackLocked("base")
       : from === "over" ? trackLocked(id ?? "") || (!!take?.linked && take.score !== undefined && !!ov && Math.abs(ov.offset - take.offset) < 0.01)
       : false;
-    setVdrag({ fixed, from, id, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" && id ? overNo(settingsRef.current, id) : camNo(settingsRef.current, cam),
-      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, id, grab, fixed, x0: x0 ?? e.clientX }, e.clientX, e.clientY) });
+    setVdrag({ fixed, header: header || undefined, from, id, cam, label: c?.videoName?.replace(/\.[^.]+$/, "") ?? (c ? clipName(c) : ""), colour: from === "over" && id ? overNo(settingsRef.current, id) : camNo(settingsRef.current, cam),
+      x: e.clientX, y: e.clientY, w: clamp(r.width, 80, 320), grab, el, x0: x0 ?? e.clientX, y0: y0 ?? e.clientY, ...landing({ from, id, grab, fixed, x0: x0 ?? e.clientX, header }, e.clientX, e.clientY) });
   };
   const moveVdrag = (e: React.PointerEvent) => {
     const d = vdragRef.current;
@@ -5986,8 +5998,15 @@ export default function VideoStudio({
     const d = vdrag;
     if (!d) return;
     const el = d.el;
+    // (carried by its header: the whole line moves — each clip's header follows its clip, up or down)
+    const moved: HTMLElement[] = [];
+    const move = (c: HTMLElement, x: number, y: number) => {
+      c.style.translate = `${x}px ${y}px`;
+      const hd = d.header ? c.closest(".tl-row")?.querySelector<HTMLElement>(".tl-hd") : null;
+      if (hd) { hd.style.translate = `0 ${y}px`; hd.classList.add("hd-moving"); if (c === el) hd.classList.add("hd-lifted"); moved.push(hd); }
+    };
     el.classList.add("lifted");
-    el.style.translate = `${d.fixed ? 0 : d.x - d.x0}px ${d.y - d.y0}px`;
+    move(el, d.fixed ? 0 : d.x - d.x0, d.y - d.y0);
     let other: HTMLElement | null = null;
     const pushed: HTMLElement[] = [];
     if (d.act === "order" && d.target) {
@@ -6000,10 +6019,10 @@ export default function VideoStudio({
         for (let k = to; k !== me; k += dir) {
           const c = rows[k].el.querySelector<HTMLElement>(".video-clip");
           if (!c) continue;
-          c.classList.add("shifted"); c.style.translate = `0 ${rows[k + dir].r.top - rows[k].r.top}px`;
+          c.classList.add("shifted"); move(c, 0, rows[k + dir].r.top - rows[k].r.top);
           pushed.push(c);
         }
-        el.classList.add("shifted"); el.style.translate = `0 ${rows[to].r.top - rows[me].r.top}px`;
+        el.classList.add("shifted"); move(el, 0, rows[to].r.top - rows[me].r.top);
       }
     } else if (d.act === "swap" && d.target) {
       const rows = videoRows(), row = rows.find((r) => r.key === d.target);
@@ -6011,15 +6030,16 @@ export default function VideoStudio({
       const mine = el.closest(".lyric-track");
       if (other && mine && row) {
         const gap = mine.getBoundingClientRect().top - row.r.top;
-        other.classList.add("shifted"); other.style.translate = `0 ${gap}px`;
+        other.classList.add("shifted"); move(other, 0, gap);
         // ...(letting go keeps both at their times)
-        el.classList.add("shifted"); el.style.translate = `0 ${-gap}px`;
+        el.classList.add("shifted"); move(el, 0, -gap);
       } else other = null;
     }
     return () => {
       el.classList.remove("lifted", "shifted"); el.style.translate = "";
       if (other) { other.classList.remove("shifted"); other.style.translate = ""; }
       for (const c of pushed) { c.classList.remove("shifted"); c.style.translate = ""; }
+      for (const h of moved) { h.style.translate = ""; h.classList.remove("hd-moving", "hd-lifted"); }
     };
   }, [vdrag]);
   /**
@@ -6047,7 +6067,8 @@ export default function VideoStudio({
       // The one over it concerned: the one dragged, or the one the base was dropped on.
       const ovId = d.from === "over" ? d.id : d.target, ov = overlayOf(cur, ovId), take = ov ? clips.find((c) => c.id === ov.clip) : undefined;
       if (!ov || !take) return;
-      if (d.act === "swap") { swapBase(take); return; }
+      // (the line lit follows the video carried: its file is now on the other line)
+      if (d.act === "swap") { swapBase(take); setRowPick(d.from === "base" ? take.id : "base"); return; }
       if (angles.length >= MAX_CAMS - 1) { onToast?.(t("Up to {n} cameras.", { n: MAX_CAMS })); return; }
       // Both on the base line: the one over it joins the cameras at the place it had (its offset), and a cut is made.
       // (at its start, wherever it is: in the segment or not — the multicam track shows the whole of its videos)
@@ -7687,7 +7708,8 @@ export default function VideoStudio({
                 {audioBuf && videoBlob && (
                   <div className={"video-block" + (dragTake || vdrag ? " dragging" : "") + (dropRow ? " drop-" + dropRow : "") + (vdrag?.act ? " va-" + vdrag.act : "")} {...blockDrop}>
                     {/* Dragging a take from the library: the row above the base line to drop it over the video. */}
-                    {dragTake && videosIn(settings) < MAX_CAMS && <div className="lyric-track drop-over-row">{t("Drop here: over the video")}</div>}
+                    {/* A take carried from the library: a new line on top, as a real track (its header, a plain slot). */}
+                    {dragTake && videosIn(settings) < MAX_CAMS && <div className="tl-row drop-row"><div className="tl-hd drop-hd">{hdName("plus", t("New track"))}</div><div className="lyric-track drop-over-row">{t("Drop here: over the video")}</div></div>}
                     {/* The videos over it, the top one first (2, 3, 4 from the base up), then the base line (1, or the multicam). */}
                     {[...overlaysOf(settings)].reverse().map((o) => <Fragment key={o.clip}>{overlayTrackEl(o)}</Fragment>)}{camsEl("track")}
                     {vdrag?.act === "multicam" && <div className="vz-cut" style={{ left: vdrag.cutX }} title={t("Cut here")} />}

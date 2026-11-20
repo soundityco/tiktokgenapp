@@ -575,9 +575,15 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 /* A take dragged from the library: the block shows where it can go (over the video: the row above; the base line:
    multicam), the row under the pointer lit. */
 .video-block { position: relative; }
-.video-block.dragging { border-style: dashed; border-color: var(--muted); }
-.video-block .drop-over-row { display: grid; place-items: center; font-size: 11px; color: var(--muted); border: 1px dashed var(--line-2); margin: 0 4px; }
-.video-block.drop-over .drop-over-row, .video-block.drop-over .over-track { background: color-mix(in srgb, var(--video) 14%, transparent); color: var(--text); }
+/* (a clip or a take being carried: the block lit softly, never a dashed frame) */
+.video-block { transition: background-color .15s ease, box-shadow .15s ease; }
+.video-block.dragging { background: color-mix(in srgb, var(--text) 3%, var(--bg)); }
+.video-block .drop-over-row { display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 4%, transparent); transition: background-color .15s ease, color .15s ease, box-shadow .15s ease; }
+.video-block .drop-hd { --row: var(--video); opacity: .75; transition: opacity .15s ease; }
+.video-block.drop-over .drop-hd { opacity: 1; }
+.video-block.drop-over .drop-over-row { background: color-mix(in srgb, var(--video) 16%, transparent); color: var(--text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--video) 45%, transparent); }
+.video-block.drop-over .over-track { background: color-mix(in srgb, var(--video) 10%, transparent); }
 .video-block.drop-main .cam-track, .video-block.drop-main .video-track:not(.over-track) { background: color-mix(in srgb, var(--video) 14%, transparent); }
 .video-block .drop-ghost { position: absolute; top: 4px; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 8px; pointer-events: none; z-index: 5;
   font-size: 12px; color: var(--text); border-left: 2px solid var(--video); border-radius: 3px; background: color-mix(in srgb, var(--video) 40%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
@@ -2953,7 +2959,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .tl-hd.hd-drag { cursor: grab; } .tl-hd.hd-drag button, .tl-hd.hd-drag input { cursor: default; }
 .tl-hd > .hd-name { grid-column: 1; display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--text); }
 .tl-hd > .hd-name svg { flex: none; color: var(--row); }
-.tl-hd > .hd-name.can-rename, .tl-hd > .hd-name.can-rename .truncate { cursor: text; }
+.tl-hd > .hd-name .can-rename { cursor: text; }
 .tl-hd .hd-rename { min-width: 0; width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 4px; outline: none; }
 .tl-hd > .track-eye { grid-column: 2; }
 .tl-hd > .track-lock { grid-column: 3; }
@@ -2962,7 +2968,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .tl-hd .btn.icon.sm.track-eye:not(.off), .tl-hd .btn.icon.sm.track-lock.on { color: var(--text); }
 .tl-hd .btn.icon.sm.track-lock.some { color: var(--muted); }
 .tl-stack .track-tools { display: none; }
-.tl-stack .video-block > .drop-over-row, .tl-stack .video-block > .drop-main-hint { margin-left: calc(var(--tl-hd) + 4px); }
+.tl-stack .video-block > .drop-main-hint { margin-left: calc(var(--tl-hd) + 4px); }
 @media (max-width: 640px) {
   .tl-stack { --tl-hd: 54px; }
   .tl-hd { grid-template-columns: 24px 24px; justify-content: end; padding: 0 1px 0 5px; }
@@ -2983,7 +2989,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   .tl-stack .wave { border: 0; }
   .tl-stack .lyric-track { border: 0; background: none; border-radius: 0; }
   .tl-stack > .video-block { border: 0; padding: 0; background: none; border-radius: 0; gap: 2px; }
-  .tl-stack > .video-block.dragging { outline: 1px dashed var(--muted); outline-offset: 3px; }
+  .tl-stack > .video-block.dragging { background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 3%, transparent); border-radius: 4px; }
   .tl-stack .lyric-head { display: none; }
   .tl-stack .track-seg { display: none; } /* (the segment is on the waveform, right above) */
   /* from the waveform's top to the last clip's bottom: never on the frame */
@@ -3009,6 +3015,9 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
   box-shadow: -1px 0 0 0 color-mix(in srgb, var(--bg) 70%, transparent); } /* (a seam, never a gap: the two pieces touch, the next one's coloured edge after a 1 px line, as two clips side by side in an editor) */
 .lyric-track .cue.lifted { z-index: 10 !important; cursor: grabbing; box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 80%, transparent); }
 .lyric-track .cue.shifted { transition: translate .16s ease; }
+/* A line carried by its header: the headers move with their clips (the one carried above the others). */
+.tl-hd.hd-moving { transition: translate .16s ease; z-index: 8; }
+.tl-hd.hd-lifted { z-index: 12; transition: none; cursor: grabbing; box-shadow: 0 8px 22px color-mix(in srgb, var(--bg) 80%, transparent); }
 .video-clip .vc-no { color: var(--vc); font-weight: 600; }
 
 /* A video track hidden (its eye): its clips dimmed, the eye crossed out. */
