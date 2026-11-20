@@ -27,6 +27,7 @@ import { COPY_VERSION, fastWorkCopy } from "@/lib/fastCopy";
 import { copyBusy as copyLock } from "@/lib/driveCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
 import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
+import { wavOf } from "@/lib/wav";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import { alignEmissions, cachedEmissions, stopAlign } from "@/lib/alignAI";
@@ -2120,6 +2121,56 @@ export default function VideoStudio({
   };
 
   /**
+   * A video's own sound made the audio (a live take, a guitar-voice filmed on a phone, a sketch: the sound is the
+   * video's): kept as a WAV (stereo, the file's rate; ffmpeg for a heavy camera file), it becomes the release's audio
+   * when it has none, else a new version of it for this project (« Video sound »). The video is placed on it from its
+   * start and linked; the lyrics are then synced on it (« Sync the lyrics »), the other videos synced on it too.
+   */
+  const [soundOf, setSoundOf] = useState<string | null>(null);
+  /** A video that matched nothing in the official audio: its sound offered as the audio (under the sync's message). */
+  const [soundOffer, setSoundOffer] = useState<string | null>(null);
+  const lowSync = useRef(false);
+  const takeVideoSound = async (c: VideoSetup) => {
+    const base = c.id === clip.id;
+    const file = base ? videoBlob : anglesRef.current.get(c.id)?.blob ?? (await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined));
+    if (!file) { onToast?.(t("This video's file is not on this device: link the original file first.")); return; }
+    stop(); syncRef.current?.abort();
+    setSoundOf(c.id); setErr(null);
+    setAudioBusy(t("Reading the sound of the video…"));
+    const ac = new AbortController();
+    try {
+      let wav: Blob | null = null;
+      if (file.size <= SYNC_DECODE_MAX) {
+        try {
+          const buf = await decodeAudio(getCtx(), file);
+          wav = wavOf(Array.from({ length: Math.min(2, buf.numberOfChannels) }, (_, k) => buf.getChannelData(k)), buf.sampleRate);
+        } catch { /* ffmpeg */ }
+      }
+      if (!wav) {
+        const len = (base ? settings.source?.duration : c.source?.duration) ?? 60;
+        const raw = await ffmpegAlone(file, ["-i", "/in/source", "-map", "0:a:0", "-vn", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", "sound.wav"], "sound.wav", Math.max(1, len), () => {}, ac.signal);
+        wav = new Blob([raw.slice()], { type: "audio/wav" });
+      }
+      if (!wav || wav.size < 1000) { setErr(t("This video has no sound to use.")); return; }
+      const name = `${(c.videoName ?? clipName(c)).replace(/\.[^.]+$/, "")} · ${t("video sound")}.wav`;
+      const f = new File([wav], name, { type: "audio/wav" });
+      if (!audioBlob || !project.audioName) await pickAudio(f);
+      else {
+        await addAudioVersion(f, undefined, "this");
+        // (another recording than the official one, as expected: no « not the same song » report, the toast says it all)
+        setRemapReport(null);
+      }
+      // On it from its start, linked: its sound is the audio.
+      if (base) setV({ offset: 0, linked: true, score: 1 });
+      else { patchTake(c.id, { offset: 0, linked: true, score: 1 }); if (overlayOf(settingsRef.current, c.id)) patchOverlay(c.id, { offset: 0 }); }
+      onSaveNow();
+      onToast?.(t("The sound of “{name}” is the audio now: sync the lyrics on it (Sync), and the other videos.", { name: (c.videoName ?? clipName(c)).replace(/\.[^.]+$/, "") }));
+    } catch (e) {
+      if (!ac.signal.aborted) { console.warn("[sound] not read", e); setErr(t("The sound of this video could not be read.")); }
+    } finally { setSoundOf(null); setAudioBusy(null); }
+  };
+
+  /**
    * "Replace from this computer": another file for the open version of the audio (a new master, a longer export…), the
    * same version kept. The same song: its lyrics and the videos on it move to where the same music is in the new file (as
    * for a new version); another song: everything starts again, as a first import. The old file leaves the device and the
@@ -2696,6 +2747,7 @@ export default function VideoStudio({
           ? t("{n} takes found in the video", { n: takes.length }) + " · " + t("Sync quality {n}%", { n: Math.round(r.score * 100) })
           : t("Sync quality {n}%", { n: Math.round(r.score * 100) }));
         if (r.score < 0.7) setErr(t("Low confidence: check the offset by ear."));
+        lowSync.current = r.score < 0.7;
         outcome = {
           title: r.score < 0.7 ? t("Sync finished, low confidence") : t("Sync finished"),
           body: t("Sync quality {n}%", { n: Math.round(r.score * 100) }) + " · " + t("Offset (s)") + " " + round2(r.offset),
@@ -2738,6 +2790,11 @@ export default function VideoStudio({
     outcome: { title: string; body: string } | null = null) => {
     const list = (n: string[]) => n.map((x) => `« ${x} »`).join(", ");
     const freeNames = [...(fail ? [fail.name] : []), ...others.free];
+    // The video under matching nothing (a live, a guitar-voice, a sketch: not the official recording): its own sound
+    // offered as the audio, in a click.
+    // (or placed with a low confidence: the same song played again, a live, matches only roughly)
+    setSoundOffer(fail || lowSync.current ? clip.id : null);
+    lowSync.current = false;
     if (fail && !others.synced.length) {
       // Nothing placed at all: the error, as before.
       setErr(fail.why);
@@ -5271,6 +5328,7 @@ export default function VideoStudio({
       <button onClick={() => { close(); stop(); const ovs = overlaysOf(settingsRef.current); setV({ angles: [ovs[0].clip], ...withOverlays(ovs.slice(1)) }); }}><Icon name="layers" size={14} />{t("Put in the multicam")}</button>
     )}
     <button disabled={!videoBlob || syncBusy} onClick={() => { close(); void autoSync(); }}><Icon name="refresh" size={14} />{t("Sync again")}</button>
+    <button disabled={!videoBlob || !!soundOf} onClick={() => { close(); void takeVideoSound(clip); }} title={t("A live, a guitar-voice, a sketch: its own sound becomes the audio, the lyrics are synced on it.")}><Icon name="music" size={14} />{t("Use its sound as the audio")}</button>
     {/* The same camera file found again on this computer (the sync and settings kept). */}
     <button onClick={() => { close(); document.getElementById("video-original")?.click(); }}><Icon name="link" size={14} />{t("Link the original file")}</button>
     {driveWrite && videoBlob && !onCopy && <button disabled={!!copyJob} onClick={() => { close(); copyNow(); }}><Icon name="copy" size={14} />{settings.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>}
@@ -5384,6 +5442,7 @@ export default function VideoStudio({
         {cam !== null && cam > 0 && <button onClick={() => { close(); stop(); removeAngle(i, withOverlays([...overlaysOf(settingsRef.current), overlayFor(c)])); }}><Icon name="film" size={14} />{t("Put on its own track (over the video)")}</button>}
         {cam === null && !isOver && <button disabled={!room} onClick={() => { close(); putOverlay(c); }}><Icon name="plus" size={14} />{t("Add to the project")}</button>}
         <button disabled={!!job && !job.err} onClick={() => { close(); void resyncTake(c); }}><Icon name="refresh" size={14} />{t("Sync again")}</button>
+        <button disabled={!!soundOf} onClick={() => { close(); void takeVideoSound(c); }} title={t("A live, a guitar-voice, a sketch: its own sound becomes the audio, the lyrics are synced on it.")}><Icon name="music" size={14} />{t("Use its sound as the audio")}</button>
         <button onClick={() => { close(); relinkFor.current = c.id; takeOriginal.current?.click(); }}><Icon name="link" size={14} />{t("Link the original file")}</button>
         {/* Its Drive copy made now, or again (another device opens it; the old one replaced). */}
         {driveWrite && (() => {
@@ -7104,6 +7163,8 @@ export default function VideoStudio({
         {t("Import the audio")}
         <input type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
       </label>
+      {/* (no official audio — a live, a sketch —: the video's own sound is the audio) */}
+      {videoBlob && <button className="btn sm" disabled={!!soundOf} onClick={() => void takeVideoSound(clip)}>{soundOf ? t("Reading…") : t("Use the video's sound")}</button>}
     </div>
   );
 
@@ -7866,6 +7927,17 @@ export default function VideoStudio({
                 )}
                 {genInfo && <p className="notice xs">{genInfo}</p>}
                 {err && <p className="notice bad xs">{err}</p>}
+                {soundOffer && (() => {
+                  const c = clips.find((x) => x.id === soundOffer);
+                  if (!c) return null;
+                  return (
+                    <div className="notice xs row">
+                      <span className="grow">{t("Not the official recording (a live, a guitar-voice…)? Its own sound can be the audio: the lyrics are then synced on it.")}</span>
+                      <button className="btn sm" disabled={!!soundOf} onClick={() => { setSoundOffer(null); setErr(null); void takeVideoSound(c); }}>{t("Use its sound as the audio")}</button>
+                      <button className="btn sm quiet icon" aria-label={t("Close")} onClick={() => setSoundOffer(null)}><Icon name="x" size={12} /></button>
+                    </div>
+                  );
+                })()}
                 {note && <p className="notice xs">{note}</p>}
                 <details className="fine">
                   <summary>{t("Fine tuning")}</summary>
