@@ -1592,6 +1592,7 @@ export const FR: Record<string, string> = {
   "{n} videos linked again: their sync and settings are kept.": "{n} vidéos reliées : leur synchro et leurs réglages sont gardés.",
   "Moved your camera files? Pick the folder: every video of the release missing on this device is found there by its name, its sync and settings kept.": "Tu as déplacé tes fichiers caméra ? Choisis le dossier : chaque vidéo de la release absente de cet appareil y est retrouvée par son nom, synchro et réglages gardés.",
   "Link the files from a folder…": "Relier les fichiers d'un dossier…",
+  "Link from a folder…": "Relier depuis un dossier…",
   "Re-place the others": "Recaler les autres",
   "Locked: kept as it is when the lyrics are placed again. Click to unlock.": "Verrouillée : gardée telle quelle quand les paroles sont recalées. Clic pour déverrouiller.",
   "Lock this line: kept as it is when the lyrics are placed again": "Verrouiller cette ligne : gardée telle quelle quand les paroles sont recalées",

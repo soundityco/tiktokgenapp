@@ -5830,12 +5830,12 @@ export default function VideoStudio({
     return (
       <div className="takes">
         {rows.map((r) => r.el)}
-        <button className="btn sm take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
+        <button className="btn primary take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
           <Icon name="plus" size={14} />{t("Import takes")}
         </button>
-        <button className="btn sm quiet take-import" onClick={() => folderInput.current?.click()}
+        <button className="take-relink" onClick={() => folderInput.current?.click()}
           title={t("Moved your camera files? Pick the folder: every video of the release missing on this device is found there by its name, its sync and settings kept.")}>
-          <Icon name="link" size={14} />{t("Link the files from a folder…")}
+          <Icon name="link" size={13} /><span className="truncate">{t("Link from a folder…")}</span>
         </button>
         <input ref={folderInput} type="file" multiple hidden {...{ webkitdirectory: "" }}
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) void relinkFolder(f); }} />

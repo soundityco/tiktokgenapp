@@ -541,7 +541,13 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .take.other { --cam: var(--line-2); }
 .take.other:hover, .take.other.open, .take.other:focus-within { --cam: var(--accent); }
 .take.other .media.m-film { --kind: var(--cam); }
-.take-import { align-self: flex-start; margin-top: 6px; } /* (12 px from the last take: the videos 6 px apart) */
+.take-import { align-self: stretch; width: 100%; margin-top: 6px; } /* (12 px from the last take: the videos 6 px apart; the column's width, the app's main button) */
+/* "Link from a folder…": a quiet link under it, never wider than the column. */
+.take-relink { display: flex; align-items: center; justify-content: center; gap: 6px; align-self: stretch; min-width: 0; max-width: 100%; height: 26px; padding: 0 4px;
+  border: 0; background: none; color: var(--muted); font-size: var(--fs-sm); cursor: pointer; transition: color .12s; }
+.take-relink:hover { color: var(--text); }
+.take-relink:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.take-relink svg { flex: none; }
 /* The project's takes 6 px apart all along (camera 1's card, then the others), its title as far as before. */
 .tree-branch.takes-branch { row-gap: 6px; }
 .tree-branch.takes-branch > .tree-head { margin-bottom: 6px; }
