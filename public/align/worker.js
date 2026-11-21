@@ -113,13 +113,32 @@ async function listen(ort, audio) {
   return { frames: all.subarray(0, T * V).slice(), T, V };
 }
 
+/** The model loaded once, even asked twice at a time (the studio's warm-up and a click). */
+let ready = null;
+const ensure = (ort) => (session ? Promise.resolve() : (ready ??= start(ort).finally(() => { ready = null; })));
+
 self.onmessage = async (e) => {
   const { type, audio } = e.data || {};
+  if (type === "warm") {
+    // Loaded ahead (the video studio opened with lyrics), so a click places the lyrics at once: only on the graphics
+    // card, and only a model already downloaded (never a download nobody asked for).
+    try {
+      if (!session && (await gpu()) && (await (await caches.open(MODELS.gpu.cache)).match(MODELS.gpu.url))) {
+        const ort = await ortLib();
+        await ensure(ort);
+        await listen(ort, new Float32Array(RATE)); // (a second of silence: the graphics card readies its work once, here)
+      }
+      post({ type: "warm-done", loaded: !!session });
+    } catch (err) {
+      post({ type: "warm-done", loaded: false, message: String((err && err.message) || err) });
+    }
+    return;
+  }
   if (type !== "run") return;
   try {
     post({ type: "status", step: "library" });
     const ort = await ortLib();
-    if (!session) { await start(ort); post({ type: "status", step: "start" }); }
+    if (!session) { await ensure(ort); post({ type: "status", step: "start" }); }
     post({ type: "device", device: provider });
     post({ type: "status", step: "listen" });
     let r;

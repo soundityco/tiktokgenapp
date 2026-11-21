@@ -7,9 +7,11 @@ import type { AsrStep } from "./transcribe";
 export interface Emissions { frames: Float32Array; T: number; V: number }
 
 let worker: Worker | null = null;
+// One job at a time on the worker: its messages carry no job id, two at once would take each other's answer.
+let queue: Promise<unknown> = Promise.resolve();
 /** Where the model last ran: "webgpu" (graphics card) or "wasm" (processor). */
 export let alignDevice = "";
-export function stopAlign() { worker?.terminate(); worker = null; }
+export function stopAlign() { worker?.terminate(); worker = null; queue = Promise.resolve(); } // (a job cut off never answers: the queue starts again)
 
 /** Mono 16 kHz copy of the whole track, as the model expects. */
 async function mono16k(buf: AudioBuffer): Promise<Float32Array> {
@@ -50,8 +52,28 @@ export async function alignEmissions(
 
 type RunOpts = { onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal };
 
+const inTurn = <T>(job: () => Promise<T>): Promise<T> => { const r = queue.then(job, job); queue = r.catch(() => {}); return r; };
+
+/**
+ * The model loaded ahead, in the background (the video studio opened with lyrics): the first "Re-place" then takes a
+ * second, not the model's loading. Graphics card only, and only when it was downloaded before; nothing otherwise.
+ */
+export function warmAlign(): Promise<boolean> {
+  return inTurn(() => new Promise<boolean>((resolve) => {
+    worker ??= new Worker("/align/worker.js", { type: "module" });
+    const w = worker;
+    const onMsg = (e: MessageEvent) => { if (e.data?.type === "warm-done") { w.removeEventListener("message", onMsg); resolve(!!e.data.loaded); } };
+    w.addEventListener("message", onMsg);
+    w.postMessage({ type: "warm" });
+  }));
+}
+
 /** The model run on mono 16 kHz samples (handed over to the worker). */
 function runModel(samples: Float32Array, opts: RunOpts): Promise<Emissions> {
+  return inTurn(() => runNow(samples, opts));
+}
+function runNow(samples: Float32Array, opts: RunOpts): Promise<Emissions> {
+  if (opts.signal?.aborted) return Promise.reject(new Error("aborted")); // (cancelled while waiting its turn)
   return new Promise<Emissions>((resolve, reject) => {
     worker ??= new Worker("/align/worker.js", { type: "module" });
     const w = worker;

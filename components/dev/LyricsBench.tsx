@@ -4,7 +4,7 @@ import { decodeAudio } from "@/lib/media";
 import { parseLyrics } from "@/lib/lyricsAlign";
 import { placeByAlignment, placeExact } from "@/lib/lyricsPipeline";
 import { hasGpu } from "@/lib/transcribe";
-import { alignEmissions, alignEmissionsIn } from "@/lib/alignAI";
+import { alignEmissions, alignEmissionsIn, warmAlign } from "@/lib/alignAI";
 
 type Line = { text: string; start: number; end: number; doubt: boolean };
 declare global { interface Window { __inCheck?: unknown; __lyricsResult?: { lines: Line[]; words?: { w: string; s: number; e: number; line?: number; sy?: number[]; conf?: number; doubt?: boolean }[]; ms: number } | { error: string } } }
@@ -49,8 +49,10 @@ export default function LyricsBench() {
     if (!file) return;
     const buf = await decodeAudio(new AudioContext(), file);
     const spans: [number, number][] = [[35, 39], [60, 64]];
-    await alignEmissionsIn(buf, [[0, 2]]); // (the model loaded first: its loading is not timed)
     let t0 = performance.now();
+    const warm = await warmAlign(); // (as the studio does: the model loaded ahead)
+    const msWarm = performance.now() - t0;
+    t0 = performance.now();
     const part = await alignEmissionsIn(buf, spans);
     const msIn = performance.now() - t0;
     t0 = performance.now();
@@ -59,7 +61,7 @@ export default function LyricsBench() {
     let same = 0, n = 0;
     const best = (f: Float32Array, t: number, V: number) => { let k = 0; for (let v = 1; v < V; v++) if (f[t * V + v] > f[t * V + k]) k = v; return k; };
     for (const [a, b] of spans) for (let t = Math.round(a / 0.02); t < Math.round(b / 0.02); t++) { n++; if (best(part.frames, t, part.V) === best(all.frames, t, all.V)) same++; }
-    window.__inCheck = { T: [part.T, all.T], V: [part.V, all.V], same: same / n, msIn: Math.round(msIn), msAll: Math.round(msAll) };
+    window.__inCheck = { warm, msWarm: Math.round(msWarm), T: [part.T, all.T], V: [part.V, all.V], same: same / n, msIn: Math.round(msIn), msAll: Math.round(msAll) };
     setLog(JSON.stringify(window.__inCheck));
   };
   return (

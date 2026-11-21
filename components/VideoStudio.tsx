@@ -30,7 +30,7 @@ import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, spli
 import { wavOf } from "@/lib/wav";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import { alignEmissions, alignEmissionsIn, cachedEmissions, stopAlign } from "@/lib/alignAI";
+import { alignEmissions, alignEmissionsIn, cachedEmissions, stopAlign, warmAlign } from "@/lib/alignAI";
 import { faNorm, looksFrench } from "@/lib/forcedAlign";
 import { LYRICS_LAP, LYRICS_WIN, freeSpans, inLines, placeByAlignment, realignFree, realignSpans } from "@/lib/lyricsPipeline";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
@@ -4143,6 +4143,14 @@ export default function VideoStudio({
 
   /** Lyrics there are to place: the pasted ones (even not saved yet) or the chosen carousel ones. */
   const hasLyrics = !!(lyricsLinked ? sungOf(project.lyrics).trim() : writtenSrc === "song" ? parseLyrics(paste).text.trim() : writtenOf(writtenSrc, project).trim());
+  // The alignment model loaded ahead, once the studio has settled (computer with a graphics card, lyrics written, the model
+  // downloaded before): the first "Re-place" then takes a second, not its loading. Nothing on a phone.
+  const warmed = useRef(false);
+  useEffect(() => {
+    if (warmed.current || !audioBuf || !hasLyrics || !hasGpu() || matchMedia("(hover: none)").matches) return;
+    const id = window.setTimeout(() => { warmed.current = true; void warmAlign().then((ok) => ok && console.info("[align] model loaded ahead")); }, 5000);
+    return () => window.clearTimeout(id);
+  }, [audioBuf, hasLyrics]);
 
   /**
    * The one sync button: the video on the official audio (when there is one), then the written
