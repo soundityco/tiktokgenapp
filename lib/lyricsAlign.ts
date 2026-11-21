@@ -1031,3 +1031,76 @@ export function tightenLineStarts(words: LyricWord[]): LyricWord[] {
   }
   return out;
 }
+
+/** A run of lines (their numbers in the new text) and the time span they were placed again in. */
+export type LineSpan = { lines: number[]; lo: number; hi: number };
+
+/**
+ * The lyrics placed again after an edit of the text (no new listening): a line whose text changed keeps the time its old
+ * version had (its start, its end), its words shared there by syllables, locked if it was; a line added keeps the room
+ * between the lines around it. Before, an edited line took the time the words heard first gave it, which could be far
+ * (WANNA TRY: « OK, OK, AY » written « OK » came 3 s early, over the locked line before it). Gives the spans placed, for
+ * the model to place the words on the voice there when it listened to the song (`realignSpans`).
+ */
+export function keepEditedLines(prev: LyricWord[], next: LyricWord[]): { words: LyricWord[]; spans: LineSpan[] } {
+  const group = (ws: LyricWord[]) => {
+    const by = new Map<number, LyricWord[]>();
+    for (const x of ws) { const l = x.line ?? -1; (by.get(l) ?? by.set(l, []).get(l)!).push(x); }
+    return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([line, words]) => ({ line, words, key: words.map((x) => norm(x.w)).join(" ") }));
+  };
+  const A = group(prev), B = group(next);
+  if (!A.length || !B.length) return { words: next, spans: [] };
+  const n = A.length, m = B.length, L = new Int32Array((n + 1) * (m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    L[i * (m + 1) + j] = A[i].key === B[j].key ? L[(i + 1) * (m + 1) + j + 1] + 1 : Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
+  const pairs: [number, number][] = [];
+  for (let i = 0, j = 0; i < n && j < m;) {
+    if (A[i].key === B[j].key) { pairs.push([i, j]); i++; j++; }
+    else if (L[(i + 1) * (m + 1) + j] >= L[i * (m + 1) + j + 1]) i++;
+    else j++;
+  }
+  // a line not edited stays exactly where it was (its words, syllables, retouches): an edit is local
+  const placed = new Map<LyricWord, LyricWord>(), spans: LineSpan[] = [];
+  for (const [i, j] of pairs) A[i].words.forEach((o, k) => { const x = B[j].words[k]; if (x) placed.set(x, { ...o, line: x.line }); });
+  pairs.push([n, m]);
+  const startOf = (ws: LyricWord[]) => Math.min(...ws.map((x) => x.s));
+  const endOf = (ws: LyricWord[]) => Math.max(...ws.map((x) => x.until ?? x.e));
+  let pi = 0, pj = 0;
+  for (const [ai, bj] of pairs) {
+    const oldRun = A.slice(pi, ai), newRun = B.slice(pj, bj);
+    const before = pj > 0 ? B[pj - 1] : undefined, after = bj < m ? B[bj] : undefined;
+    pi = ai + 1; pj = bj + 1;
+    if (!newRun.length) continue;
+    const kept = (r: (typeof B)[number]) => r.words.map((x) => placed.get(x) ?? x);
+    const room0 = before ? endOf(kept(before)) + 0.02 : 0, room1 = after ? startOf(kept(after)) - 0.02 : Infinity;
+    const words = newRun.flatMap((r) => r.words);
+    if (oldRun.length) {
+      // changed: in the old version's time, shared by syllables (the model places them on the voice after, when it can)
+      const old = oldRun.flatMap((r) => r.words);
+      const lo = Math.max(room0, startOf(old)), hi = Math.max(lo + 0.1 * words.length, Math.min(room1, endOf(old)));
+      const lock = old.every((x) => x.lock), until = old[old.length - 1].until;
+      const syl = words.map((x) => Math.max(1, syllables(x.w))), total = syl.reduce((a, b) => a + b, 0);
+      let at = 0;
+      words.forEach((x, k) => {
+        const s = lo + ((hi - lo) * at) / total; at += syl[k];
+        const e = lo + ((hi - lo) * at) / total;
+        const { sy: _s, ws: _ws, we: _we, wu: _wu, until: _u, doubt: _d, ...rest } = x;
+        placed.set(x, { ...rest, s: r3(s), e: r3(Math.max(s + 0.03, e)), ...(lock ? { lock: true as const, manual: true as const } : { lock: undefined, manual: undefined }),
+          ...(k === words.length - 1 && until !== undefined ? { until: r3(Math.min(hi, until)) } : {}) });
+      });
+      spans.push({ lines: newRun.map((r) => r.line), lo, hi });
+    } else if (Number.isFinite(room1) || before) {
+      // added: kept in the room between the lines around it
+      const hi = Number.isFinite(room1) ? room1 : Math.max(...words.map((x) => x.until ?? x.e));
+      if (hi - room0 < 0.1 * words.length) continue;
+      const a = startOf(words), b = endOf(words);
+      if (a < room0 || b > hi) {
+        const len = b - a, room = hi - room0;
+        const map = len <= room ? (t: number) => t + (a < room0 ? room0 - a : hi - b) : (t: number) => room0 + ((t - a) / Math.max(0.01, len)) * room;
+        for (const x of words) placed.set(x, { ...x, s: r3(map(x.s)), e: r3(Math.max(map(x.s) + 0.03, map(x.e))), ...(x.until === undefined ? {} : { until: r3(map(x.until)) }) });
+      }
+      spans.push({ lines: newRun.map((r) => r.line), lo: room0, hi });
+    }
+  }
+  return { words: next.map((x) => placed.get(x) ?? x).sort((x, y) => x.s - y.s), spans };
+}

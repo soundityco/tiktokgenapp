@@ -3,7 +3,7 @@ import { type Emissions, alignDevice, alignEmissions } from "./alignAI";
 import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench, wordsInSpan } from "./forcedAlign";
 import { findRepeats, foldedFit, melFrames, repeatPeriodIn } from "./repeatBlocks";
 import { syllableSpans } from "./syllables";
-import { alignSong, cleanHeard, norm, similarity, splitWords, syllables, withoutLost, wordsFromSegments } from "./lyricsAlign";
+import { type LineSpan, alignSong, cleanHeard, norm, similarity, splitWords, syllables, withoutLost, wordsFromSegments } from "./lyricsAlign";
 import { mergeHeard, noSpeech, relayWeakLines } from "./lyricsRelay";
 import { type AsrModel, type AsrStep, prepareAudio, transcribe } from "./transcribe";
 import { clamp } from "./render";
@@ -791,7 +791,7 @@ export function realignFree(words: LyricWord[], em: Emissions): LyricWord[] {
   words.forEach((x, i) => { const l = x.line ?? -1; (byLine.get(l) ?? byLine.set(l, []).get(l)!).push(i); });
   const order = [...byLine.keys()].sort((a, b) => a - b);
   const locked = (l: number) => byLine.get(l)!.every((i) => words[i].lock);
-  const out = words.slice(), end = em.T * FRAME, touched = new Set<number>();
+  const spans: LineSpan[] = [];
   for (let k = 0; k < order.length;) {
     if (locked(order[k])) { k++; continue; }
     let j = k;
@@ -799,18 +799,32 @@ export function realignFree(words: LyricWord[], em: Emissions): LyricWord[] {
     const lines = order.slice(k, j), before = k > 0 ? order[k - 1] : undefined, after = j < order.length ? order[j] : undefined;
     k = j;
     if (before === undefined && after === undefined) continue;
-    const run = lines.flatMap((l) => byLine.get(l)!);
     const lo = before === undefined ? 0 : Math.max(...byLine.get(before)!.map((i) => words[i].until ?? words[i].e)) + 0.02;
-    const hi = after === undefined ? end : Math.min(...byLine.get(after)!.map((i) => words[i].s)) - 0.02;
-    const f0 = Math.max(0, Math.floor(lo / FRAME)), f1 = Math.min(em.T, Math.ceil(hi / FRAME));
-    if ((f1 - f0) * FRAME < 0.15 * run.length) continue; // no room to listen in: left as fitted
-    const again = alignWordsForced(em.frames.subarray(f0 * em.V, f1 * em.V), f1 - f0, em.V, run.map((i) => ({ w: words[i].w, line: words[i].line ?? 0 })));
+    const hi = after === undefined ? em.T * FRAME : Math.min(...byLine.get(after)!.map((i) => words[i].s)) - 0.02;
+    spans.push({ lines, lo, hi });
+  }
+  return realignSpans(words, em, spans);
+}
+
+/**
+ * Runs of lines aligned again on the audio, each alone in its time span (between locked lines, or where an edited line
+ * was), then their words and syllables on the voice inside each line (`inLines`). A locked line is never moved.
+ */
+export function realignSpans(words: LyricWord[], em: Emissions, spans: LineSpan[]): LyricWord[] {
+  const out = words.slice(), touched = new Set<number>();
+  for (const sp of spans) {
+    const want = new Set(sp.lines);
+    const run = out.map((x, i) => (want.has(x.line ?? -1) ? i : -1)).filter((i) => i >= 0);
+    if (!run.length || run.some((i) => out[i].lock)) continue;
+    const f0 = Math.max(0, Math.floor(sp.lo / FRAME)), f1 = Math.min(em.T, Math.ceil(sp.hi / FRAME));
+    if ((f1 - f0) * FRAME < 0.15 * run.length) continue; // no room to listen in: left as it is
+    const again = alignWordsForced(em.frames.subarray(f0 * em.V, f1 * em.V), f1 - f0, em.V, run.map((i) => ({ w: out[i].w, line: out[i].line ?? 0 })));
     if (!again || again.length !== run.length) continue;
     run.forEach((i, q) => {
-      const x = again[q], { until: _u, sy: _s, manual: _m, ws: _ws, we: _we, wu: _wu, ...rest } = words[i];
+      const x = again[q], { until: _u, sy: _s, manual: _m, ws: _ws, we: _we, wu: _wu, ...rest } = out[i];
       out[i] = { ...rest, s: x.s + f0 * FRAME, e: x.e + f0 * FRAME, conf: x.conf, ...(x.doubt ? { doubt: true } : { doubt: undefined }), ...(x.weak ? { weak: true } : { weak: undefined }) };
     });
-    lines.forEach((l) => touched.add(l));
+    sp.lines.forEach((l) => touched.add(l));
   }
   if (!touched.size) return words;
   const sorted = out.sort((x, y) => x.s - y.s);

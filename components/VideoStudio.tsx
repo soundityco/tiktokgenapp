@@ -8,7 +8,7 @@ import { askPersistentStorage, delMedia, getMedia, putMedia } from "@/lib/idb";
 import { DRIVE_PATHS, canWriteDrive, deleteDriveFile, driveQuota, renameDriveFile, downloadDriveFile, downloadDriveFileProgress, findInAppFolder, listAppFiles, trashDriveFile, uploadToDrive } from "@/lib/drive";
 import { cueKey, cueStyle, styleDiff, wordKeys } from "@/lib/cueLooks";
 import type { Cue } from "@/lib/lyricsAlign";
-import { activeCue, alignLyrics, alignSong, buildCues, norm, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, moveCueBy, moveCueEnd, moveCueStart, moveWordStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
+import { activeCue, alignLyrics, alignSong, buildCues, norm, placeLine, setCueEnd, cleanHeard, clearWordTiming, hasManual, hasWordTiming, keepLocked, keepManual, lockedLines, lostCount, parseLyrics, repairOrder, respreadLost, joinCue, fitBetweenLocked, keepEditedLines, moveCueBy, moveCueEnd, moveCueStart, moveWordStart, retimeCue, retimeWordCue, rewriteCue, splitCue, spreadOnHeard, tightenLineStarts } from "@/lib/lyricsAlign";
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
@@ -32,7 +32,7 @@ import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkC
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import { alignEmissions, cachedEmissions, stopAlign } from "@/lib/alignAI";
 import { faNorm, looksFrench } from "@/lib/forcedAlign";
-import { LYRICS_LAP, LYRICS_WIN, inLines, placeByAlignment, realignFree } from "@/lib/lyricsPipeline";
+import { LYRICS_LAP, LYRICS_WIN, inLines, placeByAlignment, realignFree, realignSpans } from "@/lib/lyricsPipeline";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { VideoOverlay } from "@/lib/types";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -50,6 +50,26 @@ import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from 
 
 /** The free lines placed again on the audio between the locked ones, when the model listened to this song in this session. */
 const withFree = (w: LyricWord[], em: ReturnType<typeof cachedEmissions>) => (em ? realignFree(w, em) : w);
+/**
+ * The lyrics placed again after an edit of the text: the lines retimed by hand kept, an edited line in its old time, a
+ * line added in the room around it, never over a locked line; their words then on the voice when the model listened.
+ */
+/**
+ * The words kept as heard after a placing: words placed by the alignment are the written words with their times, so the
+ * lyrics as placed (lines locked, lines placed again between them) become them; the next edit of the text starts from
+ * there. Before, it started from the first listening: a line placed again between locked ones went back to where the
+ * whole song's alignment had put it (WANNA TRY: 3 s early, over the locked line before it). The speech model's words
+ * (not exact) stay as they are.
+ */
+const heardAfter = (heard: LyricWord[] | undefined, words: LyricWord[]): LyricWord[] | undefined => {
+  if (!heard?.length || !heard.every((x) => x.exact) || !words.length) return heard;
+  return words.map(({ manual: _m, lock: _l, ws: _ws, we: _we, wu: _wu, until: _u, split: _sp, glue: _g, ...x }) => ({ ...x, exact: true as const }));
+};
+const afterEdit = (prev: LyricWord[], next: LyricWord[], em: ReturnType<typeof cachedEmissions>) => {
+  const ed = keepEditedLines(prev, keepManual(prev, next));
+  const fitted = fitBetweenLocked(ed.words);
+  return em && ed.spans.length ? realignSpans(fitted, em, ed.spans) : fitted;
+};
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -4052,7 +4072,10 @@ export default function VideoStudio({
     const cfg = settingsRef.current;
     const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
     const em = audioBuf ? cachedEmissions(audioBuf) : null;
-    onProject((x) => ({ ...x, lyricWords: fresh ? withFree(keepLocked(x.lyricWords ?? [], r.words), em) : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p), lyricsAlignV: LYRICS_ALIGN_V }));
+    onProject((x) => {
+      const words = fresh ? withFree(keepLocked(x.lyricWords ?? [], r.words), em) : afterEdit(x.lyricWords ?? [], r.words, em);
+      return { ...x, lyricWords: words, heardWords: heardAfter(x.heardWords, words), lyricsPlacedFrom: writtenOf(src, p), lyricsAlignV: LYRICS_ALIGN_V };
+    });
     setGenInfo(r.info);
     if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
@@ -4329,7 +4352,10 @@ export default function VideoStudio({
         const doubts = new Set((forced ?? []).filter((x) => x.doubt).map((x) => x.line));
         const words = doubts.size ? placed.words.map((x) => (x.line !== undefined && doubts.has(x.line) ? { ...x, doubt: true } : x)) : placed.words;
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
-        onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? (dropLocks.current ? words : withFree(keepLocked(p.lyricWords ?? [], words), cachedEmissions(buf))) : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
+        onProject((p) => {
+          const placedNow = fresh ? (dropLocks.current ? words : withFree(keepLocked(p.lyricWords ?? [], words), cachedEmissions(buf))) : fitBetweenLocked(keepManual(p.lyricWords ?? [], words));
+          return { ...p, heardWords: heardAfter(heard, placedNow), lyricWords: placedNow, lyricsPlacedFrom: writtenOf(src, proj) };
+        });
         dropLocks.current = false;
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
         const said = forced
