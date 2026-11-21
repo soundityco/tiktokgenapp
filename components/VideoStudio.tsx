@@ -1349,7 +1349,10 @@ export default function VideoStudio({
     // the ones over it —, never a video's own (a camera's vignette jumped in at each cut).
     if (!raw) { const fin = finishOf(cfg); if (finishOn(fin)) drawLook(g, W, H, finishGrade(fin), Math.round(time * GRAIN_FPS)); }
     // The Effects track (an adjustment layer: lib/fx.ts): its clips under the texts, over the picture and its finish.
-    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, false, picRect);
+    // (what is on screen: the multicam's camera at this time, the video's picture there or not — a slow shutter starts its
+    // exposure again at each cut, never a dissolve from the shot before)
+    const shotKey = `${camAt(cfg.cuts, time)}|${picRect ? 1 : 0}`;
+    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, false, picRect, shotKey);
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
     drawMatte(g, W, H, matte, ground);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
@@ -1364,7 +1367,7 @@ export default function VideoStudio({
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
     const hookBox = hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null;
     // (the effect clips set over the texts too: a flash covers them)
-    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, true, picRect);
+    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, true, picRect, shotKey);
     return { caption, hook: hookBox };
   }, []);
   const captionBox = useRef<TextBox | null>(null);

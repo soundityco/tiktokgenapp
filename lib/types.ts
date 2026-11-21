@@ -255,9 +255,10 @@ export interface FxClip {
   strobe?: { color: string; count: number; on: number };
   /** Zoom blur towards (x, y) (fractions of the post): `amount` 0..1. */
   zoom?: { amount: number; x: number; y: number };
-  /** Slow shutter: the picture held at `fps` frames a second (0: as it is), each frame trailing the ones before (`trail`
-   *  0..0.95). */
-  shutter?: { fps: number; trail: number };
+  /** Slow shutter, as a camera's: the picture held at `fps` frames a second (0: as it is), each held frame the light of
+   *  every frame filmed during its exposure — `trail` 0..1 of its time (a 360° shutter at 1; with no hold, up to 0.2 s) —,
+   *  `organic` 0..1 the camera's unevenness (uneven exposure, a hand's tiny shake: trails never quite straight). */
+  shutter?: { fps: number; trail: number; organic?: number };
 }
 
 export interface VideoFrame {

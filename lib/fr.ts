@@ -1647,6 +1647,8 @@ export const FR: Record<string, string> = {
   "Right click: add an effect layer": "Clic droit : ajouter un calque d'effet",
   "Inside the video's picture only": "Seulement dans l'image de la vidéo",
   "On: the effects stay inside the picture of the video under (its frame, never the ground nor the bars), following it wherever it is. Off: over the whole post.": "Activé : les effets restent dans l'image de la vidéo du dessous (son cadre, jamais le fond ni les bandes), où qu'elle soit. Désactivé : sur tout le post.",
+  "Organic": "Organique",
+  "As a camera with a slow shutter: each frame gathers the light of every frame filmed while it is open (its exposure; as a shutter angle when the frame rate is lowered). Organic: the camera's unevenness, the trails never quite straight. Starts again at each cut. Seen while playing and in the export; at rest, the frame alone.": "Comme une caméra à obturation lente : chaque image recueille la lumière de toutes les images filmées pendant qu'il est ouvert (sa pose ; en angle d'obturation quand on baisse les images par seconde). Organique : les imperfections de la caméra, des traînées jamais tout à fait droites. Repart à chaque coupe. Visible en lecture et à l'export ; à l'arrêt, l'image seule.",
   "Re-place the others": "Recaler les autres",
   "Locked: kept as it is when the lyrics are placed again. Click to unlock.": "Verrouillée : gardée telle quelle quand les paroles sont recalées. Clic pour déverrouiller.",
   "Lock this line: kept as it is when the lyrics are placed again": "Verrouiller cette ligne : gardée telle quelle quand les paroles sont recalées",

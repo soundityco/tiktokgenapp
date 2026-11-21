@@ -12,8 +12,46 @@ import type { FxClip } from "./types";
  */
 
 /** What one canvas keeps from frame to frame (its held picture, its trail): the preview's and the export's apart. */
-interface FxState { held?: HTMLCanvasElement; heldKey?: string; trail?: HTMLCanvasElement; trailKey?: string; curT?: number; prevT?: number; tmp?: HTMLCanvasElement }
-const states = new WeakMap<CanvasRenderingContext2D, FxState>();
+interface FxState {
+  held?: HTMLCanvasElement; heldKey?: string; curT?: number; prevT?: number; tmp?: HTMLCanvasElement;
+  /** The last frames as they came (the picture and its finish, before the shutter): what a slow exposure gathers. */
+  frames?: { t: number; c: HTMLCanvasElement }[];
+  /** Canvases of frames dropped, used again. */
+  spare?: HTMLCanvasElement[];
+  /** The shot the frames belong to (a cut of the multicam, a video starting or ending: the exposure starts again). */
+  shot?: string;
+  acc?: HTMLCanvasElement;
+}
+const states = new WeakMap<CanvasRenderingContext2D, FxState[]>();
+
+/** A number from 0 to 1 that is always the same for the same seed (the shutter's unevenness: the export is the preview). */
+const rand = (seed: number) => { const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
+
+/**
+ * The light of these frames gathered, as a sensor during an exposure: each frame with the same weight (a running mean),
+ * `organic` adding the camera's unevenness — weights a little uneven, each frame shifted and turned a hair (a hand-held
+ * camera's shake during the exposure: the trails never quite straight).
+ */
+function expose(to: HTMLCanvasElement, frames: { t: number; c: HTMLCanvasElement }[], organic: number, seed: number) {
+  const g = to.getContext("2d")!, W = to.width, H = to.height;
+  let sum = 0;
+  frames.forEach((f, i) => {
+    const r = (k: number) => rand(seed + f.t * 1000 + k * 17.3 + i);
+    const w = Math.max(0.2, 1 + organic * 0.9 * (r(1) - 0.5));
+    sum += w;
+    g.save();
+    g.globalCompositeOperation = i === 0 ? "copy" : "source-over";
+    g.globalAlpha = i === 0 ? 1 : w / sum;
+    if (organic > 0 && frames.length > 1) {
+      const shake = organic * 0.006 * Math.min(W, H), turn = organic * 0.004;
+      g.translate(W / 2 + (r(2) - 0.5) * shake, H / 2 + (r(3) - 0.5) * shake);
+      g.rotate((r(4) - 0.5) * turn);
+      g.translate(-W / 2, -H / 2);
+    }
+    g.drawImage(f.c, 0, 0, W, H);
+    g.restore();
+  });
+}
 
 const canvasOf = (c: HTMLCanvasElement | undefined, W: number, H: number) => {
   const x = c ?? document.createElement("canvas");
@@ -47,10 +85,15 @@ export interface PicRect { x: number; y: number; w: number; h: number }
 
 export function drawFx(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, list: FxClip[] | undefined, over: boolean,
   /** The video's picture on the post (null: none there — a layer kept inside the picture draws nothing). */
-  pic?: PicRect | null) {
+  pic?: PicRect | null,
+  /** What is on screen (the multicam's camera, the video there or not): when it changes, a cut — the slow exposure starts
+   *  again, never a dissolve from the shot before. */
+  shot = "") {
   const run = fxAt(list, t).filter((c) => !!c.over === over);
-  const st = states.get(ctx) ?? {};
-  states.set(ctx, st);
+  // (the layers under the texts and those over them each keep their own frames)
+  const all = states.get(ctx) ?? [{}, {}];
+  states.set(ctx, all);
+  const st = all[over ? 1 : 0];
   // Held frames and trails carry over only while time moves on, frame after frame (playing, exporting): the same moment
   // drawn again (the preview at rest) or a jump (a click on the timeline) starts them again from this frame — a frame
   // held while the video was still loading stayed black.
@@ -64,19 +107,37 @@ export function drawFx(ctx: CanvasRenderingContext2D, W: number, H: number, t: n
     ctx.save();
     if (inside && pic) { ctx.beginPath(); ctx.rect(pic.x, pic.y, pic.w, pic.h); ctx.clip(); }
     if (c.shutter && (c.shutter.fps > 0 || c.shutter.trail > 0)) {
-      // held at a lower frame rate: the frame of its quantum, drawn again until the next one
-      if (c.shutter.fps > 0) {
-        const key = `${c.id}|${heldFrame(c, t, c.shutter.fps)}`;
-        if (advancing && st.held && st.heldKey === key) { ctx.save(); ctx.globalCompositeOperation = "copy"; ctx.drawImage(st.held, 0, 0, W, H); ctx.restore(); }
-        else { st.held = canvasOf(st.held, W, H); copy(ctx, st.held); st.heldKey = key; }
+      const sh = c.shutter, organic = Math.min(1, Math.max(0, sh.organic ?? 0.5));
+      // The frames as they come (this one kept), within this shot: a cut, a jump, the preview at rest start them again.
+      const fresh = !advancing || st.shot !== shot;
+      st.shot = shot;
+      const frames = (st.frames ??= []), spare = (st.spare ??= []);
+      if (fresh) { spare.push(...frames.map((f) => f.c)); frames.length = 0; }
+      if (!frames.length || frames[frames.length - 1].t !== t) {
+        const cv = canvasOf(spare.pop(), W, H);
+        copy(ctx, cv);
+        frames.push({ t, c: cv });
       }
-      // trailing: the frames before stay, fading
-      if (c.shutter.trail > 0) {
-        const tk = c.id;
-        if (advancing && st.trail && st.trailKey === tk) {
-          ctx.save(); ctx.globalAlpha = Math.min(0.95, c.shutter.trail); ctx.drawImage(st.trail, 0, 0, W, H); ctx.restore();
+      // (a second of them at most)
+      while (frames.length > 1 && frames[0].t < t - 1) spare.push(frames.shift()!.c);
+      // the exposure: `trail` of a held frame's time (a 360° shutter at 1), or up to 0.2 s with no hold
+      const exposure = Math.max(0, Math.min(1, sh.trail)) * (sh.fps > 0 ? 1 / sh.fps : 0.2);
+      const lit = frames.filter((f) => f.t >= t - exposure - 1e-4);
+      if (sh.fps > 0) {
+        // held at a lower frame rate: its first frame's exposure, shown until the next one (a camera at that rate)
+        const key = `${c.id}|${heldFrame(c, t, sh.fps)}|${shot}`;
+        if (!fresh && st.held && st.heldKey === key) { ctx.save(); ctx.globalCompositeOperation = "copy"; ctx.drawImage(st.held, 0, 0, W, H); ctx.restore(); }
+        else {
+          st.held = canvasOf(st.held, W, H);
+          expose(st.held, lit, organic, heldFrame(c, t, sh.fps) + c.from);
+          st.heldKey = key;
+          ctx.save(); ctx.globalCompositeOperation = "copy"; ctx.drawImage(st.held, 0, 0, W, H); ctx.restore();
         }
-        st.trail = canvasOf(st.trail, W, H); copy(ctx, st.trail); st.trailKey = tk;
+      } else if (lit.length > 1) {
+        // no hold: each frame the light of the last `exposure` seconds
+        st.acc = canvasOf(st.acc, W, H);
+        expose(st.acc, lit, organic, Math.round(t * 1000));
+        ctx.save(); ctx.globalCompositeOperation = "copy"; ctx.drawImage(st.acc, 0, 0, W, H); ctx.restore();
       }
     }
     if (c.zoom && c.zoom.amount > 0) {
@@ -105,7 +166,7 @@ export function newFx(kind: "empty" | "strobe" | "zoom" | "shutter", at: number,
   if (kind === "empty") return base;
   if (kind === "strobe") return { ...base, over: true, strobe: { color: "#000000", count: 6, on: 0.5 } };
   if (kind === "zoom") return { ...base, zoom: { amount: 0.5, x: 0.5, y: 0.5 } };
-  return { ...base, shutter: { fps: 8, trail: 0.6 } };
+  return { ...base, shutter: { fps: 8, trail: 0.8, organic: 0.5 } };
 }
 
 /** What a clip does, in a few words (its clip's label). */

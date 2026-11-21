@@ -62,13 +62,15 @@ export default function FxPanel({ value, onChange, onDelete }: { value: FxClip; 
 
       <div className={"fx-part" + (sh ? " on" : "")}>
         <div className="row fx-line"><b>{t("Slow shutter")}</b>
-          <Switch checked={!!sh} onChange={(on) => onChange({ shutter: on ? { fps: 8, trail: 0.6 } : undefined })} /></div>
+          <Switch checked={!!sh} onChange={(on) => onChange({ shutter: on ? { fps: 8, trail: 0.8, organic: 0.5 } : undefined })} /></div>
         {sh && <>
           <Range label={t("Frames a second")} value={sh.fps} display={sh.fps ? String(Math.round(sh.fps)) : t("Off")} min={0} max={24} step={1}
             onChange={(fps) => onChange({ shutter: { ...sh, fps: Math.round(fps) } })} onReset={() => onChange({ shutter: { ...sh, fps: 8 } })} />
-          <Range label={t("Trail")} value={sh.trail} display={`${Math.round(sh.trail * 100)} %`} min={0} max={0.9} step={0.05}
-            onChange={(trail) => onChange({ shutter: { ...sh, trail } })} onReset={() => onChange({ shutter: { ...sh, trail: 0.6 } })} />
-          <p className="muted xs">{t("Fewer frames a second: the picture stutters. Trail: each frame stays a moment over the next ones (a blur of a slow shutter). Exact in the export; on the preview, while playing.")}</p>
+          <Range label={t("Exposure")} value={sh.trail} display={sh.fps ? `${Math.round(sh.trail * 360)}°` : `1/${Math.max(5, Math.round(1 / Math.max(0.01, sh.trail * 0.2)))} s`} min={0} max={1} step={0.05}
+            onChange={(trail) => onChange({ shutter: { ...sh, trail } })} onReset={() => onChange({ shutter: { ...sh, trail: 0.8 } })} />
+          <Range label={t("Organic")} value={sh.organic ?? 0.5} display={`${Math.round((sh.organic ?? 0.5) * 100)} %`} min={0} max={1} step={0.05}
+            onChange={(organic) => onChange({ shutter: { ...sh, organic } })} onReset={() => onChange({ shutter: { ...sh, organic: 0.5 } })} />
+          <p className="muted xs">{t("As a camera with a slow shutter: each frame gathers the light of every frame filmed while it is open (its exposure; as a shutter angle when the frame rate is lowered). Organic: the camera's unevenness, the trails never quite straight. Starts again at each cut. Seen while playing and in the export; at rest, the frame alone.")}</p>
         </>}
       </div>
 
