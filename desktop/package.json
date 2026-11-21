@@ -43,7 +43,28 @@
       "artifactName": "RAW-by-aurare-mac-${arch}.${ext}"
     },
     "dmg": {
-      "title": "RAW by aurare"
+      "title": "RAW by aurare",
+      "icon": "build/icon.icns",
+      "background": "build/background.png",
+      "window": {
+        "width": 660,
+        "height": 420
+      },
+      "iconSize": 96,
+      "iconTextSize": 12,
+      "contents": [
+        {
+          "x": 190,
+          "y": 292,
+          "type": "file"
+        },
+        {
+          "x": 470,
+          "y": 292,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "win": {
       "icon": "build/icon.png",

@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- The DMG window's background (660 × 420), rendered by .workbench/bench/render-dmg.mjs to background.png / @2x.
+     The app's look: the home's dotted board, its serif headline in the holographic gradient, mono labels. -->
+<html><head><meta charset="utf-8"><style>
+@font-face { font-family: "Instrument Serif"; src: url("../../public/fonts/instrument-serif-latin-400-normal.woff2"); }
+@font-face { font-family: "Instrument Serif"; font-style: italic; src: url("../../public/fonts/instrument-serif-latin-400-italic.woff2"); }
+@font-face { font-family: "JetBrains Mono"; src: url("../../public/fonts/jetbrains-mono-latin-wght-normal.woff2"); font-weight: 100 800; }
+html, body { margin: 0; width: 660px; height: 420px; overflow: hidden; }
+body { position: relative; background-color: #08080a; background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px); background-size: 20px 20px; color: #f0eee8; }
+.glow { position: absolute; left: 50%; top: 292px; width: 460px; height: 200px; translate: -50% -50%; border-radius: 50%; background: radial-gradient(closest-side, rgba(161,132,255,.20), rgba(161,132,255,.05) 60%, transparent); filter: blur(10px); }
+.logo { position: absolute; left: 50%; top: 34px; translate: -50% 0; height: 15px; opacity: .92; }
+h1 { position: absolute; left: 0; right: 0; top: 64px; margin: 0; text-align: center; font: 400 46px/1.02 "Instrument Serif", serif; letter-spacing: -.01em; }
+h1 .a { color: transparent; background: linear-gradient(90deg, #dcc3f6 0%, #c7cdf8 22%, #c2e9f0 42%, #d3f1c8 60%, #f1edbf 78%, #f7d9bd 100%); -webkit-background-clip: text; background-clip: text; }
+h1 em { font-style: italic; color: color-mix(in srgb, #86858f 78%, #a184ff); }
+.hint { position: absolute; left: 0; right: 0; top: 184px; text-align: center; font: 500 10px/1 "JetBrains Mono", monospace; letter-spacing: .22em; color: #86858f; }
+.arrow { position: absolute; left: 262px; top: 286px; width: 136px; height: 12px; }
+.foot { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center; font: 500 9px/1 "JetBrains Mono", monospace; letter-spacing: .2em; color: #5a5964; }
+</style></head><body>
+<div class="glow"></div>
+<img class="logo" src="../../public/brand/raw-logo-white.svg" alt="">
+<h1><span class="a">Your next release</span><br><em>is one drag away.</em></h1>
+<div class="hint">DRAG RAW INTO APPLICATIONS</div>
+<svg class="arrow" viewBox="0 0 136 12"><defs><linearGradient id="l" gradientUnits="userSpaceOnUse" x1="2" y1="0" x2="130" y2="0"><stop offset="0" stop-color="#f0eee8" stop-opacity="0"/><stop offset=".35" stop-color="#c7cdf8" stop-opacity=".7"/><stop offset="1" stop-color="#f0eee8"/></linearGradient></defs>
+<path d="M2 6 H130" stroke="url(#l)" stroke-width="1.5" stroke-linecap="round"/><path d="M125 1.5 L131 6 L125 10.5" fill="none" stroke="#f0eee8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div class="foot">RAW BY AURARE · RAW.AURARE.APP</div>
+</body></html>

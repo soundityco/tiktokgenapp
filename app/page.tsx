@@ -34,7 +34,7 @@ export default async function Home() {
   return (
     <main className="lp">
       <header className="lp-nav">
-        <Link href="/" className="row" style={{ gap: 12, textDecoration: "none" }} aria-label="RAW by aurare"><Logo size={28} /><Wordmark height={18} /></Link>
+        <Link href="/" className="row" style={{ gap: 12, textDecoration: "none" }} aria-label="RAW by aurare"><Wordmark height={18} /></Link>
         <span className="grow" />
         <a className="lp-nav-link" href="#studio">{t("The studio")}</a>
         <a className="lp-nav-link" href="#styles">{t("Styles")}</a>
