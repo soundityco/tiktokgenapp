@@ -2315,8 +2315,37 @@ export default function VideoStudio({
    * Read what the file is (camera or phone, log / HDR / SDR). Log and HDR footage gets the matching
    * conversion at once (log: with the last look LUT imported); standard SDR footage is left as it is.
    */
+  /**
+   * A file that says nothing of its colours (its camera's notes lost: copied or cut by another app) taken as its sibling:
+   * the same codec and the same series of names (FX30_4636 / FX30_4637) as a video of the release recorded in log or
+   * HDR — its profile, its curve « deduced from … ». (Seen: one of two FX30 files without its Sony notes was shown in log,
+   * never converted, and never of the same kind as the others.)
+   */
+  const deduceSource = (info: VideoSourceInfo, name?: string): VideoSourceInfo => {
+    if (info.colour !== "unknown" || !info.codec || !name) return info;
+    const series = (n?: string) => (n ?? "").replace(/\.[^.]+$/, "").replace(/\d+$/, "");
+    const me = series(name);
+    if (!me) return info;
+    const twin = clipsRef.current.find((c) => c.source && (c.source.colour === "log" || c.source.colour === "hdr") && c.source.profile
+      && c.source.codec === info.codec && c.videoName !== name && series(c.videoName) === me);
+    if (!twin?.source) return info;
+    const from = twin.videoName?.replace(/\.[^.]+$/, "") ?? "";
+    return { ...info, kind: twin.source.kind, device: info.device ?? twin.source.device, colour: twin.source.colour, profile: twin.source.profile,
+      curve: `${twin.source.curve ?? ""} · ${t("deduced from {name}", { name: from })}` };
+  };
+  // Videos read before, which said nothing of their colours: deduced from a sibling now (their grade made if they had none).
+  const deducedKey = clips.map((c) => (c.source?.colour === "unknown" ? c.id : "")).join() + "|" + clips.map((c) => c.source?.colour ?? "").join();
+  useEffect(() => {
+    for (const c of clips) {
+      if (c.source?.colour !== "unknown") continue;
+      const ded = deduceSource(c.source, c.videoName);
+      if (ded === c.source) continue;
+      const patch = { source: ded, ...(c.grade ? null : gradeForSource(ded, undefined)) };
+      if (c.id === clip.id) setV(patch); else patchTake(c.id, patch);
+    }
+  }, [deducedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const describeVideo = async (f: Blob, fresh: boolean) => {
-    const info = await probeVideo(f);
+    const info = deduceSource(await probeVideo(f), f instanceof File ? f.name : settingsRef.current.videoName);
     const cur = settingsRef.current;
     if (cur.grade && !fresh) { setV({ source: info }); return; } // an older video read again: its grade stays as set
     setV({ source: info, ...gradeForSource(info, cur.grade) });
@@ -4780,12 +4809,14 @@ export default function VideoStudio({
   const panelGrade = camTake ? withLutSettings(camTake.grade) : grade;
   /** Log / HDR or standard: a colour is only copied between cameras of the same kind. */
   const lookKind = (c: VideoSettings) => (c.source?.colour === "log" || c.source?.colour === "hdr" ? "graded" : "std");
-  const camsOfProject = [clip, ...(settings.angles ?? []).map((id) => clips.find((c) => c.id === id)).filter((c): c is VideoSetup => !!c)];
+  // (every video of the project — the one under, the multicam's cameras, the ones over it —: the same for each, whichever
+  // is set; the ones over it were left out, the button showed for some videos and not for others)
+  const camsOfProject = [clip, ...[...(settings.angles ?? []), ...overlaysOf(settings).map((o) => o.clip)].map((id) => clips.find((c) => c.id === id && c.id !== clip.id)).filter((c): c is VideoSetup => !!c)];
   const lookOwner = camTake ?? clip;
   const otherCams = camsOfProject.filter((c) => c.id !== lookOwner.id && lookKind(c) === lookKind(lookOwner));
   const copyLookToCams = (g: VideoGrade) => {
     for (const c of otherCams) { if (c.id === clip.id) setV({ grade: g }); else patchTake(c.id, { grade: g }); }
-    onToast?.(t("Colour copied on {n} cameras", { n: otherCams.length }));
+    onToast?.(t("Colour copied on {n} videos", { n: otherCams.length }));
   };
   const curFrame = () => (camTakeRef.current ? camTakeRef.current.frame : settingsRef.current.frame) ?? DEFAULT_VIDEO.frame;
   const frame = (camTake ? camTake.frame : settings.frame) ?? DEFAULT_VIDEO.frame;
@@ -5161,7 +5192,7 @@ export default function VideoStudio({
     const cfg = settingsRef.current; // the passage of the audio it is placed on: read now, with `official` (a project opened meanwhile has others)
     setTakeJobs((j) => ({ ...j, [id]: { p: 0 } }));
     try {
-      const info = await probeVideo(file);
+      const info = deduceSource(await probeVideo(file), clipsRef.current.find((c) => c.id === id)?.videoName);
       patchTake(id, { source: info, ...(fresh ? gradeForSource(info, grade0) : null) });
       if (!official) { setTakeJobs((j) => { const n = { ...j }; delete n[id]; return n; }); return null; }
       const sound = await readSound(file, info.duration ?? 60, (p) => setTakeJobs((j) => ({ ...j, [id]: { p: p * 0.9 } })), new AbortController().signal);
@@ -5331,7 +5362,7 @@ export default function VideoStudio({
         probedOnce.current.add(c.id);
         const b = await getMedia(`video:${c.media ?? c.id}`).catch(() => undefined);
         if (!b || off) continue;
-        const info = await probeVideo(b);
+        const info = deduceSource(await probeVideo(b), c.videoName);
         if (off) return;
         // What the player or the index read (length, rate) kept when this reading has none.
         patchTake(c.id, { source: { ...c.source, ...info, duration: info.duration ?? c.source?.duration, fps: info.fps ?? c.source?.fps } });
@@ -8608,7 +8639,7 @@ export default function VideoStudio({
               {panelGrade && <Switch checked={!panelGrade.off} onChange={(v) => { setRawView(false); writeLook({ grade: { ...panelGrade, off: !v } }); }}
                 title={panelGrade.off ? t("Colour turned off: the video is shown and exported as recorded. Click to turn it back on.") : t("Colour on: click to turn it all off (preview and export), your settings kept.")} />}
               {panelGrade && otherCams.length > 0 && <button className="btn sm quiet" onClick={() => copyLookToCams(panelGrade)}
-                title={t("The same colour on the project's other cameras of the same kind (log with log, standard with standard).")}>{t("Other cameras")}</button>}
+                title={t("The same colour on the project's other videos of the same kind (log with log, standard with standard).")}>{t("Other videos")}</button>}
               {panelGrade && <button className="btn sm quiet" onClick={() => { setRawView(false); writeLook({ grade: undefined }); }} title={t("Remove the grade")}>{t("Reset")}</button>}
             </div>
               <ColorGrade grade={panelGrade} onChange={(g) => writeLook({ grade: g })} onRaw={setRawView} lookErr={camTake ? null : lookErr} disabled={!!panelGrade?.off}
