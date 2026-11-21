@@ -531,6 +531,9 @@ export interface VideoSettings {
   /** Custom subtitles: a word (word by word) or a phrase (phrase by phrase) with its own look over captionStyle (only
    *  what differs: font, effect, size, colours, place…), by caption key (lib/cueLooks cueKey). None: all alike. */
   captionLooks?: Record<string, Partial<TextStyle>>;
+  /** The second lyrics track: its lines (their keys, lib/cueLooks `cueKey`) and its own style over the lyrics' (what
+   *  differs): a chorus set once for all its lines. A line's own look still goes over it. */
+  lyrics2?: { keys: string[]; look?: Partial<TextStyle> };
   /** Progressive zoom over the segment: ×1 on the first frame, this factor on the last (e.g. 1.05). None: off. */
   push?: number;
   /** The progressive zoom moves inside the picture's frame (a mask: the frame, the bars and the texts around stay put)

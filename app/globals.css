@@ -35,7 +35,7 @@
   /* The timeline: where the camera video is (violet), and the music found in it (green). */
   --video: #a184ff; --music: #4fffb0; --fx: #e48cff;
   /* The lyrics' own colour, a light gold (the library's lyrics tile). */
-  --lyrics: #d8b56a;
+  --lyrics: #d8b56a; --lyrics-2: #f0956b;
   /* The fourth video's colour (never the lyrics' gold: it looked like a text). */
   --pink: #ff7ad9;
   --cam-4: #ffb547; --cam-5: #6fd6ff; --cam-6: #ff8f70; --cam-7: #c8f36e; --cam-8: #7f9dff; --cam-9: #d9a6ff;
@@ -2970,6 +2970,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 /* Each kind of clip in its colour, as the video clips: a tinted ground, its left border, its glow and its icon (the
    lyrics in gold, the hooks in blue); the text stays white. */
 .lyrics-track { --clip: var(--lyrics); }
+.lyrics-track.lane-2 { --clip: var(--lyrics-2); } /* (the second lyrics track: a warmer orange beside the gold) */
 .lyrics-track .cue:not(.outside), .hook-track .cue { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 16%, var(--bg)); color: var(--text); }
 .lyrics-track .cue.on, .hook-track .cue.on { border-left-color: var(--clip); background: color-mix(in srgb, var(--clip) 16%, var(--bg)); }
 /* The clip clicked, of any kind (one at a time on the whole timeline): lit more than the others. Playing (.on) only
@@ -2986,6 +2987,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .tl-hd.cam-0, .tl-hd.cam-1, .tl-hd.cam-2, .tl-hd.cam-3, .tl-hd.cam-4, .tl-hd.cam-5, .tl-hd.cam-6, .tl-hd.cam-7, .tl-hd.cam-8, .tl-hd.cam-9 { --row: var(--cam); }
 .tl-hd.hd-hook { --row: var(--blue); }
 .tl-hd.hd-lyrics { --row: var(--lyrics); }
+.tl-hd.hd-lyrics2 { --row: var(--lyrics-2); }
+.look-of.text-of.is-lyrics2 { --cam: var(--lyrics-2); }
 .tl-hd.hd-audio { --row: var(--text); }
 /* The line picked (a click anywhere in it, or on its header: L locks it whole): its header lit in its colour. */
 .tl-hd { transition: background-color .15s ease; }

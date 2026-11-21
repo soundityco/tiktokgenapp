@@ -184,7 +184,7 @@ const shiftEdits = (s: { clipIn?: number; clipOut?: number; splits?: number[]; o
 });
 
 const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "trackLocks", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish", "backdrop", "effects", "effectsHidden"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish", "backdrop", "effects", "effectsHidden", "lyrics2"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 /** The part of the camera file shown (seconds in the file, `len` its length): trimmed on the video track, else all. */
@@ -833,12 +833,25 @@ export default function VideoStudio({
   const wordKeyMap = useMemo(() => wordKeys(project.lyricWords ?? []), [project.lyricWords]);
   const keyOf = (c: Cue | null | undefined) => (c ? cueKey(c, mode, wordKeyMap) : null);
   const looks = settings.captionLooks ?? {};
+  /** The lines on the second lyrics track (their keys). */
+  const lane2 = useMemo(() => new Set(settings.lyrics2?.keys ?? []), [settings.lyrics2]);
+  /** Is this line on that lyrics track. */
+  const inLane = (c: Cue, L: 1 | 2) => { const k = keyOf(c); return (k !== null && lane2.has(k) ? 2 : 1) === L; };
+  /** Lines put on a track (2) or back on the first (1): the ones picked, or this one. */
+  const toLane = (keys: string[], lane: 1 | 2) => {
+    const cur = settingsRef.current.lyrics2;
+    const set = new Set(cur?.keys ?? []);
+    for (const k of keys) { if (lane === 2) set.add(k); else set.delete(k); }
+    setV({ lyrics2: set.size || cur?.look ? { keys: [...set], ...(cur?.look ? { look: cur.look } : {}) } : undefined });
+  };
   /** What the lyrics panel sets: every caption ("all"), or only the one under the playhead ("one"). */
   /** A caption's style as drawn: the lyrics' style, its own look over it (and a font tried in a list, on it alone). */
   const cueStyleRef = useRef<(c: Cue) => TextStyle>(() => captionStyle);
   cueStyleRef.current = (c: Cue) => {
     const k = keyOf(c);
-    const st = cueStyle(styleRef.current, k ? looks[k] : undefined);
+    // (on the second lyrics track: its style first, then the line's own look)
+    const base = k && lane2.has(k) ? cueStyle(styleRef.current, settingsRef.current.lyrics2?.look) : styleRef.current;
+    const st = cueStyle(base, k ? looks[k] : undefined);
     return fontPreview?.which === "cue" && fontPreview.key === k ? { ...st, ...fontPreview.patch } : st;
   };
   /** The lyrics' style as it is now (also inside a drag, between two renders). */
@@ -6255,6 +6268,13 @@ export default function VideoStudio({
         <div className="label cap truncate">{c.text.replace(/\n/g, " ")}</div>
         <button disabled={mode === "word"} onClick={() => { close(); toggleLock(c); }}><Icon name={lk ? "unlock" : "lock"} size={14} />{lk ? t("Unlock this line") : t("Lock this line")}<kbd>L</kbd></button>
         <button onClick={() => { close(); stop(); setHead(round2(c.start)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
+        {(() => {
+          // (the lines picked with it, or this one: onto the second lyrics track, or back)
+          const keys = [pk, ...multi].filter((x) => x.startsWith("text:")).map((x) => x.slice(5));
+          const on2 = keys.length > 0 && keys.every((k) => lane2.has(k));
+          return keys.length ? <button onClick={() => { close(); toLane(keys, on2 ? 1 : 2); }}><Icon name="layers" size={14} />
+            {on2 ? (keys.length > 1 ? t("Put these lines back on Lyrics") : t("Put back on Lyrics")) : keys.length > 1 ? t("Put these {n} lines on Lyrics 2", { n: keys.length }) : t("Put on Lyrics 2")}</button> : null;
+        })()}
         <div className="sep" />
         <button onClick={() => { close(); timingFns.current.copy(); }}><Icon name="copy" size={14} />{multi.length ? t("Copy the timing of the lines") : t("Copy the timing")}<kbd>⌘C</kbd></button>
         {timingCopy.current && <button onClick={() => { close(); timingFns.current.paste(); }}><Icon name="copy" size={14} />{t("Paste the timing at the playhead")}<kbd>⌘V</kbd></button>}
@@ -7340,6 +7360,11 @@ export default function VideoStudio({
     <button onClick={() => { close(); addFx("zoom", at); }}><Icon name="target" size={14} />{t("Zoom blur")}</button>
     <button onClick={() => { close(); addFx("shutter", at); }}><Icon name="film" size={14} />{t("Slow shutter (stutter, trails)")}</button>
   </>);
+  const lane2HdMenu = (close: () => void) => (<>
+    <div className="label cap">{t("Lyrics 2")}</div>
+    <button onClick={() => { close(); setV({ lyrics2: undefined }); }}><Icon name="minus" size={14} />{t("Put every line back on the lyrics track")}</button>
+    {settings.lyrics2?.look && <button onClick={() => { close(); setV({ lyrics2: { keys: settings.lyrics2?.keys ?? [] } }); }}><Icon name="refresh" size={14} />{t("Its style back to the lyrics style")}</button>}
+  </>);
   const fxHdMenu = (close: () => void) => (<>
     <div className="label cap">{t("Effects")} · {t("at the playhead")}</div>
     {fxAddItems(close, head)}
@@ -7434,8 +7459,13 @@ export default function VideoStudio({
   const curKey = keyOf(pickedCue);
   const curOwn = !!curKey && !!looks[curKey];
   const panelOne = curOwn;
-  const panelStyle = panelOne ? cueStyle(captionStyle, looks[curKey!]) : captionStyle;
-  const setPanelStyle = (next: TextStyle) => (panelOne ? setCueLook(curKey!, next) : setV({ captionStyle: next }));
+  // (a line of the second lyrics track, without a look of its own: the panel sets that track's style, all its lines)
+  const panelLane2 = !panelOne && !!curKey && lane2.has(curKey);
+  const lane2Style = cueStyle(captionStyle, settings.lyrics2?.look);
+  const panelStyle = panelOne ? cueStyle(panelLane2 || (curKey && lane2.has(curKey)) ? lane2Style : captionStyle, looks[curKey!]) : panelLane2 ? lane2Style : captionStyle;
+  const setPanelStyle = (next: TextStyle) => (panelOne ? setCueLook(curKey!, next)
+    : panelLane2 ? setV({ lyrics2: { keys: settingsRef.current.lyrics2?.keys ?? [], look: styleDiff(masterStyle(), next) } })
+    : setV({ captionStyle: next }));
   // A word picked on the timeline (or the timeline let go) brings its line of the lyrics list to the middle of the
   // part of the list on screen (its bottom near the end), once the finger or the mouse is off, never while playing.
   const followList = useRef(false);
@@ -7763,6 +7793,42 @@ export default function VideoStudio({
             </button>
           </span>
         </div>
+  );
+
+  /** A lyrics track's clips (1: the lyrics, 2: the second track): the same clips and gestures, each line on its own track. */
+  const laneClips = (L: 1 | 2) => (
+                  <div className="track-content">
+                  <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
+                  {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
+                  {songCues.map((c, i) => inLane(c, L) && (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
+                    <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) || multi.includes("text:" + (keyOf(c) ?? "o" + i)) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={lockedCue(c) ? undefined : "song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} onContextMenu={cueCtx(c, "text:" + (keyOf(c) ?? "o" + i))} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
+                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{cueIcon(c)}{c.text.replace(/\n/g, " ")}{pick === "text:" + (keyOf(c) ?? "o" + i) && wordMarks(c)}{mode !== "word" && !lockedCue(c) && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
+                  ))}
+                  {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
+                  {cues.map((c, i) => inLane(c, L) && onTrack(c.start, c.end) && (
+                    <button key={i} className={"cue" + (c === current ? " on" : "") + (pick === "text:" + (keyOf(c) ?? i) || multi.includes("text:" + (keyOf(c) ?? i)) ? " sel" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} data-pick={"text:" + (keyOf(c) ?? i)} data-mv={lockedCue(c) ? undefined : "seg:" + i} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
+                      data-text={c.text.replace(/\n/g, " ")}
+                      // (a line across the segment's edge drawn whole, one clip: its end handle where it really ends)
+                      style={{
+                        ...place(c.start),
+                        width: wFull(c.start, c.end),
+                        ...(c === current ? { ["--hx" as string]: hxIn(c.start, c.end) } : null),
+                      }}
+                      data-a={c.start} data-b={c.end}
+                      data-at={Math.max(settings.crop.start, c.start)} onContextMenu={cueCtx(c, "text:" + (keyOf(c) ?? i))}
+                      onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
+                      {cueIcon(c)}{c.text.replace(/\n/g, " ")}
+                      {pick === "text:" + (keyOf(c) ?? i) && wordMarks(c)}
+                      {mode !== "word" && !lockedCue(c) && grips(moveLine(i), moveLineEnd(i))}
+                    </button>
+                  ))}
+                  {L === 1 && !songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
+                  {/* Loop off: the whole song plays as the segment does, its lines outside lit under the playhead too (loop on: dimmed). */}
+                  {!loopSeg && (() => { const o = songCues.find((c) => inLane(c, L) && (c.end <= settings.crop.start || c.start >= end) && head >= c.start && head < c.end); const at = o ? barAt(o.start, o.end) : null; return o && at !== null ? <span className="cue-bar-glow" data-a={o.start} data-b={o.end} style={place(at)} /> : null; })()}
+                  {/* (on the line's own edge: a line across the segment's edge is drawn whole, its bar where it starts, never at the segment's start in its middle) */}
+                  {current && inLane(current, L) && barAt(current.start, current.end) !== null && <span className="cue-bar-glow" data-a={current.start} data-b={current.end} style={place(barAt(current.start, current.end)!)} />}
+                  <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
+                  </div>
   );
 
   return (
@@ -8356,39 +8422,15 @@ export default function VideoStudio({
                       </div>
                     );
                   })()}
-                  <div className="track-content">
-                  <span className="track-seg" style={{ ...place(settings.crop.start), width: wFull(settings.crop.start, end) }} />
-                  {/* The song's lines outside the segment: dimmed, not edited here (move the segment onto them to work on them). */}
-                  {songCues.map((c, i) => (c.end <= settings.crop.start || c.start >= end) && onTrack(c.start, c.end) && (
-                    <span key={"o" + i} className={"cue song-line" + (loopSeg ? " outside" : head >= c.start && head < c.end ? " on" : "") + (pick === "text:" + (keyOf(c) ?? "o" + i) || multi.includes("text:" + (keyOf(c) ?? "o" + i)) ? " sel" : "")} data-text={c.text.replace(/\n/g, " ")} data-a={c.start} data-b={c.end} data-mv={lockedCue(c) ? undefined : "song:" + i} data-at={c.start} data-pick={"text:" + (keyOf(c) ?? "o" + i)} onContextMenu={cueCtx(c, "text:" + (keyOf(c) ?? "o" + i))} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")} · ${t("outside the segment: not in the post")}`}
-                      style={{ ...place(c.start), width: wFull(c.start, c.end) }}>{cueIcon(c)}{c.text.replace(/\n/g, " ")}{pick === "text:" + (keyOf(c) ?? "o" + i) && wordMarks(c)}{mode !== "word" && !lockedCue(c) && grips(moveSongLine(i), moveSongLineEnd(i))}</span>
-                  ))}
-                  {/* Only the clips with a part in view (one wholly past the left edge was drawn there, 3 px wide, and they piled up). */}
-                  {cues.map((c, i) => onTrack(c.start, c.end) && (
-                    <button key={i} className={"cue" + (c === current ? " on" : "") + (pick === "text:" + (keyOf(c) ?? i) || multi.includes("text:" + (keyOf(c) ?? i)) ? " sel" : "") + (looks[keyOf(c) ?? ""] ? " own-look" : "")} data-pick={"text:" + (keyOf(c) ?? i)} data-mv={lockedCue(c) ? undefined : "seg:" + i} title={`${fmtTime(c.start)} · ${c.text.replace(/\n/g, " ")}${looks[keyOf(c) ?? ""] ? ` · ${t("own style")}` : ""}`}
-                      data-text={c.text.replace(/\n/g, " ")}
-                      // (a line across the segment's edge drawn whole, one clip: its end handle where it really ends)
-                      style={{
-                        ...place(c.start),
-                        width: wFull(c.start, c.end),
-                        ...(c === current ? { ["--hx" as string]: hxIn(c.start, c.end) } : null),
-                      }}
-                      data-a={c.start} data-b={c.end}
-                      data-at={Math.max(settings.crop.start, c.start)} onContextMenu={cueCtx(c, "text:" + (keyOf(c) ?? i))}
-                      onClick={(e) => { if (e.detail === 0) { stop(); setTab("lyrics"); setHead(round2(Math.max(settings.crop.start, c.start))); } }}>
-                      {cueIcon(c)}{c.text.replace(/\n/g, " ")}
-                      {pick === "text:" + (keyOf(c) ?? i) && wordMarks(c)}
-                      {mode !== "word" && !lockedCue(c) && grips(moveLine(i), moveLineEnd(i))}
-                    </button>
-                  ))}
-                  {!songCues.length && <span className={"muted xs lyric-track-empty" + (genBusy ? " shine" : "")}>{genBusy ? t("Placing the lyrics…") : t("No lyrics on this segment yet: paste them in Lyrics, then Sync.")}</span>}
-                  {/* Loop off: the whole song plays as the segment does, its lines outside lit under the playhead too (loop on: dimmed). */}
-                  {!loopSeg && (() => { const o = songCues.find((c) => (c.end <= settings.crop.start || c.start >= end) && head >= c.start && head < c.end); const at = o ? barAt(o.start, o.end) : null; return o && at !== null ? <span className="cue-bar-glow" data-a={o.start} data-b={o.end} style={place(at)} /> : null; })()}
-                  {/* (on the line's own edge: a line across the segment's edge is drawn whole, its bar where it starts, never at the segment's start in its middle) */}
-                  {current && barAt(current.start, current.end) !== null && <span className="cue-bar-glow" data-a={current.start} data-b={current.end} style={place(barAt(current.start, current.end)!)} />}
-                  <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
-                  </div>
+                  {laneClips(1)}
                 </div></div>
+                {/* The second lyrics track: its lines, its own style (a chorus set once for all its lines). */}
+                {lane2.size > 0 && (
+                  <div className="tl-row"><div className="tl-hd hd-lyrics hd-lyrics2" onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(lane2HdMenu)}>{hdName("type", t("Lyrics 2"))}</div>
+                    <div className={"lyric-track lyrics-track lane-2" + (settings.captions ? "" : " off")} role="group" aria-label={t("Lyrics 2")} {...scrub(() => setTab("lyrics"))}>
+                      {laneClips(2)}
+                    </div></div>
+                )}
                 {/* The video part of the timeline: every video track in one block (the one over it on top). */}
                 {audioBuf && videoBlob && (
                   <div className={"video-block" + (dragTake || vdrag ? " dragging" : "") + (dropRow ? " drop-" + dropRow : "") + (vdrag?.act ? " va-" + vdrag.act : "")} {...blockDrop}>
@@ -8831,9 +8873,9 @@ export default function VideoStudio({
             const own = !hook && !!c && !!looks[keyOf(c) ?? ""];
             const what = own ? c!.text.replace(/\n/g, " ").trim() : undefined;
             return (
-              <div className={"look-of text-of " + (hook ? "is-hook" : "is-lyrics")}>
+              <div className={"look-of text-of " + (hook ? "is-hook" : c && keyOf(c) && lane2.has(keyOf(c)!) ? "is-lyrics is-lyrics2" : "is-lyrics")}>
                 <Icon name={hook ? "sparkle" : "type"} size={13} />
-                <span className="xs muted">{t("Settings of")}</span> <b>{hook ? t("Hook") : t("Lyrics")}</b>
+                <span className="xs muted">{t("Settings of")}</span> <b>{hook ? t("Hook") : c && keyOf(c) && lane2.has(keyOf(c)!) ? t("Lyrics 2") : t("Lyrics")}</b>
                 {what && <span className="take-name">{what}</span>}
               </div>
             );
