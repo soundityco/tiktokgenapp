@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import Icon from "./Icon";
 import { useT } from "@/lib/i18n";
 import { DESKTOP_DOWNLOADS, DESKTOP_LATEST, desktopApp, olderThan } from "@/lib/desktop";
 
@@ -29,7 +31,17 @@ export default function UpdatePill() {
     document.addEventListener("visibilitychange", check);
     return () => { window.clearInterval(id); document.removeEventListener("visibilitychange", check); };
   }, []);
-  if (hidden || (!fresh && !shell)) return null;
+  // the top bar's slot, looked for each second while there is something to say (the studio mounts after this, a phone)
+  const [slot, setSlot] = useState<Element | null>(null);
+  const showing = !hidden && (fresh || !!shell);
+  useEffect(() => {
+    if (!showing) return;
+    const find = () => setSlot((cur) => { const el = matchMedia("(max-width: 640px)").matches ? null : document.querySelector(".update-slot"); return el === cur ? cur : el; });
+    find();
+    const id = window.setInterval(find, 1000);
+    return () => window.clearInterval(id);
+  }, [showing]);
+  if (!showing) return null;
   const reload = async () => {
     // the work saved first (the studio answers this event), then the new version
     const waits: Promise<unknown>[] = [];
@@ -37,12 +49,17 @@ export default function UpdatePill() {
     await Promise.race([Promise.allSettled(waits), new Promise((r) => setTimeout(r, 5000))]);
     location.reload();
   };
-  return (
-    <div className="update-pill" role="status">
+  // In the studio's top bar on a computer (left of the account), as an app tells an update; elsewhere (a phone, a page
+  // without the bar) at the bottom. The button is Generate's, small.
+  const chip = (
+    <div className={"update-chip" + (slot ? "" : " floating")} role="status">
+      <span className="update-dot" aria-hidden />
+      <span className="update-txt">{fresh ? t("New version of RAW") : t("New version of the app")}</span>
       {fresh
-        ? <><span>{t("New version of RAW")}</span><button className="btn sm primary" onClick={() => void reload()}>{t("Reload")}</button></>
-        : <><span>{t("New version of the app")}</span><a className="btn sm primary" href={shell!} target="_blank" rel="noreferrer">{t("Download")}</a></>}
-      <button className="btn sm quiet icon" aria-label={t("Later")} onClick={() => setHidden(true)}>×</button>
+        ? <button className="btn sm primary gen-btn" onClick={() => void reload()}>{t("Reload")}</button>
+        : <a className="btn sm primary gen-btn" href={shell!} target="_blank" rel="noreferrer">{t("Download")}</a>}
+      <button className="btn sm quiet icon update-x" aria-label={t("Later")} title={t("Later")} onClick={() => setHidden(true)}><Icon name="x" size={13} /></button>
     </div>
   );
+  return slot ? createPortal(chip, slot) : chip;
 }

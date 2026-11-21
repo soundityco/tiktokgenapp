@@ -3169,7 +3169,18 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 .desk-card { width: min(380px, 100%); display: grid; gap: 16px; justify-items: center; text-align: center; padding: 28px 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
 .desk-card p { margin: 0; line-height: 1.5; }
 
-/* A new version online (components/UpdatePill) */
-.update-pill { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); translate: -50% 0; z-index: 90; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--raised); box-shadow: 0 10px 30px rgb(0 0 0 / .45); font-size: 13px; white-space: nowrap; max-width: calc(100vw - 32px); }
-.update-pill .btn { border-radius: 999px; }
-@media (max-width: 640px) { .update-pill { bottom: calc(92px + env(safe-area-inset-bottom)); } }
+/* A new version online (components/UpdatePill): a chip in the top bar, left of the account (or floating at the bottom
+   on a phone / a page without the bar); the app's radii and sizes, Generate's button. */
+.update-slot { display: contents; }
+.top .update-chip { order: 3; } /* (with the bar's right side: its slot is display: contents, `.top > *` misses it) */
+.update-chip { display: flex; align-items: center; gap: 8px; height: calc(var(--h-sm) + 8px); padding: 0 4px 0 11px; border: 1px solid var(--line-2); border-radius: var(--r);
+  background: var(--raised); font-size: var(--fs-sm); white-space: nowrap; animation: update-in .35s cubic-bezier(.2, .9, .3, 1); }
+.update-chip .btn.sm { height: var(--h-sm); text-decoration: none; }
+.update-chip .update-x { width: var(--h-sm); padding: 0; color: var(--muted); }
+.update-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--grad-holo); background-size: 300% 100%; box-shadow: 0 0 10px rgba(199,205,248,.55); }
+.update-txt { color: var(--text); }
+.update-chip.floating { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); translate: -50% 0; z-index: 90; box-shadow: 0 10px 30px rgb(0 0 0 / .45); max-width: calc(100vw - 32px); }
+@media (max-width: 640px) { .update-chip.floating { bottom: calc(92px + env(safe-area-inset-bottom)); } }
+@keyframes update-in { from { opacity: 0; translate: 0 -4px; } }
+.update-chip.floating { animation: none; }
+html.desk-inset .update-chip { -webkit-app-region: no-drag; app-region: no-drag; }

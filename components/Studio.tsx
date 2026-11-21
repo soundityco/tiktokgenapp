@@ -2014,6 +2014,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
         </span>}
         {saveState === "error" && <button className="btn sm" onClick={() => void flushSave()}>{t("Try again")}</button>}
         {!online && <span className="badge warn"><span className="dot" />{t("Offline")}</span>}
+        {/* A new version waiting (components/UpdatePill renders itself here on a computer) */}
+        <div className="update-slot" />
         <div className="top-settings"><Menu trigger={(open, toggle) => <button className={"me" + (open ? " open" : "")} aria-label={t("Settings and account")} title={userName} onClick={toggle}>{userImage && !noPhoto ? <img className="me-photo" src={userImage} alt="" referrerPolicy="no-referrer" onError={() => setNoPhoto(true)} /> : (userName || "?").trim().charAt(0).toUpperCase()}</button>}>
           {settingsMenu}
         </Menu></div>
