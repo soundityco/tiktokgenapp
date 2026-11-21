@@ -830,10 +830,12 @@ button.link { background: none; border: 0; padding: 0; color: var(--text); text-
   .top button, .top select, .top a, .top input, .top label { -webkit-app-region: no-drag; app-region: no-drag; } }
 
 /* The desktop app without its title bar (components/DesktopFrame): the top bar drags the window (a strip across the top
-   too, for the pages without it: the first screen, the loading), anything one clicks never does; room for the window's
+   on the pages without it: the first screen, the loading), anything one clicks never does; room for the window's
    buttons — Mac on the left (none in full screen), Windows on the right. */
 html.desk-inset .top { -webkit-app-region: drag; app-region: drag; }
-html.desk-inset body::after { content: ""; position: fixed; inset: 0 0 auto 0; height: 30px; z-index: 2147483000; pointer-events: none; -webkit-app-region: drag; app-region: drag; }
+/* (the strip only where there is no top bar: macOS reads the drag regions in the page's order, the strip came last and
+   took the top half of the bar's buttons from the clicks) */
+html.desk-inset body:not(:has(.top))::after { content: ""; position: fixed; inset: 0 0 auto 0; height: 30px; z-index: 2147483000; pointer-events: none; -webkit-app-region: drag; app-region: drag; }
 html.desk-inset :is(button, a, input, textarea, select, label, summary, [role="button"], [role="slider"], [role="menu"], [role="tab"], [contenteditable="true"], .menu, .dd, .modal, .ov) { -webkit-app-region: no-drag; app-region: no-drag; }
 html.desk-inset.desk-darwin:not(.desk-full) .top { padding-left: 86px; }
 html.desk-inset.desk-win32 .top { padding-right: 150px; }
