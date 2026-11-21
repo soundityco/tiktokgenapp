@@ -3249,7 +3249,18 @@ export default function VideoStudio({
   // (the state then catches up a few times a second, commitView).
   const viewRef = useRef(view);
   const viewCommittedAt = useRef(0);
-  const commitView = () => { viewCommittedAt.current = performance.now(); setViewState(viewRef.current); };
+  const commitView = () => {
+    viewCommittedAt.current = performance.now();
+    // (the view laid out again on a whole number of the screen's pixels from the one laid out before — exactly where the
+    // tracks have slid to: the clips placed again land on the same pixel; on the view as it was, each clip's own place
+    // and the track's slide, each rounded, could add up a pixel off: they shifted by a pixel at every new layout)
+    const v = viewRef.current, laid = twRef.current, W = trackWRef.current, dpr = waveBox.dpr || 1;
+    if (v && laid && W > 0 && Math.abs(v.d - laid.d) < 1e-9) {
+      const k = (W * dpr) / laid.d;
+      viewRef.current = { s: laid.s - Math.round((laid.s - v.s) * k) / k, d: v.d };
+    }
+    setViewState(viewRef.current);
+  };
   // Every change of the view is seen at once by whoever reads it next (the playhead's follow reads it every frame: it
   // used to put back the view of the frame before, undoing a zoom made while playing).
   const setView = (v: { s: number; d: number } | null) => { viewRef.current = v; setViewState(v); };
