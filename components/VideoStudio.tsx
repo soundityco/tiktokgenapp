@@ -26,7 +26,7 @@ import { type Variant, videoVariants } from "@/lib/variants";
 import { COPY_VERSION, fastWorkCopy } from "@/lib/fastCopy";
 import { copyBusy as copyLock, shareCopy } from "@/lib/driveCopy";
 import { gpuGradedSource, gpuGradeReason } from "@/lib/grade10";
-import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
+import { type Cut, camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, splitAt } from "@/lib/multicam";
 import { wavOf } from "@/lib/wav";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
@@ -5473,7 +5473,7 @@ export default function VideoStudio({
     for (const id of winner.keys()) if (!all.some((c) => c.media === id || c.media === `${id}`)) void delMedia(`video:${id}`).catch(() => {});
     onSaveNow();
   }, [clips]); // eslint-disable-line react-hooks/exhaustive-deps
-  const cutDrag = useRef<{ i: number; left: number; width: number } | null>(null);
+  const cutDrag = useRef<{ i: number; cuts0: Cut[]; left: number; width: number } | null>(null);
   const takeInput = useRef<HTMLInputElement>(null);
   /** What a file is (device, curve, codec) and what the app does with its colours: the (i) beside LOG / SDR. */
   const sourceNote = (src: VideoSourceInfo) => [
@@ -6753,7 +6753,9 @@ export default function VideoStudio({
                   e.stopPropagation(); stop();
                   e.currentTarget.setPointerCapture(e.pointerId);
                   const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget.parentElement!).getBoundingClientRect(); // the track (its content may be sliding)
-                  cutDrag.current = { i: [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at).indexOf(c), left: r.left, width: r.width };
+                  // (the cuts as they were: the shots gone over come back when the cut comes back)
+                  const cuts0 = [...(settings.cuts ?? [])].sort((a, b) => a.at - b.at);
+                  cutDrag.current = { i: cuts0.indexOf(c), cuts0, left: r.left, width: r.width };
                 }}
                 onPointerMove={(e) => {
                   const d = cutDrag.current;
@@ -6765,11 +6767,12 @@ export default function VideoStudio({
                   // sound; ⌘ / Ctrl held: free.
                   if (!e.metaKey && !e.ctrlKey) {
                     const reach = (8 / d.width) * w.d;
-                    const marks = [...cues.flatMap((q) => [q.start, q.end]), ...hooks.flatMap((h) => [cfg.crop.start + h.from, ...(h.to != null ? [cfg.crop.start + h.to] : [])])];
+                    const marks = [...cues.flatMap((q) => [q.start, q.end]), ...hooks.flatMap((h) => [cfg.crop.start + h.from, ...(h.to != null ? [cfg.crop.start + h.to] : [])]),
+                      ...d.cuts0.filter((_, k) => k !== d.i).map((x) => x.at)]; // (onto another cut: its shot covered whole)
                     const near = marks.reduce((b, m) => (Math.abs(m - at) < Math.abs(b - at) ? m : b), Infinity);
                     if (Math.abs(near - at) <= reach) at = near;
                   }
-                  setV({ cuts: moveCut(cfg.cuts ?? [], d.i, at) });
+                  setV({ cuts: moveCut(d.cuts0, d.i, at) });
                 }}
                 onPointerUp={() => { cutDrag.current = null; }} onPointerCancel={() => { cutDrag.current = null; }} />
             ))}
@@ -8955,12 +8958,12 @@ export default function VideoStudio({
             <p className="muted xs">{outW}×{outH} · H.264 + AAC · {+exportSettings(settings.source?.fps, exportPrefs).fps.toFixed(2)} {t("fps")} · {fmtTime(settings.crop.duration)}</p>
             {exp.step === "convert" && gpuWhy && <p className="muted xs">{t("Colour grade on the graphics card not possible here: {why}", { why: gpuWhy })}</p>}
             {expMode && (expMode.direct
-              ? <p className="muted xs">{t("Camera frames decoded from the file ({codec}): you can switch tabs.", { codec: expMode.detail })}</p>
-              : <p className="notice warn xs">{t("Camera frames read by the browser's player ({why}): the export plays the clip in real time. Keep this tab visible, it pauses while hidden.", { why: expMode.detail || "?" })}</p>)}
-            {expPaused && <p className="notice warn xs">{t("Paused: come back to this tab to continue.")}</p>}
+              ? <p className="muted xs">{t("Camera frames decoded from the file ({codec}): you can do something else meanwhile.", { codec: expMode.detail })}</p>
+              : <p className="notice warn xs">{t("Camera frames read by the video player ({why}): the export plays the clip in real time. Keep RAW in view, it pauses while hidden.", { why: expMode.detail || "?" })}</p>)}
+            {expPaused && <p className="notice warn xs">{t("Paused: come back to RAW to continue.")}</p>}
             {!exp.done && expMode?.direct !== false && (notifyBlocked()
               ? <p className="notice warn xs">{t("Notifications are blocked for this site: allow them in the browser to be told when the video is ready. The tab title will show it anyway.")}</p>
-              : <p className="muted xs">{t("You can switch tabs: you will be notified when the video is ready.")}</p>)}
+              : <p className="muted xs">{t("You can do something else meanwhile: you will be notified when the video is ready.")}</p>)}
             </>)}
             {batch && err && <p className="notice bad xs">{err}</p>}
           </div>

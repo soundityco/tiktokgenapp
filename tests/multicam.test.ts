@@ -18,11 +18,26 @@ describe("multicam cuts", () => {
     // Before the first cut: a cut at the segment's start.
     expect(camAt(setShotCam(cuts, 2, 3, 0), 1)).toBe(3);
   });
-  it("removing joins a shot with the one before, moving stays between neighbours", () => {
+  it("removing joins a shot with the one before", () => {
     const cuts = [{ at: 5, cam: 1 }, { at: 8, cam: 2 }, { at: 12, cam: 3 }];
     expect(removeCutAt(cuts, 9).map((c) => c.at)).toEqual([5, 12]);
-    expect(moveCut(cuts, 1, 20)[1].at).toBeCloseTo(11.9);
-    expect(moveCut(cuts, 1, 1)[1].at).toBeCloseTo(5.1);
+  });
+  it("moving a cut between its neighbours only moves it", () => {
+    const cuts = [{ at: 5, cam: 1 }, { at: 8, cam: 2 }, { at: 12, cam: 3 }];
+    expect(moveCut(cuts, 1, 10)).toEqual([{ at: 5, cam: 1 }, { at: 10, cam: 2 }, { at: 12, cam: 3 }]);
+  });
+  it("pulled left onto the cut before, its shot covers that one: one shot (camera 4, then camera 4 again)", () => {
+    const cuts = [{ at: 2, cam: 0 }, { at: 5, cam: 3 }, { at: 8, cam: 3 }, { at: 12, cam: 1 }];
+    const one = moveCut(cuts, 2, 5);
+    expect(one).toEqual([{ at: 2, cam: 0 }, { at: 5, cam: 3 }, { at: 12, cam: 1 }]);
+    expect(shotsOf(one, 0, 14).map((x) => [x.from, x.to, x.cam])).toEqual([[0, 2, 0], [2, 5, 0], [5, 12, 3], [12, 14, 1]]);
+    // further left: over the shots before too
+    expect(moveCut(cuts, 2, 1)).toEqual([{ at: 1, cam: 3 }, { at: 12, cam: 1 }]);
+  });
+  it("pulled right past other cuts: the shot before runs on, the camera where it stops goes on", () => {
+    const cuts = [{ at: 5, cam: 1 }, { at: 8, cam: 2 }, { at: 12, cam: 3 }];
+    expect(moveCut(cuts, 0, 10)).toEqual([{ at: 10, cam: 2 }, { at: 12, cam: 3 }]);
+    expect(camAt(moveCut(cuts, 0, 10), 7)).toBe(0);
   });
   it("shots of a segment", () => {
     const shots = shotsOf([{ at: 2, cam: 1 }, { at: 5, cam: 2 }, { at: 30, cam: 3 }], 3, 15);

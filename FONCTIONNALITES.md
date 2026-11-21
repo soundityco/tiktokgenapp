@@ -119,6 +119,7 @@ dans ton Google Drive.
 
 ## Studio vidéo
 
+- **Coupes du multicam comme dans un logiciel de montage** : tirer une coupe par-dessus les plans voisins les recouvre (jusqu'au début d'un plan de la même caméra : un seul plan), revenir en arrière avant de lâcher les rend ; la coupe s'aimante aux autres. — En test
 - **Importer plusieurs vidéos d'un coup** : jusqu'à 4 pistes (la première en vidéo 1) ; au-delà, un message dit lesquelles attendent dans les prises de la release. — En test
 - **Chercher un hook ou un texte** dans le sélecteur de sa liste : un champ où taper un mot. — En test
 - **Plusieurs vidéos par release**, chacune avec son fichier caméra ; « + » en crée une de zéro (le même morceau et les mêmes paroles, sans vidéo ni hook ; numérotée Vidéo 1, 2, 3… dans chaque release), « Dupliquer » refait la même vidéo (même fichier, mêmes réglages). — En ligne

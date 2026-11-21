@@ -49,11 +49,23 @@ export function removeCutAt(cuts: Cut[] | undefined, t: number): Cut[] {
   return i < 0 ? list : list.filter((_, k) => k !== i);
 }
 
-/** Cut number `i` moved to `at`, kept between its neighbours. */
+/**
+ * Cut number `i` moved to `at`, as an edit in a timeline: from the gesture's start (`cuts` as they were when it began),
+ * the shot whose edge is pulled covers the shots it goes over. Left: its shot starts earlier, over the shots before (onto
+ * a cut, that cut is gone: two shots of camera 4 made one). Right: the shot before it runs on over the shots after; where
+ * it stops, the camera of the shot that was there goes on. Before, a cut stopped 0.1 s from the next one (a gap left, both
+ * shots kept).
+ */
 export function moveCut(cuts: Cut[], i: number, at: number): Cut[] {
-  const list = sorted(cuts);
-  const lo = i > 0 ? list[i - 1].at + 0.1 : -Infinity, hi = i < list.length - 1 ? list[i + 1].at - 0.1 : Infinity;
-  return list.map((c, k) => (k === i ? { ...c, at: r3(Math.min(hi, Math.max(lo, at))) } : c));
+  const list = sorted(cuts), me = list[i];
+  if (!me) return list;
+  const to = r3(Math.max(0, at)), lo = Math.min(me.at, to), hi = Math.max(me.at, to);
+  const over = (c: Cut, k: number) => k !== i && c.at >= lo - SAME && c.at <= hi + SAME;
+  const rest = list.filter((c, k) => k !== i && !over(c, k));
+  // (going right past other cuts: the camera of the shot where it lands goes on from there)
+  const passed = to > me.at ? list.filter((c, k) => over(c, k)) : [];
+  const cam = passed.length ? passed[passed.length - 1].cam : me.cam;
+  return sorted([...rest, { ...me, at: to, cam }]);
 }
 
 /** The shots between `from` and `to`: where each starts and ends, and its camera. */
