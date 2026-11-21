@@ -1,6 +1,6 @@
 import type { LyricWord } from "./types";
 import { type Emissions, alignDevice, alignEmissions } from "./alignAI";
-import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, frenchSound, looksFrench, wordsInSpan } from "./forcedAlign";
+import { FA_VOCAB, alignWordsForced, ctcStarts, faNorm, looksFrench, soundOf, wordsInSpan } from "./forcedAlign";
 import { findRepeats, foldedFit, melFrames, repeatPeriodIn } from "./repeatBlocks";
 import { syllableSpans } from "./syllables";
 import { type LineSpan, alignSong, cleanHeard, norm, similarity, splitWords, syllables, withoutLost, wordsFromSegments } from "./lyricsAlign";
@@ -520,7 +520,7 @@ async function placeCopies(words: LyricWord[], lineOf: number[][], rep: { from: 
   const end = last + 1 < lineOf.length ? words[lineOf[last + 1][0]].s : buf.duration;
   const unit = lineOf.slice(first, first + rep.unit).flat();
   const toks: number[] = [], owner: number[] = [];
-  unit.forEach((i, wi) => { const n = faNorm(words[i].w); for (const c of french ? frenchSound(n) : n) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
+  unit.forEach((i, wi) => { const n = faNorm(words[i].w); for (const c of soundOf(n, french)) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
   // Its first copy may start anywhere between the line before (its end) and the last place all the copies still fit
   // before the line after: not only around where the alignment put it (a passage it hardly heard, a blurred intro, was
   // placed seconds too early, and its true start was never tried).

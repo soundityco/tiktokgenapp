@@ -97,6 +97,15 @@ const MAX_GAP = 4;
 const FPS = 1 / FA_FRAME;
 
 /**
+ * The letters the model is asked for, for a word (normalised): what is heard. "ok" is heard "o-kay" (both languages):
+ * its letters alone ended the word on the "k", lit in one piece, the "ay" never placed. French: its sound (frenchSound).
+ */
+export function soundOf(n: string, french: boolean): string {
+  if (n === "ok") return "okei";
+  return french ? frenchSound(n) : n;
+}
+
+/**
  * Every written word with its time, from the frames the model gave (`emis`, T × V log-probabilities). `written` = the
  * words of the lyrics with their line number. Words with no letter (numbers, signs) take the time right after the
  * word before. Null when the alignment cannot be done.
@@ -111,7 +120,7 @@ export function alignWordsForced(emis: Float32Array, T: number, V: number, writt
   const french = FA_TUNE.french && looksFrench(written.map((x) => faNorm(x.w)));
   written.forEach((x, wi) => {
     const n = faNorm(x.w);
-    for (const c of french ? frenchSound(n) : n) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } }
+    for (const c of soundOf(n, french)) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } }
   });
   // State j (j letters done) is inside a line when letter j and letter j+1 belong to the same line.
   const inLine = new Uint8Array(toks.length + 1);
@@ -294,8 +303,8 @@ const HOLD = 1.0;
 export function wordsInSpan(emis: Float32Array, T: number, V: number, line: LyricWord[], from: number, to: number, french = looksFrench(line.map((x) => faNorm(x.w)))): { words: LyricWord[]; heard: number } | null {
   const f0 = Math.max(0, Math.floor(from / FA_FRAME)), f1 = Math.min(T, Math.ceil(to / FA_FRAME)), n = f1 - f0;
   const toks: number[] = [], owner: number[] = [];
-  line.forEach((x, wi) => { const w = faNorm(x.w); for (const c of french ? frenchSound(w) : w) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
-  if (line.length < 2 || !toks.length || n < toks.length + 2) return null;
+  line.forEach((x, wi) => { const w = faNorm(x.w); for (const c of soundOf(w, french)) { const id = FA_VOCAB[c]; if (id !== undefined) { toks.push(id); owner.push(wi); } } });
+  if (!toks.length || n < toks.length + 2) return null;
   // (its first letter at its start, give or take 0.24 s: the line's start is trusted)
   const lo = new Int32Array(toks.length), hi = new Int32Array(toks.length).fill(n - 1);
   hi[0] = Math.min(n - 1, 12);
@@ -311,7 +320,7 @@ export function wordsInSpan(emis: Float32Array, T: number, V: number, line: Lyri
   const firstTok: number[] = []; // word -> its first token
   owner.forEach((o, k) => { if (firstTok[o] === undefined) firstTok[o] = k; });
   const sylTimes = (wi: number): number[] | null => {
-    const n = faNorm(line[wi].w), sound = french ? frenchSound(n) : n;
+    const n = faNorm(line[wi].w), sound = soundOf(n, french);
     const shown = syllableSpans(line[wi].w).length;
     if (shown < 2 || firstTok[wi] === undefined) return null;
     // the letters of the sound that are tokens, in order: their place in `sound`

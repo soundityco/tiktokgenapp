@@ -14,8 +14,22 @@ const VOWEL = /[aeiouyàâäéèêëîïôöùûüÿœæ]/i;
 /** Two consonants that start a syllable together. */
 const CLUSTERS = new Set(["bl", "br", "cl", "cr", "dr", "fl", "fr", "gl", "gr", "pl", "pr", "tr", "vr", "ch", "ph", "th", "gn", "sh", "wh", "qu", "gu"]);
 
+/**
+ * A word said letter by letter: "OK" (o-kay), an acronym in capitals with no vowel ("DJ", "TV", "PNL"): its letters
+ * as character ranges (a sign after the last letter stays with it), else null.
+ */
+export function spelledOut(word: string): [number, number][] | null {
+  const letters = [...word].map((c, i) => (/\p{L}/u.test(c) ? i : -1)).filter((i) => i >= 0);
+  const bare = letters.map((i) => [...word][i]).join("");
+  if (!/^ok$/i.test(bare) && !(/^[A-Z]{2,4}$/.test(bare) && !VOWEL.test(bare))) return null;
+  const n = [...word].length;
+  return letters.map((i, k) => [k === 0 ? 0 : i, k + 1 < letters.length ? letters[k + 1] : n] as [number, number]);
+}
+
 /** The syllables of `word` as [start, end) character ranges covering the whole word. */
 export function syllableSpans(word: string): [number, number][] {
+  const spelled = spelledOut(word);
+  if (spelled) return spelled;
   const chars = [...word];
   const isL = (c: string) => /\p{L}/u.test(c);
   // which letters are vowels: "u" after "q" or "g" before a vowel is a consonant ("qui", "guerre"); "y" between vowels

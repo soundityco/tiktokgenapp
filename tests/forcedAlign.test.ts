@@ -102,3 +102,16 @@ describe("French as it sounds", () => {
     expect(looksFrench(["i", "wish", "that", "i", "could", "lie"])).toBe(false);
   });
 });
+
+describe("OK heard o-kay", () => {
+  it("its syllables placed on the voice, even alone on its line", async () => {
+    const { wordsInSpan, soundOf } = await import("@/lib/forcedAlign");
+    expect(soundOf("ok", false)).toBe("okei");
+    // o at 1.0 s, k-e-i from 1.4 s
+    const e = emis(150, [[50, "o"], [70, "k"], [73, "e"], [76, "i"]]);
+    const r = wordsInSpan(e, 150, V, [{ w: "OK", s: 1, e: 1.2, line: 0 }], 1, 2.5, false)!;
+    expect(r.words[0].sy).toBeDefined();
+    const w = r.words[0], second = w.s + w.sy![1] * (w.e - w.s);
+    expect(second).toBeGreaterThan(1.3); expect(second).toBeLessThan(1.5);
+  });
+});

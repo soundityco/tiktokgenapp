@@ -1,4 +1,5 @@
 import type { LyricWord } from "./types";
+import { spelledOut } from "./syllables";
 
 /**
  * Pure helpers behind the lyrics generator: align written lyrics on the words a speech model
@@ -500,6 +501,8 @@ export interface CueOptions {
 
 /** Syllables of a word, roughly (groups of vowels): its share of the phrase when the words are spread. */
 export function syllables(w: string): number {
+  const spelled = spelledOut(w);
+  if (spelled) return spelled.length;
   return Math.max(1, (norm(w).match(/[aeiouyàâäéèêëîïôöùûüœæ]+/g) ?? []).length);
 }
 
