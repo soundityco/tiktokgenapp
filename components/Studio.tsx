@@ -39,6 +39,7 @@ import { StyleTabs, useStyleParts, type SheetPart } from "./StyleSheet";
 import VideoStudio, { type CopyJob } from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
+import { desktopDownloadHere } from "@/lib/desktop";
 import { merge3 } from "@/lib/merge";
 import { isDemo } from "@/lib/demo";
 import PicStack from "./PicStack";
@@ -159,6 +160,9 @@ export default function Studio({ userName, userImage }: { userName: string; user
   const handheld = useHandheld();
   const [mobileTab, setMobileTab] = useState<MobileTab>("slides");
   const { canInstall, installed, install, iosHelp, closeIosHelp } = useInstall();
+  // On a computer, the desktop app (lib/desktop) takes the place of the browser's install.
+  const [deskDl, setDeskDl] = useState<ReturnType<typeof desktopDownloadHere>>(null);
+  useEffect(() => { setDeskDl(desktopDownloadHere()); }, []);
   // Phone: the tools of the studio head folded under "More" (the release, share, download and generate stay out).
   const [headMore, setHeadMore] = useState(false);
   // The TikTok zones: on a computer the Style setting (saved with the data); on a phone the deck's own switch, kept
@@ -1932,9 +1936,13 @@ export default function Studio({ userName, userImage }: { userName: string; user
             <button disabled={!!copyJob && !remaking} title={t("Every video of every release whose file is on this computer: its Drive copy made again (the old one deleted), release after release.")}
               onClick={() => { close(); if (remaking) remakeAc.current?.abort(); else void remakeAccount(); }}><Icon name={remaking ? "x" : "refresh"} size={14} />{remaking ? t("Stop making the Drive copies") : t("Make every Drive copy again")}</button>
             <button onClick={() => { close(); setKeysOpen(true); }}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
-            {/* The installed app: nothing here. The browser: installed, or the install, standing out. */}
-            {canInstall && <><div className="sep" /><button className="menu-primary" onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
-            {installed && <><div className="sep" /><div className="menu-note"><Icon name="check" size={14} /><span>{t("App installed")}<small>{t("Open it from your dock or home screen.")}</small></span></div></>}
+            {/* A computer: the desktop app's installer, downloaded at once (nothing inside the desktop app). A phone: the
+                browser's install (its only app), or "installed". */}
+            {deskDl ? <><div className="sep" /><a className="menu-primary" href={deskDl.href} download onClick={() => close()}><Icon name="download" size={14} />{deskDl.os === "mac" ? t("Download the app for Mac") : t("Download the app for Windows")}</a></>
+              : <>
+                {canInstall && <><div className="sep" /><button className="menu-primary" onClick={() => { close(); void install(); }}><Icon name="download" size={14} />{t("Install the app")}</button></>}
+                {installed && <><div className="sep" /><div className="menu-note"><Icon name="check" size={14} /><span>{t("App installed")}<small>{t("Open it from your dock or home screen.")}</small></span></div></>}
+              </>}
             <div className="sep" />
             <div className="label cap truncate">{userName}</div>
             <button onClick={() => signOut({ callbackUrl: "/" })}>{t("Sign out")}</button>

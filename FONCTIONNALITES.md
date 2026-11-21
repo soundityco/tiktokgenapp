@@ -191,7 +191,7 @@ dans ton Google Drive.
 - **Page d'accueil** avec un vrai carrousel à générer et une vidéo de démo, sans compte. — En ligne
 - **Pages Confidentialité et Conditions**. — En ligne
 - **Vérification Google** de l'app (sinon reconnexion tous les 7 jours). — En attente (Google)
-- **App pour Mac et Windows** : RAW dans sa propre fenêtre, avec son icône, téléchargée depuis la home (« Aussi en app : Mac · Mac Intel · Windows »). Toujours à jour (c'est le site en ligne) ; connexion Google par le navigateur, qui rend la main à l'app. Premier lancement à autoriser (Réglages système sur Mac, « Exécuter quand même » sur Windows). — En test
+- **App pour Mac et Windows** : RAW dans sa propre fenêtre, avec son icône, téléchargée depuis la home (« Aussi en app : Mac · Mac Intel · Windows »). Toujours à jour (c'est le site en ligne) ; connexion Google par le navigateur, qui rend la main à l'app. Premier lancement à autoriser (Réglages système sur Mac, « Exécuter quand même » sur Windows). Dans le menu du compte sur ordinateur, « Télécharger l'app pour Mac / Windows » télécharge directement le bon fichier (à la place de l'installation par le navigateur, gardée sur téléphone). — En test
 - **Nouvelle version disponible** : après une mise à jour, une pastille « Nouvelle version de RAW · Recharger » (le travail enregistré d'abord), sur le site comme dans l'app. — En test
 
 ## À venir (idées retenues)

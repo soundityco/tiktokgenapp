@@ -230,6 +230,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .menu.left { right: auto; left: 0; }
 .menu.up { top: auto; bottom: calc(100% + 6px); }
 .menu button { display: flex; align-items: center; gap: var(--s2); width: 100%; text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: var(--r); min-height: 32px; cursor: pointer; }
+/* (a download in a menu is a link: the same look as its buttons) */
+.menu a.menu-primary { display: flex; align-items: center; gap: var(--s2); width: 100%; padding: 8px 10px; border-radius: var(--r); min-height: 32px; text-decoration: none; cursor: pointer; }
 .menu button:hover { background: #1d1d23; }
 .menu .sep { margin: var(--s1) 0; }
 .menu .cap { padding: 8px 10px 4px; }

@@ -22,3 +22,21 @@ export const olderThan = (a: string, b: string): boolean => {
   for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
   return false;
 };
+
+/**
+ * The installer for this computer, when the desktop app fits it (a Mac or a Windows PC, not already in the app; never a
+ * phone): a Mac's chip read from its graphics card (an Intel or AMD one: an Intel Mac; Apple's: Apple's chip).
+ */
+export function desktopDownloadHere(): { href: string; os: "mac" | "windows" } | null {
+  if (typeof window === "undefined" || desktopApp() || matchMedia("(hover: none)").matches) return null;
+  const ua = navigator.userAgent;
+  if (/Windows/.test(ua)) return { href: DESKTOP_DOWNLOADS.windows, os: "windows" };
+  if (!/Macintosh|Mac OS X/.test(ua)) return null;
+  let gpu = "";
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    const ext = gl?.getExtension("WEBGL_debug_renderer_info");
+    gpu = gl && ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : "";
+  } catch { /* unknown: Apple's chip, the Macs of today */ }
+  return { href: /Intel|AMD|Radeon/i.test(gpu) ? DESKTOP_DOWNLOADS.macIntel : DESKTOP_DOWNLOADS.macArm, os: "mac" };
+}
