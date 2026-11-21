@@ -3,9 +3,10 @@
  * preload script gives `window.rawDesktop`. The installers live in the GitHub releases of the repository (public),
  * downloaded straight from the site's buttons.
  */
-export interface DesktopInfo { version: string; platform: string; arch: string; signIn?: () => void }
+export interface DesktopInfo { version: string; platform: string; arch: string; signIn?: () => void;
+  /** "inset": no title bar, the site's top bar is the window's (1.1.0 on) */ frame?: string; full?: boolean; onFullScreen?: (cb: (on: boolean) => void) => void }
 /** The desktop app's latest version: an older one installed is offered the new installer (UpdatePill). */
-export const DESKTOP_LATEST = "1.0.0";
+export const DESKTOP_LATEST = "1.1.0";
 const RELEASES = "https://github.com/soundityco/tiktokgenapp/releases/latest/download/";
 export const DESKTOP_DOWNLOADS = {
   macArm: RELEASES + "RAW-by-aurare-mac-arm64.dmg",

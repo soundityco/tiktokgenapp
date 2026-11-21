@@ -5,6 +5,7 @@ import InstallApp from "@/components/InstallApp";
 import PointerHabits from "@/components/PointerHabits";
 import Tooltips from "@/components/Tooltips";
 import UpdatePill from "@/components/UpdatePill";
+import DesktopFrame from "@/components/DesktopFrame";
 
 export const metadata: Metadata = {
   title: "RAW by aurare",
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {FIRST_FONTS.map((f) => <link key={f} rel="preload" href={`/fonts/${f}`} as="font" type="font/woff2" crossOrigin="anonymous" />)}
       </head>
-      <body><I18nProvider>{children}<UpdatePill /></I18nProvider><InstallApp /><PointerHabits /><Tooltips /></body>
+      <body><I18nProvider>{children}<UpdatePill /></I18nProvider><InstallApp /><PointerHabits /><Tooltips /><DesktopFrame /></body>
     </html>
   );
 }

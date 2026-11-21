@@ -48,6 +48,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             {signInButton("btn primary lp-cta", t("Continue with Google"))}
             <form action={demo}><button className="btn lp-cta">{t("Try the studio in demo")}</button></form>
           </div>
+          {dev && <form action={async () => { "use server"; await signIn("dev", { redirectTo: "/studio" }); }}><button className="btn sm">Dev login (local only)</button></form>}
           <p className={"lp-fine mono" + (failed ? " dw-failed" : "")}>{failed ? t("The sign-in did not finish. Try again.") : t("You sign in in your browser, then come back here.")}</p>
         </section>
         <p className="dw-foot mono">RAW by aurare</p>

@@ -57,6 +57,11 @@ function createWindow() {
   win = new BrowserWindow({
     width: p?.width ?? 1440, height: p?.height ?? 900, x: TEST ? -4000 : p?.x, y: TEST ? -4000 : p?.y, minWidth: 960, minHeight: 620,
     title: "RAW by aurare", backgroundColor: "#08080a", show: false,
+    // No grey title bar: the app's own top bar is the window's (52 px, the studio's .top). Mac: its three buttons on it;
+    // Windows: its buttons drawn in the app's colours over its right end. The site leaves them room (html.desk-inset).
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 19 } }
+      : { titleBarStyle: "hidden", titleBarOverlay: { color: "#08080a", symbolColor: "#f0eee8", height: 52 } }),
     icon: path.join(__dirname, "build", "icon.png"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: true, spellcheck: false },
   });
@@ -64,6 +69,9 @@ function createWindow() {
   win.once("ready-to-show", () => win.show());
   for (const ev of ["resize", "move", "close"]) win.on(ev, savePlace);
   win.on("closed", () => { win = null; });
+  // Full screen (Mac): its three buttons gone, the top bar takes back their room.
+  win.on("enter-full-screen", () => win?.webContents.send("raw-full", true));
+  win.on("leave-full-screen", () => win?.webContents.send("raw-full", false));
   const wc = win.webContents;
   // Google's sign-in: in the browser. Another site: in the browser too. The app's own pages stay here.
   const guard = (e, url) => {
@@ -86,7 +94,7 @@ function createWindow() {
   if (early) { const l = early; early = null; onLink(l); }
 }
 
-ipcMain.on("raw-info", (e) => { e.returnValue = { version: app.getVersion(), platform: process.platform, arch: process.arch }; });
+ipcMain.on("raw-info", (e) => { e.returnValue = { version: app.getVersion(), platform: process.platform, arch: process.arch, frame: "inset", full: !!win?.isFullScreen() }; });
 ipcMain.on("raw-sign-in", () => signInInBrowser());
 
 // macOS: the link opens the app; Windows / Linux: it starts a second instance, its arguments carry the link.

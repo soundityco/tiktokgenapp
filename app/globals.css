@@ -829,6 +829,15 @@ button.link { background: none; border: 0; padding: 0; color: var(--text); text-
 @media (display-mode: window-controls-overlay) { .top { -webkit-app-region: drag; app-region: drag; padding-left: max(var(--s4), env(titlebar-area-x, 0px)); }
   .top button, .top select, .top a, .top input, .top label { -webkit-app-region: no-drag; app-region: no-drag; } }
 
+/* The desktop app without its title bar (components/DesktopFrame): the top bar drags the window (a strip across the top
+   too, for the pages without it: the first screen, the loading), anything one clicks never does; room for the window's
+   buttons — Mac on the left (none in full screen), Windows on the right. */
+html.desk-inset .top { -webkit-app-region: drag; app-region: drag; }
+html.desk-inset body::after { content: ""; position: fixed; inset: 0 0 auto 0; height: 30px; z-index: 2147483000; pointer-events: none; -webkit-app-region: drag; app-region: drag; }
+html.desk-inset :is(button, a, input, textarea, select, label, summary, [role="button"], [role="slider"], [role="menu"], [role="tab"], [contenteditable="true"], .menu, .dd, .modal, .ov) { -webkit-app-region: no-drag; app-region: no-drag; }
+html.desk-inset.desk-darwin:not(.desk-full) .top { padding-left: 86px; }
+html.desk-inset.desk-win32 .top { padding-right: 150px; }
+
 /* Scrollbars of the whole app: thin and rounded, hidden until the pointer is over what scrolls. */
 * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 *:hover { scrollbar-color: rgba(255,255,255,.18) transparent; }
