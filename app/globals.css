@@ -631,7 +631,9 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue .cue-ico.lockable:hover .ico-hover { display: inline-flex; }
 .lyric-track .cue .cue-ico.lockable:hover { color: var(--text); }
 .lyric-track .cue .cue-ico.locked { color: var(--clip, var(--lyrics)); }
-.lyric-track .cue:has(.cue-ico.locked) { cursor: default; }
+/* A locked line is not dragged but is still clicked (picked, its menu): the hand that points, as a locked video clip —
+   the arrow made it look dead. A free line (data-mv) is grabbed. */
+.lyrics-track .cue:not(.video-clip):not([data-mv]), .lyrics-track .cue:not(.video-clip):not([data-mv]):active { cursor: pointer; }
 /* A text's or a hook's own handles, inside the clip (as a video clip's): its start on its coloured edge, its end a bar
    shown on hover; each clip its own, even where two touch. */
 /* The words of the line picked (word by word on the timeline): each one's start a thin mark, dragged as a cut. */
