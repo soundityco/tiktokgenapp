@@ -5384,12 +5384,16 @@ export default function VideoStudio({
    * original file" does one by one. Its sync and settings stay. Said in the end: how many found, which are still missing.
    */
   const folderInput = useRef<HTMLInputElement>(null);
+  /** The folder being linked: where it is (looking, then k of n written), and each video's state on its card. */
+  const [relinkJob, setRelinkJob] = useState<{ k: number; n: number; name: string } | null>(null);
+  const [relinkIds, setRelinkIds] = useState<Record<string, "wait" | "busy">>({});
   const relinkFolder = async (files: File[]) => {
     const vids = files.filter((f) => f.type.startsWith("video/") || /\.(mp4|mov|m4v|mxf|mkv|avi)$/i.test(f.name));
     const byName = new Map<string, File[]>();
     for (const f of vids) { const k = f.name.toLowerCase(); (byName.get(k) ?? byName.set(k, []).get(k)!).push(f); }
-    const seen = new Set<string>(), linked: string[] = [], lost: string[] = [];
-    let baseFile: File | null = null;
+    // First the videos missing on this device and their file in the folder (quick), then each written (a camera file of
+    // several GB takes a while: its card says so, the link shows k of n).
+    const seen = new Set<string>(), found: { c: VideoSetup; key: string; f: File }[] = [], lost: string[] = [];
     for (const c of clips) {
       if (!c.videoName) continue;
       const key = c.media ?? c.id;
@@ -5399,16 +5403,32 @@ export default function VideoStudio({
       if (have && (!c.videoSize || have.size === c.videoSize)) continue; // (on this device already)
       const same = byName.get(c.videoName.toLowerCase()) ?? [];
       const f = c.videoSize ? same.find((x) => x.size === c.videoSize) : same.length === 1 ? same[0] : undefined;
-      if (!f) { lost.push(c.videoName); continue; }
-      if (key === (clip.media ?? clip.id)) { baseFile = f; linked.push(c.videoName); continue; } // (through relinkVideo below)
-      try { await putMedia(`video:${key}`, f); } catch { /* private mode */ }
-      dropKeptCopy(c.id, c.drive?.copy?.id);
-      const a = anglesRef.current.get(c.id);
-      if (a) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); anglesRef.current.delete(c.id); }
-      linked.push(c.videoName);
+      if (f) found.push({ c, key, f }); else lost.push(c.videoName);
     }
-    if (baseFile && !(await relinkVideo(baseFile, true))) { try { await putMedia(`video:${clip.media ?? clip.id}`, baseFile); } catch { /* private mode */ } }
-    if (linked.length) { setTakeFilesRev((n) => n + 1); void askPersistentStorage(); }
+    setRelinkIds(Object.fromEntries(found.map((x) => [x.c.id, "wait" as const])));
+    const linked: string[] = [];
+    try {
+      for (let k = 0; k < found.length; k++) {
+        const { c, key, f } = found[k];
+        setRelinkJob({ k: k + 1, n: found.length, name: c.videoName ?? "" });
+        setRelinkIds((m) => ({ ...m, [c.id]: "busy" }));
+        if (key === (clip.media ?? clip.id)) {
+          if (!(await relinkVideo(f, true))) { try { await putMedia(`video:${key}`, f); } catch { /* private mode */ } }
+        } else {
+          try { await putMedia(`video:${key}`, f); } catch { /* private mode */ }
+          dropKeptCopy(c.id, c.drive?.copy?.id);
+          const a = anglesRef.current.get(c.id);
+          if (a) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); anglesRef.current.delete(c.id); }
+          setTakeFilesRev((n) => n + 1);
+        }
+        linked.push(c.videoName ?? "");
+        setRelinkIds((m) => { const n = { ...m }; delete n[c.id]; return n; });
+      }
+    } finally {
+      setRelinkJob(null);
+      setRelinkIds({});
+    }
+    if (linked.length) void askPersistentStorage();
     onToast?.(!linked.length && !lost.length ? t("Every video of this release is already on this device.")
       : !linked.length ? t("None of the missing videos is in this folder ({names}).", { names: lost.slice(0, 3).join(", ") + (lost.length > 3 ? "…" : "") })
       : lost.length ? t("{n} videos linked again; not in this folder: {names}.", { n: linked.length, names: lost.slice(0, 3).join(", ") + (lost.length > 3 ? "…" : "") })
@@ -5806,7 +5826,8 @@ export default function VideoStudio({
           </button>
           {c.source?.duration ? <span className="mono muted xs">{fmtLength(c.source.duration)}</span> : null}
           {/* On the line, an icon (its words in the unfolded card): the name keeps the room. */}
-          {job && !job.err ? sync
+          {relinkIds[c.id] ? <span className={"muted xs take-relinking" + (relinkIds[c.id] === "busy" ? " shine" : "")}>{relinkIds[c.id] === "busy" ? t("Linking…") : t("Waiting")}</span>
+            : job && !job.err ? sync
             : missing || job?.err ? <span className="warn-text take-warn" title={missing ? t("File not on this device") : job?.err}><Icon name="alert" size={13} /></span>
             // Not synced is not a fault (a video placed by hand on the video track): said quietly.
             : c.score === undefined ? <span className="muted xs take-free" title={t("Not synced")}>—</span>
@@ -5833,12 +5854,17 @@ export default function VideoStudio({
         <button className="btn primary take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
           <Icon name="plus" size={14} />{t("Import takes")}
         </button>
-        <button className="take-relink" onClick={() => folderInput.current?.click()}
+        {relinkJob ? (
+          <div className="take-relink busy" role="status">
+            <span className="truncate shine">{relinkJob.n ? t("Linking {k}/{n} · {name}", { k: relinkJob.k, n: relinkJob.n, name: relinkJob.name }) : t("Looking for the missing videos…")}</span>
+            <span className="take-relink-bar" style={{ "--p": relinkJob.n ? (relinkJob.k - 0.5) / relinkJob.n : 0.08 } as CSSProperties} />
+          </div>
+        ) : <button className="take-relink" onClick={() => folderInput.current?.click()}
           title={t("Moved your camera files? Pick the folder: every video of the release missing on this device is found there by its name, its sync and settings kept.")}>
           <Icon name="link" size={13} /><span className="truncate">{t("Link from a folder…")}</span>
-        </button>
+        </button>}
         <input ref={folderInput} type="file" multiple hidden {...{ webkitdirectory: "" }}
-          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) void relinkFolder(f); }} />
+          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) { setRelinkJob({ k: 0, n: 0, name: "" }); void relinkFolder(f).catch(() => setRelinkJob(null)); } }} />
         <input ref={takeInput} type="file" accept="video/*,.mxf" multiple hidden
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void importTakes(f); }} />
         <input ref={takeReplace} type="file" accept="video/*,.mxf" hidden
