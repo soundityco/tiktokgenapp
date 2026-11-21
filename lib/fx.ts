@@ -28,7 +28,8 @@ const copy = (ctx: CanvasRenderingContext2D, to: HTMLCanvasElement) => {
 };
 
 /** The effect clips running at `t`, in their order on the track. */
-export const fxAt = (list: FxClip[] | undefined, t: number) => (list ?? []).filter((c) => t >= c.from && t < c.to);
+export const fxAt = (list: FxClip[] | undefined, t: number) =>
+  (list ?? []).filter((c) => !c.off && t >= c.from && t < c.to).sort((a, b) => (a.track ?? 0) - (b.track ?? 0)); // (the lower tracks first, the higher over them)
 
 /** Is the strobe's colour shown at `t` (count flashes over the clip, each `on` of its turn). */
 export function strobeOn(c: FxClip, t: number): boolean {
@@ -85,9 +86,11 @@ export function drawFx(ctx: CanvasRenderingContext2D, W: number, H: number, t: n
   }
 }
 
-/** A new effect clip at `at` (a second long), of this kind with its defaults. */
-export function newFx(kind: "strobe" | "zoom" | "shutter", at: number, id: string): FxClip {
-  const base = { id, from: Math.round(at * 100) / 100, to: Math.round((at + (kind === "strobe" ? 0.5 : 1)) * 100) / 100 };
+/** A new effect clip at `at` (a second long) on track `track`: empty (an adjustment layer, its effects then chosen), or of
+ *  this kind with its defaults. */
+export function newFx(kind: "empty" | "strobe" | "zoom" | "shutter", at: number, id: string, track = 0): FxClip {
+  const base = { id, from: Math.round(at * 100) / 100, to: Math.round((at + (kind === "strobe" ? 0.5 : 1)) * 100) / 100, ...(track ? { track } : {}) };
+  if (kind === "empty") return base;
   if (kind === "strobe") return { ...base, over: true, strobe: { color: "#000000", count: 6, on: 0.5 } };
   if (kind === "zoom") return { ...base, zoom: { amount: 0.5, x: 0.5, y: 0.5 } };
   return { ...base, shutter: { fps: 8, trail: 0.6 } };
@@ -95,3 +98,10 @@ export function newFx(kind: "strobe" | "zoom" | "shutter", at: number, id: strin
 
 /** What a clip does, in a few words (its clip's label). */
 export const fxKinds = (c: FxClip) => [c.strobe && "strobe", c.zoom && "zoom", c.shutter && "shutter"].filter(Boolean) as ("strobe" | "zoom" | "shutter")[];
+
+/** A clip cut in two at `at` (both keep its effects; the second a new id), or null when `at` is not inside it. */
+export function splitFx(c: FxClip, at: number, id: string): [FxClip, FxClip] | null {
+  if (at <= c.from + 0.05 || at >= c.to - 0.05) return null;
+  const t = Math.round(at * 100) / 100;
+  return [{ ...c, to: t }, { ...c, id, from: t }];
+}

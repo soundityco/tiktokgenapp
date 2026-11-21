@@ -120,6 +120,7 @@ dans ton Google Drive.
 
 ## Studio vidéo
 
+- **Calques d'effet, comme dans DaVinci** : autant de pistes d'effets qu'on veut (celle du dessus par-dessus les autres) ; un calque s'ajoute vide (clic droit) et on choisit ses effets à droite, seuls ou ensemble ; on peut l'activer / le désactiver (Maj + E), le couper à la tête de lecture (C), le copier-coller (⌘C / ⌘V), le dupliquer (⌘D), le glisser n'importe où, d'une piste à l'autre aussi. — En test
 - **Piste d'effets (calque d'effets)** : des clips d'effets sur la timeline, calés sur le morceau (ils restent en place quand on change les vidéos ou le multicam), sous les textes ou par-dessus : flash / stroboscope (une couleur, le nombre de coupures, la part de couleur), zoom blur (force, centre), shutter lent (moins d'images par seconde, traînée). Clic droit sur la piste pour en ajouter, glisser pour déplacer, poignées pour la durée. — En test
 - **Remplacer dans cette vidéo** (menu ⋯ de chaque vidéo, V1 à V4 et celles par-dessus) : un autre fichier à sa place dans cette vidéo seulement, synchronisé aussitôt ; ses plans du multicam, coupes, découpes et le segment restent où ils sont. Pour un gabarit : dupliquer une vidéo, puis remplacer ses fichiers. — En test
 - **Relier tous les fichiers d'un dossier** (bibliothèque, sous « Importer des prises ») : tu as déplacé tes fichiers caméra ou changé d'ordinateur ? Choisis le dossier, chaque vidéo de la release qui manque y est retrouvée par son nom et sa taille, synchro et réglages gardés ; un message dit lesquelles restent introuvables. — En test

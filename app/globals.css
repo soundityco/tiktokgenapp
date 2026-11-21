@@ -3097,6 +3097,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .lyric-track.fx-track .cue.fx-clip.sel { background: color-mix(in srgb, var(--fx) 30%, var(--bg)); }
 .lyric-track.fx-track .cue.fx-clip .cue-ico { color: var(--fx); }
 .lyric-track.fx-track.off .cue.fx-clip { opacity: .45; }
+/* (a layer turned off: dimmed and striped, as a disabled clip) */
+.lyric-track.fx-track .cue.fx-clip.off { opacity: .5; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--fx) 14%, var(--bg)) 0 5px, var(--bg) 5px 10px); }
 .fx-empty { position: absolute; left: 10px; top: 50%; translate: 0 -50%; pointer-events: none; white-space: nowrap; }
 .tl-hd.hd-fx { --row: var(--fx); }
 /* A phone has no keyboard: the keys shown in the menus go. */

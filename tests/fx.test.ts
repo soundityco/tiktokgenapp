@@ -18,3 +18,21 @@ describe("effect clips", () => {
     expect([0, 0.1, 0.124, 0.126, 0.25].map((t) => heldFrame(c, t, 8))).toEqual([0, 0, 0, 1, 2]);
   });
 });
+
+describe("effect layers", () => {
+  it("a layer cut in two keeps its effects on both halves", async () => {
+    const { splitFx } = await import("@/lib/fx");
+    const c = { ...newFx("zoom", 2, "a"), to: 4 };
+    const two = splitFx(c, 3, "b")!;
+    expect(two.map((x) => [x.id, x.from, x.to, !!x.zoom])).toEqual([["a", 2, 3, true], ["b", 3, 4, true]]);
+    expect(splitFx(c, 2.01, "x")).toBeNull();
+  });
+  it("a layer turned off is not drawn; the higher tracks come after the lower ones", () => {
+    const a = { ...newFx("zoom", 0, "a"), track: 2 }, b = newFx("strobe", 0, "b"), c = { ...newFx("shutter", 0, "c"), track: 1, off: true };
+    expect(fxAt([a, b, c], 0.2).map((x) => x.id)).toEqual(["b", "a"]);
+  });
+  it("a new layer is empty: its effects are chosen afterwards", () => {
+    const e = newFx("empty", 1, "e", 1);
+    expect([e.strobe, e.zoom, e.shutter, e.track]).toEqual([undefined, undefined, undefined, 1]);
+  });
+});

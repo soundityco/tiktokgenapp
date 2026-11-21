@@ -15,7 +15,7 @@ import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectF
 import type { AudioVersion, FxClip, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { groundFill, isGradient } from "@/lib/backdrop";
-import { drawFx, fxKinds, newFx } from "@/lib/fx";
+import { drawFx, fxKinds, newFx, splitFx } from "@/lib/fx";
 import FxPanel from "./FxPanel";
 import BackdropPanel from "./BackdropPanel";
 import GroundHandles from "./GroundHandles";
@@ -7308,27 +7308,67 @@ export default function VideoStudio({
   useEffect(() => { redraw(); }, [settings.effects, settings.effectsHidden]); // eslint-disable-line react-hooks/exhaustive-deps
   const setFx = (list: FxClip[]) => setV({ effects: list.length ? [...list].sort((x, y) => x.from - y.from) : undefined });
   const patchFx = (id: string, patch: Partial<FxClip>) => setFx((settingsRef.current.effects ?? []).map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  /** A new effect clip at `at` (the playhead, or where the track was clicked), picked. */
-  const addFx = (kind: "strobe" | "zoom" | "shutter", at: number) => {
-    const c = newFx(kind, clamp(at, 0, Math.max(0, (audioBuf?.duration ?? at + 1) - 0.5)), uid());
+  /** How many effects tracks there are (one at least; one more than the highest clip's). */
+  const fxLanes = Math.max(1, settings.fxTracks ?? 1, ...effects.map((c) => (c.track ?? 0) + 1));
+  /** An effects track's padlock key ("fx" the first, as before; "fx2", "fx3"… the next ones). */
+  const fxLock = (lane: number) => (lane ? `fx${lane + 1}` : "fx");
+  /** A new effect layer at `at` (the playhead, or where its track was clicked) on track `lane`: empty, its effects then
+   *  chosen in the right column (or of a kind). Picked. */
+  const addFx = (at: number, lane = 0, kind: "empty" | "strobe" | "zoom" | "shutter" = "empty") => {
+    const c = newFx(kind, clamp(at, 0, Math.max(0, (audioBuf?.duration ?? at + 1) - 0.5)), uid(), lane);
     setFx([...(settingsRef.current.effects ?? []), c]);
     setPick("fx:" + c.id); setMulti([]);
     onSaveNow();
   };
+  /** The effect layer copied (⌘C), and what ⌘V pastes: the last thing copied, a layer or a lines' timing. */
+  const fxCopied = useRef<FxClip | null>(null);
+  const lastCopy = useRef<"fx" | "timing" | null>(null);
+  /** The layer copied pasted at the playhead, on the track picked (the one it came from by default). */
+  const pasteFx = (at: number, lane?: number) => {
+    const c = fxCopied.current;
+    if (!c) return false;
+    const len = c.to - c.from, id = uid(), from = round2(clamp(at, 0, Math.max(0, (audioBuf?.duration ?? at + len) - len)));
+    setFx([...(settingsRef.current.effects ?? []), { ...c, id, from, to: round2(from + len), ...(lane !== undefined ? { track: lane || undefined } : {}) }]);
+    setPick("fx:" + id); setMulti([]); onSaveNow();
+    return true;
+  };
+  /** A layer cut at the playhead (both halves keep its effects). */
+  const splitFxAt = (c: FxClip, at: number) => {
+    const two = splitFx(c, at, uid());
+    if (!two) return false;
+    setFx([...(settingsRef.current.effects ?? []).filter((x) => x.id !== c.id), ...two]);
+    setPick("fx:" + two[1].id); onSaveNow();
+    return true;
+  };
+  const duplicateFx = (c: FxClip) => {
+    const id = uid(), len = c.to - c.from;
+    setFx([...(settingsRef.current.effects ?? []), { ...c, id, from: round2(c.to), to: round2(c.to + len) }]);
+    setPick("fx:" + id); onSaveNow();
+  };
+  /** An effects track taken away: its layers go with it, the ones above come down a track. */
+  const removeFxLane = (lane: number) => {
+    const list = settingsRef.current.effects ?? [];
+    const n = Math.max(1, fxLanes - 1);
+    setV({
+      effects: (() => { const l = list.filter((c) => (c.track ?? 0) !== lane).map((c) => ((c.track ?? 0) > lane ? { ...c, track: (c.track ?? 0) - 1 || undefined } : c)).sort((x, y) => x.from - y.from); return l.length ? l : undefined; })(),
+      fxTracks: n > 1 ? n : undefined,
+      trackLocks: (settingsRef.current.trackLocks ?? []).filter((k) => k !== fxLock(lane)),
+    });
+  };
   const removeFx = (id: string) => { setFx((settingsRef.current.effects ?? []).filter((c) => c.id !== id)); if (pick === "fx:" + id) setPick(null); };
   const moveFxStart = (id: string) => edgeDrag((at) => {
     const c = (settingsRef.current.effects ?? []).find((x) => x.id === id);
-    if (!c) return;
+    if (!c || trackLocked(fxLock(c.track ?? 0))) return;
     const from = round2(clamp(at, 0, c.to - 0.05));
     patchFx(id, { from }); setHead(from);
   }, true, true);
   const moveFxEnd = (id: string) => edgeDrag((at) => {
     const c = (settingsRef.current.effects ?? []).find((x) => x.id === id);
-    if (!c) return;
+    if (!c || trackLocked(fxLock(c.track ?? 0))) return;
     const to = round2(clamp(at, c.from + 0.05, audioBuf?.duration ?? at));
     patchFx(id, { to }); setHead(to);
   }, true, true);
-  /** An effect clip dragged by its body: moved whole (its length kept); a click without moving picks it, the playhead on it. */
+  /** An effect layer dragged by its body: moved whole (its length kept), onto another effects track too; a click picks it. */
   const fxBody = (c: FxClip) => (e: React.PointerEvent<HTMLElement>) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -7336,59 +7376,76 @@ export default function VideoStudio({
     setPick("fx:" + c.id); setMulti([]);
     // (on one of its handles — all of a short clip —: picked too, the handle drags its edge)
     if ((e.target as HTMLElement).closest(".cue-grip")) return;
-    if (trackLocked("fx")) { setHead(round2(c.from)); return; }
+    if (trackLocked(fxLock(c.track ?? 0))) { lockedTried(fxLock(c.track ?? 0)); return; }
     const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget.parentElement!).getBoundingClientRect();
-    const x0 = e.clientX, from0 = c.from, len = c.to - c.from;
+    const x0 = e.clientX, y0 = e.clientY, from0 = c.from, len = c.to - c.from;
     let moved = false;
     const mv = (ev: PointerEvent) => {
       const w = viewRef.current ?? twRef.current;
       const d = ((ev.clientX - x0) / r.width) * w.d;
-      if (!moved && Math.abs(ev.clientX - x0) < 3) return;
+      if (!moved && Math.abs(ev.clientX - x0) < 3 && Math.abs(ev.clientY - y0) < 6) return;
       moved = true;
       const from = round2(clamp(from0 + d, 0, Math.max(0, (audioBuf?.duration ?? from0 + len) - len)));
-      patchFx(c.id, { from, to: round2(from + len) });
+      // (up or down onto another effects track, not a locked one: it goes there)
+      const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>(".fx-track");
+      const lane = over?.dataset.lane !== undefined ? Number(over.dataset.lane) : c.track ?? 0;
+      const goes = trackLocked(fxLock(lane)) ? c.track ?? 0 : lane;
+      patchFx(c.id, { from, to: round2(from + len), track: goes || undefined });
     };
     const up = () => {
       window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
-      if (moved) onSaveNow(); else setHead(round2(c.from));
+      // (a click picks it, the playhead stays: placed first, then the layer picked, C cuts it there — as a video clip)
+      if (moved) onSaveNow();
     };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
-  const fxName = (c: FxClip) => fxKinds(c).map((k) => (k === "strobe" ? t("Flash") : k === "zoom" ? t("Zoom blur") : t("Slow shutter"))).join(" + ") || t("Effect");
-  const fxAddItems = (close: () => void, at: number) => (<>
-    <button onClick={() => { close(); addFx("strobe", at); }}><Icon name="sparkle" size={14} />{t("Flash (strobe)")}</button>
-    <button onClick={() => { close(); addFx("zoom", at); }}><Icon name="target" size={14} />{t("Zoom blur")}</button>
-    <button onClick={() => { close(); addFx("shutter", at); }}><Icon name="film" size={14} />{t("Slow shutter (stutter, trails)")}</button>
-  </>);
   const lane2HdMenu = (close: () => void) => (<>
     <div className="label cap">{t("Lyrics 2")}</div>
     <button onClick={() => { close(); setV({ lyrics2: undefined }); }}><Icon name="minus" size={14} />{t("Put every line back on the lyrics track")}</button>
     {settings.lyrics2?.look && <button onClick={() => { close(); setV({ lyrics2: { keys: settings.lyrics2?.keys ?? [] } }); }}><Icon name="refresh" size={14} />{t("Its style back to the lyrics style")}</button>}
   </>);
-  const fxHdMenu = (close: () => void) => (<>
-    <div className="label cap">{t("Effects")} · {t("at the playhead")}</div>
-    {fxAddItems(close, head)}
+  const fxName = (c: FxClip) => fxKinds(c).map((k) => (k === "strobe" ? t("Flash") : k === "zoom" ? t("Zoom blur") : t("Slow shutter"))).join(" + ") || t("Effect layer");
+  /** An effects track's header menu: a layer at the playhead, a track more or less, its eye and padlock. */
+  const fxHdMenu = (lane: number) => (close: () => void) => (<>
+    <div className="label cap">{t("Effects {n}", { n: lane + 1 })}</div>
+    <button onClick={() => { close(); addFx(head, lane); }}><Icon name="plus" size={14} />{t("Add an effect layer at the playhead")}</button>
+    {fxCopied.current && <button onClick={() => { close(); pasteFx(head, lane); }}><Icon name="copy" size={14} />{t("Paste the layer at the playhead")}<kbd>⌘V</kbd></button>}
+    <div className="sep" />
+    <button onClick={() => { close(); setV({ fxTracks: fxLanes + 1 }); }}><Icon name="layers" size={14} />{t("Add an effects track")}</button>
+    {fxLanes > 1 && <button onClick={() => { close(); removeFxLane(lane); }}><Icon name="minus" size={14} />{t("Remove this effects track (and its layers)")}</button>}
     <div className="sep" />
     <button onClick={() => { close(); setV({ effectsHidden: settings.effectsHidden ? undefined : true }); redraw(); }}><Icon name={settings.effectsHidden ? "eye" : "eye-off"} size={14} />{settings.effectsHidden ? t("Show the effects") : t("Hide the effects")}</button>
-    <button onClick={() => { close(); toggleTrackLock("fx"); }}><Icon name={trackLocked("fx") ? "unlock" : "lock"} size={14} />{trackLocked("fx") ? t("Unlock the track") : t("Lock the track")}</button>
+    <button onClick={() => { close(); toggleTrackLock(fxLock(lane)); }}><Icon name={trackLocked(fxLock(lane)) ? "unlock" : "lock"} size={14} />{trackLocked(fxLock(lane)) ? t("Unlock the track") : t("Lock the track")}</button>
   </>);
   const fxCtx = (c: FxClip) => (e: React.MouseEvent) => {
     setPick("fx:" + c.id); setMulti([]);
+    const locked = trackLocked(fxLock(c.track ?? 0));
     ctxOn((close) => (<>
       <div className="label cap truncate">{fxName(c)}</div>
-      <button onClick={() => { close(); stop(); setHead(round2(c.from)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
-      <button onClick={() => { close(); const id = uid(), len = c.to - c.from; setFx([...(settingsRef.current.effects ?? []), { ...c, id, from: round2(c.to), to: round2(c.to + len) }]); setPick("fx:" + id); }}><Icon name="copy" size={14} />{t("Duplicate after it")}</button>
+      <button onClick={() => { close(); patchFx(c.id, { off: c.off ? undefined : true }); }}><Icon name={c.off ? "eye" : "eye-off"} size={14} />{c.off ? t("Turn this layer on") : t("Turn this layer off")}<kbd>⇧E</kbd></button>
+      <button disabled={locked || !(head > c.from + 0.05 && head < c.to - 0.05)} onClick={() => { close(); splitFxAt(c, head); }}><Icon name="scissors" size={14} />{t("Cut at the playhead")}<kbd>C</kbd></button>
       <div className="sep" />
-      <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); removeFx(c.id); }}><Icon name="trash" size={14} />{t("Delete")}</button>
+      <button onClick={() => { close(); fxCopied.current = c; lastCopy.current = "fx"; }}><Icon name="copy" size={14} />{t("Copy")}<kbd>⌘C</kbd></button>
+      <button disabled={locked} onClick={() => { close(); duplicateFx(c); }}><Icon name="copy" size={14} />{t("Duplicate after it")}<kbd>⌘D</kbd></button>
+      <button onClick={() => { close(); stop(); setHead(round2(c.from)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
+      <div className="sep" />
+      <button className="danger" disabled={locked} style={{ color: "var(--danger)" }} onClick={() => { close(); removeFx(c.id); }}><Icon name="trash" size={14} />{t("Delete")}<kbd>⌫</kbd></button>
     </>))(e);
   };
-  /** The track's right click where there is no clip: an effect there. */
-  const fxTrackCtx = (e: React.MouseEvent<HTMLElement>) => {
+  /** An effects track's right click where there is no layer: a layer there, the copied one pasted there. */
+  const fxTrackCtx = (lane: number) => (e: React.MouseEvent<HTMLElement>) => {
     if ((e.target as HTMLElement).closest(".fx-clip")) return;
     const r = e.currentTarget.getBoundingClientRect(), w = viewRef.current ?? twRef.current;
     const at = round2(w.s + clamp((e.clientX - r.left) / r.width, 0, 1) * w.d);
-    ctxOn((close) => (<><div className="label cap">{t("Add an effect here")}</div>{fxAddItems(close, at)}</>))(e);
+    ctxOn((close) => (<>
+      <div className="label cap">{t("Effects {n}", { n: lane + 1 })}</div>
+      <button onClick={() => { close(); addFx(at, lane); }}><Icon name="plus" size={14} />{t("Add an effect layer here")}</button>
+      {fxCopied.current && <button onClick={() => { close(); pasteFx(at, lane); }}><Icon name="copy" size={14} />{t("Paste the layer here")}</button>}
+      <div className="sep" />
+      <button onClick={() => { close(); setV({ fxTracks: fxLanes + 1 }); }}><Icon name="layers" size={14} />{t("Add an effects track")}</button>
+    </>))(e);
   };
+
   // ---- hook lists: the same as the carousel's; by default the one of the first slide of the release ----
   const slide1Pool = (() => {
     const src = project.slides[0]?.textSource;
@@ -7645,7 +7702,12 @@ export default function VideoStudio({
     // ⌘C / ⌘V: a line's timing (lines picked on the timeline), as clips in an editor
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !document.querySelector(".ov")) {
       const c = e.key.toLowerCase();
-      if (c === "c" && pick?.startsWith("text:") && copyTiming()) { e.preventDefault(); return; }
+      // (an effect layer picked: ⌘C copies it, ⌘D duplicates it; ⌘V pastes what was copied last, a layer or a timing)
+      const fxPicked = pick?.startsWith("fx:") ? (settingsRef.current.effects ?? []).find((x) => "fx:" + x.id === pick) : undefined;
+      if (c === "c" && fxPicked) { e.preventDefault(); fxCopied.current = fxPicked; lastCopy.current = "fx"; onToast?.(t("Effect layer copied: ⌘V pastes it at the playhead")); return; }
+      if (c === "d" && fxPicked && !trackLocked(fxLock(fxPicked.track ?? 0))) { e.preventDefault(); duplicateFx(fxPicked); return; }
+      if (c === "v" && lastCopy.current === "fx" && pasteFx(headRef.current, fxPicked ? fxPicked.track ?? 0 : fxCopied.current?.track ?? 0)) { e.preventDefault(); return; }
+      if (c === "c" && pick?.startsWith("text:") && copyTiming()) { lastCopy.current = "timing"; e.preventDefault(); return; }
       if (c === "v" && pasteTiming()) { e.preventDefault(); return; }
     }
     if (e.metaKey || e.ctrlKey) return;
@@ -7682,6 +7744,14 @@ export default function VideoStudio({
       else { const o = overlayOf(cur, what); if (o) patchOverlay(what, { hidden: o.hidden ? undefined : true }); }
       requestAnimationFrame(() => drawAt(headRef.current));
       return;
+    }
+    // An effect layer picked: ⌫ deletes it, C cuts it at the playhead, Shift + E turns it off or on.
+    if (pick?.startsWith("fx:")) {
+      const c = (settingsRef.current.effects ?? []).find((x) => "fx:" + x.id === pick);
+      const locked = !!c && trackLocked(fxLock(c.track ?? 0));
+      if (c && (k === "Backspace" || k === "Delete")) { e.preventDefault(); if (locked) lockedTried(fxLock(c.track ?? 0)); else removeFx(c.id); return; }
+      if (c && !e.shiftKey && k.toLowerCase() === "c") { e.preventDefault(); if (locked) lockedTried(fxLock(c.track ?? 0)); else splitFxAt(c, headRef.current); return; }
+      if (c && e.shiftKey && k.toLowerCase() === "e") { e.preventDefault(); patchFx(c.id, { off: c.off ? undefined : true }); return; }
     }
     if ((k === "Backspace" || k === "Delete") && pick?.startsWith("hook:") && !trackLocked("hooks")) {
       e.preventDefault(); const id = pick.slice(5); setHooks(hooks.filter((x) => x.id !== id)); setPick(null); return;
@@ -8351,28 +8421,30 @@ export default function VideoStudio({
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
                     onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
                 </div></div>
-                {/* The Effects track (an adjustment layer): flashes, zoom blur, slow shutter, on the song's time. */}
-                <div className="tl-row"><div className={"tl-hd hd-fx"} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(fxHdMenu)}>{hdName("sliders", t("Effects"))}
+                {/* The effects tracks (adjustment layers, stacked: the highest on top), on the song's time. */}
+                {Array.from({ length: fxLanes }, (_, k) => fxLanes - 1 - k).map((lane) => (
+                <div key={"fx" + lane} className="tl-row"><div className={"tl-hd hd-fx"} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(fxHdMenu(lane))}>{hdName("sliders", fxLanes > 1 ? t("Effects {n}", { n: lane + 1 }) : t("Effects"))}
                   <button className={"btn icon sm quiet track-eye" + (settings.effectsHidden ? " off" : "")} aria-pressed={!!settings.effectsHidden}
                     aria-label={settings.effectsHidden ? t("Show the effects") : t("Hide the effects")} title={settings.effectsHidden ? t("Show the effects") : t("Hide the effects")}
                     onClick={() => { setV({ effectsHidden: settings.effectsHidden ? undefined : true }); redraw(); }}><Icon name={settings.effectsHidden ? "eye-off" : "eye"} size={14} /></button>
-                  {trackLockEl("fx")}</div>
-                  <div className={"lyric-track fx-track" + (settings.effectsHidden ? " off" : "")} role="group" aria-label={t("Effects")} {...scrub()} onContextMenu={fxTrackCtx}
-                    title={effects.length ? undefined : t("Right click to add an effect (flash, zoom blur, slow shutter)")}>
+                  {trackLockEl(fxLock(lane))}</div>
+                  <div className={"lyric-track fx-track" + (settings.effectsHidden ? " off" : "")} data-lane={lane} role="group" aria-label={t("Effects {n}", { n: lane + 1 })} {...scrub()} onContextMenu={fxTrackCtx(lane)}
+                    title={effects.length ? undefined : t("Right click: add an effect layer, then choose its effects on the right")}>
                     <div className="track-content">
-                    {effects.map((c) => onTrack(c.from, c.to) && (
-                      <button key={c.id} className={"cue fx-clip" + (head >= c.from && head < c.to ? " on" : "") + (pick === "fx:" + c.id ? " sel" : "")}
+                    {effects.filter((c) => (c.track ?? 0) === lane).map((c) => onTrack(c.from, c.to) && (
+                      <button key={c.id} className={"cue fx-clip" + (c.off ? " off" : "") + (head >= c.from && head < c.to ? " on" : "") + (pick === "fx:" + c.id ? " sel" : "")}
                         data-a={c.from} data-b={c.to} data-pick={"fx:" + c.id} data-text={fxName(c)} style={{ ...place(c.from), width: wFull(c.from, c.to) }}
-                        title={fxName(c)} onPointerDown={fxBody(c)} onContextMenu={fxCtx(c)}
+                        title={fxName(c) + (c.off ? ` · ${t("off")}` : "")} onPointerDown={fxBody(c)} onContextMenu={fxCtx(c)}
                         onPointerDownCapture={(e) => { if (e.button === 0) { setPick("fx:" + c.id); setMulti([]); } }}>
                         <span className="cue-ico" aria-hidden><Icon name="sliders" size={11} /></span>{fxName(c)}
-                        {!trackLocked("fx") && grips(moveFxStart(c.id), moveFxEnd(c.id))}
+                        {!trackLocked(fxLock(lane)) && grips(moveFxStart(c.id), moveFxEnd(c.id))}
                       </button>
                     ))}
-                    {!effects.length && <span className="fx-empty muted xs">{t("Right click: add an effect")}</span>}
+                    {lane === 0 && !effects.length && <span className="fx-empty muted xs">{t("Right click: add an effect layer")}</span>}
                     <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
                     </div>
                   </div></div>
+                ))}
                 {hooks.length > 0 && (<>
                   <div className="tl-row"><div className={"tl-hd hd-hook" + (rowPick === "hooks" ? " row-on" : "")} {...rowHd("hooks")} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(hookHdMenu)}>{hdName("sparkle", t("Hook"))}{textEye(settings.showHooks !== false, () => setV({ showHooks: settings.showHooks === false }), "hooks")}{trackLockEl("hooks")}</div><div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">

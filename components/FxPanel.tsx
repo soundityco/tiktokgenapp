@@ -6,8 +6,8 @@ import Icon from "./Icon";
 import { Range, Switch } from "./ui";
 
 /**
- * The settings of an effect clip (the Effects track, lib/fx.ts), in the right column when it is picked: over the texts or
- * not, and each of its effects switched on and set — flash (colour, flashes, how long each shows), zoom blur (strength,
+ * The settings of an effect layer (an effects track's clip, lib/fx.ts), in the right column when it is picked: on or off,
+ * over the texts or not, and each of its effects switched on and set — any of them, together or alone — flash (colour, flashes, how long each shows), zoom blur (strength,
  * centre), slow shutter (frame rate, trail).
  */
 export default function FxPanel({ value, onChange, onDelete }: { value: FxClip; onChange: (patch: Partial<FxClip>) => void; onDelete: () => void }) {
@@ -18,8 +18,12 @@ export default function FxPanel({ value, onChange, onDelete }: { value: FxClip; 
     <div className="fx-panel">
       <div className="look-of fx-of">
         <Icon name="sliders" size={13} />
-        <span className="xs muted">{t("Settings of")}</span> <b>{t("Effect")}</b>
+        <span className="xs muted">{t("Settings of")}</span> <b>{t("Effect layer")}</b>
         <span className="take-name mono">{time(value.from)} → {time(value.to)}</span>
+      </div>
+      <div className="row fx-line">
+        <span className="label">{t("On")}</span>
+        <Switch checked={!value.off} onChange={(on) => onChange({ off: on ? undefined : true })} title={t("Off: the layer stays on its track, its effects not drawn (Shift + E).")} />
       </div>
       <div className="row fx-line">
         <span className="label">{t("Over the texts too")}</span>

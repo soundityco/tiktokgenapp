@@ -244,6 +244,10 @@ export interface FxClip {
   id: string;
   from: number;
   to: number;
+  /** Its effects track (0: the first; a higher one goes over the lower ones, as stacked adjustment layers). */
+  track?: number;
+  /** Switched off (as a clip disabled in an editor): kept, not drawn. */
+  off?: boolean;
   over?: boolean;
   /** Flashes of a colour: `count` over the clip, each shown `on` of its time (0..1). */
   strobe?: { color: string; count: number; on: number };
@@ -427,8 +431,10 @@ export interface VideoSettings {
   backdrop?: Backdrop;
   /** Effect clips over the picture (an adjustment layer: lib/fx.ts), on the song's time. */
   effects?: FxClip[];
-  /** The effects track switched off (its eye): none drawn, kept. */
+  /** The effects tracks switched off (their eye): none drawn, kept. */
   effectsHidden?: boolean;
+  /** How many effects tracks the timeline shows (1 by default; more as stacked adjustment layers). */
+  fxTracks?: number;
   /** The names given to the video tracks in their header, by file (else « V » and the number). */
   trackNames?: Record<string, string>;
   /** Multicam: the other videos of the release used as cameras 2 to 4 (their own sync, framing and grade). */
