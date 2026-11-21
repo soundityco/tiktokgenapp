@@ -3639,6 +3639,8 @@ export default function VideoStudio({
   };
   /** ⌘ (Ctrl) held: the playhead free, no magnet (as for the clips' edges). */
   const freeHead = useRef(false);
+  /** The snap points when the gesture on the timeline began (every press on it takes them: see `magnet`). */
+  const snapAtStart = useRef<number[] | null>(null);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { freeHead.current = e.metaKey || e.ctrlKey; };
     const blur = () => { freeHead.current = false; };
@@ -3649,8 +3651,12 @@ export default function VideoStudio({
    * The playhead drawn onto what starts or ends near it, within 8 px, as an editor does: the lines of the lyrics, the
    * hooks, the video clips (and their cuts, the multicam's), the segment's edges. A bit further: free; ⌘ (Ctrl): free.
    */
-  const onCut = (t: number, pxPerSec: number) => {
-    if (freeHead.current) return t;
+  /**
+   * Every place the timeline snaps to (the playhead, a clip's edge dragged, a clip moved, a cut, a layer): the segment's
+   * edges, every clip's edges on every track — the lyrics' lines (both tracks), the hooks, the videos (their trims and
+   * cuts), the multicam's cuts and cameras, the effect layers. One list for all, ⌘ (Ctrl) held: free.
+   */
+  const snapPoints = (): number[] => {
     const c = settingsRef.current, pts: number[] = [c.crop.start, c.crop.start + c.crop.duration];
     for (const x of songCues) pts.push(x.start, x.end);
     const segLen0 = c.crop.duration;
@@ -3664,8 +3670,19 @@ export default function VideoStudio({
       for (const x of o.splits ?? []) pts.push(o.offset + x);
     }
     for (const k of c.cuts ?? []) pts.push(k.at);
+    // (the multicam's cameras: where each one's picture starts and ends on the song)
+    for (const id of c.angles ?? []) {
+      const tk = clips.find((x) => x.id === id), a = anglesRef.current.get(id), d = a && Number.isFinite(a.el.duration) ? a.el.duration : tk?.source?.duration;
+      if (tk && d) { const [ci, co] = clipSpan(tk, d); pts.push(tk.offset + ci, tk.offset + co); }
+    }
+    for (const x of c.effects ?? []) pts.push(x.from, x.to);
+    return pts.filter(Number.isFinite);
+  };
+  /** The playhead near something of the timeline (8 px): on it. */
+  const onCut = (t: number, pxPerSec: number) => {
+    if (freeHead.current) return t;
     let best = t, gap = 8 / Math.max(1e-6, pxPerSec);
-    for (const x of pts) if (Number.isFinite(x) && Math.abs(x - t) < gap) { gap = Math.abs(x - t); best = x; }
+    for (const x of snapPoints()) if (Math.abs(x - t) < gap) { gap = Math.abs(x - t); best = x; }
     return best;
   };
   /**
@@ -6996,13 +7013,10 @@ export default function VideoStudio({
                   let at = clamp(w.s + clamp((e.clientX - d.left) / d.width, 0, 1) * w.d, 0, audioBuf?.duration ?? end);
                   // Drawn to the lyrics' lines and the hooks (their start or end) within 8 px, so a cut falls on the
                   // sound; ⌘ / Ctrl held: free.
-                  if (!e.metaKey && !e.ctrlKey) {
-                    const reach = (8 / d.width) * w.d;
-                    const marks = [...cues.flatMap((q) => [q.start, q.end]), ...hooks.flatMap((h) => [cfg.crop.start + h.from, ...(h.to != null ? [cfg.crop.start + h.to] : [])]),
-                      ...d.cuts0.filter((_, k) => k !== d.i).map((x) => x.at)]; // (onto another cut: its shot covered whole)
-                    const near = marks.reduce((b, m) => (Math.abs(m - at) < Math.abs(b - at) ? m : b), Infinity);
-                    if (Math.abs(near - at) <= reach) at = near;
-                  }
+                  // (onto anything of the timeline, as every clip: a line, a hook, another cut — its shot then covered whole —, a
+                  // layer, the playhead; ⌘ / Ctrl held: free)
+                  const m = magnet(e, at, d.width / w.d);
+                  if (m !== null) at = m;
                   setV({ cuts: moveCut(d.cuts0, d.i, at) });
                 }}
                 onPointerUp={() => { cutDrag.current = null; }} onPointerCancel={() => { cutDrag.current = null; }} />
@@ -7139,7 +7153,9 @@ export default function VideoStudio({
   const magnet = (e: { metaKey: boolean; ctrlKey: boolean }, t: number, pxPerS: number): number | null => {
     if (e.metaKey || e.ctrlKey) return null;
     let best: number | null = null;
-    for (const m of [settingsRef.current.crop.start, dragHead.current]) if (Math.abs(t - m) * pxPerS < 8 && (best === null || Math.abs(t - m) < Math.abs(t - best))) best = m;
+    // (the timeline as it was when the gesture began — the edge moving is not in it, it would stick to itself —, and the
+    // playhead where it was)
+    for (const m of [...(snapAtStart.current ?? snapPoints()), dragHead.current]) if (Math.abs(t - m) * pxPerS < 8 && (best === null || Math.abs(t - m) < Math.abs(t - best))) best = m;
     return best;
   };
   /** The playhead put on an edge being trimmed (its picture shown), only while it is inside the segment. */
@@ -7166,7 +7182,7 @@ export default function VideoStudio({
         // (a line outside the segment: anywhere in the song)
         const lo = wholeSong ? 0 : cfg.crop.start, hi = wholeSong ? audioBuf?.duration ?? Infinity : cfg.crop.start + Math.max(0.1, cfg.crop.duration);
         let at = round2(clamp(w.s + clamp((ev.clientX - d.left) / d.width, 0, 1) * w.d, lo, hi));
-        const m = wholeSong && !magnetToo ? null : magnet(ev, at, d.width / w.d);
+        const m = magnet(ev, at, d.width / w.d);
         if (m !== null) at = m;
         move(at, ev.altKey);
       };
@@ -7385,7 +7401,10 @@ export default function VideoStudio({
       const d = ((ev.clientX - x0) / r.width) * w.d;
       if (!moved && Math.abs(ev.clientX - x0) < 3 && Math.abs(ev.clientY - y0) < 6) return;
       moved = true;
-      const from = round2(clamp(from0 + d, 0, Math.max(0, (audioBuf?.duration ?? from0 + len) - len)));
+      let from = round2(clamp(from0 + d, 0, Math.max(0, (audioBuf?.duration ?? from0 + len) - len)));
+      // (its start, else its end, on whatever is near: the playhead, another clip's edge; ⌘: free)
+      const pps = r.width / w.d, ms = magnet(ev, from, pps), me = ms === null ? magnet(ev, from + len, pps) : null;
+      if (ms !== null) from = round2(ms); else if (me !== null) from = round2(me - len);
       // (up or down onto another effects track, not a locked one: it goes there)
       const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>(".fx-track");
       const lane = over?.dataset.lane !== undefined ? Number(over.dataset.lane) : c.track ?? 0;
@@ -8415,7 +8434,8 @@ export default function VideoStudio({
                 )}
                 {/* One frame for every line of the timeline (waveform, hook, lyrics, videos), each with its kind's icon on
                     the left, and one playhead across them all (desktop; the phone keeps one per line). */}
-                <div className="tl-stack" ref={stackRef} onContextMenu={ctxOn(timelineMenu)}>
+                <div className="tl-stack" ref={stackRef} onContextMenu={ctxOn(timelineMenu)}
+                  onPointerDownCapture={() => { snapAtStart.current = snapPoints(); dragHead.current = headRef.current; }}>
                 <div className="tl-row"><div className="tl-hd hd-audio" onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(audioHdMenu)}>{hdName("music", t("Audio"))}{muteEl}</div><div className="wave-wrap">
                   <canvas ref={waveRef} className="wave"
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
@@ -8432,7 +8452,8 @@ export default function VideoStudio({
                     title={effects.length ? undefined : t("Right click: add an effect layer, then choose its effects on the right")}>
                     <div className="track-content">
                     {effects.filter((c) => (c.track ?? 0) === lane).map((c) => onTrack(c.from, c.to) && (
-                      <button key={c.id} className={"cue fx-clip" + (c.off ? " off" : "") + (head >= c.from && head < c.to ? " on" : "") + (pick === "fx:" + c.id ? " sel" : "")}
+                      <button key={c.id} className={"cue fx-clip" + (c.off ? " off" : "") + (head >= c.from && head < c.to ? " on" : "") + (pick === "fx:" + c.id ? " sel" : "")
+                        + (((c.to - c.from) / Math.max(1e-6, tw.d)) * trackW < 30 ? " tiny" : "")}
                         data-a={c.from} data-b={c.to} data-pick={"fx:" + c.id} data-text={fxName(c)} style={{ ...place(c.from), width: wFull(c.from, c.to) }}
                         title={fxName(c) + (c.off ? ` · ${t("off")}` : "")} onPointerDown={fxBody(c)} onContextMenu={fxCtx(c)}
                         onPointerDownCapture={(e) => { if (e.button === 0) { setPick("fx:" + c.id); setMulti([]); } }}>

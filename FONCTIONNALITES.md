@@ -120,6 +120,7 @@ dans ton Google Drive.
 
 ## Studio vidéo
 
+- **Tout s'aimante sur la timeline** : la tête de lecture et tout ce qu'on déplace (bords, lignes, clips, coupes, calques d'effet) se collent aux bords de tous les clips de toutes les pistes, à la tête et au segment ; ⌘ enfoncé : libre. — En test
 - **Calques d'effet, comme dans DaVinci** : autant de pistes d'effets qu'on veut (celle du dessus par-dessus les autres) ; un calque s'ajoute vide (clic droit) et on choisit ses effets à droite, seuls ou ensemble ; on peut l'activer / le désactiver (Maj + E), le couper à la tête de lecture (C), le copier-coller (⌘C / ⌘V), le dupliquer (⌘D), le glisser n'importe où, d'une piste à l'autre aussi. — En test
 - **Piste d'effets (calque d'effets)** : des clips d'effets sur la timeline, calés sur le morceau (ils restent en place quand on change les vidéos ou le multicam), sous les textes ou par-dessus : flash / stroboscope (une couleur, le nombre de coupures, la part de couleur), zoom blur (force, centre), shutter lent (moins d'images par seconde, traînée). Clic droit sur la piste pour en ajouter, glisser pour déplacer, poignées pour la durée. — En test
 - **Remplacer dans cette vidéo** (menu ⋯ de chaque vidéo, V1 à V4 et celles par-dessus) : un autre fichier à sa place dans cette vidéo seulement, synchronisé aussitôt ; ses plans du multicam, coupes, découpes et le segment restent où ils sont. Pour un gabarit : dupliquer une vidéo, puis remplacer ses fichiers. — En test

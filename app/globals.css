@@ -3094,6 +3094,8 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .fx-of { --tone: var(--fx); }
 .lyric-track.fx-track .cue.fx-clip { --c: var(--fx); background: color-mix(in srgb, var(--fx) 16%, var(--bg)); border-left: 2px solid var(--fx); color: var(--text); cursor: grab; }
 .lyric-track.fx-track .cue.fx-clip:active { cursor: grabbing; }
+/* (a short layer: thin handles, its body left to grab — on 14 px, the two handles were all of it) */
+.lyric-track.fx-track .cue.fx-clip.tiny .cue-grip { width: 3px; }
 .lyric-track.fx-track .cue.fx-clip.sel { background: color-mix(in srgb, var(--fx) 30%, var(--bg)); }
 .lyric-track.fx-track .cue.fx-clip .cue-ico { color: var(--fx); }
 .lyric-track.fx-track.off .cue.fx-clip { opacity: .45; }
