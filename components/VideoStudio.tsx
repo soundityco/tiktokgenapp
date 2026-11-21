@@ -95,6 +95,11 @@ function dropKeptCopy(owner: string, cpId?: string | null) {
   if (cpId) void delMedia(`copy:${cpId}`).catch(() => {});
 }
 
+/** A clip's width on a track (device pixels): its length over the view's, on the track's width — never from its two
+ *  rounded edges (they moved by a pixel each in turn while the view slid). */
+const clipWidth = (a: number, b: number, viewD: number, trackW: number, dpr: number) =>
+  Math.round(((Math.max(0, b - a) / Math.max(1e-6, viewD)) * trackW) * dpr) / dpr;
+
 /** Clips of a release; old workspaces still carry a single `project.video`. */
 /** A working copy on its way (shown in the top bar wherever the user is: see Studio). */
 export interface CopyJob { step: "make" | "send"; p: number; clip: string; project: string; label: string; /** In a batch ("Make every Drive copy again"): which one, of how many; the release, and which of how many. */ k?: number; n?: number; release?: string; rk?: number; rn?: number }
@@ -5076,6 +5081,8 @@ export default function VideoStudio({
   const trTimeRef = useRef<HTMLSpanElement>(null);
   const paintTimeline = (at: number) => { paintWaveRef.current(viewRef.current, at); paintTracks(at); };
   const paintTracks = (at: number) => {
+    // (only where things are: a clip's width depends on the zoom and the track's width alone — set by the render when
+    // either changes, never touched while playing: a width written at each frame made the clips' "…" flicker)
     const els = timelineEls.current;
     if (trTimeRef.current) { const s = fmtTime(at); if (trTimeRef.current.textContent !== s) trTimeRef.current.textContent = s; }
     if (!els) return;
@@ -5096,10 +5103,7 @@ export default function VideoStudio({
     // (a clip, or its text, held there while the timeline moved on looked wrong, and a clip shrinking there was unreadable).
     els.clips.forEach((list) => {
       for (const el of list) {
-        const a = Number(el.dataset.a), b = Number(el.dataset.b);
-        const x0 = xOf(a);
-        el.style.transform = `translate3d(${x0}px,0,0)`;
-        el.style.width = `${Math.max(3, xOf(b) - x0)}px`;
+        el.style.transform = `translate3d(${xOf(Number(el.dataset.a))}px,0,0)`;
       }
     });
     // A video clip (long: never moved whole, it would show past its end): once its start has gone past the left edge of
@@ -5107,10 +5111,8 @@ export default function VideoStudio({
     // that end reaches the edge too. Its name glows where the playhead is on it, as a text's.
     const hxPx = xOf(at);
     els.vclips.forEach(({ el, name, at: nameAt }) => {
-      const a = Number(el.dataset.va), b = Number(el.dataset.vb);
-      const x0 = xOf(a);
+      const x0 = xOf(Number(el.dataset.va));
       el.style.transform = `translate3d(${x0}px,0,0)`;
-      el.style.width = `${Math.max(0, xOf(b) - x0)}px`;
       if (name && el.classList.contains("on")) name.style.setProperty("--hx", `${hxPx - x0 - nameAt}px`);
     });
     // The playing clip's bar: on its own start (gone off the left edge with it); its text glows under the playhead.
@@ -5133,7 +5135,9 @@ export default function VideoStudio({
     return { left: 0, transform: `translate3d(${Math.round(((t - tw.s) / tw.d) * trackW * dpr) / dpr}px,0,0)` };
   };
   /** A clip's full width (not cut to the view: the track's edge hides what is out, the clip slides in and out whole). */
-  const wFull = (a: number, b: number) => `${(Math.max(0, b - a) / tw.d) * 100}%`;
+  // (in device pixels, from its length alone — the same sum as paintTracks makes at every frame: a width in % at each
+  // render and one from two rounded edges at each frame differed by a pixel, the clips' "…" flickered while playing)
+  const wFull = (a: number, b: number) => `${clipWidth(a, b, tw.d, trackW, waveBox.dpr || 1)}px`;
   /** Clips laid out on the tracks: the view and as much again on each side, so while the view slides under the playhead
    * (between two layouts) the next ones are already there, coming in whole from the right. */
   const onTrack = (a: number, b: number) => b > tw.s - tw.d && a < tw.s + 2 * tw.d;
