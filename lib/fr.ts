@@ -292,6 +292,8 @@ export const FR: Record<string, string> = {
   "Copied": "Copié",
   "Copy": "Copier",
   "Copy all": "Tout copier",
+  "Fill the height (crop)": "Remplir la hauteur (recadrer)",
+  "Fill the width (crop)": "Remplir la largeur (recadrer)",
   "A Drive copy lets another device (a phone, another computer) open a video without its camera file. Off: made only when you ask (the ⋯ of a video).": "Une copie Drive permet à un autre appareil (un téléphone, un autre ordi) d'ouvrir une vidéo sans son fichier caméra. Coupé : faite seulement quand tu le demandes (le ⋯ d'une vidéo).",
   "Automatic Drive copies: off": "Copies Drive automatiques : coupées",
   "Automatic Drive copies: on": "Copies Drive automatiques : activées",

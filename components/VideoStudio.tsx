@@ -4823,7 +4823,7 @@ export default function VideoStudio({
     const ov = take ? overlayOf(settingsRef.current, take.id) : undefined;
     const W = ov && !ov.full ? (c.width * clamp(ov.w, 5, 400)) / 100 : c.width, H = ov && !ov.full ? (W * ph) / pw : c.height;
     const cover = Math.max(W / pw, H / ph), want = dir === "w" ? W / pw : H / ph;
-    setFrame({ framing: "fill", zoom: Math.round((want / cover) * 1000) / 1000, ox: 0, oy: 0 });
+    setFrame({ framing: "fill", fill: dir, zoom: Math.round((want / cover) * 1000) / 1000, ox: 0, oy: 0 });
   };
   const pdrag = useRef<null | { kind: "text" | "hook" | "pic" | "over"; id?: string; sx: number; sy: number; ox: number; oy: number; k: number; cue?: { key: string; st: TextStyle } }>(null);
   const toCv = (e: { clientX: number; clientY: number }) => {
@@ -8421,20 +8421,19 @@ export default function VideoStudio({
               onClick={() => setV({ format: "16:9" })}>16:9</button>
             {/* (every video has it: the one over it too, in its own frame) */}
             {<Select className="input sm grow" aria-label={t("Framing")}
-              value={(frame.framing ?? "fill") === "fill" ? "fill" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
+              // (filled by its height or its width — the zoom worked out to fit exactly —, or whole with bars; an older
+              // « Fill » reads as by its height, unless zoomed out below ×1: by its width)
+              value={(frame.framing ?? "fill") === "fill" ? (frame.fill ?? (frame.zoom < 0.99 ? "w" : "h")) === "w" ? "fill-w" : "fill-h" : (frame.bars ?? "blur") === "blur" ? "fit-blur" : "fit-black"}
               onChange={(e) => {
                 const v = e.target.value;
-                setFrame(v === "fill" ? { framing: "fill" } : { framing: "fit", bars: v === "fit-blur" ? "blur" : "black" });
+                if (v === "fill-h" || v === "fill-w") fillTo(v === "fill-h" ? "h" : "w");
+                else setFrame({ framing: "fit", fill: undefined, bars: v === "fit-blur" ? "blur" : "black" });
               }}>
-              <option value="fill">{t("Fill (crop)")}</option>
+              <option value="fill-h">{t("Fill the height (crop)")}</option>
+              <option value="fill-w">{t("Fill the width (crop)")}</option>
               <option value="fit-blur">{t("Fit whole, blurred bars")}</option>
               <option value="fit-black">{t("Fit whole, black bars")}</option>
             </Select>}
-          </div>
-          {/* Its height or its width filled, in one click (the zoom worked out for where the video is drawn). */}
-          <div className="row" role="group" aria-label={t("Fill")}>
-            <button className="btn sm grow" onClick={() => fillTo("h")} title={t("The picture as tall as its frame (centred)")}>{t("Fill the height")}</button>
-            <button className="btn sm grow" onClick={() => fillTo("w")} title={t("The picture as wide as its frame (centred)")}>{t("Fill the width")}</button>
           </div>
           {/* The video over it: whole, its size is its zoom (×1: as wide as the post), moved on the preview. */}
           {ovTake && ovSel && (
@@ -8457,7 +8456,7 @@ export default function VideoStudio({
             <MatteSelect className="input sm grow" value={lookMatte} onChange={(v) => writeLook({ matte: camTake ? v ?? 0 : v })} />
           </div>
           <Range label={t("Zoom")} value={frame.zoom} display={`${frame.zoom.toFixed(2)}×`} min={0.15} max={4} step={0.05}
-            onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy })); }}
+            onChange={(v) => { const z = zoomPic(picOf(frame), v); setFrame(fitFrame({ ...frame, zoom: z.zoom, ox: z.ox, oy: z.oy, fill: undefined })); }}
             onReset={() => setFrame({ zoom: 1, ox: 0, oy: 0 })} />
           {/* Progressive zoom: its factor on one line (like the lens), then, when on, what it zooms. */}
           <div className="row" title={t("Zooms in slowly over the whole segment: ×1 on the first frame, up to the chosen factor on the last.")}>

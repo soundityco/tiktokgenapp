@@ -229,6 +229,8 @@ export interface VideoFrame {
   /** Same choices as the carousel photos: fill (crop) or fit with blurred / black bars. Default fill. */
   framing?: PicSettings["framing"];
   bars?: PicSettings["bars"];
+  /** Filled (cropped) by its height or its width (picked in the Framing menu: the zoom worked out to fit exactly). */
+  fill?: "h" | "w";
 }
 
 /** One take found in the camera video: where its music plays and its own offset. */
