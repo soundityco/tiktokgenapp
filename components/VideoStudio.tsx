@@ -833,6 +833,16 @@ export default function VideoStudio({
   const wordKeyMap = useMemo(() => wordKeys(project.lyricWords ?? []), [project.lyricWords]);
   const keyOf = (c: Cue | null | undefined) => (c ? cueKey(c, mode, wordKeyMap) : null);
   const looks = settings.captionLooks ?? {};
+  /** The style a line is drawn with before its own look: its track's (the second track's whole style, or the lyrics'). */
+  const laneStyleOf = (key: string | null | undefined): TextStyle =>
+    key && lane2.has(key) ? cueStyle(settingsRef.current.captionStyle ?? slideStyle, settingsRef.current.lyrics2?.look) : (settingsRef.current.captionStyle ?? slideStyle);
+  /** A line's style set (from the panel, the preview, its menu): its own look if it has one, else its track's style —
+   *  the second track's for its lines, the lyrics' for the others. */
+  const writeLineStyle = (key: string | null | undefined, next: TextStyle) => {
+    if (key && settingsRef.current.captionLooks?.[key]) { setCueLook(key, next); return; }
+    if (key && lane2.has(key)) { setV({ lyrics2: { keys: settingsRef.current.lyrics2?.keys ?? [], look: next } }); return; }
+    setV({ captionStyle: next });
+  };
   /** The lines on the second lyrics track (their keys). */
   const lane2 = useMemo(() => new Set(settings.lyrics2?.keys ?? []), [settings.lyrics2]);
   /** Is this line on that lyrics track. */
@@ -842,7 +852,10 @@ export default function VideoStudio({
     const cur = settingsRef.current.lyrics2;
     const set = new Set(cur?.keys ?? []);
     for (const k of keys) { if (lane === 2) set.add(k); else set.delete(k); }
-    setV({ lyrics2: set.size || cur?.look ? { keys: [...set], ...(cur?.look ? { look: cur.look } : {}) } : undefined });
+    // (its own whole style from the first line put on it — the lyrics' style then —: each track its own, never its
+    // differences from the other, a size changed on the lyrics changed it too)
+    const look = cur?.look ?? (set.size ? { ...(settingsRef.current.captionStyle ?? slideStyle) } : undefined);
+    setV({ lyrics2: set.size || look ? { keys: [...set], ...(look ? { look } : {}) } : undefined });
   };
   /** What the lyrics panel sets: every caption ("all"), or only the one under the playhead ("one"). */
   /** A caption's style as drawn: the lyrics' style, its own look over it (and a font tried in a list, on it alone). */
@@ -850,7 +863,7 @@ export default function VideoStudio({
   cueStyleRef.current = (c: Cue) => {
     const k = keyOf(c);
     // (on the second lyrics track: its style first, then the line's own look)
-    const base = k && lane2.has(k) ? cueStyle(styleRef.current, settingsRef.current.lyrics2?.look) : styleRef.current;
+    const base = k && lane2.has(k) ? cueStyle(styleRef.current, settings.lyrics2?.look) : styleRef.current;
     const st = cueStyle(base, k ? looks[k] : undefined);
     return fontPreview?.which === "cue" && fontPreview.key === k ? { ...st, ...fontPreview.patch } : st;
   };
@@ -858,7 +871,7 @@ export default function VideoStudio({
   const masterStyle = () => settingsRef.current.captionStyle ?? slideStyle;
   /** A caption's own look: what `next` changes from the lyrics' style. */
   const setCueLook = (key: string, next: TextStyle) =>
-    setV({ captionLooks: { ...(settingsRef.current.captionLooks ?? {}), [key]: styleDiff(masterStyle(), next) } });
+    setV({ captionLooks: { ...(settingsRef.current.captionLooks ?? {}), [key]: styleDiff(laneStyleOf(key), next) } });
   /** The caption takes the lyrics' style again (font, effects, size, place: everything). */
   const relinkCue = (key: string) => {
     const rest = { ...(settingsRef.current.captionLooks ?? {}) };
@@ -5110,7 +5123,7 @@ export default function VideoStudio({
       if (sv !== snap.v || sh !== snap.h) setSnap({ v: sv, h: sh });
       if (d.kind === "hook") setV({ hookStyle: { ...hookStyleRef.current, x, y } });
       else if (d.cue) setCueLook(d.cue.key, { ...d.cue.st, x, y });
-      else setV({ captionStyle: { ...styleRef.current, x, y } });
+      else { const h = cueHere(); writeLineStyle(h?.key, { ...laneStyleOf(h?.key), x, y }); }
     } else {
       // Its centre snaps to the middle lines, as a text does (the blue guides show).
       const sn = snapPic(d.ox + dx / c.width, d.oy + dy / c.height, free ? 0 : undefined);
@@ -5161,11 +5174,10 @@ export default function VideoStudio({
     }
     if (kind) {
       const here = kind === "text" ? cueHere() : null;
-      const st = kind === "hook" ? hookStyleRef.current : here?.one ? cueStyleRef.current(here.cue) : styleRef.current;
+      const st = kind === "hook" ? hookStyleRef.current : here?.one ? cueStyleRef.current(here.cue) : laneStyleOf(here?.key);
       const next = { ...st, size: clamp(Math.round(st.size + dir * 3), 18, 200) };
       if (kind === "hook") setV({ hookStyle: next });
-      else if (here?.one) setCueLook(here.key, next);
-      else setV({ captionStyle: next });
+      else writeLineStyle(here?.key, next);
       return;
     }
     const f = fitFrame(curFrame());
@@ -7552,11 +7564,10 @@ export default function VideoStudio({
   const panelOne = curOwn;
   // (a line of the second lyrics track, without a look of its own: the panel sets that track's style, all its lines)
   const panelLane2 = !panelOne && !!curKey && lane2.has(curKey);
-  const lane2Style = cueStyle(captionStyle, settings.lyrics2?.look);
-  const panelStyle = panelOne ? cueStyle(panelLane2 || (curKey && lane2.has(curKey)) ? lane2Style : captionStyle, looks[curKey!]) : panelLane2 ? lane2Style : captionStyle;
-  const setPanelStyle = (next: TextStyle) => (panelOne ? setCueLook(curKey!, next)
-    : panelLane2 ? setV({ lyrics2: { keys: settingsRef.current.lyrics2?.keys ?? [], look: styleDiff(masterStyle(), next) } })
-    : setV({ captionStyle: next }));
+  // (what the panel shows and sets: the line's own look over its track's style, else its track's style)
+  const trackStyle = curKey && lane2.has(curKey) ? cueStyle(captionStyle, settings.lyrics2?.look) : captionStyle;
+  const panelStyle = panelOne ? cueStyle(trackStyle, looks[curKey!]) : trackStyle;
+  const setPanelStyle = (next: TextStyle) => writeLineStyle(curKey, next);
   // A word picked on the timeline (or the timeline let go) brings its line of the lyrics list to the middle of the
   // part of the list on screen (its bottom near the end), once the finger or the mouse is off, never while playing.
   const followList = useRef(false);
@@ -8194,7 +8205,7 @@ export default function VideoStudio({
               // The lyrics: the caption shown alone when it has its own look (or "this word" is chosen), else all.
               const here = which === "caption" ? cueHere() : null;
               const one = !!here?.one;
-              const st = which === "hook" ? hookStyle : one ? cueStyleRef.current(here!.cue) : captionStyle;
+              const st = which === "hook" ? hookStyle : one ? cueStyleRef.current(here!.cue) : laneStyleOf(here?.key); // (its track's style: the second track's for its lines)
               const own = !!here && !!looks[here.key];
               return (
                 <ContextMenu x={vctx.x} y={vctx.y} onClose={() => { setVctx(null); setFontPreview(null); }}>
@@ -8203,7 +8214,7 @@ export default function VideoStudio({
                     onChange={(patch) => {
                       if (which === "hook") setV({ hookStyle: { ...hookStyle, ...patch } });
                       else if (one) setCueLook(here!.key, { ...st, ...patch });
-                      else setV({ captionStyle: { ...captionStyle, ...patch } });
+                      else writeLineStyle(here?.key, { ...laneStyleOf(here?.key), ...patch });
                     }}>
                     {here && (own
                       ? <button onClick={() => { relinkCue(here.key); setVctx(null); }}><Icon name="refresh" size={14} />{t("Link to the lyrics style")}</button>
@@ -9118,7 +9129,7 @@ export default function VideoStudio({
                 <span className="label">{t("Lyrics style")}</span>
                 <Hint text={settings.captionStyle ? t("Own style for this video.") : t("Default video style, with the font of the selected carousel slide, until you change something.")} />
                 <span className="grow" />
-                <button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button>
+                <button className="btn sm quiet" onClick={() => (panelLane2 ? setV({ lyrics2: { keys: settings.lyrics2?.keys ?? [], look: { ...captionStyle } } }) : setV({ captionStyle: undefined }))} disabled={panelLane2 ? false : !settings.captionStyle}>{t("Reset")}</button>
               </div>
               {/* A line picked: its own style or the lyrics' (the lyrics' style is every line's, by default). */}
               {curKey && (
@@ -9185,7 +9196,7 @@ export default function VideoStudio({
                   onPreview={(patch) => setFontPreview(patch ? (panelOne ? { which: "cue", key: curKey!, patch } : { which: "caption", patch }) : null)}
                   onFonts={onFonts}
                 />}
-                <div className="reset-m"><button className="btn sm quiet" onClick={() => setV({ captionStyle: undefined })} disabled={!settings.captionStyle}>{t("Reset")}</button></div>
+                <div className="reset-m"><button className="btn sm quiet" onClick={() => (panelLane2 ? setV({ lyrics2: { keys: settings.lyrics2?.keys ?? [], look: { ...captionStyle } } }) : setV({ captionStyle: undefined }))} disabled={panelLane2 ? false : !settings.captionStyle}>{t("Reset")}</button></div>
                         </div>
           )}
           <div id="video-color" className="stack">
