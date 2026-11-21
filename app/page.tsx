@@ -19,10 +19,11 @@ import { detectLang, translate } from "@/lib/translate";
  * The app's own look: serif headlines, mono labels, each studio in its colour, hairlines. The posts are drawn in code
  * until real videos replace them (components/landing/posts.ts).
  */
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ desktop?: string }> }) {
   const session = await auth();
   if (session?.user) redirect("/studio");
-  const lang = detectLang((await headers()).get("accept-language"));
+  const h = await headers();
+  const lang = detectLang(h.get("accept-language"));
   const t = (k: string) => translate(lang, k);
   const dev = process.env.NODE_ENV !== "production" && process.env.DEV_FAKE_LOGIN === "1";
   const google = async () => { "use server"; await signIn("google", { redirectTo: "/studio" }); };
@@ -30,6 +31,29 @@ export default async function Home() {
   const signInButton = (cls: string, label: string) => (
     <form action={google}><button className={cls}><GoogleG />{label}</button></form>
   );
+
+  // Opened in the desktop app (desktop/: Electron, its name in the user agent): its own first screen, full window, as a
+  // music app's first launch: the brand, the sign-in (in the browser, then back here), the demo. Not the site's page.
+  const ua = h.get("user-agent") ?? "";
+  if (/\bElectron\//.test(ua) && /\b(RAWbyaurare|raw-by-aurare)\//i.test(ua)) {
+    const failed = (await searchParams).desktop === "failed";
+    return (
+      <main className="lp dw">
+        <div className="dw-glow" aria-hidden><i /><i /><i /></div>
+        <section className="dw-box">
+          <Wordmark height={30} />
+          <h1 className="display lp-title2 dw-title">{t("Your music, everywhere.")}<br /><em>{t("Without the all-nighters.")}</em></h1>
+          <p className="lp-lead2">{t("Lyric videos synced to your take, carousels for every day of your release.")}</p>
+          <div className="lp-ctas center dw-ctas">
+            {signInButton("btn primary lp-cta", t("Continue with Google"))}
+            <form action={demo}><button className="btn lp-cta">{t("Try the studio in demo")}</button></form>
+          </div>
+          <p className={"lp-fine mono" + (failed ? " dw-failed" : "")}>{failed ? t("The sign-in did not finish. Try again.") : t("You sign in in your browser, then come back here.")}</p>
+        </section>
+        <p className="dw-foot mono">RAW by aurare</p>
+      </main>
+    );
+  }
 
   return (
     <main className="lp">

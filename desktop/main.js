@@ -12,6 +12,8 @@ const SCHEME = "rawaurare";
 // Automated tests only (.workbench/bench/desktop-check.mjs): the window off screen and silent, links logged, not opened.
 const TEST = process.env.RAW_TEST === "1";
 if (TEST) app.commandLine.appendSwitch("mute-audio");
+// (its own folder: a test never touches the installed app's window place nor its sign-in)
+if (TEST) app.setPath("userData", path.join(require("node:os").tmpdir(), "raw-desktop-test"));
 const openOutside = (url) => (TEST ? console.log("[external] " + url) : shell.openExternal(url));
 
 if (!app.requestSingleInstanceLock()) app.quit();

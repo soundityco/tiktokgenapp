@@ -204,3 +204,21 @@
 .lp-dl a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line-2); padding-bottom: 1px; transition: border-color .12s; }
 .lp-dl a:hover { border-color: var(--text); }
 .lp-dl a.lp-dl-minor { color: var(--muted); }
+
+/* The desktop app's first screen (app/page.tsx, opened in desktop/): the whole window, the brand and the sign-in, the
+   home's board and headline, slow light drifting behind (as a music app's first launch). */
+.dw { position: relative; display: grid; place-items: center; min-height: 100dvh; padding: 32px 16px 56px; overflow: hidden; }
+.dw-box { position: relative; z-index: 1; display: grid; justify-items: center; gap: 22px; text-align: center; width: min(1040px, 100%) !important; }
+.dw-title { font-size: clamp(40px, 6vw, 88px); }
+.dw-title em { white-space: nowrap; } /* (never "all-" / "nighters") */
+.dw-ctas { margin-top: 4px; }
+.dw-failed { color: var(--danger); }
+.dw-foot { position: absolute; left: 0; right: 0; bottom: 20px; margin: 0; text-align: center; font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--faint); }
+.dw-glow { position: absolute; inset: 0; pointer-events: none; }
+.dw-glow i { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .28; }
+.dw-glow i:nth-child(1) { width: 46vw; height: 46vw; left: 6%; top: 18%; background: radial-gradient(circle, var(--video), transparent 65%); animation: dw-a 22s ease-in-out infinite alternate; }
+.dw-glow i:nth-child(2) { width: 40vw; height: 40vw; right: 4%; top: 30%; background: radial-gradient(circle, #7fd8e8, transparent 65%); opacity: .16; animation: dw-b 26s ease-in-out infinite alternate; }
+.dw-glow i:nth-child(3) { width: 60vw; height: 30vw; left: 20%; bottom: -12%; background: radial-gradient(circle, #f1d8b8, transparent 65%); opacity: .10; animation: dw-a 30s ease-in-out infinite alternate-reverse; }
+@keyframes dw-a { to { translate: 8vw -4vh; } }
+@keyframes dw-b { to { translate: -6vw 5vh; } }
+@media (prefers-reduced-motion: reduce) { .dw-glow i { animation: none; } }
