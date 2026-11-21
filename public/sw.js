@@ -3,7 +3,8 @@
 const CACHE = "rollout-offline-v1";
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.add("/offline.html"))); self.skipWaiting(); });
 self.addEventListener("activate", (e) => e.waitUntil((async () => {
-  for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+  // (only its own old caches: the AI models' caches live beside it, a deletion here meant downloading them again)
+  for (const k of await caches.keys()) if (k.startsWith("rollout-offline") && k !== CACHE) await caches.delete(k);
   await self.clients.claim();
 })()));
 self.addEventListener("fetch", (e) => {

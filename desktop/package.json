@@ -1,0 +1,62 @@
+{
+  "name": "raw-by-aurare",
+  "productName": "RAW by aurare",
+  "version": "1.0.0",
+  "description": "RAW by aurare: TikTok carousels and videos for artists",
+  "author": "aurare",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "local": "RAW_URL=http://localhost:3000 electron .",
+    "dist:mac": "electron-builder --mac dmg --arm64 --x64 --publish never",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
+  },
+  "build": {
+    "appId": "app.aurare.raw",
+    "productName": "RAW by aurare",
+    "copyright": "aurare",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "build/icon.png"
+    ],
+    "protocols": [
+      {
+        "name": "RAW by aurare",
+        "schemes": [
+          "rawaurare"
+        ]
+      }
+    ],
+    "afterPack": "./adhoc-sign.js",
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.music",
+      "identity": null,
+      "darkModeSupport": true,
+      "artifactName": "RAW-by-aurare-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "RAW by aurare"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "artifactName": "RAW-by-aurare-windows.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "RAW by aurare"
+    }
+  },
+  "devDependencies": {
+    "electron": "39.8.10",
+    "electron-builder": "26.18.0"
+  }
+}

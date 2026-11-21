@@ -797,6 +797,12 @@ export default function Studio({ userName, userImage }: { userName: string; user
     }
   }, [saveWorkspace]);
   flushRef.current = flushSave;
+  // A reload asked for (a new version online, UpdatePill): the work saved first.
+  useEffect(() => {
+    const f = (e: Event) => (e as CustomEvent<{ wait: (p: Promise<unknown>) => void }>).detail?.wait(flushRef.current());
+    window.addEventListener("rollout:flush", f);
+    return () => window.removeEventListener("rollout:flush", f);
+  }, []);
 
   useEffect(() => {
     if (!ws || conflict.current) return;

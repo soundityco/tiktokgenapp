@@ -8,6 +8,7 @@ import Wordmark from "@/components/Wordmark";
 import CarouselDeck from "@/components/landing/CarouselDeck";
 import StylePicker from "@/components/landing/StylePicker";
 import StudioScene from "@/components/landing/StudioScene";
+import DesktopLinks from "@/components/landing/DesktopLinks";
 import { STYLES } from "@/components/landing/posts";
 import "./landing.css";
 import { detectLang, translate } from "@/lib/translate";
@@ -51,6 +52,7 @@ export default async function Home() {
           <form action={demo}><button className="btn lp-cta">{t("Try the studio in demo")}</button></form>
         </div>
         <p className="lp-fine mono">{t("Your files stay in your own Google Drive.")}</p>
+        <DesktopLinks labels={{ lead: t("Also as an app:"), mac: t("Mac"), intel: t("Intel Mac"), windows: t("Windows") }} />
         {dev && <form action={async () => { "use server"; await signIn("dev", { redirectTo: "/studio" }); }}><button className="btn sm">Dev login (local only)</button></form>}
       </section>
       <section id="studio" className="lp-product">
