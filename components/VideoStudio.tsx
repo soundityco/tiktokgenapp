@@ -584,6 +584,8 @@ export default function VideoStudio({
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncPct, setSyncPct] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const exportingRef = useRef(false);
+  exportingRef.current = exporting;
   /** The clip whose files were read from the device (its camera file found or not): a batch export waits for it. */
   const [loadedClip, setLoadedClip] = useState<string | null>(null);
   /** The Drive copy being looked for or fetched (no camera file here): "loading", never "missing" meanwhile. */
@@ -1718,7 +1720,10 @@ export default function VideoStudio({
       // player keeps the video chip first, both run at once (it used to wait for the pause).
       // (one picture every 100 ms while playing — about 10 a second: a 4K 10-bit take decoded at full pace made the
       // playback lag; full speed again once paused)
-      const whilePlaying = () => (playingRef.current && !ac.signal.aborted ? new Promise<void>((r) => setTimeout(r, 100)) : undefined);
+      // (and while a video is exported, it waits: both decoding the same 4K file at once, the export took twice as long)
+      const whilePlaying = () => (ac.signal.aborted ? undefined
+        : exportingRef.current ? new Promise<void>((r) => setTimeout(r, 400))
+        : playingRef.current ? new Promise<void>((r) => setTimeout(r, 100)) : undefined);
       let copy: Blob | null = null, chip = false;
       try {
         const fast = await fastWorkCopy(blob, plan, from, to, onP, ac.signal, whilePlaying);
@@ -4726,9 +4731,18 @@ export default function VideoStudio({
           angleClose.push(() => pf.stop());
           return async (time) => { await visible(); await pf.frameAt(time - a.offset); return a.el.readyState >= 2 ? { src: a.el, w: aw, h: ah } : null; };
         };
+        // The bar moves by whole percents (a step, or half a second): each change draws the whole studio again, and once a
+        // frame it took 80 % of the export's time (measured on a vertical FX30 clip: 15 s exported in 31 s).
+        let shownP = -1, shownStep = "", shownAt = 0;
+        const progress = (p: number, step: ExportStep) => {
+          const v = 0.05 + p * 0.95, now = performance.now();
+          if (step === shownStep && v - shownP < 0.01 && now - shownAt < 500) return;
+          shownP = v; shownStep = step; shownAt = now;
+          setExp({ p: v, step });
+        };
         blob = await exportMp4({
           width: W, height: H, fps: rate.fps, bitrate: rate.bitrate, audioBitrate: rate.audioBitrate, from, until, audio: await withCameraSound(audioBuf, cfg, ac.signal), signal: ac.signal,
-          onProgress: (p, step) => setExp({ p: 0.05 + p * 0.95, step }),
+          onProgress: progress,
           frame: async (g, time) => {
             const cam = camAt(cfg.cuts, time);
             const ang = cam > 0 ? anglesRef.current.get(cfg.angles?.[cam - 1] ?? "") : undefined;

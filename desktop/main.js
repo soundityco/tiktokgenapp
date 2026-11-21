@@ -1,7 +1,7 @@
 // RAW by aurare, the desktop app: the site (raw.aurare.app) in its own window, so it is always the version online (each
 // push reaches the app at its next reload, the site offers it: components/UpdatePill). Google refuses its sign-in inside
 // an app, so signing in goes through the browser and comes back by the app's link (rawaurare://auth, lib/desktopAuth).
-const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, session, shell } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -113,7 +113,21 @@ const menu = () => Menu.buildFromTemplate([
   { role: "windowMenu" },
 ]);
 
+/** A free name in `dir` for `name` ("post.mp4", then "post (1).mp4"…), as the browser does. */
+function freeName(dir, name) {
+  const ext = path.extname(name), stem = name.slice(0, name.length - ext.length);
+  for (let n = 0; ; n++) { const p = path.join(dir, n ? `${stem} (${n})${ext}` : name); if (!fs.existsSync(p)) return p; }
+}
+
 app.whenReady().then(() => {
+  // An export (a download): straight into Downloads, as Chrome does, no "Save as" window each time (tests: a temp folder).
+  session.defaultSession.on("will-download", (_e, item) => {
+    const dir = TEST ? path.join(require("node:os").tmpdir(), "raw-desktop-test-downloads") : app.getPath("downloads");
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* there */ }
+    const to = freeName(dir, item.getFilename() || "RAW export");
+    item.setSavePath(to);
+    if (TEST) item.once("done", (_ev, state) => console.log(`[download] ${state} ${to}`));
+  });
   Menu.setApplicationMenu(menu());
   createWindow();
   const first = process.argv.find((a) => a.startsWith(SCHEME + "://"));

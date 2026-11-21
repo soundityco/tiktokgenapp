@@ -153,6 +153,7 @@ dans ton Google Drive.
 
 ## Export et partage
 
+- **Export plus rapide** : environ 40 % plus rapide (15 s de vidéo FX30 en 4K 10 bits : 31 → 18 s) ; une copie Drive en cours attend la fin de l'export. Dans l'app, la vidéo va directement dans Téléchargements. — En test
 - **Carrousel** : les images en fichiers directs ; tous les carrousels d'un coup dans un zip (un dossier par carrousel). — En ligne
 - **Vidéo** : MP4 avec sa légende ; **toutes les vidéos d'une release** à la suite. — En ligne
 - **Export calé sur la prise, réglé pour TikTok et Instagram** : 1080 × 1920, H.264, à la cadence filmée (25p reste 25p, 50/60p restent fluides, aucune image doublée), 16 Mb/s (jusqu'à 24 en 50/60p, sous le plafond d'Instagram), son AAC 256 kb/s en 48 kHz au plus, une image clé toutes les 2 s. — En ligne
