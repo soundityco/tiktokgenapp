@@ -6887,9 +6887,10 @@ export default function VideoStudio({
   const cueIcon = (c: Cue) => {
     if (mode === "word") return <span className="cue-ico" aria-hidden><Icon name="type" size={11} /></span>;
     const on = lockedCue(c);
-    // (its padlock answers once the line is picked: on a short line the icon is where one clicks to pick it, and that
-    // click locked it by mistake; a first click picks the line, as anywhere on it)
-    const armed = !!keyOf(c) && pick === "text:" + keyOf(c);
+    // (its padlock answers at once — a first click locks or unlocks —, except on a short clip, where the icon is most of
+    // what one clicks to pick it (that click locked it by mistake): there, once the line is picked)
+    const wide = ((c.end - c.start) / Math.max(1e-6, tw.d)) * trackW >= 56;
+    const armed = wide || (!!keyOf(c) && pick === "text:" + keyOf(c));
     if (!armed) return (
       <span className={"cue-ico" + (on ? " locked" : "")} aria-hidden><Icon name={on ? "lock" : "type"} size={11} /></span>
     );
