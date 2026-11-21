@@ -180,6 +180,8 @@ dans ton Google Drive.
 
 ## Confort
 
+- **Bulles d'aide plus discrètes** : plus de bulle qui répète ce qui est déjà écrit (une ligne de paroles, sauf si elle est coupée par « … ») ; « Bulles d'aide : activées / désactivées » dans le menu du compte. — En test
+
 - **Annuler / rétablir** sur tout. — En ligne
 - **Menus clic droit maison**, rangés par catégorie (slide, aperçu vidéo, texte, photo, app). — En ligne
 - **Raccourcis** : Espace (lecture), I / O (début / fin du segment), F (plein écran), G (zones TikTok). — En ligne

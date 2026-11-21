@@ -1570,6 +1570,8 @@ export const FR: Record<string, string> = {
   "Lyric videos synced to your take, carousels for every day of your release.": "Des vidéos avec tes paroles calées sur ta prise, des carrousels pour chaque jour de ta sortie.",
   "The sign-in did not finish. Try again.": "La connexion n'a pas abouti. Réessaie.",
   "You sign in in your browser, then come back here.": "Tu te connectes dans ton navigateur, puis tu reviens ici.",
+  "Help bubbles: on": "Bulles d'aide : activées",
+  "Help bubbles: off": "Bulles d'aide : désactivées",
   "Re-place the others": "Recaler les autres",
   "Locked: kept as it is when the lyrics are placed again. Click to unlock.": "Verrouillée : gardée telle quelle quand les paroles sont recalées. Clic pour déverrouiller.",
   "Lock this line: kept as it is when the lyrics are placed again": "Verrouiller cette ligne : gardée telle quelle quand les paroles sont recalées",

@@ -40,6 +40,7 @@ import VideoStudio, { type CopyJob } from "./VideoStudio";
 import Logo from "./Logo";
 import { useInstall } from "./InstallApp";
 import { desktopDownloadHere } from "@/lib/desktop";
+import { TIPS_KEY, tipsOff } from "./Tooltips";
 import { merge3 } from "@/lib/merge";
 import { isDemo } from "@/lib/demo";
 import PicStack from "./PicStack";
@@ -162,6 +163,8 @@ export default function Studio({ userName, userImage }: { userName: string; user
   const { canInstall, installed, install, iosHelp, closeIosHelp } = useInstall();
   // On a computer, the desktop app (lib/desktop) takes the place of the browser's install.
   const [deskDl, setDeskDl] = useState<ReturnType<typeof desktopDownloadHere>>(null);
+  const [tipsOn, setTipsOn] = useState(true);
+  useEffect(() => { setTipsOn(!tipsOff()); }, []);
   useEffect(() => { setDeskDl(desktopDownloadHere()); }, []);
   // Phone: the tools of the studio head folded under "More" (the release, share, download and generate stay out).
   const [headMore, setHeadMore] = useState(false);
@@ -1936,6 +1939,9 @@ export default function Studio({ userName, userImage }: { userName: string; user
             <button disabled={!!copyJob && !remaking} title={t("Every video of every release whose file is on this computer: its Drive copy made again (the old one deleted), release after release.")}
               onClick={() => { close(); if (remaking) remakeAc.current?.abort(); else void remakeAccount(); }}><Icon name={remaking ? "x" : "refresh"} size={14} />{remaking ? t("Stop making the Drive copies") : t("Make every Drive copy again")}</button>
             <button onClick={() => { close(); setKeysOpen(true); }}><Icon name="keyboard" size={14} />{t("Shortcuts")}</button>
+            {/* The tooltips (this device): on, or off for good. */}
+            <button onClick={() => { const off = !tipsOn; try { localStorage.setItem(TIPS_KEY, off ? "on" : "off"); } catch { /* private mode */ } setTipsOn(off); }}>
+              <Icon name={tipsOn ? "check" : "x"} size={14} />{tipsOn ? t("Help bubbles: on") : t("Help bubbles: off")}</button>
             {/* A computer: the desktop app's installer, downloaded at once (nothing inside the desktop app). A phone: the
                 browser's install (its only app), or "installed". */}
             {deskDl ? <><div className="sep" /><a className="menu-primary" href={deskDl.href} download onClick={() => close()}><Icon name="download" size={14} />{deskDl.os === "mac" ? t("Download the app for Mac") : t("Download the app for Windows")}</a></>

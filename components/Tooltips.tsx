@@ -7,9 +7,26 @@ import { createPortal } from "react-dom";
  * is shown in the app's look, under its element (over it near the bottom of the screen), after a short wait — and at
  * once while going from one to the next, as in software. The `title` is moved to `data-tip` the first time the element
  * is hovered (the browser then has none to show); an element without a name of its own keeps it as its `aria-label`.
- * Mouse only (a finger has no hover).
+ * Mouse only (a finger has no hover). Never one that only repeats the text shown (`saysAgain`); none when turned off.
  */
 const WAIT = 450, WARM = 600;
+/** Turned off in the account menu (this device): no tooltips at all. */
+export const TIPS_KEY = "tktgen-tips";
+export const tipsOff = () => { try { return localStorage.getItem(TIPS_KEY) === "off"; } catch { return false; } };
+const flat = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+/** Some text of the element cut by "…" (its tooltip then shows it whole). */
+const clipped = (el: HTMLElement) => [el, ...Array.from(el.querySelectorAll<HTMLElement>("*")).slice(0, 40)]
+  .some((n) => n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).textOverflow === "ellipsis");
+/**
+ * A tooltip that says again what the element already shows (a lyric line's clip, its text written on it; a button's own
+ * label): not shown, unless that text is cut by "…". Read twice, the lyrics were hard to follow.
+ */
+const saysAgain = (el: HTMLElement, tip: string) => {
+  const shown = flat(el.innerText || el.textContent || ""), said = flat(tip);
+  if (shown.length < 3) return false;
+  // (a short label inside a longer tip is no repeat: "Video" and its explanation)
+  return (said === shown || shown.includes(said) || (shown.length >= 12 && said.includes(shown))) && !clipped(el);
+};
 
 export default function Tooltips() {
   const [tip, setTip] = useState<{ text: string; x: number; top: number; bottom: number } | null>(null);
@@ -47,7 +64,7 @@ export default function Tooltips() {
         el.removeAttribute("title");
         if (title && !el.getAttribute("aria-label") && !el.textContent?.trim()) el.setAttribute("aria-label", title);
       }
-      if (!el.dataset.tip) return;
+      if (!el.dataset.tip || tipsOff() || saysAgain(el, el.dataset.tip)) return;
       on = el;
       timer = window.setTimeout(() => { if (on === el) show(el); }, performance.now() < warmUntil ? 0 : WAIT);
     };
