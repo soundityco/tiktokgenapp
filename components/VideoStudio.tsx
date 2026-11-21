@@ -32,7 +32,7 @@ import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkC
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
 import { alignEmissions, cachedEmissions, stopAlign } from "@/lib/alignAI";
 import { faNorm, looksFrench } from "@/lib/forcedAlign";
-import { LYRICS_LAP, LYRICS_WIN, inLines, placeByAlignment } from "@/lib/lyricsPipeline";
+import { LYRICS_LAP, LYRICS_WIN, inLines, placeByAlignment, realignFree } from "@/lib/lyricsPipeline";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { VideoOverlay } from "@/lib/types";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -47,6 +47,9 @@ import { ConfirmDialog, ContextMenu, Hint, MatteSelect, Menu, Modal, PromptDialo
 import { createPortal } from "react-dom";
 import { FullView } from "./FullView";
 import { PHONE_QUERY, StyleTabs, usePhone, useStyleParts, type SheetPart } from "./StyleSheet";
+
+/** The free lines placed again on the audio between the locked ones, when the model listened to this song in this session. */
+const withFree = (w: LyricWord[], em: ReturnType<typeof cachedEmissions>) => (em ? realignFree(w, em) : w);
 
 const RATE = 25;
 const PRESETS = [10, 15, 20, 30];
@@ -4048,7 +4051,8 @@ export default function VideoStudio({
     if (!heard?.length) { void generateLyrics(); return; }
     const cfg = settingsRef.current;
     const r = placeWords(heard, src, p, cfg.crop.start - 0.5, cfg.crop.start + cfg.crop.duration + 0.5);
-    onProject((x) => ({ ...x, lyricWords: fresh ? keepLocked(x.lyricWords ?? [], r.words) : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p), lyricsAlignV: LYRICS_ALIGN_V }));
+    const em = audioBuf ? cachedEmissions(audioBuf) : null;
+    onProject((x) => ({ ...x, lyricWords: fresh ? withFree(keepLocked(x.lyricWords ?? [], r.words), em) : keepManual(x.lyricWords ?? [], r.words), lyricsPlacedFrom: writtenOf(src, p), lyricsAlignV: LYRICS_ALIGN_V }));
     setGenInfo(r.info);
     if (r.words.length && !cfg.captions) setV({ captions: true });
     onSaveNow();
@@ -4325,7 +4329,7 @@ export default function VideoStudio({
         const doubts = new Set((forced ?? []).filter((x) => x.doubt).map((x) => x.line));
         const words = doubts.size ? placed.words.map((x) => (x.line !== undefined && doubts.has(x.line) ? { ...x, doubt: true } : x)) : placed.words;
         // The heard words are kept: editing the written lyrics re-places them without a new analysis.
-        onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? (dropLocks.current ? words : keepLocked(p.lyricWords ?? [], words)) : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
+        onProject((p) => ({ ...p, heardWords: heard, lyricWords: fresh ? (dropLocks.current ? words : withFree(keepLocked(p.lyricWords ?? [], words), cachedEmissions(buf))) : keepManual(p.lyricWords ?? [], words), lyricsPlacedFrom: writtenOf(src, proj) }));
         dropLocks.current = false;
         if (words.length && !settingsRef.current.captions) setV({ captions: true });
         const said = forced

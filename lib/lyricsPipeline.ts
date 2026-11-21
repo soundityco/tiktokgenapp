@@ -777,3 +777,42 @@ function bySyllables(line: LyricWord[], from: number, end: number): LyricWord[] 
     return { ...rest, s: Math.round(s * 1000) / 1000, e: Math.round(Math.max(s + 0.05, e) * 1000) / 1000, ...(n > 1 ? { sy: Array.from({ length: n }, (_, k) => Math.round((k / n) * 1000) / 1000) } : {}) };
   });
 }
+
+/**
+ * Lyrics placed again with some lines locked by the artist ("Re-place the others"): each run of free lines next to a
+ * locked one is aligned again on the audio, alone, in the room the locked lines leave it (their times are what is
+ * right), then its words and syllables follow the voice inside each line (`inLines`). Before, the run kept the place the
+ * whole song's alignment gave it and was only moved or squeezed into that room, its rhythm kept: two lines added
+ * ("OK, yeah") were glued to the locked line before them, their syllables off the voice.
+ */
+export function realignFree(words: LyricWord[], em: Emissions): LyricWord[] {
+  if (!words.some((x) => x.lock)) return words;
+  const byLine = new Map<number, number[]>();
+  words.forEach((x, i) => { const l = x.line ?? -1; (byLine.get(l) ?? byLine.set(l, []).get(l)!).push(i); });
+  const order = [...byLine.keys()].sort((a, b) => a - b);
+  const locked = (l: number) => byLine.get(l)!.every((i) => words[i].lock);
+  const out = words.slice(), end = em.T * FRAME, touched = new Set<number>();
+  for (let k = 0; k < order.length;) {
+    if (locked(order[k])) { k++; continue; }
+    let j = k;
+    while (j < order.length && !locked(order[j])) j++;
+    const lines = order.slice(k, j), before = k > 0 ? order[k - 1] : undefined, after = j < order.length ? order[j] : undefined;
+    k = j;
+    if (before === undefined && after === undefined) continue;
+    const run = lines.flatMap((l) => byLine.get(l)!);
+    const lo = before === undefined ? 0 : Math.max(...byLine.get(before)!.map((i) => words[i].until ?? words[i].e)) + 0.02;
+    const hi = after === undefined ? end : Math.min(...byLine.get(after)!.map((i) => words[i].s)) - 0.02;
+    const f0 = Math.max(0, Math.floor(lo / FRAME)), f1 = Math.min(em.T, Math.ceil(hi / FRAME));
+    if ((f1 - f0) * FRAME < 0.15 * run.length) continue; // no room to listen in: left as fitted
+    const again = alignWordsForced(em.frames.subarray(f0 * em.V, f1 * em.V), f1 - f0, em.V, run.map((i) => ({ w: words[i].w, line: words[i].line ?? 0 })));
+    if (!again || again.length !== run.length) continue;
+    run.forEach((i, q) => {
+      const x = again[q], { until: _u, sy: _s, manual: _m, ws: _ws, we: _we, wu: _wu, ...rest } = words[i];
+      out[i] = { ...rest, s: x.s + f0 * FRAME, e: x.e + f0 * FRAME, conf: x.conf, ...(x.doubt ? { doubt: true } : { doubt: undefined }), ...(x.weak ? { weak: true } : { weak: undefined }) };
+    });
+    lines.forEach((l) => touched.add(l));
+  }
+  if (!touched.size) return words;
+  const sorted = out.sort((x, y) => x.s - y.s);
+  return inLines(sorted, em, looksFrench(sorted.map((x) => faNorm(x.w))), touched);
+}
