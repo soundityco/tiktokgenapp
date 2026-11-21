@@ -7683,7 +7683,7 @@ export default function VideoStudio({
       // C = cut the shot here, Delete = remove the cut that starts it.
       const cfg = settingsRef.current;
       // By the key's place (Digit1…, the keypad too): on an AZERTY keyboard the top row gives & é " ' without Shift.
-      const dig = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
+      const dig = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
       // (the key is the video's number: the camera that shows that video)
       const want = dig ? Number(dig[1]) - 1 : -1;
       const cam = want < 0 ? -1 : [0, ...(cfg.angles ?? []).map((_, j) => j + 1)].find((j) => (j === 0 || cfg.angles?.[j - 1]) && camNo(cfg, j) === want) ?? want;

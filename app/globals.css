@@ -38,6 +38,7 @@
   --lyrics: #d8b56a;
   /* The fourth video's colour (never the lyrics' gold: it looked like a text). */
   --pink: #ff7ad9;
+  --cam-4: #ffb547; --cam-5: #6fd6ff; --cam-6: #ff8f70; --cam-7: #c8f36e; --cam-8: #7f9dff; --cam-9: #d9a6ff;
   /* The two studios' colours: orange for the carousel, violet for the video (the dock's tile, the switch, the release picked). */
   --grad-carousel: linear-gradient(140deg, #ffd27a 0%, #ffa24d 48%, #ff7b3a 100%);
   --grad-video: linear-gradient(140deg, #dcc4ff 0%, #a184ff 50%, #6a55ff 100%);
@@ -608,6 +609,8 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .cams-row { flex-wrap: wrap; gap: 6px; }
 .cams-row .label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
 .cam-0 { --cam: var(--accent); } .cam-1 { --cam: var(--video); } .cam-2 { --cam: var(--music); } .cam-3 { --cam: var(--pink); }
+/* (videos 5 to 10: up to ten in a project) */
+.cam-4 { --cam: var(--cam-4); } .cam-5 { --cam: var(--cam-5); } .cam-6 { --cam: var(--cam-6); } .cam-7 { --cam: var(--cam-7); } .cam-8 { --cam: var(--cam-8); } .cam-9 { --cam: var(--cam-9); }
 .cam-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); font-size: 12px; }
 .cam-chip b, .cam-shot b { color: var(--cam); font-weight: 700; }
 .cams-row .cam-pick { width: auto; flex: 0 1 230px; min-width: 0; border-color: color-mix(in srgb, var(--cam) 35%, var(--line-2)); }
@@ -2980,7 +2983,7 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 .tl-hd { --row: var(--muted); display: grid; grid-template-columns: minmax(0, 1fr) 24px 24px; align-items: center; column-gap: 1px;
   position: relative; z-index: 6; padding: 0 2px 0 8px; border-radius: 3px; background: var(--raised);
   box-shadow: inset 3px 0 0 var(--row); }
-.tl-hd.cam-0, .tl-hd.cam-1, .tl-hd.cam-2, .tl-hd.cam-3 { --row: var(--cam); }
+.tl-hd.cam-0, .tl-hd.cam-1, .tl-hd.cam-2, .tl-hd.cam-3, .tl-hd.cam-4, .tl-hd.cam-5, .tl-hd.cam-6, .tl-hd.cam-7, .tl-hd.cam-8, .tl-hd.cam-9 { --row: var(--cam); }
 .tl-hd.hd-hook { --row: var(--blue); }
 .tl-hd.hd-lyrics { --row: var(--lyrics); }
 .tl-hd.hd-audio { --row: var(--text); }

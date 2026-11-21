@@ -7,7 +7,8 @@
 
 export interface Cut { at: number; cam: number }
 
-export const MAX_CAMS = 4;
+/** Videos in a project at most (the one under, the multicam's cameras, the ones over it). */
+export const MAX_CAMS = 10;
 /** Two cuts closer than this are the same one. */
 const SAME = 0.04;
 
