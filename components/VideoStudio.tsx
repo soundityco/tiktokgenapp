@@ -4807,17 +4807,6 @@ export default function VideoStudio({
   /** Its look written where it belongs: the take's, or this project's own (camera 1). */
   const writeLook = (patch: Partial<VideoSettings>) => { const c = camTakeRef.current; if (c) patchTake(c.id, patch); else setV(patch); };
   const panelGrade = camTake ? withLutSettings(camTake.grade) : grade;
-  /** Log / HDR or standard: a colour is only copied between cameras of the same kind. */
-  const lookKind = (c: VideoSettings) => (c.source?.colour === "log" || c.source?.colour === "hdr" ? "graded" : "std");
-  // (every video of the project — the one under, the multicam's cameras, the ones over it —: the same for each, whichever
-  // is set; the ones over it were left out, the button showed for some videos and not for others)
-  const camsOfProject = [clip, ...[...(settings.angles ?? []), ...overlaysOf(settings).map((o) => o.clip)].map((id) => clips.find((c) => c.id === id && c.id !== clip.id)).filter((c): c is VideoSetup => !!c)];
-  const lookOwner = camTake ?? clip;
-  const otherCams = camsOfProject.filter((c) => c.id !== lookOwner.id && lookKind(c) === lookKind(lookOwner));
-  const copyLookToCams = (g: VideoGrade) => {
-    for (const c of otherCams) { if (c.id === clip.id) setV({ grade: g }); else patchTake(c.id, { grade: g }); }
-    onToast?.(t("Colour copied on {n} videos", { n: otherCams.length }));
-  };
   const curFrame = () => (camTakeRef.current ? camTakeRef.current.frame : settingsRef.current.frame) ?? DEFAULT_VIDEO.frame;
   const frame = (camTake ? camTake.frame : settings.frame) ?? DEFAULT_VIDEO.frame;
   const desq = camTake ? camTake.desqueeze : settings.desqueeze;
@@ -8638,8 +8627,6 @@ export default function VideoStudio({
               {panelGrade && <span className="grow" />}
               {panelGrade && <Switch checked={!panelGrade.off} onChange={(v) => { setRawView(false); writeLook({ grade: { ...panelGrade, off: !v } }); }}
                 title={panelGrade.off ? t("Colour turned off: the video is shown and exported as recorded. Click to turn it back on.") : t("Colour on: click to turn it all off (preview and export), your settings kept.")} />}
-              {panelGrade && otherCams.length > 0 && <button className="btn sm quiet" onClick={() => copyLookToCams(panelGrade)}
-                title={t("The same colour on the project's other videos of the same kind (log with log, standard with standard).")}>{t("Other videos")}</button>}
               {panelGrade && <button className="btn sm quiet" onClick={() => { setRawView(false); writeLook({ grade: undefined }); }} title={t("Remove the grade")}>{t("Reset")}</button>}
             </div>
               <ColorGrade grade={panelGrade} onChange={(g) => writeLook({ grade: g })} onRaw={setRawView} lookErr={camTake ? null : lookErr} disabled={!!panelGrade?.off}
