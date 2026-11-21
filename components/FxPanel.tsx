@@ -26,6 +26,11 @@ export default function FxPanel({ value, onChange, onDelete }: { value: FxClip; 
         <Switch checked={!value.off} onChange={(on) => onChange({ off: on ? undefined : true })} title={t("Off: the layer stays on its track, its effects not drawn (Shift + E).")} />
       </div>
       <div className="row fx-line">
+        <span className="label">{t("Inside the video's picture only")}</span>
+        <Switch checked={!value.whole} onChange={(inside) => onChange({ whole: inside ? undefined : true })}
+          title={t("On: the effects stay inside the picture of the video under (its frame, never the ground nor the bars), following it wherever it is. Off: over the whole post.")} />
+      </div>
+      <div className="row fx-line">
         <span className="label">{t("Over the texts too")}</span>
         <Switch checked={!!value.over} onChange={(over) => onChange({ over: over || undefined })} title={t("On: the effect covers the lyrics and the hook too (a flash over everything). Off: only the picture under them.")} />
       </div>

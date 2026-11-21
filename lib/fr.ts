@@ -1645,6 +1645,8 @@ export const FR: Record<string, string> = {
   "Effect layer copied: ⌘V pastes it at the playhead": "Calque d'effet copié : ⌘V le colle à la tête de lecture",
   "Right click: add an effect layer, then choose its effects on the right": "Clic droit : ajouter un calque d'effet, puis choisir ses effets à droite",
   "Right click: add an effect layer": "Clic droit : ajouter un calque d'effet",
+  "Inside the video's picture only": "Seulement dans l'image de la vidéo",
+  "On: the effects stay inside the picture of the video under (its frame, never the ground nor the bars), following it wherever it is. Off: over the whole post.": "Activé : les effets restent dans l'image de la vidéo du dessous (son cadre, jamais le fond ni les bandes), où qu'elle soit. Désactivé : sur tout le post.",
   "Re-place the others": "Recaler les autres",
   "Locked: kept as it is when the lyrics are placed again. Click to unlock.": "Verrouillée : gardée telle quelle quand les paroles sont recalées. Clic pour déverrouiller.",
   "Lock this line: kept as it is when the lyrics are placed again": "Verrouiller cette ligne : gardée telle quelle quand les paroles sont recalées",

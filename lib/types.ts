@@ -248,6 +248,8 @@ export interface FxClip {
   track?: number;
   /** Switched off (as a clip disabled in an editor): kept, not drawn. */
   off?: boolean;
+  /** Over the whole post (its ground and bars too); by default only inside the picture of the video under it. */
+  whole?: boolean;
   over?: boolean;
   /** Flashes of a colour: `count` over the clip, each shown `on` of its time (0..1). */
   strobe?: { color: string; count: number; on: number };

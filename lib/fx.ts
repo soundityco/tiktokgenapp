@@ -42,7 +42,12 @@ export function strobeOn(c: FxClip, t: number): boolean {
 export const heldFrame = (c: FxClip, t: number, fps: number) => Math.floor((t - c.from) * fps + 1e-6);
 
 /** The effects of the clips running at `t` drawn on the canvas: those under the texts (`over` false) or over them. */
-export function drawFx(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, list: FxClip[] | undefined, over: boolean) {
+/** Where the picture of the video under is drawn on the post (its frame, inside the bars): a layer stays inside it. */
+export interface PicRect { x: number; y: number; w: number; h: number }
+
+export function drawFx(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, list: FxClip[] | undefined, over: boolean,
+  /** The video's picture on the post (null: none there — a layer kept inside the picture draws nothing). */
+  pic?: PicRect | null) {
   const run = fxAt(list, t).filter((c) => !!c.over === over);
   const st = states.get(ctx) ?? {};
   states.set(ctx, st);
@@ -52,6 +57,12 @@ export function drawFx(ctx: CanvasRenderingContext2D, W: number, H: number, t: n
   if (st.curT !== t) { st.prevT = st.curT; st.curT = t; }
   const advancing = st.prevT !== undefined && t > st.prevT + 1e-4 && t - st.prevT <= 0.25;
   for (const c of run) {
+    // (inside the video's picture only, unless set over the whole post: its effects clipped to its frame — the zoom blur
+    // spreads the picture from its centre, it never takes in the ground around it)
+    const inside = !c.whole;
+    if (inside && !pic) continue;
+    ctx.save();
+    if (inside && pic) { ctx.beginPath(); ctx.rect(pic.x, pic.y, pic.w, pic.h); ctx.clip(); }
     if (c.shutter && (c.shutter.fps > 0 || c.shutter.trail > 0)) {
       // held at a lower frame rate: the frame of its quantum, drawn again until the next one
       if (c.shutter.fps > 0) {
@@ -83,6 +94,7 @@ export function drawFx(ctx: CanvasRenderingContext2D, W: number, H: number, t: n
     if (c.strobe && strobeOn(c, t)) {
       ctx.save(); ctx.globalAlpha = 1; ctx.fillStyle = c.strobe.color || "#000"; ctx.fillRect(0, 0, W, H); ctx.restore();
     }
+    ctx.restore();
   }
 }
 

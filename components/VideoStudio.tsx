@@ -15,7 +15,7 @@ import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectF
 import type { AudioVersion, FxClip, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { groundFill, isGradient } from "@/lib/backdrop";
-import { drawFx, fxKinds, newFx, splitFx } from "@/lib/fx";
+import { drawFx, fxKinds, newFx, splitFx, type PicRect } from "@/lib/fx";
 import FxPanel from "./FxPanel";
 import BackdropPanel from "./BackdropPanel";
 import GroundHandles from "./GroundHandles";
@@ -1244,6 +1244,8 @@ export default function VideoStudio({
     const vEl = videoRef.current, [vci, vco] = clipSpan(cfg, vEl && Number.isFinite(vEl.duration) ? vEl.duration : Infinity);
     const inVideo = time >= cfg.offset + vci - 0.01 && time <= cfg.offset + vco + 0.01;
     if (preview && !pic && !cfg.videoHidden && inVideo && posterRef.current && !(videoRef.current && videoRef.current.readyState >= 2)) g.drawImage(posterRef.current, 0, 0, W, H);
+    /** Where the video's picture is drawn on the post (inside the bars): the effect layers stay inside it (lib/fx). */
+    let picRect: PicRect | null = null;
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
       pic = desqueeze(pic, angle ? angle.desqueeze : cfg.desqueeze);
@@ -1274,6 +1276,16 @@ export default function VideoStudio({
       }
       if (pic) {
         drawFramed(g, pic.src, pic.w, pic.h, f, W, H, pic.part);
+        {
+          // (the picture's frame on the post, within the canvas and the bars)
+          const fa = framedAt(f, pic.w, pic.h, W, H);
+          let x0 = Math.max(0, fa.x), y0 = Math.max(0, fa.y), x1 = Math.min(W, fa.x + pic.w * fa.s), y1 = Math.min(H, fa.y + pic.h * fa.s);
+          if (matte && Math.abs(matte - W / H) > 0.005) {
+            if (matte > W / H) { const bar = (H - W / matte) / 2; y0 = Math.max(y0, bar); y1 = Math.min(y1, H - bar); }
+            else { const bar = (W - H * matte) / 2; x0 = Math.max(x0, bar); x1 = Math.min(x1, W - bar); }
+          }
+          if (x1 > x0 && y1 > y0) picRect = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+        }
         if (inside) {
           // The frame stays where it is (a mask); the picture grows inside it from the frame's centre.
           const { x, y, s } = framedAt(f, pic.w, pic.h, W, H);
@@ -1337,7 +1349,7 @@ export default function VideoStudio({
     // the ones over it —, never a video's own (a camera's vignette jumped in at each cut).
     if (!raw) { const fin = finishOf(cfg); if (finishOn(fin)) drawLook(g, W, H, finishGrade(fin), Math.round(time * GRAIN_FPS)); }
     // The Effects track (an adjustment layer: lib/fx.ts): its clips under the texts, over the picture and its finish.
-    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, false);
+    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, false, picRect);
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
     drawMatte(g, W, H, matte, ground);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
@@ -1352,7 +1364,7 @@ export default function VideoStudio({
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
     const hookBox = hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null;
     // (the effect clips set over the texts too: a flash covers them)
-    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, true);
+    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, true, picRect);
     return { caption, hook: hookBox };
   }, []);
   const captionBox = useRef<TextBox | null>(null);
