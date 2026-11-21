@@ -19,7 +19,7 @@ import { buildGradeLut, convertsFootage, type CubeLut, drawLook, finishGrade, fi
 import { PROBE_VERSION, probeVideo } from "@/lib/probe";
 import { followLists, hookLink, itemTags, keptElsewhere, sourceTags, tagGroups, textItems } from "@/lib/generate";
 import { copyRegion, Grader } from "@/lib/gradeGL";
-import ColorGrade, { FinishParts, knownLuts, lastLut, rememberLut, sameLut } from "./ColorGrade";
+import ColorGrade, { FinishParts, knownLuts, lastLut, lookKey, rememberLut, sameLut } from "./ColorGrade";
 import { AUDIO_KBPS, exportMp4, exportSettings, ExportStep, exportSampleRate, mp4Support, recommendedRate, seekVideo } from "@/lib/exportVideo";
 import { DESQUEEZE, desqueeze, type Picture, VideoSource } from "@/lib/videoSource";
 import { type Variant, videoVariants } from "@/lib/variants";
@@ -5532,6 +5532,8 @@ export default function VideoStudio({
   };
   /** A video asked to be deleted (its ⋯, its right click: every video, the same). */
   const [askDel, setAskDel] = useState<VideoSetup | null>(null);
+  /** A colour preset saved again while other videos still had its former look: which ones, to update them (asked). */
+  const [presetSync, setPresetSync] = useState<{ name: string; grade: VideoGrade; id: string; ids: string[] } | null>(null);
   /** The video under being deleted: its file taken out of the project first, then deleted once it is a take. */
   const pendingDel = useRef<string | null>(null);
   /** A project without one of its takes (a camera of its multicam or a video over it): its cuts kept on the others. */
@@ -8655,9 +8657,16 @@ export default function VideoStudio({
                   const lib = panelGrade.lut && lutChoices.find((l) => l.id === panelGrade.lut!.id);
                   const kept = panelGrade.lut && lib?.driveId ? { ...panelGrade, lut: { ...panelGrade.lut, driveId: lib.driveId } } : panelGrade;
                   // The same name: that preset is replaced, in its place (the form said so).
-                  const list = gradePresets ?? [], same = presetNamed(list, name);
-                  onGradePresets?.(same ? list.map((x) => (x.id === same.id ? { ...x, grade: kept } : x)) : [...list, { id: uid(), name, grade: kept }]);
-                  onToast?.(same ? t("Preset replaced") : t("Preset saved"));
+                  const list = gradePresets ?? [], same = presetNamed(list, name), pid = same?.id ?? uid();
+                  const { preset: _p, ...clean } = kept;
+                  onGradePresets?.(same ? list.map((x) => (x.id === same.id ? { ...x, grade: clean } : x)) : [...list, { id: pid, name, grade: clean }]);
+                  // This video uses it from now on; the release's other videos put from it and never retouched since:
+                  // updated too, once asked.
+                  writeLook({ grade: { ...panelGrade, preset: { id: pid, key: lookKey(clean) } } });
+                  const me = camTake?.id ?? clip.id;
+                  const users = same ? clips.filter((c) => c.id !== me && c.grade?.preset?.id === same.id && lookKey(c.grade) === c.grade.preset.key) : [];
+                  if (users.length) setPresetSync({ name: same!.name, grade: clean, id: pid, ids: users.map((c) => c.id) });
+                  else onToast?.(same ? t("Preset replaced") : t("Preset saved"));
                 }}
                 library={lutChoices} onRemoveLut={onRemoveLut}
                 onImported={(l) => { lutSent.current.delete(l.id); onLutLibrary?.((cur) => (cur.some((x) => x.id === l.id) ? cur.map((x) => (x.id === l.id ? l : x)) : [...cur, l])); }} />
@@ -8729,6 +8738,26 @@ export default function VideoStudio({
         <PromptDialog title={t("Rename this version")} label={t("Name")} confirmLabel={t("Rename")}
           initial={(() => { const v = audioVersionsOf(release).find((x) => x.id === renamingAudio); return v ? audioLabel(v) : ""; })()}
           onSubmit={(v) => { const id = renamingAudio; setRenamingAudio(null); onRelease((p) => renameAudio(p, id, v)); onSaveNow(); }} onClose={() => setRenamingAudio(null)} />
+      )}
+      {/* A preset saved again: the videos still on its former look, updated to the new one (asked). */}
+      {presetSync && (
+        <Modal title={t("Update the videos using “{name}”?", { name: presetSync.name })} onClose={() => { setPresetSync(null); onToast?.(t("Preset replaced")); }}>
+          <p className="modal-text">{presetSync.ids.length === 1 ? t("1 other video of this release uses this preset (not retouched since): give it the new version?")
+            : t("{n} other videos of this release use this preset (not retouched since): give them the new version?", { n: presetSync.ids.length })}</p>
+          <p className="muted xs">{t("A video retouched by hand after the preset keeps its own colour.")}</p>
+          <div className="modal-foot">
+            <button className="btn" onClick={() => { setPresetSync(null); onToast?.(t("Preset replaced")); }}>{t("Only the preset")}</button>
+            <button className="btn primary" onClick={() => {
+              const x = presetSync; setPresetSync(null);
+              for (const id of x.ids) {
+                const c = clips.find((v) => v.id === id);
+                const g = { ...x.grade, preset: { id: x.id, key: lookKey(x.grade) }, sdrOverride: c?.grade?.sdrOverride };
+                if (id === clip.id) setV({ grade: g }); else patchTake(id, { grade: g });
+              }
+              onToast?.(t("Preset replaced: {n} videos updated", { n: x.ids.length }));
+            }}>{t("Update them")}</button>
+          </div>
+        </Modal>
       )}
       {askDel && (
         <ConfirmDialog danger title={t("Delete this video")} confirmLabel={t("Delete")}

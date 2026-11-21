@@ -116,7 +116,8 @@ export default function ColorGrade({ grade, onChange, onRaw, lookErr, onLutStore
     onRaw(false);
     const lib = p.grade.lut && luts.find((l) => l.id === p.grade.lut!.id);
     const lut = p.grade.lut ? { ...p.grade.lut, ...(lib?.driveId ? { driveId: lib.driveId } : null) } : undefined;
-    onChange({ ...p.grade, lut, sdrOverride: sdr && (p.grade.profile !== "rec709" || !!lut) ? true : p.grade.sdrOverride });
+    // (the preset it comes from kept with it: saving that preset again offers to update this video, if not retouched)
+    onChange({ ...p.grade, lut, sdrOverride: sdr && (p.grade.profile !== "rec709" || !!lut) ? true : p.grade.sdrOverride, preset: { id: p.id, key: lookKey(p.grade) } });
   };
   const presetsPart = (
     <Section id="color-presets" title={<>{t("Colour presets")}{grade && gradePresetOf(presets, grade) && <span className="sec-sub"> · {gradePresetOf(presets, grade)!.name}</span>}</>} open={false}>
@@ -279,7 +280,7 @@ export const gradeFootage = (g: VideoGrade): Footage =>
 const FOOTAGE_LABEL: Record<Footage, string> = { sdr: "SDR", log: "LOG", hdr: "HDR" };
 
 /** The same look (the camera profile apart: it is the video's own). */
-const lookKey = (g: VideoGrade) => JSON.stringify([g.bypass ?? null, g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null, effectsOn(g) ? effectsOf(g) : null]);
+export const lookKey = (g: VideoGrade) => JSON.stringify([g.bypass ?? null, g.profile, g.lut?.id ?? null, g.exposure, g.contrast, g.pivot ?? null, g.temp, g.tint, g.sat, g.vignette, g.vignetteSize, g.grain, g.grainSize, wheelsOn(g) ? g.wheels : null, effectsOn(g) ? effectsOf(g) : null]);
 export const gradePresetOf = (presets: GradePreset[], g: VideoGrade) => presets.find((p) => lookKey(p.grade) === lookKey(g));
 
 /** The colour presets, as the text's: a name and "Save the current colour", then each one to put on, or delete. */

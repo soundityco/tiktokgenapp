@@ -316,6 +316,9 @@ export type WheelId = "offset" | "lift" | "gamma" | "gain";
 export interface VideoGrade {
   /** Standard SDR video: the camera profile and the LUT were turned back on by hand (off by default). */
   sdrOverride?: boolean;
+  /** The colour preset it was put from, and that preset's look then (`key`): the same look still = never retouched by
+   *  hand since, updated when the preset is saved again (asked first). */
+  preset?: { id: string; key: string };
   /** How the camera recorded the colours: converted to DaVinci Wide Gamut / Intermediate first. */
   profile: "slog3-cine" | "slog3" | "rec709" | "applelog" | "hlg" | "pq" | "none";
   /** The LUT at the end, kept on this device (IndexedDB "lut:<id>"): a look made in DaVinci (input DWG / Intermediate,
