@@ -170,6 +170,17 @@ const LYRICS_ALIGN_V = 4;
  *  and what depends on it (sync, takes, and the grade's camera profile, see `valuesOf`). */
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
+/**
+ * A video's trims, cuts and parts turned off (seconds of its file) moved by `d` seconds: kept at the same places on the song
+ * when another file takes its place and syncs elsewhere in it (Replace in this video).
+ */
+const shiftEdits = (s: { clipIn?: number; clipOut?: number; splits?: number[]; offParts?: [number, number][] }, d: number) => ({
+  ...(s.clipIn !== undefined ? { clipIn: round2(Math.max(0, s.clipIn + d)) } : {}),
+  ...(s.clipOut !== undefined ? { clipOut: round2(Math.max(0, s.clipOut + d)) } : {}),
+  ...(s.splits ? { splits: s.splits.map((x) => round2(x + d)) } : {}),
+  ...(s.offParts ? { offParts: s.offParts.map(([x, y]) => [round2(x + d), round2(y + d)] as [number, number]) } : {}),
+});
+
 const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "trackLocks", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
   "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish", "backdrop"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
@@ -588,6 +599,16 @@ export default function VideoStudio({
   const [syncPct, setSyncPct] = useState(0);
   const [exporting, setExporting] = useState(false);
   const exportingRef = useRef(false);
+  /**
+   * Video 1 replaced in this video (its menu): where it was (offset) and the segment, kept until its new file is synced
+   * (at once, once read: `armed`), then its trims and cuts moved by the difference and the segment put back.
+   */
+  const replaceKeep = useRef<{ clip: string; offset: number; crop: VideoSettings["crop"]; sync: boolean } | null>(null);
+  // Video 1 replaced in this video: synced as soon as its new file is read (its edit then kept, see autoSync).
+  useEffect(() => {
+    const k = replaceKeep.current;
+    if (k?.sync && k.clip === clip.id && videoBlob && audioBuf && !syncBusy) void autoSync();
+  }, [videoBlob, audioBuf]); // eslint-disable-line react-hooks/exhaustive-deps
   /** The Ground panel open: a gradient's two points shown on the preview to move. */
   const [groundOpen, setGroundOpen] = useState(false);
   exportingRef.current = exporting;
@@ -2815,6 +2836,9 @@ export default function VideoStudio({
       } else if (!r.anchors || r.score < 0.4) {
         // Nothing in the official track resembles this recording: keep the current offset untouched.
         baseFail = t("No match found in the official audio. Check it is the right track, or sync by ear.");
+        // (video 1 just replaced: it stays where the old one was, its edit with it)
+        const keep = replaceKeep.current;
+        if (keep?.sync && keep.clip === clipIdRef.current) { replaceKeep.current = null; setV({ offset: keep.offset, crop: keep.crop }); }
       } else {
         const takes = r.takes.map((k) => ({ offset: round2(k.offset), musicStart: round2(k.musicStart), musicEnd: round2(k.musicEnd) }));
         const kept = takes.length > 1 ? takes : undefined;
@@ -2830,6 +2854,15 @@ export default function VideoStudio({
           const crop = range ? fitCrop(cur.crop.start, cur.crop.duration, range) : cur.crop;
           setV({ offset: round2(r.offset), musicStart: r.musicStart === null ? undefined : round2(r.musicStart), musicEnd: r.musicEnd === null ? undefined : round2(r.musicEnd), linked: true, crop });
           setHead(crop.start);
+        }
+        // Video 1 just replaced in this video: its trims, cuts and parts turned off (seconds of the file) moved by the
+        // difference, the segment as it was — the edit does not move with the new sync.
+        const keep = replaceKeep.current;
+        if (keep?.sync && keep.clip === clipIdRef.current) {
+          replaceKeep.current = null;
+          const now = settingsRef.current;
+          setV({ crop: keep.crop, ...shiftEdits(now, keep.offset - now.offset) });
+          setHead(keep.crop.start);
         }
         setNote(takes.length > 1
           ? t("{n} takes found in the video", { n: takes.length }) + " · " + t("Sync quality {n}%", { n: Math.round(r.score * 100) })
@@ -5463,10 +5496,58 @@ export default function VideoStudio({
       : linked.length === 1 ? t("1 video linked again: its sync and settings are kept.") : t("{n} videos linked again: their sync and settings are kept.", { n: linked.length }));
   };
   /**
+   * "Replace in this video" (any camera of the multicam, any video over it): another file takes this video's place here
+   * only — a duplicated video keeps its edit, its takes are changed one by one. A new take is made for the file (the old
+   * one stays as it was in the other videos and the release); here it takes the old one's place in the multicam (the same
+   * shots: the cuts are on the song), its number, its track's name, its look (framing, grade), its trims, cuts and parts
+   * turned off. Synced at once; its trims and cuts (seconds of its file) then moved by the difference, so they stay where
+   * they were on the song. No match: it stays where the old one was.
+   */
+  const replaceInVideo = async (oldId: string, f: File) => {
+    const old = clips.find((x) => x.id === oldId);
+    if (!old) return;
+    stop();
+    const cur = settingsRef.current;
+    const id = uid();
+    const c: VideoSetup = {
+      ...old, id, name: f.name.replace(/\.[^.]+$/, ""), takeOnly: true, media: undefined, videoName: f.name, videoSize: f.size,
+      source: undefined, drive: undefined, score: undefined, anchors: undefined, musicStart: undefined, musicEnd: undefined, takes: undefined,
+      linked: false, versions: undefined, angles: undefined, cuts: undefined, overlays: undefined, overlay: undefined,
+    };
+    pendingTakeFiles.current.set(id, f);
+    void putMedia(`video:${id}`, f).catch(() => {}).finally(() => pendingTakeFiles.current.delete(id));
+    onProject((p) => ({ ...p, videos: [...clipsOf(p), c] }));
+    // its place here: in the multicam, or over the video; its number and track name carried over
+    const nos = { ...numbersFn.current(cur) }, oldKey = takeKey(oldId);
+    if (nos[oldKey] !== undefined) { nos[id] = nos[oldKey]; delete nos[oldKey]; }
+    const names = cur.trackNames?.[oldKey] !== undefined ? { ...cur.trackNames, [id]: cur.trackNames[oldKey] } : cur.trackNames;
+    const ov = overlaysOf(cur).find((o) => o.clip === oldId);
+    setV({
+      videoNos: nos, trackNames: names,
+      ...((cur.angles ?? []).includes(oldId) ? { angles: (cur.angles ?? []).map((x) => (x === oldId ? id : x)) } : {}),
+      ...(ov ? withOverlays(overlaysOf(cur).map((o) => (o.clip === oldId ? { ...o, clip: id } : o))) : {}),
+    });
+    const a = anglesRef.current.get(oldId);
+    if (a) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); anglesRef.current.delete(oldId); }
+    setTakeFilesRev((n) => n + 1);
+    onSaveNow();
+    void askPersistentStorage();
+    const at = await prepareTake(id, f, old.grade, false);
+    if (at === null) { onToast?.(t("“{name}” is in this video in place of the other one; no match found in the audio: place it by ear.", { name: f.name })); return; }
+    // its trims, cuts and parts turned off: the same places on the song
+    const shift = shiftEdits;
+    // (over the video, its place on the song is the overlay's own: synced there, its trims moved by the same amount)
+    if (ov) patchOverlay(id, { offset: at, ...shift(ov, ov.offset - at) });
+    else patchTake(id, shift(old, old.offset - at));
+    onToast?.(t("“{name}” is in this video in place of the other one, synced: its cuts and trims stay where they were.", { name: f.name }));
+  };
+  /**
    * "Replace from this computer" for a take: another file in its place (a montage with the song under it, a new export),
    * its row, size and place kept; synced at once (the song in it: placed on it and locked, else left free).
    */
   const replaceFor = useRef<string | null>(null);
+  /** The take picked is replaced in this video only (it is in its multicam or over it): `replaceInVideo`. */
+  const replaceHere = useRef(false);
   const takeReplace = useRef<HTMLInputElement>(null);
   const replaceTake = async (id: string, f: File) => {
     const c = clips.find((x) => x.id === id);
@@ -5671,7 +5752,9 @@ export default function VideoStudio({
     {copyJob && <button onClick={() => { close(); copyAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the Drive copy")}</button>}
     {driveJob && <button onClick={() => { close(); driveAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the transfer")}</button>}
     {/* Another take for this video. */}
-    <button onClick={() => { close(); document.getElementById("video-file")?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
+    <button onClick={() => { close(); replaceKeep.current = { clip: clip.id, offset: settings.offset, crop: settings.crop, sync: false }; document.getElementById("video-file")?.click(); }}
+      title={t("Another file in its place in this video only: its shots, cuts and trims stay where they are, synced at once.")}>
+      <Icon name="upload" size={14} />{t("Replace in this video…")}</button>
     {/* Out of the project, as any other video (V2, V3…): the one above it becomes the one under, it waits in the
         release's other takes. */}
     {settings.videoName && <><div className="sep" /><button onClick={() => { close(); takeOutBase(); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button>
@@ -5790,7 +5873,9 @@ export default function VideoStudio({
           return <button disabled={!!copyJob} onClick={() => { close(); copyFailed.current.clear(); void makeCopy({ c, blob: a.blob, dur, off: ov ? ov.offset : undefined, span: ov ? clipSpan(ov, dur) : undefined }); }}><Icon name="copy" size={14} />{c.drive?.copy ? t("Make its Drive copy again") : t("Make its Drive copy now")}</button>;
         })()}
         {copyJob?.clip === c.id && <button onClick={() => { close(); copyAc.current?.abort(); }}><Icon name="x" size={14} />{t("Stop the Drive copy")}</button>}
-        <button onClick={() => { close(); replaceFor.current = c.id; takeReplace.current?.click(); }}><Icon name="upload" size={14} />{t("Replace from this computer")}</button>
+        <button onClick={() => { close(); replaceFor.current = c.id; replaceHere.current = isOver || (cam !== null && cam > 0); takeReplace.current?.click(); }}
+          title={isOver || (cam !== null && cam > 0) ? t("Another file in its place in this video only: its shots, cuts and trims stay where they are, synced at once.") : undefined}>
+          <Icon name="upload" size={14} />{isOver || (cam !== null && cam > 0) ? t("Replace in this video…") : t("Replace from this computer")}</button>
         {(isOver || (cam !== null && cam > 0)) && <><div className="sep" /><button onClick={() => { close(); stop(); if (isOver) patchOverlay(c.id, null); else removeAngle(i); }}><Icon name="minus" size={14} />{t("Take out of the project")}</button></>}
         {/* Every video can be deleted, wherever it is (asked first): the same right for all of them. */}
         <div className="sep" />
@@ -5896,7 +5981,7 @@ export default function VideoStudio({
         <input ref={takeInput} type="file" accept="video/*,.mxf" multiple hidden
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void importTakes(f); }} />
         <input ref={takeReplace} type="file" accept="video/*,.mxf" hidden
-          onChange={(e) => { const f = e.target.files?.[0], id = replaceFor.current; e.target.value = ""; replaceFor.current = null; if (f && id) void replaceTake(id, f); }} />
+          onChange={(e) => { const f = e.target.files?.[0], id = replaceFor.current, here = replaceHere.current; e.target.value = ""; replaceFor.current = null; replaceHere.current = false; if (f && id) void (here ? replaceInVideo(id, f) : replaceTake(id, f)); }} />
         <input ref={takeOriginal} type="file" accept="video/*,.mxf" hidden
           onChange={(e) => { const f = e.target.files?.[0], id = relinkFor.current; e.target.value = ""; relinkFor.current = null; if (f && id) void relinkTake(id, f); }} />
         {others.length > 0 && (
@@ -7602,7 +7687,13 @@ export default function VideoStudio({
             {/* The two files of the clip, drawn the same way: empty, a drop zone with its buttons; filled, the name, one line of facts and a menu. */}
             <input id="audio-file" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickAudio(f); e.target.value = ""; }} />
             <input id="audio-replace" type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void replaceAudio(f); e.target.value = ""; }} />
-            <input id="video-file" type="file" accept="video/*" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length === 1) void pickVideo(fs[0]); else if (fs.length) void pickVideos(fs); e.target.value = ""; }} />
+            <input id="video-file" type="file" accept="video/*" multiple hidden onChange={(e) => {
+              const fs = Array.from(e.target.files ?? []);
+              // (video 1 replaced in this video: synced once its file is read, its edit kept)
+              const keep = replaceKeep.current;
+              if (keep && keep.clip === clip.id && fs.length === 1) keep.sync = true; else replaceKeep.current = null;
+              if (fs.length === 1) void pickVideo(fs[0]); else if (fs.length) void pickVideos(fs); e.target.value = "";
+            }} />
             <input id="video-original" type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickOriginal(f); e.target.value = ""; }} />
             {/* The release holds the audio (shared by all its videos); this video holds its camera file and its framing. */}
             <div className="tree-head" title={t("The audio and the lyrics belong to the release: every video of it uses them.")}>
