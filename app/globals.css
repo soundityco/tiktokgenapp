@@ -602,6 +602,11 @@ details.sec > .body { display: grid; gap: var(--s3); padding-top: var(--s3); }
 .lyric-track .cue.cam-shot { display: flex; align-items: center; gap: 4px; }
 .shot-x { display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); align-items: center; justify-content: center; padding: 2px; border: 0; background: none; color: var(--muted); cursor: pointer; z-index: 3; }
 .shot-x:hover { color: var(--text); }
+/* Readable over the shot's name: the shot's own background (inherited: normal, playing or picked, always the same as
+   the clip), and a fade just left of it so the text goes under it softly. */
+.lyric-track .cue.cam-shot .shot-x { background: inherit; border-radius: 3px; height: 18px; width: 18px; box-sizing: border-box; }
+.lyric-track .cue.cam-shot .shot-x::before { content: ""; position: absolute; right: 100%; top: 0; bottom: 0; width: 14px; background: inherit;
+  -webkit-mask-image: linear-gradient(to right, transparent, black); mask-image: linear-gradient(to right, transparent, black); pointer-events: none; }
 .cam-shot:hover .shot-x { display: flex; }
 /* No hover on a phone: the cross of the shot under the playhead (a tap on a shot puts it there). */
 @media (hover: none) { .cam-shot.on .shot-x { display: flex; } }
