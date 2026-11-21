@@ -5379,6 +5379,42 @@ export default function VideoStudio({
     onToast?.(t("Camera file found again: the sync and the settings are kept."));
   };
   /**
+   * "Link the files from a folder": every video of the release whose file is not on this device looks for it in the folder
+   * picked (and its subfolders): the same name and size (a unique name when its size was never known), as "Link the
+   * original file" does one by one. Its sync and settings stay. Said in the end: how many found, which are still missing.
+   */
+  const folderInput = useRef<HTMLInputElement>(null);
+  const relinkFolder = async (files: File[]) => {
+    const vids = files.filter((f) => f.type.startsWith("video/") || /\.(mp4|mov|m4v|mxf|mkv|avi)$/i.test(f.name));
+    const byName = new Map<string, File[]>();
+    for (const f of vids) { const k = f.name.toLowerCase(); (byName.get(k) ?? byName.set(k, []).get(k)!).push(f); }
+    const seen = new Set<string>(), linked: string[] = [], lost: string[] = [];
+    let baseFile: File | null = null;
+    for (const c of clips) {
+      if (!c.videoName) continue;
+      const key = c.media ?? c.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const have = await getMedia(`video:${key}`).catch(() => null);
+      if (have && (!c.videoSize || have.size === c.videoSize)) continue; // (on this device already)
+      const same = byName.get(c.videoName.toLowerCase()) ?? [];
+      const f = c.videoSize ? same.find((x) => x.size === c.videoSize) : same.length === 1 ? same[0] : undefined;
+      if (!f) { lost.push(c.videoName); continue; }
+      if (key === (clip.media ?? clip.id)) { baseFile = f; linked.push(c.videoName); continue; } // (through relinkVideo below)
+      try { await putMedia(`video:${key}`, f); } catch { /* private mode */ }
+      dropKeptCopy(c.id, c.drive?.copy?.id);
+      const a = anglesRef.current.get(c.id);
+      if (a) { a.el.pause(); a.el.removeAttribute("src"); a.el.load(); a.el.remove(); URL.revokeObjectURL(a.url); anglesRef.current.delete(c.id); }
+      linked.push(c.videoName);
+    }
+    if (baseFile && !(await relinkVideo(baseFile, true))) { try { await putMedia(`video:${clip.media ?? clip.id}`, baseFile); } catch { /* private mode */ } }
+    if (linked.length) { setTakeFilesRev((n) => n + 1); void askPersistentStorage(); }
+    onToast?.(!linked.length && !lost.length ? t("Every video of this release is already on this device.")
+      : !linked.length ? t("None of the missing videos is in this folder ({names}).", { names: lost.slice(0, 3).join(", ") + (lost.length > 3 ? "…" : "") })
+      : lost.length ? t("{n} videos linked again; not in this folder: {names}.", { n: linked.length, names: lost.slice(0, 3).join(", ") + (lost.length > 3 ? "…" : "") })
+      : linked.length === 1 ? t("1 video linked again: its sync and settings are kept.") : t("{n} videos linked again: their sync and settings are kept.", { n: linked.length }));
+  };
+  /**
    * "Replace from this computer" for a take: another file in its place (a montage with the song under it, a new export),
    * its row, size and place kept; synced at once (the song in it: placed on it and locked, else left free).
    */
@@ -5797,6 +5833,12 @@ export default function VideoStudio({
         <button className="btn sm take-import" onClick={() => takeInput.current?.click()} title={t("One or several camera / phone files: each synced on the official audio by itself.")}>
           <Icon name="plus" size={14} />{t("Import takes")}
         </button>
+        <button className="btn sm quiet take-import" onClick={() => folderInput.current?.click()}
+          title={t("Moved your camera files? Pick the folder: every video of the release missing on this device is found there by its name, its sync and settings kept.")}>
+          <Icon name="link" size={14} />{t("Link the files from a folder…")}
+        </button>
+        <input ref={folderInput} type="file" multiple hidden {...{ webkitdirectory: "" }}
+          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) void relinkFolder(f); }} />
         <input ref={takeInput} type="file" accept="video/*,.mxf" multiple hidden
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void importTakes(f); }} />
         <input ref={takeReplace} type="file" accept="video/*,.mxf" hidden
@@ -6101,6 +6143,7 @@ export default function VideoStudio({
     <button onClick={() => { close(); onEditLyrics(); }}><Icon name="type" size={14} />{project.lyrics.length ? t("Edit the lyrics") : t("Add the lyrics")}</button>
     <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}><Icon name="music" size={14} />{audioBlob ? t("Add a version of the audio") : t("Import the audio")}</button>
     <button onClick={() => { close(); if (settings.videoName) takeInput.current?.click(); else document.getElementById("video-file")?.click(); }}><Icon name="film" size={14} />{t("Import videos")}</button>
+    <button onClick={() => { close(); folderInput.current?.click(); }}><Icon name="link" size={14} />{t("Link the files from a folder…")}</button>
   </>);
   const videoTrackEl = () => {
     // (its file still being read or fetched: its clip stays where it is, "Loading…" in place of its name)
