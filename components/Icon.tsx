@@ -47,6 +47,7 @@ const P: Record<string, string> = {
   // The shortcuts: a keyboard.
   keyboard: "M3.5 6.5h17v11h-17zM7 10v.01M10.3 10v.01M13.7 10v.01M17 10v.01M8 14h8",
   trash: "M4 7h16M9 7V4.5h6V7M6.5 7l.8 12a2 2 0 002 1.9h5.4a2 2 0 002-1.9l.8-12M10 11v6M14 11v6",
+  swap: "M5 8h13M15 5l3 3-3 3M19 16H6M9 13l-3 3 3 3",
   folder: "M3 7.5A2 2 0 015 5.5h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z",
   list: "M4 6.5h16M4 12h10M4 17.5h13",
   sparkle: "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM18.5 16l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z",

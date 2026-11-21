@@ -252,16 +252,19 @@ export function Menu({ trigger, children, left, float, portal }: {
 /**
  * A panel that folds. With `id`, whether it is open is remembered on this device (`open`: the first time).
  */
-export function Section({ title, children, open = false, id }: { title: ReactNode; children: ReactNode; open?: boolean; id?: string }) {
+export function Section({ title, children, open = false, id, onOpen }: { title: ReactNode; children: ReactNode; open?: boolean; id?: string;
+  /** Told when it opens or closes (and once at first, as it shows): a panel that has handles on the preview. */
+  onOpen?: (open: boolean) => void }) {
   // "sec2": the panels became closed by default; what was remembered before is dropped once.
   const key = id ? `tktgen-sec2:${id}` : null;
   const [shown] = useState(() => {
     if (!key) return open;
     try { const v = localStorage.getItem(key); return v === null ? open : v === "1"; } catch { return open; }
   });
+  useEffect(() => { onOpen?.(shown); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <details className="sec" open={shown} data-sec={id}
-      onToggle={(e) => { if (key) try { localStorage.setItem(key, (e.currentTarget as HTMLDetailsElement).open ? "1" : "0"); } catch { /* private mode */ } }}>
+      onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; onOpen?.(o); if (key) try { localStorage.setItem(key, o ? "1" : "0"); } catch { /* private mode */ } }}>
       <summary>{title}</summary>
       <div className="body">{children}</div>
     </details>

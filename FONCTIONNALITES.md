@@ -119,6 +119,7 @@ dans ton Google Drive.
 
 ## Studio vidéo
 
+- **Fond du post** (rubrique « Fond » sous Cadrage) : noir, une couleur, ou un dégradé linéaire ou radial avec autant de couleurs qu'on veut (clic sur la barre pour en ajouter, glisser, éloigner pour retirer), placé sur l'aperçu par ses deux points comme dans Photoshop (la molette l'étire) ; il remplit le vide autour de l'image et les bandes, à l'aperçu comme à l'export. — En test
 - **Coupes du multicam comme dans un logiciel de montage** : tirer une coupe par-dessus les plans voisins les recouvre (jusqu'au début d'un plan de la même caméra : un seul plan), revenir en arrière avant de lâcher les rend ; la coupe s'aimante aux autres. — En test
 - **Importer plusieurs vidéos d'un coup** : jusqu'à 4 pistes (la première en vidéo 1) ; au-delà, un message dit lesquelles attendent dans les prises de la release. — En test
 - **Chercher un hook ou un texte** dans le sélecteur de sa liste : un champ où taper un mot. — En test

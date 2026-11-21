@@ -14,6 +14,9 @@ import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, t
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
 import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
+import { groundFill, isGradient } from "@/lib/backdrop";
+import BackdropPanel from "./BackdropPanel";
+import GroundHandles from "./GroundHandles";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, litWords, TextBox, visibleRegion, zoomPic } from "@/lib/render";
 import { buildGradeLut, convertsFootage, type CubeLut, drawLook, finishGrade, finishOf, finishOn, gradeKey, gradesColour, NEUTRAL_GRADE, parseCube, toCube } from "@/lib/grade";
 import { PROBE_VERSION, probeVideo } from "@/lib/probe";
@@ -168,7 +171,7 @@ const LYRICS_ALIGN_V = 4;
 /** The menu's progressive zooms (0: off); any other factor is a custom one. */
 const PUSH_PRESETS = [0, 1.05, 1.1];
 const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "trackLocks", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish", "backdrop"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 /** The part of the camera file shown (seconds in the file, `len` its length): trimmed on the video track, else all. */
@@ -585,6 +588,8 @@ export default function VideoStudio({
   const [syncPct, setSyncPct] = useState(0);
   const [exporting, setExporting] = useState(false);
   const exportingRef = useRef(false);
+  /** The Ground panel open: a gradient's two points shown on the preview to move. */
+  const [groundOpen, setGroundOpen] = useState(false);
   exportingRef.current = exporting;
   /** The clip whose files were read from the device (its camera file found or not): a batch export waits for it. */
   const [loadedClip, setLoadedClip] = useState<string | null>(null);
@@ -1191,9 +1196,12 @@ export default function VideoStudio({
     const matte = (angle ? ownOr(angle.matte, cfg.matte) : cfg.matte) || undefined;
     const pushK = (angle ? ownOr(angle.push, cfg.push) : cfg.push) || undefined, pushIn = angle ? ownOr(angle.pushIn, cfg.pushIn) : cfg.pushIn;
     const raw = !!preview?.raw;
-    g.fillStyle = "#000";
+    // The post's ground (black, a colour, a gradient: lib/backdrop): under everything, in the bars of a whole picture,
+    // where a picture filled by its width leaves room, where there is no video.
+    const ground = groundFill(g, W, H, cfg.backdrop);
+    g.fillStyle = ground;
     g.fillRect(0, 0, W, H);
-    // The video under the others hidden (its eye): black there (the ones over it, the bars and the texts stay).
+    // The video under the others hidden (its eye): the ground there (the ones over it, the bars and the texts stay).
     if (cfg.videoHidden) pic = null;
     // Preview, before the video is ready (a big camera file takes a while to open): its last picture; only where the
     // video is (past its end, or before it, black: never its last picture held there).
@@ -1203,7 +1211,7 @@ export default function VideoStudio({
     if (pic && pic.w && pic.h) {
       // Anamorphic lens: the picture drawn wider, as it was meant to be seen (everything below works on that size).
       pic = desqueeze(pic, angle ? angle.desqueeze : cfg.desqueeze);
-      let f = picOf(lookFrame ?? DEFAULT_VIDEO.frame, matte);
+      let f: PicSettings = { ...picOf(lookFrame ?? DEFAULT_VIDEO.frame, matte), ground };
       // Progressive zoom: ×1 at the start of the segment, `push` on its last frame. The whole framed picture around the
       // centre, or (`pushIn`) only what is inside its frame, around the frame's centre (below).
       const push = pushK ?? 1;
@@ -1293,7 +1301,7 @@ export default function VideoStudio({
     // the ones over it —, never a video's own (a camera's vignette jumped in at each cut).
     if (!raw) { const fin = finishOf(cfg); if (finishOn(fin)) drawLook(g, W, H, finishGrade(fin), Math.round(time * GRAIN_FPS)); }
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
-    drawMatte(g, W, H, matte);
+    drawMatte(g, W, H, matte, ground);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
     // last frame, as in the export: a hook running to the end must not vanish there.
     // Outside the segment (the preview, the loop off): what is under the playhead there, as in an editing app (the song's
@@ -7733,6 +7741,7 @@ export default function VideoStudio({
                 const c = toCv(e);
                 setVctx({ x: e.clientX, y: e.clientY, text: textAt(c.x, c.y) ?? undefined });
               }} />
+            {groundOpen && isGradient(settings.backdrop) && <GroundHandles canvas={canvasRef} value={settings.backdrop!} onChange={(b) => setV({ backdrop: b })} />}
             {vctx?.text && (() => {
               const which = vctx.text === "hook" ? "hook" : "caption";
               // The lyrics: the caption shown alone when it has its own look (or "this word" is chosen), else all.
@@ -8614,6 +8623,10 @@ export default function VideoStudio({
             </div>
           )}
           </>}
+          </Section>
+          {/* The post's ground (black, a colour, a gradient): behind the picture where it leaves room, in its bars. */}
+          <Section id="video-ground" title={<>{t("Ground")}<span className="sec-sub"> · {t("the whole post")}</span></>} onOpen={setGroundOpen}>
+            <BackdropPanel value={settings.backdrop} onChange={(b) => setV({ backdrop: b })} />
           </Section>
           {tab === "hook" ? (
             <div className="stack sheet-text">

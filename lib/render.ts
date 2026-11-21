@@ -151,7 +151,8 @@ export function drawFramed(
       ctx.fillStyle = "rgba(0,0,0,.35)";
       ctx.fillRect(0, 0, W, H);
     } else {
-      ctx.fillStyle = "#000";
+      // (its bars: the post's ground, black unless chosen)
+      ctx.fillStyle = pic.ground ?? "#000";
       ctx.fillRect(0, 0, W, H);
     }
     put(Math.min(W / iw, H / ih) * zoom);
@@ -477,9 +478,11 @@ export const matteName = (r: number) => (Math.abs(r - 16 / 9) < 0.01 ? "16:9" : 
  * Black bars over the picture so it shows at `ratio` (width / height), centred: above and under it when the format is
  * wider than the frame, on its sides when narrower. Drawn over the picture, under the texts (a title can sit in a bar).
  */
-export function drawMatte(ctx: CanvasRenderingContext2D, W: number, H: number, ratio?: number) {
+export function drawMatte(ctx: CanvasRenderingContext2D, W: number, H: number, ratio?: number,
+  /** The bars painted with the post's ground (lib/backdrop: a colour, a gradient across the whole post); black. */
+  fill: string | CanvasGradient = "#000") {
   if (!ratio || Math.abs(ratio - W / H) < 0.005) return;
-  ctx.fillStyle = "#000";
+  ctx.fillStyle = fill;
   if (ratio > W / H) {
     const bar = (H - W / ratio) / 2;
     ctx.fillRect(0, 0, W, Math.round(bar));

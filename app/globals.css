@@ -698,6 +698,7 @@ details.fine[open] > summary { margin-bottom: var(--s2); }
 .font-style { flex-wrap: wrap; gap: 6px; }
 .font-style.off { opacity: .45; }
 .color-field .row { gap: 6px; flex-wrap: nowrap; }
+.video-shell > .col.side .color-field .row { flex-wrap: nowrap; } /* (the column's rows wrap; a colour's swatch and code stay on one line) */
 .color-field input[type="color"] { flex: none; width: 40px; }
 .color-field .input { width: 100%; min-width: 0; text-transform: lowercase; }
 .color-field .input.bad { border-color: var(--danger); }
@@ -3184,3 +3185,23 @@ html.col-resizing *, html.col-resizing *::before, html.col-resizing *::after { t
 @keyframes update-in { from { opacity: 0; translate: 0 -4px; } }
 .update-chip.floating { animation: none; }
 html.desk-inset .update-chip { -webkit-app-region: no-drag; app-region: no-drag; }
+
+/* The post's ground (components/BackdropPanel, GroundHandles): its kinds, the gradient's stops on a bar, its two points
+   on the preview. */
+.ground-panel { display: grid; gap: var(--s3); }
+.ground-kinds { gap: 4px; }
+.grad-edit { display: grid; gap: var(--s3); }
+.grad-bar { position: relative; height: 22px; margin: 0 11px; border-radius: var(--r); outline: 1px solid var(--line-2); cursor: copy; touch-action: none; }
+.grad-stop { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; padding: 0; border-radius: 50%; border: 2px solid var(--text);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.4); cursor: grab; touch-action: none; transition: scale .12s, opacity .12s; }
+.grad-stop.on { scale: 1.2; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text), 0 2px 8px rgba(0,0,0,.5); }
+.grad-stop.leaving { opacity: .3; }
+.grad-cur { align-items: end; gap: 4px; flex-wrap: nowrap; }
+.grad-cur .color-field { flex: 1; min-width: 0; }
+.ground-handles { position: absolute; z-index: 3; pointer-events: none; }
+.ground-handles svg { position: absolute; inset: 0; overflow: visible; }
+.gh-line, .gh-ring { stroke: rgba(255,255,255,.85); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; filter: drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+.gh-pt { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; padding: 0; border-radius: 50%; border: 2px solid #fff; pointer-events: auto;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.7), 0 2px 8px rgba(0,0,0,.5); cursor: grab; touch-action: none; }
+.gh-pt:active { cursor: grabbing; scale: 1.15; }
+.gh-pt.a { width: 18px; height: 18px; margin: -9px 0 0 -9px; }

@@ -65,6 +65,8 @@ export interface PicSettings {
   /** Only while drawing or moving it, never kept: the frame is masked by black bars to this format (the slide's or the
    *  video's `matte`), so the picture only has to cover the part between the bars (see clampPic). */
   matte?: number;
+  /** Only while drawing, never kept: what the bars of a whole picture are painted with (the post's ground; black). */
+  ground?: string | CanvasGradient;
 }
 
 /** A photo's own edits, kept for when it comes back on a slide (its framing only for the same format). */
@@ -220,6 +222,17 @@ export interface StylePreset {
   id: string;
   name: string;
   style: TextStyle;
+}
+
+/**
+ * The ground of a post (see VideoSettings.backdrop): a colour, or a gradient through its stops — linear from point A to
+ * point B, radial centred on A out to B (A and B as fractions of the post's width and height), as Photoshop's handles.
+ */
+export interface Backdrop {
+  kind: "color" | "linear" | "radial";
+  color?: string;
+  stops?: { at: number; color: string }[];
+  ax?: number; ay?: number; bx?: number; by?: number;
 }
 
 export interface VideoFrame {
@@ -390,6 +403,9 @@ export interface VideoSettings {
   /** The post's finish (effects, vignette, grain), on the whole picture. None: the one of the video under's grade (older
    *  projects: the same picture as before). */
   finish?: FinishLook;
+  /** The post's ground: behind the picture where it leaves room (whole, filled by its width, no video there) and in its
+   *  bars. None: black. (lib/backdrop.ts) */
+  backdrop?: Backdrop;
   /** The names given to the video tracks in their header, by file (else « V » and the number). */
   trackNames?: Record<string, string>;
   /** Multicam: the other videos of the release used as cameras 2 to 4 (their own sync, framing and grade). */
