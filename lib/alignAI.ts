@@ -43,8 +43,16 @@ export async function alignEmissions(
   const key = keyOf(buf);
   if (last?.key === key) return last.em;
   if (opts.signal?.aborted) throw new Error("aborted");
-  const samples = await mono16k(buf);
-  const em = await new Promise<Emissions>((resolve, reject) => {
+  const em = await runModel(await mono16k(buf), opts);
+  last = { key, em };
+  return em;
+}
+
+type RunOpts = { onStep?: (s: AsrStep) => void; onProgress?: (p: number) => void; signal?: AbortSignal };
+
+/** The model run on mono 16 kHz samples (handed over to the worker). */
+function runModel(samples: Float32Array, opts: RunOpts): Promise<Emissions> {
+  return new Promise<Emissions>((resolve, reject) => {
     worker ??= new Worker("/align/worker.js", { type: "module" });
     const w = worker;
     const cleanup = () => { w.removeEventListener("message", onMsg); w.removeEventListener("error", onErr); opts.signal?.removeEventListener("abort", onAbort); };
@@ -63,6 +71,42 @@ export async function alignEmissions(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     w.postMessage({ type: "run", audio: samples }, [samples.buffer]);
   });
-  last = { key, em };
-  return em;
+}
+
+/**
+ * The letters of some passages of the track only (lines placed again between locked ones: a few seconds, not the whole
+ * song): the model run on each passage, a second more on each side, the rest of the track left to the blank. Frames on
+ * the whole track's clock, as `alignEmissions`. The song's own letters when the model already listened to it.
+ */
+export async function alignEmissionsIn(buf: AudioBuffer, spans: [number, number][], opts: RunOpts = {}): Promise<Emissions> {
+  const cached = cachedEmissions(buf);
+  if (cached) return cached;
+  const FRAME = 0.02, T = Math.ceil((buf.duration * 16000) / 320);
+  // the passages with a margin, on the frames' grid, joined when they touch
+  const wins = spans.map(([a, b]) => [Math.max(0, Math.floor((a - 1) / FRAME)), Math.min(T, Math.ceil((b + 1) / FRAME))] as [number, number])
+    .filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])
+    .reduce<[number, number][]>((acc, w) => { const l = acc[acc.length - 1]; if (l && w[0] <= l[1]) l[1] = Math.max(l[1], w[1]); else acc.push([...w]); return acc; }, []);
+  const total = wins.reduce((n, [a, b]) => n + b - a, 0);
+  let frames: Float32Array | null = null, V = 0, done = 0;
+  for (const [a, b] of wins) {
+    if (opts.signal?.aborted) throw new Error("aborted");
+    const from = a * FRAME, len = (b - a) * FRAME;
+    const ctx = new OfflineAudioContext(1, Math.max(1, Math.ceil(len * 16000)), 16000);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0, from, len);
+    const samples = (await ctx.startRendering()).getChannelData(0).slice();
+    const em = await runModel(samples, { ...opts, onProgress: (p) => opts.onProgress?.((done + p * (b - a)) / Math.max(1, total)) });
+    if (!frames) {
+      V = em.V;
+      frames = new Float32Array(T * V).fill(-12);
+      for (let t = 0; t < T; t++) frames[t * V] = -0.01; // (not listened to: the blank)
+    }
+    const n = Math.min(em.T, T - a);
+    frames.set(em.frames.subarray(0, n * V), a * V);
+    done += b - a;
+  }
+  if (!frames) throw new Error("nothing to listen to");
+  return { frames, T, V };
 }

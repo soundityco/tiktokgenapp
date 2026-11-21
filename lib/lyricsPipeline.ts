@@ -786,7 +786,15 @@ function bySyllables(line: LyricWord[], from: number, end: number): LyricWord[] 
  * ("OK, yeah") were glued to the locked line before them, their syllables off the voice.
  */
 export function realignFree(words: LyricWord[], em: Emissions): LyricWord[] {
-  if (!words.some((x) => x.lock)) return words;
+  return realignSpans(words, em, freeSpans(words, em.T * FRAME));
+}
+
+/**
+ * The runs of free lines next to a locked one, each with the room the locked lines around it leave (from the end of the
+ * one before to the start of the one after; the song's edge on a side with none). None when nothing is locked.
+ */
+export function freeSpans(words: LyricWord[], duration: number): LineSpan[] {
+  if (!words.some((x) => x.lock)) return [];
   const byLine = new Map<number, number[]>();
   words.forEach((x, i) => { const l = x.line ?? -1; (byLine.get(l) ?? byLine.set(l, []).get(l)!).push(i); });
   const order = [...byLine.keys()].sort((a, b) => a - b);
@@ -800,10 +808,10 @@ export function realignFree(words: LyricWord[], em: Emissions): LyricWord[] {
     k = j;
     if (before === undefined && after === undefined) continue;
     const lo = before === undefined ? 0 : Math.max(...byLine.get(before)!.map((i) => words[i].until ?? words[i].e)) + 0.02;
-    const hi = after === undefined ? em.T * FRAME : Math.min(...byLine.get(after)!.map((i) => words[i].s)) - 0.02;
+    const hi = after === undefined ? duration : Math.min(...byLine.get(after)!.map((i) => words[i].s)) - 0.02;
     spans.push({ lines, lo, hi });
   }
-  return realignSpans(words, em, spans);
+  return spans;
 }
 
 /**

@@ -30,9 +30,9 @@ import { camAt, cutTo, MAX_CAMS, moveCut, removeCutAt, setShotCam, shotsOf, spli
 import { wavOf } from "@/lib/wav";
 import { convertSegment, copyPlanFor, cropFor, ffmpegAlone, grabFrame, makeWorkCopy, type ConvertCrop, type ConvertStep } from "@/lib/convert";
 import { ASR_MODELS, AsrModel, AsrStep, hasGpu, prepareAudio, stopTranscribe, transcribe } from "@/lib/transcribe";
-import { alignEmissions, cachedEmissions, stopAlign } from "@/lib/alignAI";
+import { alignEmissions, alignEmissionsIn, cachedEmissions, stopAlign } from "@/lib/alignAI";
 import { faNorm, looksFrench } from "@/lib/forcedAlign";
-import { LYRICS_LAP, LYRICS_WIN, inLines, placeByAlignment, realignFree, realignSpans } from "@/lib/lyricsPipeline";
+import { LYRICS_LAP, LYRICS_WIN, freeSpans, inLines, placeByAlignment, realignFree, realignSpans } from "@/lib/lyricsPipeline";
 import { snapLines, voiceOnsets } from "@/lib/voiceOnsets";
 import type { VideoOverlay } from "@/lib/types";
 import type { LyricWord, PicSettings, Project, StylePreset, TextPool, TextStyle, VideoFrame, VideoHook, VideoSettings, VideoSetup, VideoTake, VideoVersion } from "@/lib/types";
@@ -4224,10 +4224,45 @@ export default function VideoStudio({
       onSaveNow();
       return;
     }
+    // Locked lines kept, the others between them: only those passages are listened to, not the whole song.
+    if (!dropLocks.current && await placeFreeOnly(next)) return;
     // Asked by hand: always from scratch, nothing kept from an earlier placing (the words heard or aligned before, the
     // lines retimed by hand). Editing the text still re-places it at once on what was heard (resyncLyrics).
     // (the words heard before stay saved until the new placing replaces them: cancelled or failed, nothing is lost)
     await generateLyrics(audioBuf, { ...next, heardWords: undefined }, writtenSrc, true);
+  };
+
+  /**
+   * "Re-place the others" when most of the song is locked: only the passages between the locked lines are listened to
+   * (a few seconds, not the whole song: a minute and more for two lines before) and their free lines placed there, on
+   * the voice, syllables too. False when it does not apply (the text changed since the last placing, the free passages
+   * cover more than half the song, the lyrics not written) or failed: the whole song is placed then.
+   */
+  const placeFreeOnly = async (p: Project): Promise<boolean> => {
+    const words = p.lyricWords, buf = audioBuf;
+    if (!buf || !words?.length || !words.some((x) => x.lock)) return false;
+    if ((writtenSrc !== "song" && writtenSrc !== "all") || writtenOf(writtenSrc, p) !== (p.lyricsPlacedFrom ?? "")) return false;
+    const spans = freeSpans(words, buf.duration);
+    if (!spans.length || spans.reduce((n, x) => n + x.hi - x.lo, 0) > buf.duration * 0.5) return false;
+    genRef.current?.abort();
+    const ac = new AbortController();
+    genRef.current = ac;
+    setGenBusy(true); setGenStep("listen"); setGenPct(0); setGenDone(0); setGenInfo(null); setErr(null); setNote(null);
+    try {
+      const em = await alignEmissionsIn(buf, spans.map((x) => [x.lo, x.hi]), { onStep: setGenStep, onProgress: setGenDone, signal: ac.signal });
+      if (ac.signal.aborted || genRef.current !== ac) return true;
+      const n = new Set(spans.flatMap((x) => x.lines)).size;
+      onProject((x) => { const w = realignSpans(x.lyricWords ?? [], em, spans); lyricWordsRef.current = w; return { ...x, lyricWords: w, heardWords: heardAfter(x.heardWords, w) }; });
+      setGenInfo(n === 1 ? t("1 line placed again between your locked lines") : t("{n} lines placed again between your locked lines", { n }));
+      onSaveNow();
+      return true;
+    } catch (e) {
+      if (ac.signal.aborted || (e instanceof Error && e.message === "aborted")) return true;
+      console.warn("[lyrics] the passages alone could not be listened to: the whole song instead", e);
+      return false;
+    } finally {
+      if (genRef.current === ac) { genRef.current = null; setGenBusy(false); setGenStep(null); }
+    }
   };
 
 

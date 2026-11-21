@@ -4,9 +4,10 @@ import { decodeAudio } from "@/lib/media";
 import { parseLyrics } from "@/lib/lyricsAlign";
 import { placeByAlignment, placeExact } from "@/lib/lyricsPipeline";
 import { hasGpu } from "@/lib/transcribe";
+import { alignEmissions, alignEmissionsIn } from "@/lib/alignAI";
 
 type Line = { text: string; start: number; end: number; doubt: boolean };
-declare global { interface Window { __lyricsResult?: { lines: Line[]; words?: { w: string; s: number; e: number; line?: number; sy?: number[]; conf?: number; doubt?: boolean }[]; ms: number } | { error: string } } }
+declare global { interface Window { __inCheck?: unknown; __lyricsResult?: { lines: Line[]; words?: { w: string; s: number; e: number; line?: number; sy?: number[]; conf?: number; doubt?: boolean }[]; ms: number } | { error: string } } }
 
 /**
  * Dev bench (app/dev/lyrics): an audio file and its lyrics placed by the very code of the video studio
@@ -43,6 +44,24 @@ export default function LyricsBench() {
       setLog(String(e));
     }
   };
+  // Passages listened to alone ("Re-place the others"): the same letters as the whole song there? Time of each.
+  const checkIn = async () => {
+    if (!file) return;
+    const buf = await decodeAudio(new AudioContext(), file);
+    const spans: [number, number][] = [[35, 39], [60, 64]];
+    await alignEmissionsIn(buf, [[0, 2]]); // (the model loaded first: its loading is not timed)
+    let t0 = performance.now();
+    const part = await alignEmissionsIn(buf, spans);
+    const msIn = performance.now() - t0;
+    t0 = performance.now();
+    const all = await alignEmissions(buf);
+    const msAll = performance.now() - t0;
+    let same = 0, n = 0;
+    const best = (f: Float32Array, t: number, V: number) => { let k = 0; for (let v = 1; v < V; v++) if (f[t * V + v] > f[t * V + k]) k = v; return k; };
+    for (const [a, b] of spans) for (let t = Math.round(a / 0.02); t < Math.round(b / 0.02); t++) { n++; if (best(part.frames, t, part.V) === best(all.frames, t, all.V)) same++; }
+    window.__inCheck = { T: [part.T, all.T], V: [part.V, all.V], same: same / n, msIn: Math.round(msIn), msAll: Math.round(msAll) };
+    setLog(JSON.stringify(window.__inCheck));
+  };
   return (
     <main style={{ padding: 16, maxWidth: 900, margin: "0 auto", display: "grid", gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>Lyrics bench (dev)</h1>
@@ -50,6 +69,7 @@ export default function LyricsBench() {
       <textarea id="lyrics" rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="Lyrics" />
       <input id="lang" value={lang} onChange={(e) => setLang(e.target.value)} />
       <button id="run" onClick={() => void run()}>Run</button>
+      <button id="checkin" onClick={() => void checkIn()}>Check passages</button>
       <div id="log" className="mono">{log}</div>
       <table className="mono" style={{ fontSize: 12 }}><tbody>
         {lines.map((l, i) => <tr key={i}><td>{l.start.toFixed(2)}</td><td>{l.end.toFixed(2)}</td><td>{l.doubt ? "?" : ""}</td><td>{l.text}</td></tr>)}

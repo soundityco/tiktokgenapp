@@ -1551,6 +1551,8 @@ export const FR: Record<string, string> = {
   "Your {n} locked lines stay as they are.": "Tes {n} lignes verrouillées restent telles quelles.",
   "To keep a line as you set it, lock it first with the padlock on its clip (on the timeline).": "Pour garder une ligne telle que tu l'as calée, verrouille-la d'abord avec le cadenas de son clip (sur la timeline).",
   "Re-place everything": "Tout recaler",
+  "1 line placed again between your locked lines": "1 ligne recalée entre tes lignes verrouillées",
+  "{n} lines placed again between your locked lines": "{n} lignes recalées entre tes lignes verrouillées",
   "Re-place the others": "Recaler les autres",
   "Locked: kept as it is when the lyrics are placed again. Click to unlock.": "Verrouillée : gardée telle quelle quand les paroles sont recalées. Clic pour déverrouiller.",
   "Lock this line: kept as it is when the lyrics are placed again": "Verrouiller cette ligne : gardée telle quelle quand les paroles sont recalées",
