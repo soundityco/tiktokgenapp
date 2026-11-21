@@ -12,9 +12,11 @@ import { activeCue, alignLyrics, alignSong, buildCues, norm, placeLine, setCueEn
 import { alignTracks, autoLineTimes, decodeAudio, envelopeOf, fmtLength, fmtTime, monoOf, peaksOf, syncAudio } from "@/lib/media";
 import { coverage, remapClip, remapWords, sharedShare, trackMap, uniformShift, type RemapReport, type TrackMap } from "@/lib/audioRemap";
 import { audioIdOf, audioKey, audioLabel, audioVersionsOf, mainAudioId, projectFor, renameAudio, videosOn, writeFor } from "@/lib/audioVersions";
-import type { AudioVersion, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
+import type { AudioVersion, FxClip, GradePreset, LutRef, VideoExportPrefs, VideoGrade, VideoSourceInfo } from "@/lib/types";
 import { askNotifyPermission, notify, notifyBlocked } from "@/lib/notify";
 import { groundFill, isGradient } from "@/lib/backdrop";
+import { drawFx, fxKinds, newFx } from "@/lib/fx";
+import FxPanel from "./FxPanel";
 import BackdropPanel from "./BackdropPanel";
 import GroundHandles from "./GroundHandles";
 import { clamp, clampPic, drawFramed, drawHelpers, drawMatte, drawPictureAt, framedAt, snapPic, drawStyledText, litWords, TextBox, visibleRegion, zoomPic } from "@/lib/render";
@@ -182,7 +184,7 @@ const shiftEdits = (s: { clipIn?: number; clipOut?: number; splits?: number[]; o
 });
 
 const VERSION_KEYS = ["crop", "offset", "clipIn", "clipOut", "splits", "offParts", "trackLocks", "clipVolume", "videoHidden", "overlay", "overlays", "musicStart", "musicEnd", "linked", "push", "pushIn", "hooks", "hookTheme", "hookTags", "hookPoolId", "showHooks", "hookStyle",
-  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish", "backdrop"] as const satisfies readonly (keyof VideoSettings)[];
+  "captions", "captionMode", "litDim", "litSweep", "lineChars", "captionStyle", "captionLooks", "caption", "captionPoolId", "format", "frame", "grade", "matte", "angles", "cuts", "finish", "backdrop", "effects", "effectsHidden"] as const satisfies readonly (keyof VideoSettings)[];
 /** Kept by a version only since versions hold everything (`VideoVersion.all`): an older one takes the video's. */
 const LOOK_KEYS: readonly (keyof VideoSettings)[] = ["format", "frame", "grade", "matte"];
 /** The part of the camera file shown (seconds in the file, `len` its length): trimmed on the video track, else all. */
@@ -1321,6 +1323,8 @@ export default function VideoStudio({
     // The post's finish (effects, vignette, grain): once, on the whole picture — the video under, the multicam's shot,
     // the ones over it —, never a video's own (a camera's vignette jumped in at each cut).
     if (!raw) { const fin = finishOf(cfg); if (finishOn(fin)) drawLook(g, W, H, finishGrade(fin), Math.round(time * GRAIN_FPS)); }
+    // The Effects track (an adjustment layer: lib/fx.ts): its clips under the texts, over the picture and its finish.
+    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, false);
     // Black bars to a picture format (the post's choice): over the picture, under the texts.
     drawMatte(g, W, H, matte, ground);
     // The texts at the very end of the segment (the playhead dragged to the end, or stopped there) are those of its
@@ -1333,7 +1337,10 @@ export default function VideoStudio({
     const lit = cue && cfg.captionMode === "lit" ? { words: litWords(cue.words, at, !!cfg.litSweep), dim: (cfg.litDim ?? 35) / 100 } : undefined;
     const caption = cue ? drawStyledText(g, cue.text, cueStyleRef.current(cue), W, H, lit) : null;
     const hook = cfg.showHooks === false ? undefined : hookAt(cfg, at);
-    return { caption, hook: hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null };
+    const hookBox = hook ? drawStyledText(g, hook.text, hookStyleRef.current, W, H) : null;
+    // (the effect clips set over the texts too: a flash covers them)
+    if (!raw && !cfg.effectsHidden) drawFx(g, W, H, time, cfg.effects, true);
+    return { caption, hook: hookBox };
   }, []);
   const captionBox = useRef<TextBox | null>(null);
   /** Where each video over it was drawn, from the bottom up (to drag it on the preview: the top one first). */
@@ -7275,6 +7282,88 @@ export default function VideoStudio({
     setHooks(hooks.map((x) => (x.id === id ? { ...x, from } : !free && prev && x.id === prev.id ? { ...x, to: from } : x)));
   }, true, true);
   const editHook = (id: string, patch: Partial<VideoHook>) => setHooks(hooks.map((h) => (h.id === id ? { ...h, ...patch } : h)));
+  // ---- the Effects track (an adjustment layer: lib/fx.ts), its clips on the song's time ----
+  const effects = settings.effects ?? [];
+  // (an effect set, moved or switched: the preview drawn again at once)
+  useEffect(() => { redraw(); }, [settings.effects, settings.effectsHidden]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setFx = (list: FxClip[]) => setV({ effects: list.length ? [...list].sort((x, y) => x.from - y.from) : undefined });
+  const patchFx = (id: string, patch: Partial<FxClip>) => setFx((settingsRef.current.effects ?? []).map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  /** A new effect clip at `at` (the playhead, or where the track was clicked), picked. */
+  const addFx = (kind: "strobe" | "zoom" | "shutter", at: number) => {
+    const c = newFx(kind, clamp(at, 0, Math.max(0, (audioBuf?.duration ?? at + 1) - 0.5)), uid());
+    setFx([...(settingsRef.current.effects ?? []), c]);
+    setPick("fx:" + c.id); setMulti([]);
+    onSaveNow();
+  };
+  const removeFx = (id: string) => { setFx((settingsRef.current.effects ?? []).filter((c) => c.id !== id)); if (pick === "fx:" + id) setPick(null); };
+  const moveFxStart = (id: string) => edgeDrag((at) => {
+    const c = (settingsRef.current.effects ?? []).find((x) => x.id === id);
+    if (!c) return;
+    const from = round2(clamp(at, 0, c.to - 0.05));
+    patchFx(id, { from }); setHead(from);
+  }, true, true);
+  const moveFxEnd = (id: string) => edgeDrag((at) => {
+    const c = (settingsRef.current.effects ?? []).find((x) => x.id === id);
+    if (!c) return;
+    const to = round2(clamp(at, c.from + 0.05, audioBuf?.duration ?? at));
+    patchFx(id, { to }); setHead(to);
+  }, true, true);
+  /** An effect clip dragged by its body: moved whole (its length kept); a click without moving picks it, the playhead on it. */
+  const fxBody = (c: FxClip) => (e: React.PointerEvent<HTMLElement>) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    stop();
+    setPick("fx:" + c.id); setMulti([]);
+    // (on one of its handles — all of a short clip —: picked too, the handle drags its edge)
+    if ((e.target as HTMLElement).closest(".cue-grip")) return;
+    if (trackLocked("fx")) { setHead(round2(c.from)); return; }
+    const r = (e.currentTarget.closest(".lyric-track") ?? e.currentTarget.parentElement!).getBoundingClientRect();
+    const x0 = e.clientX, from0 = c.from, len = c.to - c.from;
+    let moved = false;
+    const mv = (ev: PointerEvent) => {
+      const w = viewRef.current ?? twRef.current;
+      const d = ((ev.clientX - x0) / r.width) * w.d;
+      if (!moved && Math.abs(ev.clientX - x0) < 3) return;
+      moved = true;
+      const from = round2(clamp(from0 + d, 0, Math.max(0, (audioBuf?.duration ?? from0 + len) - len)));
+      patchFx(c.id, { from, to: round2(from + len) });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+      if (moved) onSaveNow(); else setHead(round2(c.from));
+    };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  const fxName = (c: FxClip) => fxKinds(c).map((k) => (k === "strobe" ? t("Flash") : k === "zoom" ? t("Zoom blur") : t("Slow shutter"))).join(" + ") || t("Effect");
+  const fxAddItems = (close: () => void, at: number) => (<>
+    <button onClick={() => { close(); addFx("strobe", at); }}><Icon name="sparkle" size={14} />{t("Flash (strobe)")}</button>
+    <button onClick={() => { close(); addFx("zoom", at); }}><Icon name="target" size={14} />{t("Zoom blur")}</button>
+    <button onClick={() => { close(); addFx("shutter", at); }}><Icon name="film" size={14} />{t("Slow shutter (stutter, trails)")}</button>
+  </>);
+  const fxHdMenu = (close: () => void) => (<>
+    <div className="label cap">{t("Effects")} · {t("at the playhead")}</div>
+    {fxAddItems(close, head)}
+    <div className="sep" />
+    <button onClick={() => { close(); setV({ effectsHidden: settings.effectsHidden ? undefined : true }); redraw(); }}><Icon name={settings.effectsHidden ? "eye" : "eye-off"} size={14} />{settings.effectsHidden ? t("Show the effects") : t("Hide the effects")}</button>
+    <button onClick={() => { close(); toggleTrackLock("fx"); }}><Icon name={trackLocked("fx") ? "unlock" : "lock"} size={14} />{trackLocked("fx") ? t("Unlock the track") : t("Lock the track")}</button>
+  </>);
+  const fxCtx = (c: FxClip) => (e: React.MouseEvent) => {
+    setPick("fx:" + c.id); setMulti([]);
+    ctxOn((close) => (<>
+      <div className="label cap truncate">{fxName(c)}</div>
+      <button onClick={() => { close(); stop(); setHead(round2(c.from)); }}><Icon name="arrowRight" size={14} />{t("Playhead at its start")}</button>
+      <button onClick={() => { close(); const id = uid(), len = c.to - c.from; setFx([...(settingsRef.current.effects ?? []), { ...c, id, from: round2(c.to), to: round2(c.to + len) }]); setPick("fx:" + id); }}><Icon name="copy" size={14} />{t("Duplicate after it")}</button>
+      <div className="sep" />
+      <button className="danger" style={{ color: "var(--danger)" }} onClick={() => { close(); removeFx(c.id); }}><Icon name="trash" size={14} />{t("Delete")}</button>
+    </>))(e);
+  };
+  /** The track's right click where there is no clip: an effect there. */
+  const fxTrackCtx = (e: React.MouseEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest(".fx-clip")) return;
+    const r = e.currentTarget.getBoundingClientRect(), w = viewRef.current ?? twRef.current;
+    const at = round2(w.s + clamp((e.clientX - r.left) / r.width, 0, 1) * w.d);
+    ctxOn((close) => (<><div className="label cap">{t("Add an effect here")}</div>{fxAddItems(close, at)}</>))(e);
+  };
   // ---- hook lists: the same as the carousel's; by default the one of the first slide of the release ----
   const slide1Pool = (() => {
     const src = project.slides[0]?.textSource;
@@ -8196,6 +8285,28 @@ export default function VideoStudio({
                     onPointerDown={waveDown} onPointerMove={waveMove} onPointerUp={waveUp}
                     onPointerCancel={(e) => { pointers.current.delete(e.pointerId); dragWave.current = null; }} />
                 </div></div>
+                {/* The Effects track (an adjustment layer): flashes, zoom blur, slow shutter, on the song's time. */}
+                <div className="tl-row"><div className={"tl-hd hd-fx"} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(fxHdMenu)}>{hdName("sliders", t("Effects"))}
+                  <button className={"btn icon sm quiet track-eye" + (settings.effectsHidden ? " off" : "")} aria-pressed={!!settings.effectsHidden}
+                    aria-label={settings.effectsHidden ? t("Show the effects") : t("Hide the effects")} title={settings.effectsHidden ? t("Show the effects") : t("Hide the effects")}
+                    onClick={() => { setV({ effectsHidden: settings.effectsHidden ? undefined : true }); redraw(); }}><Icon name={settings.effectsHidden ? "eye-off" : "eye"} size={14} /></button>
+                  {trackLockEl("fx")}</div>
+                  <div className={"lyric-track fx-track" + (settings.effectsHidden ? " off" : "")} role="group" aria-label={t("Effects")} {...scrub()} onContextMenu={fxTrackCtx}
+                    title={effects.length ? undefined : t("Right click to add an effect (flash, zoom blur, slow shutter)")}>
+                    <div className="track-content">
+                    {effects.map((c) => onTrack(c.from, c.to) && (
+                      <button key={c.id} className={"cue fx-clip" + (head >= c.from && head < c.to ? " on" : "") + (pick === "fx:" + c.id ? " sel" : "")}
+                        data-a={c.from} data-b={c.to} data-pick={"fx:" + c.id} data-text={fxName(c)} style={{ ...place(c.from), width: wFull(c.from, c.to) }}
+                        title={fxName(c)} onPointerDown={fxBody(c)} onContextMenu={fxCtx(c)}
+                        onPointerDownCapture={(e) => { if (e.button === 0) { setPick("fx:" + c.id); setMulti([]); } }}>
+                        <span className="cue-ico" aria-hidden><Icon name="sliders" size={11} /></span>{fxName(c)}
+                        {!trackLocked("fx") && grips(moveFxStart(c.id), moveFxEnd(c.id))}
+                      </button>
+                    ))}
+                    {!effects.length && <span className="fx-empty muted xs">{t("Right click: add an effect")}</span>}
+                    <span className="lyric-head" style={{ ...place(clamp(head, tw.s, tw.s + tw.d)) }} />
+                    </div>
+                  </div></div>
                 {hooks.length > 0 && (<>
                   <div className="tl-row"><div className={"tl-hd hd-hook" + (rowPick === "hooks" ? " row-on" : "")} {...rowHd("hooks")} onPointerDown={(e) => e.stopPropagation()} onContextMenu={ctxOn(hookHdMenu)}>{hdName("sparkle", t("Hook"))}{textEye(settings.showHooks !== false, () => setV({ showHooks: settings.showHooks === false }), "hooks")}{trackLockEl("hooks")}</div><div className={"lyric-track hook-track" + (settings.showHooks === false ? " off" : "")} role="group" aria-label={t("Hooks")} {...scrub(() => setTab("hook"))}>
                     <div className="track-content">
@@ -8707,8 +8818,10 @@ export default function VideoStudio({
         {/* Right: the look of what is edited in the middle (lyrics or hook), then the colour of the whole video. */}
         {/* (the clip selected on the timeline decides what the column shows, as in an editor: a text or a hook, its text
             settings; a video clip, the video's — nothing selected, all) */}
-        <aside onScroll={noSideScroll} className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + (pick === "video" ? " focus-video" : pick?.startsWith("text:") || pick?.startsWith("hook:") ? " focus-text" : "")} ref={rightColRef}>
+        <aside onScroll={noSideScroll} className={"col side r video-col-r" + (studioLoading ? " is-loading" : "") + (pick === "video" ? " focus-video" : pick?.startsWith("text:") || pick?.startsWith("hook:") ? " focus-text" : pick?.startsWith("fx:") ? " focus-fx" : "")} ref={rightColRef}>
           <StyleTabs parts={vParts} part={vPart} onPart={pickVPart} tone="video" />
+          {/* An effect clip picked on the Effects track: its settings (the rest of the column hidden). */}
+          {pick?.startsWith("fx:") && (() => { const c = effects.find((x) => "fx:" + x.id === pick); return c ? <FxPanel value={c} onChange={(patch) => patchFx(c.id, patch)} onDelete={() => removeFx(c.id)} /> : null; })()}
           {/* A text or a hook picked on the timeline (or on the preview): what the column sets, at a glance, as for a video. */}
           {(pick?.startsWith("text:") || pick?.startsWith("hook:")) && (() => {
             const hook = pick.startsWith("hook:");

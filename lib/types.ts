@@ -235,6 +235,25 @@ export interface Backdrop {
   ax?: number; ay?: number; bx?: number; by?: number;
 }
 
+/**
+ * An effect clip (the Effects track, an adjustment layer): from `from` to `to` on the song (seconds, like the cuts: it
+ * stays put when the videos under it change), over everything under it — the videos, the post's finish — or over the
+ * texts too (`over`). Each of its effects is on when present (lib/fx.ts).
+ */
+export interface FxClip {
+  id: string;
+  from: number;
+  to: number;
+  over?: boolean;
+  /** Flashes of a colour: `count` over the clip, each shown `on` of its time (0..1). */
+  strobe?: { color: string; count: number; on: number };
+  /** Zoom blur towards (x, y) (fractions of the post): `amount` 0..1. */
+  zoom?: { amount: number; x: number; y: number };
+  /** Slow shutter: the picture held at `fps` frames a second (0: as it is), each frame trailing the ones before (`trail`
+   *  0..0.95). */
+  shutter?: { fps: number; trail: number };
+}
+
 export interface VideoFrame {
   zoom: number;
   ox: number; // fraction of the canvas
@@ -406,6 +425,10 @@ export interface VideoSettings {
   /** The post's ground: behind the picture where it leaves room (whole, filled by its width, no video there) and in its
    *  bars. None: black. (lib/backdrop.ts) */
   backdrop?: Backdrop;
+  /** Effect clips over the picture (an adjustment layer: lib/fx.ts), on the song's time. */
+  effects?: FxClip[];
+  /** The effects track switched off (its eye): none drawn, kept. */
+  effectsHidden?: boolean;
   /** The names given to the video tracks in their header, by file (else « V » and the number). */
   trackNames?: Record<string, string>;
   /** Multicam: the other videos of the release used as cameras 2 to 4 (their own sync, framing and grade). */

@@ -33,7 +33,7 @@
   /* The accent: change these three (text on the accent, then the accent and its bright tone). */
   --accent: #f0eee8; --accent-hi: #ffffff; --on-accent: #0b0b10; --blue: #5b8cff;
   /* The timeline: where the camera video is (violet), and the music found in it (green). */
-  --video: #a184ff; --music: #4fffb0;
+  --video: #a184ff; --music: #4fffb0; --fx: #e48cff;
   /* The lyrics' own colour, a light gold (the library's lyrics tile). */
   --lyrics: #d8b56a;
   /* The fourth video's colour (never the lyrics' gold: it looked like a text). */
@@ -3076,7 +3076,23 @@ html.pv-full .video-stage .cv-wrap > * { visibility: hidden; }
 @media (min-width: 1001px) {
   .video-col-r.focus-video .sheet-text { display: none; }
   .video-col-r.focus-text .look-of:not(.text-of), .video-col-r.focus-text [data-sec="video-render"], .video-col-r.focus-text #video-color, .video-col-r.focus-text #video-export { display: none; }
+  /* (an effect clip: its settings only) */
+  .video-col-r.focus-fx > *:not(.fx-panel) { display: none; }
 }
+/* An effect clip's settings (components/FxPanel); the Effects track's clips (a muted violet, as an adjustment layer). */
+.fx-panel { display: grid; gap: var(--s3); }
+.fx-line { justify-content: space-between; gap: var(--s2); flex-wrap: nowrap; }
+.fx-part { display: grid; gap: var(--s2); padding-top: var(--s3); border-top: 1px solid var(--line); }
+.fx-part:not(.on) > .fx-line b { color: var(--muted); font-weight: 500; }
+.fx-del { justify-self: start; margin-top: var(--s2); }
+.fx-of { --tone: var(--fx); }
+.lyric-track.fx-track .cue.fx-clip { --c: var(--fx); background: color-mix(in srgb, var(--fx) 16%, var(--bg)); border-left: 2px solid var(--fx); color: var(--text); cursor: grab; }
+.lyric-track.fx-track .cue.fx-clip:active { cursor: grabbing; }
+.lyric-track.fx-track .cue.fx-clip.sel { background: color-mix(in srgb, var(--fx) 30%, var(--bg)); }
+.lyric-track.fx-track .cue.fx-clip .cue-ico { color: var(--fx); }
+.lyric-track.fx-track.off .cue.fx-clip { opacity: .45; }
+.fx-empty { position: absolute; left: 10px; top: 50%; translate: 0 -50%; pointer-events: none; white-space: nowrap; }
+.tl-hd.hd-fx { --row: var(--fx); }
 /* A phone has no keyboard: the keys shown in the menus go. */
 @media (hover: none) { .menu kbd { display: none; } }
 /* The player's listening volume: its slider slides open inside the player (the film strip makes room on its left). */

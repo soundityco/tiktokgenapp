@@ -119,6 +119,7 @@ dans ton Google Drive.
 
 ## Studio vidéo
 
+- **Piste d'effets (calque d'effets)** : des clips d'effets sur la timeline, calés sur le morceau (ils restent en place quand on change les vidéos ou le multicam), sous les textes ou par-dessus : flash / stroboscope (une couleur, le nombre de coupures, la part de couleur), zoom blur (force, centre), shutter lent (moins d'images par seconde, traînée). Clic droit sur la piste pour en ajouter, glisser pour déplacer, poignées pour la durée. — En test
 - **Remplacer dans cette vidéo** (menu ⋯ de chaque vidéo, V1 à V4 et celles par-dessus) : un autre fichier à sa place dans cette vidéo seulement, synchronisé aussitôt ; ses plans du multicam, coupes, découpes et le segment restent où ils sont. Pour un gabarit : dupliquer une vidéo, puis remplacer ses fichiers. — En test
 - **Relier tous les fichiers d'un dossier** (bibliothèque, sous « Importer des prises ») : tu as déplacé tes fichiers caméra ou changé d'ordinateur ? Choisis le dossier, chaque vidéo de la release qui manque y est retrouvée par son nom et sa taille, synchro et réglages gardés ; un message dit lesquelles restent introuvables. — En test
 - **Fond du post** (rubrique « Fond » sous Cadrage) : noir, une couleur, ou un dégradé linéaire ou radial avec autant de couleurs qu'on veut (clic sur la barre pour en ajouter, glisser, éloigner pour retirer), placé sur l'aperçu par ses deux points comme dans Photoshop (la molette l'étire) ; il remplit le vide autour de l'image et les bandes, à l'aperçu comme à l'export. — En test
