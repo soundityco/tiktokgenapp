@@ -5387,6 +5387,34 @@ export default function VideoStudio({
   /** The folder being linked: where it is (looking, then k of n written), and each video's state on its card. */
   const [relinkJob, setRelinkJob] = useState<{ k: number; n: number; name: string } | null>(null);
   const [relinkIds, setRelinkIds] = useState<Record<string, "wait" | "busy">>({});
+  /**
+   * The folder picked by the browser's own folder picker when it has one (Chrome, Edge, the desktop app: "Let the site view
+   * files?"): only the names are listed, and only the videos of this release opened. The file field instead says
+   * "Upload N files to this site?" for the whole folder (nothing is sent anywhere, the wording frightens): its way out
+   * where there is no such picker (Safari).
+   */
+  const pickFolder = async () => {
+    const picker = (window as unknown as { showDirectoryPicker?: (o?: { mode?: string; id?: string }) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
+    if (!picker) { folderInput.current?.click(); return; }
+    let dir: FileSystemDirectoryHandle;
+    try { dir = await picker({ mode: "read", id: "raw-relink" }); }
+    catch (e) { if ((e as DOMException)?.name !== "AbortError") folderInput.current?.click(); return; }
+    setRelinkJob({ k: 0, n: 0, name: "" });
+    try {
+      const wanted = new Set(clips.map((c) => c.videoName?.toLowerCase()).filter((x): x is string => !!x));
+      const files: File[] = [];
+      // (its subfolders too, four deep; hidden ones skipped)
+      const walk = async (d: FileSystemDirectoryHandle, depth: number) => {
+        for await (const h of (d as unknown as { values: () => AsyncIterable<FileSystemHandle> }).values()) {
+          if (h.name.startsWith(".")) continue;
+          if (h.kind === "file") { if (wanted.has(h.name.toLowerCase())) files.push(await (h as FileSystemFileHandle).getFile()); }
+          else if (depth < 4) await walk(h as FileSystemDirectoryHandle, depth + 1);
+        }
+      };
+      await walk(dir, 0);
+      await relinkFolder(files);
+    } catch (e) { console.warn("[relink] folder not read", e); setRelinkJob(null); onToast?.(t("This folder could not be read.")); }
+  };
   const relinkFolder = async (files: File[]) => {
     const vids = files.filter((f) => f.type.startsWith("video/") || /\.(mp4|mov|m4v|mxf|mkv|avi)$/i.test(f.name));
     const byName = new Map<string, File[]>();
@@ -5859,7 +5887,7 @@ export default function VideoStudio({
             <span className="truncate shine">{relinkJob.n ? t("Linking {k}/{n} · {name}", { k: relinkJob.k, n: relinkJob.n, name: relinkJob.name }) : t("Looking for the missing videos…")}</span>
             <span className="take-relink-bar" style={{ "--p": relinkJob.n ? (relinkJob.k - 0.5) / relinkJob.n : 0.08 } as CSSProperties} />
           </div>
-        ) : <button className="take-relink" onClick={() => folderInput.current?.click()}
+        ) : <button className="take-relink" onClick={() => void pickFolder()}
           title={t("Moved your camera files? Pick the folder: every video of the release missing on this device is found there by its name, its sync and settings kept.")}>
           <Icon name="link" size={13} /><span className="truncate">{t("Link from a folder…")}</span>
         </button>}
@@ -6169,7 +6197,7 @@ export default function VideoStudio({
     <button onClick={() => { close(); onEditLyrics(); }}><Icon name="type" size={14} />{project.lyrics.length ? t("Edit the lyrics") : t("Add the lyrics")}</button>
     <button onClick={() => { close(); document.getElementById("audio-file")?.click(); }}><Icon name="music" size={14} />{audioBlob ? t("Add a version of the audio") : t("Import the audio")}</button>
     <button onClick={() => { close(); if (settings.videoName) takeInput.current?.click(); else document.getElementById("video-file")?.click(); }}><Icon name="film" size={14} />{t("Import videos")}</button>
-    <button onClick={() => { close(); folderInput.current?.click(); }}><Icon name="link" size={14} />{t("Link the files from a folder…")}</button>
+    <button onClick={() => { close(); void pickFolder(); }}><Icon name="link" size={14} />{t("Link the files from a folder…")}</button>
   </>);
   const videoTrackEl = () => {
     // (its file still being read or fetched: its clip stays where it is, "Loading…" in place of its name)

@@ -1596,6 +1596,7 @@ export const FR: Record<string, string> = {
   "Linking {k}/{n} · {name}": "Liaison {k}/{n} · {name}",
   "Looking for the missing videos…": "Recherche des vidéos manquantes…",
   "Linking…": "Liaison…",
+  "This folder could not be read.": "Ce dossier n'a pas pu être lu.",
   "Re-place the others": "Recaler les autres",
   "Locked: kept as it is when the lyrics are placed again. Click to unlock.": "Verrouillée : gardée telle quelle quand les paroles sont recalées. Clic pour déverrouiller.",
   "Lock this line: kept as it is when the lyrics are placed again": "Verrouiller cette ligne : gardée telle quelle quand les paroles sont recalées",
