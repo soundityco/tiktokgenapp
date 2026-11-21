@@ -2881,16 +2881,17 @@ export default function VideoStudio({
     const lo = Math.max(0, v.offset + a);
     const hi = Math.min(audioBuf.duration, v.offset + b);
     if (hi - lo < 1) return null;
-    // Multicam: the part every camera of the project filmed (a shorter take ends the segment's room), unless they
-    // share less than a second (then camera 1's alone, never a locked segment).
+    // Multicam: from the first camera's start to the last one's end (a shorter take no longer ends the segment's room:
+    // the shots fill the rest with the other cameras; where the camera of a shot has no picture, it is black in the post
+    // and hatched red on its shot).
     let clo = lo, chi = hi;
     for (const id of v.angles ?? settingsRef.current.angles ?? []) {
       const c = clips.find((x) => x.id === id);
       const d = c?.source?.duration ?? anglesRef.current.get(id)?.el.duration;
       if (!c || c.score === undefined || !d || !Number.isFinite(d)) continue;
-      clo = Math.max(clo, c.offset); chi = Math.min(chi, c.offset + d);
+      clo = Math.min(clo, Math.max(0, c.offset)); chi = Math.max(chi, Math.min(audioBuf.duration, c.offset + d));
     }
-    return chi - clo >= 1 ? [clo, chi] : [lo, hi];
+    return [clo, chi];
   };
   /** Limits of the segment: the linked range, else the whole official track. */
   const boundsOf = (v: VideoSettings): [number, number] =>
